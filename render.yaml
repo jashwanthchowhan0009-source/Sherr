@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: sherbyte-v4
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: GROK_API_KEY
+        sync: false
+      - key: NEWSAPI_KEY
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: OPENWEATHER_KEY
+        sync: false
