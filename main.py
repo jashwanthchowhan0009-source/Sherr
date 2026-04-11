@@ -627,7 +627,7 @@ async def collect_news():
     # AI rewrite: process up to 30 unprocessed articles
     if GROK_API_KEY:
         unprocessed = conn.execute(
-            "SELECT id, headline, full_body FROM articles WHERE ai_processed=0 ORDER BY collected_at DESC LIMIT 30"
+            "SELECT id, headline, full_body FROM articles WHERE ai_processed=0 ORDER BY collected_at DESC LIMIT 15"
         ).fetchall()
         for row in unprocessed:
             try:
@@ -649,7 +649,7 @@ async def collect_news():
                     row["id"],
                 ))
                 conn.commit()
-                await asyncio.sleep(0.3)  # rate limit
+                await asyncio.sleep(3)  # rate limit
             except Exception as e:
                 log.warning("AI rewrite error for %d: %s", row["id"], e)
 
@@ -939,8 +939,10 @@ async def get_feed(
         "has_preferences": has_prefs,
     }
 
-@app.get("/feed/explore")
+
+@app.get("/explore")
 async def explore_feed(
+    category: str = Query(""),
     pillar: int = Query(0),
     scope: str = Query(""),
     limit: int = Query(30),
@@ -950,17 +952,27 @@ async def explore_feed(
     conn = get_db()
     query = "SELECT * FROM articles WHERE 1=1"
     params = []
+
+    # If the frontend sends a category name, find the matching pillar ID
+    if category and not pillar:
+        for pid, p_data in PILLARS.items():
+            if p_data["name"].lower() == category.lower() or p_data["slug"].lower() == category.lower():
+                pillar = pid
+                break
+
     if pillar:
         query += " AND pillar_id=?"
         params.append(pillar)
     if scope:
         query += " AND scope=?"
         params.append(scope)
+    
     query += " ORDER BY published_at DESC LIMIT ?"
     params.append(limit)
     rows = conn.execute(query, params).fetchall()
     conn.close()
     return {"articles": [article_row_to_dict(r) for r in rows]}
+
 
 @app.get("/article/{article_id}")
 async def get_article(article_id: int, authorization: str = Header("")):
