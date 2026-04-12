@@ -1777,6 +1777,8 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
     <div class="chip tap" onclick="selectChip(this,'society')">🏛 Society</div>
     <div class="chip tap" onclick="selectChip(this,'tech')">🔬 Sci & Tech</div>
     <div class="chip tap" onclick="selectChip(this,'philo')">🔮 Philosophy</div>
+    <div class="chip tap" onclick="selectChip(this,'lifestyle')">✨ Lifestyle</div>
+    <div class="chip tap" onclick="selectChip(this,'sports')">⚽ Sports</div>
   </div>
   <div id="home-feed"></div>
   <div style="height:16px"></div>
@@ -2160,17 +2162,37 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 </nav>
 
 <script>
-/* ══════════════════════════════════════════
-   SHERBYTE v21 — LIVE BACKEND JS
-   Change API_URL to your backend address
-══════════════════════════════════════════ */
+
+
+/* ══════════════════════════════════════════════════
+   SHERBYTE v22 — FIXED JS
+   Key fixes:
+   1. Article normalizer uses backend field names
+   2. CATS lookup uses a.category (pillar slug from backend)
+   3. selectChip correctly maps to /explore?category=slug
+   4. has_more properly handled for infinite scroll
+   5. Structured feed renders all pillars balanced
+══════════════════════════════════════════════════ */
 
 // ── CONFIG ──────────────────────────────────────────────────────────────
 const API_URL = "https://sherr-b3z2.onrender.com";
-//const API_URL = "http://127.0.0.1:8000";
+
+// ── NORMALIZE ARTICLE ──────────────────────────────────────────────────
+// Backend returns headline/source_name/summary_60/full_body/category
+// Frontend expects title/source/preview/body_ai/category
+function normalizeArticle(a) {
+  return {
+    ...a,
+    title:    a.headline    || a.title    || "",
+    source:   a.source_name || a.source   || "",
+    preview:  a.summary_60  || a.preview  || "",
+    body_ai:  a.full_body   || a.body_ai  || "",
+    // category is pillar slug: society/economy/tech/arts/nature/selfwell/philo/lifestyle/sports
+    category: a.category    || a.pillar_slug || "tech",
+  };
+}
 
 // ── SMART IMAGE HELPER ──────────────────────────────────────────────────────
-// Category gradient backgrounds when no image is available
 const CAT_GRADIENTS = {
   society:  'linear-gradient(135deg,#0D2137,#1E88E5 80%)',
   economy:  'linear-gradient(135deg,#1A1400,#FBC02D 80%)',
@@ -2179,38 +2201,26 @@ const CAT_GRADIENTS = {
   nature:   'linear-gradient(135deg,#0A1A0A,#43A047 80%)',
   selfwell: 'linear-gradient(135deg,#1A0D00,#FB8C00 80%)',
   philo:    'linear-gradient(135deg,#150A1A,#8E24AA 80%)',
+  lifestyle:'linear-gradient(135deg,#001A1A,#00ACC1 80%)',
+  sports:   'linear-gradient(135deg,#0A0F1A,#546E7A 80%)',
 };
 
 const CAT_ICONS_IMG = {
   society:'🏛', economy:'💼', tech:'🔬', arts:'🎭',
-  nature:'🌿', selfwell:'🧘', philo:'🔮',
+  nature:'🌿', selfwell:'🧘', philo:'🔮', lifestyle:'✨', sports:'⚽',
 };
 
-/**
- * Creates an <img> element that:
- *  - Shows the real image if URL is valid and loads
- *  - Falls back to category gradient + icon if image fails or is missing
- * @param {string} url        - image URL (may be empty)
- * @param {string} category   - article category key
- * @param {string} cssClass   - CSS class for the img
- * @param {string} wrapClass  - CSS class for the wrapper div
- */
 function smartImg(url, category, cssClass, wrapClass) {
-  const cat     = category || 'tech';
-  const gradient= CAT_GRADIENTS[cat] || CAT_GRADIENTS.tech;
-  const icon    = CAT_ICONS_IMG[cat] || '📰';
-
-  const wrap = document.createElement('div');
+  const cat      = category || 'tech';
+  const gradient = CAT_GRADIENTS[cat] || CAT_GRADIENTS.tech;
+  const icon     = CAT_ICONS_IMG[cat] || '📰';
+  const wrap     = document.createElement('div');
   wrap.className = wrapClass || 'nc-img-wrap';
-
   if (url) {
-    const img = document.createElement('img');
-    img.src     = url;
-    img.alt     = '';
-    img.loading = 'lazy';
+    const img  = document.createElement('img');
+    img.src    = url; img.alt = ''; img.loading = 'lazy';
     img.className = cssClass || '';
     img.onerror = () => {
-      // Image failed to load → show gradient placeholder
       wrap.innerHTML = '';
       wrap.style.background = gradient;
       const ph = document.createElement('div');
@@ -2220,7 +2230,6 @@ function smartImg(url, category, cssClass, wrapClass) {
     };
     wrap.appendChild(img);
   } else {
-    // No URL at all → immediate gradient placeholder
     wrap.style.background = gradient;
     const ph = document.createElement('div');
     ph.className = 'nc-img-placeholder';
@@ -2228,19 +2237,6 @@ function smartImg(url, category, cssClass, wrapClass) {
     wrap.appendChild(ph);
   }
   return wrap;
-}
-
-/**
- * Same but returns HTML string for inline template literals.
- * Uses a data-src + data-cat approach; call activateSmartImgs() after append.
- */
-function smartImgHtml(url, category, wrapStyle) {
-  const style = wrapStyle || '';
-  return url
-    ? `<img src="${url}" loading="lazy" alt="" style="${style}"
-         data-cat="${category}"
-         onerror="this.outerHTML=catPlaceholderHtml('${category}','${style}')">`
-    : `<div style="width:100%;height:100%;${style};background:${CAT_GRADIENTS[category]||CAT_GRADIENTS.tech};display:flex;align-items:center;justify-content:center;font-size:1.8rem;opacity:0.7">${CAT_ICONS_IMG[category]||'📰'}</div>`;
 }
 
 function catPlaceholderHtml(category, style) {
@@ -2255,7 +2251,6 @@ try {
   const saved = JSON.parse(localStorage.getItem('sb21') || '{}');
   ST = Object.assign({ likes:[], saves:[], token:null, userId:null, interests:{} }, saved);
 } catch(e){}
-
 const persist = () => { try { localStorage.setItem('sb21', JSON.stringify(ST)); } catch(e){} };
 
 // ── API HELPER ──
@@ -2270,7 +2265,7 @@ async function api(path, opts = {}) {
   return res.json();
 }
 
-// ── CATEGORY CONFIG — VIBGYOR exact hex ──
+// ── CATEGORY CONFIG — matches backend pillar slugs ──
 const CATS = {
   arts:    { hex:'#E53935', bg:'rgba(229,57,53,0.12)',    label:'Arts, Culture & Recreation', icon:'🎭', short:'Arts' },
   selfwell:{ hex:'#FB8C00', bg:'rgba(251,140,0,0.12)',    label:'The Self & Well-being',       icon:'🧘', short:'Well-being' },
@@ -2279,40 +2274,40 @@ const CATS = {
   society: { hex:'#1E88E5', bg:'rgba(30,136,229,0.12)',   label:'Society & Governance',        icon:'🏛', short:'Society' },
   tech:    { hex:'#3949AB', bg:'rgba(57,73,171,0.12)',    label:'Science & Technology',        icon:'🔬', short:'Sci & Tech' },
   philo:   { hex:'#8E24AA', bg:'rgba(142,36,170,0.12)',   label:'Philosophy & Belief',         icon:'🔮', short:'Philosophy' },
+  lifestyle:{ hex:'#00ACC1',bg:'rgba(0,172,193,0.12)',    label:'Society & Lifestyle',         icon:'✨', short:'Lifestyle' },
+  sports:  { hex:'#546E7A', bg:'rgba(84,110,122,0.12)',   label:'Sports & Gaming',             icon:'⚽', short:'Sports' },
 };
 
-// Fallback articles shown before backend loads or if offline
+// Fallback articles shown before backend loads
 const FALLBACK_ARTICLES = [
-  {id:'f1', category:'tech',    source:'SherByte',  title:'Loading your personalised feed...', preview:'Connecting to the live news pipeline. Please wait a moment.', image_url:'', published_at: new Date().toISOString() },
-  {id:'f2', category:'society', source:'SherByte',  title:'Real AI-rewritten news is loading',  preview:'Articles are being fetched from 10+ sources and rewritten by Gemini AI.', image_url:'', published_at: new Date().toISOString() },
+  {id:'f1', category:'tech',    source:'SherByte', title:'Loading your personalised feed...', preview:'Connecting to the live news pipeline. Please wait a moment.', image_url:'', published_at: new Date().toISOString() },
+  {id:'f2', category:'society', source:'SherByte', title:'Real AI-powered news is loading',   preview:'Articles are being fetched from 55+ sources and rewritten by AI.', image_url:'', published_at: new Date().toISOString() },
 ];
 
 // ── NAVIGATION STATE ──
 const navEl   = document.querySelector('nav');
-let lastScrollY = 0;
-let curChip     = 'all';
-let isDark      = true;
-let feedPage    = 1;
-let feedLoading = false;
-let homeArticles= [];
+let lastScrollY  = 0;
+let curChip      = 'all';
+let isDark       = true;
+let feedPage     = 1;
+let feedLoading  = false;
+let homeArticles = [];
 let currentArticle = null;
 let expHeroTimer = null;
-let expHeroIdx = 0;
-let expHeroArts = [];
-let activeFeedCats   = new Set(['arts','selfwell','economy','nature','society','tech','philo']);
+let expHeroIdx   = 0;
+let expHeroArts  = [];
+let activeFeedCats   = new Set(['arts','selfwell','economy','nature','society','tech','philo','lifestyle','sports']);
 let activeFeedTopics = new Set(['AI','Climate','Politics','Finance','Sports']);
 let quizAnswered = false;
-let structuredFeedData = []; // all loaded articles pool
-let structuredFeedOffset = 0; // how many articles rendered so far
-const FEED_STRUCTURE = [15, 'bulletin', 5, 'latest', 20]; // repeating pattern
+let structuredFeedData   = [];
+let structuredFeedOffset = 0;
 
 // ── TOAST ──
 let toastTimer;
 function toast(msg) {
   clearTimeout(toastTimer);
   const el = document.getElementById('toast');
-  el.textContent = msg;
-  el.classList.add('show');
+  el.textContent = msg; el.classList.add('show');
   toastTimer = setTimeout(() => el.classList.remove('show'), 2600);
 }
 
@@ -2353,35 +2348,22 @@ const UI_STRINGS = {
   'मराठी':    { brand:'शेरबाईट',  home:'होम', explore:'शोधा', profile:'प्रोफाइल', feed:'फीड', all:'सर्व', tagline:'तुमचे जग', readmore:'वाचा', back:'मागे' },
   'ਪੰਜਾਬੀ':   { brand:'ਸ਼ੇਅਰਬਾਈਟ', home:'ਹੋਮ', explore:'ਖੋਜ', profile:'ਪ੍ਰੋਫਾਈਲ', feed:'ਫੀਡ', all:'ਸਭ', tagline:'ਤੁਹਾਡੀ ਦੁਨੀਆ', readmore:'ਪੜ੍ਹੋ', back:'ਵਾਪਸ' },
 };
-
 let currentLang = 'English';
 function toggleLangPicker() { document.getElementById('lang-picker').classList.toggle('open'); }
 function setLang(lang, flag) {
   currentLang = lang;
   const s = UI_STRINGS[lang] || UI_STRINGS['English'];
-
-  // Update lang picker active state
   document.querySelectorAll('.lang-item').forEach(el => {
     el.classList.remove('active');
     if (el.textContent.trim().includes(lang)) el.classList.add('active');
   });
-
-  // Update brand name in header, splash, sidebar
   const brandEl = document.getElementById('h-brand');
   if (brandEl) brandEl.innerHTML = s.brand.slice(0,-4) + `<span style="color:var(--p-blue3)">${s.brand.slice(-4)}</span>`;
-  const spName = document.querySelector('.sp-name');
-  if (spName) spName.textContent = s.brand;
-  const sbVer  = document.querySelector('.sb-ver');
-  if (sbVer) sbVer.textContent = s.brand + ' v22 · Mobile · Build 2026.04';
-
-  // Update nav labels
   const nbLabels = { 'nb-home': s.home, 'nb-explore': s.explore, 'nb-profile': s.profile };
   Object.entries(nbLabels).forEach(([id, txt]) => {
     const el = document.getElementById(id);
     if (el) el.querySelector('.nb-lbl').textContent = txt;
   });
-
-  // Close picker, show toast
   document.getElementById('lang-picker').classList.remove('open');
   toast(flag + ' ' + lang);
 }
@@ -2399,6 +2381,8 @@ function selectChip(el, cat) {
   curChip = cat;
   feedPage = 1;
   homeArticles = [];
+  structuredFeedData = [];
+  structuredFeedOffset = 0;
   document.getElementById('home-feed').innerHTML = '';
   loadFeed(true);
 }
@@ -2410,129 +2394,14 @@ function selScope(btn, scope) {
   toast('📍 ' + scope.charAt(0).toUpperCase() + scope.slice(1) + ' stories');
 }
 
-// ── AUTH MODAL ──
-function showAuthModal() {
-  // Create a simple modal overlay for login/register
-  const existing = document.getElementById('auth-modal');
-  if (existing) { existing.style.display='flex'; return; }
-
-  const modal = document.createElement('div');
-  modal.id = 'auth-modal';
-  modal.style.cssText = `
-    position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.8);
-    display:flex;align-items:center;justify-content:center;padding:20px;
-    backdrop-filter:blur(8px);
-  `;
-  modal.innerHTML = `
-    <div style="background:var(--bg1);border-radius:24px;padding:24px;width:100%;max-width:340px;border:1px solid var(--line);box-shadow:0 20px 60px rgba(0,0,0,0.5)">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px">
-        <div style="width:36px;height:36px;border-radius:12px;background:linear-gradient(135deg,#1A111F,#2C3D8F,#4F6BD4);display:flex;align-items:center;justify-content:center;font-size:1.2rem">⚡</div>
-        <div style="font-family:var(--fd);font-size:1.1rem;font-weight:700;color:var(--t1)">SherByte</div>
-        <div style="margin-left:auto;cursor:pointer;color:var(--t3);font-size:1.2rem" onclick="document.getElementById('auth-modal').style.display='none'">✕</div>
-      </div>
-
-      <div style="display:flex;background:var(--bg2);border-radius:12px;padding:3px;margin-bottom:16px;border:1px solid var(--line2)" id="auth-tabs">
-        <div onclick="authTab('login')" id="tab-login"
-          style="flex:1;text-align:center;padding:7px;border-radius:10px;font-size:0.8rem;font-weight:700;cursor:pointer;background:var(--bg4);color:var(--t1)">
-          Sign In
-        </div>
-        <div onclick="authTab('register')" id="tab-register"
-          style="flex:1;text-align:center;padding:7px;border-radius:10px;font-size:0.8rem;font-weight:700;cursor:pointer;color:var(--t3)">
-          Register
-        </div>
-      </div>
-
-      <div id="auth-error" style="display:none;background:rgba(255,91,91,0.1);border:1px solid rgba(255,91,91,0.3);border-radius:10px;padding:8px 12px;margin-bottom:12px;font-size:0.76rem;color:#FF5B5B"></div>
-
-      <input id="auth-name" type="text" placeholder="Display name (optional)"
-        style="display:none;width:100%;padding:10px 14px;margin-bottom:10px;background:var(--bg2);border:1px solid var(--line);border-radius:12px;color:var(--t1);font-size:0.84rem;font-family:var(--f);outline:none">
-
-      <input id="auth-email" type="email" placeholder="Email address"
-        style="width:100%;padding:10px 14px;margin-bottom:10px;background:var(--bg2);border:1px solid var(--line);border-radius:12px;color:var(--t1);font-size:0.84rem;font-family:var(--f);outline:none">
-
-      <input id="auth-pass" type="password" placeholder="Password"
-        style="width:100%;padding:10px 14px;margin-bottom:16px;background:var(--bg2);border:1px solid var(--line);border-radius:12px;color:var(--t1);font-size:0.84rem;font-family:var(--f);outline:none">
-
-      <button onclick="doAuth()" id="auth-btn"
-        style="width:100%;padding:11px;background:linear-gradient(135deg,#002063,#1565e8);color:#fff;border:none;border-radius:12px;font-size:0.88rem;font-weight:700;cursor:pointer;font-family:var(--f);box-shadow:0 4px 16px rgba(44,61,143,0.4)">
-        Sign In
-      </button>
-
-      <div style="text-align:center;margin-top:12px;font-size:0.72rem;color:var(--t3)">
-        Your feed personalises as you read. No tracking outside the app.
-      </div>
-    </div>`;
-  document.querySelector('.phone').appendChild(modal);
-}
-
-let authMode = 'login';
-function authTab(mode) {
-  authMode = mode;
-  document.getElementById('tab-login').style.background    = mode==='login'    ? 'var(--bg4)' : 'transparent';
-  document.getElementById('tab-login').style.color         = mode==='login'    ? 'var(--t1)'  : 'var(--t3)';
-  document.getElementById('tab-register').style.background = mode==='register' ? 'var(--bg4)' : 'transparent';
-  document.getElementById('tab-register').style.color      = mode==='register' ? 'var(--t1)'  : 'var(--t3)';
-  document.getElementById('auth-name').style.display       = mode==='register' ? 'block' : 'none';
-  document.getElementById('auth-btn').textContent          = mode==='login'    ? 'Sign In' : 'Create Account';
-  document.getElementById('auth-error').style.display      = 'none';
-}
-
-async function doAuth() {
-  const email = document.getElementById('auth-email').value.trim();
-  const pass  = document.getElementById('auth-pass').value;
-  const name  = document.getElementById('auth-name').value.trim();
-  const errEl = document.getElementById('auth-error');
-  const btn   = document.getElementById('auth-btn');
-
-  if (!email || !pass) { errEl.textContent='Enter email and password'; errEl.style.display='block'; return; }
-
-  btn.textContent = '...';
-  btn.disabled = true;
-  try {
-    let data;
-    if (authMode === 'login') {
-      data = await api('/auth/login', { method:'POST', body: JSON.stringify({ email, password: pass }) });
-    } else {
-      data = await api('/auth/register', { method:'POST', body: JSON.stringify({ email, password: pass, display_name: name || undefined }) });
-    }
-    ST.token  = data.token;
-    ST.userId = data.user_id;
-    persist();
-    document.getElementById('auth-modal').style.display = 'none';
-    toast('✦ Signed in! Your feed is personalising...');
-    loadFeed(true);
-    updateProfileUI(data);
-  } catch(e) {
-    errEl.textContent = e.message;
-    errEl.style.display = 'block';
-  } finally {
-    btn.textContent = authMode === 'login' ? 'Sign In' : 'Create Account';
-    btn.disabled = false;
-  }
-}
-
-function signOut() {
-  ST.token = null; ST.userId = null;
-  persist();
-  sbClose();
-  toast('👋 Signed out');
-  loadFeed(true);
-}
-
-function updateProfileUI(data) {
-  if (!data) return;
-  const nameEl = document.querySelector('.prof-name');
-  const sbNameEl = document.querySelector('.sb-name');
-  if (nameEl && data.display_name) nameEl.textContent = data.display_name;
-  if (sbNameEl && data.display_name) sbNameEl.textContent = data.display_name;
-}
-
-// ── ARTICLE CARD RENDER (free-flow, no boxes) ──
-function renderArticleCard(a, container) {
-  const cc  = CATS[a.category] || CATS.tech;
+// ── ARTICLE CARD RENDER ──
+function renderArticleCard(rawArticle, container) {
+  const a  = normalizeArticle(rawArticle);
+  const cc = CATS[a.category] || CATS.tech;
   const liked = ST.likes.includes(a.id);
   const saved = ST.saves.includes(a.id);
   const timeStr = timeAgo(a.published_at);
+  const safeTitle = (a.title||'').replace(/'/g, "&#39;").replace(/"/g, '&quot;');
 
   const d = document.createElement('div');
   d.className = 'nc fadein';
@@ -2545,10 +2414,7 @@ function renderArticleCard(a, container) {
       clearTimeout(clickTimer); clickTimer = null;
       openArticle(a);
     } else {
-      clickTimer = setTimeout(() => {
-        clickTimer = null;
-        d.classList.toggle('expanded');
-      }, 240);
+      clickTimer = setTimeout(() => { clickTimer = null; d.classList.toggle('expanded'); }, 240);
     }
   });
 
@@ -2556,16 +2422,24 @@ function renderArticleCard(a, container) {
     <div class="nc-meta">
       <div class="nc-src-ico">${(a.source||'S').charAt(0)}</div>
       <span class="nc-src">${a.source||''}</span>
-      <span class="nc-time" style="font-size:0.66rem;color:var(--t3)">${timeStr ? '· '+timeStr : ''}</span>
+      <span style="font-size:0.66rem;color:var(--t3)">${timeStr ? '· '+timeStr : ''}</span>
       <span class="nc-tag" style="background:${cc.bg};color:${cc.hex}">${cc.icon} ${cc.short}</span>
     </div>
     <div class="nc-body">
       <div class="nc-text">
         <div class="nc-title">${a.title}</div>
         <div class="nc-desc">${a.preview||a.body_ai||''}</div>
-        <div class="nc-expand-extra">${a.body_ai||a.preview||''}<br><br><span style="color:var(--accent);font-weight:600;font-size:0.74rem">Double-tap to read full article →</span></div>
+        <div class="nc-expand-extra">${a.body_ai||a.preview||''}<br><br>
+          <span style="color:var(--accent);font-weight:600;font-size:0.74rem">Double-tap to read full article →</span>
+        </div>
       </div>
-      ${smartImgHtml(a.image_url, a.category, 'border-radius:12px;width:88px;height:66px;object-fit:cover;flex-shrink:0')}
+      ${a.image_url
+        ? `<div class="nc-img-wrap"><img src="${a.image_url}" loading="lazy" alt=""
+              style="width:100%;height:100%;object-fit:cover;border-radius:10px"
+              onerror="this.parentNode.style.background='${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}';this.remove()">
+           </div>`
+        : `<div class="nc-img-wrap" style="background:${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech};display:flex;align-items:center;justify-content:center;font-size:1.4rem;opacity:0.8">${cc.icon}</div>`
+      }
     </div>
     <div class="nc-acts">
       <div class="nc-act tap ${liked?'red':''}" id="lk-${a.id}" onclick="toggleLike('${a.id}','${a.category}',this)">
@@ -2574,11 +2448,12 @@ function renderArticleCard(a, container) {
       <div class="nc-act tap ${saved?'acc':''}" id="sv-${a.id}" onclick="toggleSave('${a.id}','${a.category}',this)">
         <i class="fa-${saved?'solid':'regular'} fa-bookmark"></i>
       </div>
-      <div class="nc-act tap" onclick="shareArt('${(a.title||'').replace(/'/g,"\\'")}')">
+      <div class="nc-act tap" onclick="shareArt('${safeTitle}')">
         <i class="fa-solid fa-paper-plane"></i>
       </div>
       <div class="nc-sp"></div>
-      <div class="nc-act tap" style="color:var(--accent);font-size:0.7rem;font-weight:700" onclick='openArticle(${JSON.stringify(a).replace(/'/g,"&#39;")})'>
+      <div class="nc-act tap" style="color:var(--accent);font-size:0.7rem;font-weight:700"
+           onclick="openArticle(${JSON.stringify(a).replace(/</g,'&lt;').replace(/>/g,'&gt;')})">
         Read <i class="fa-solid fa-arrow-right" style="font-size:0.65rem"></i>
       </div>
     </div>`;
@@ -2590,7 +2465,6 @@ function renderArticleCard(a, container) {
     }
   }, { threshold: 0.6 });
   observer.observe(d);
-
   container.appendChild(d);
 }
 
@@ -2600,10 +2474,10 @@ function renderBulletinBlock(articles, container) {
   const block = document.createElement('div');
   block.className = 'feed-bulletin fadein';
   block.innerHTML = `<div class="feed-bulletin-lbl">Top News</div>` +
-    articles.slice(0,5).map(a => {
+    articles.slice(0,5).map(rawA => {
+      const a = normalizeArticle(rawA);
       const cc = CATS[a.category]||CATS.tech;
-      const safeA = JSON.stringify(a).replace(/'/g,"&#39;");
-      return `<div class="feed-bulletin-item tap" onclick='openArticle(${safeA})'>
+      return `<div class="feed-bulletin-item tap" onclick='openArticle(${JSON.stringify(a).replace(/'/g,"&#39;")})'>
         <div class="fbi-dot" style="background:${cc.hex}"></div>
         <div><div class="fbi-title">${a.title}</div><div class="fbi-src">${a.source} · ${timeAgo(a.published_at)}</div></div>
       </div>`;
@@ -2611,15 +2485,15 @@ function renderBulletinBlock(articles, container) {
   container.appendChild(block);
 }
 
-// ── RENDER LATEST NEWS BLOCK (CNBC style) ──
+// ── RENDER LATEST NEWS BLOCK ──
 function renderLatestBlock(articles, container) {
   if (!articles.length) return;
   const block = document.createElement('div');
   block.className = 'feed-latest-news fadein';
   block.innerHTML = `<div class="fln-header"><i class="fa-solid fa-circle-dot" style="color:var(--c-blue)"></i> Latest News</div>` +
-    articles.slice(0,4).map(a => {
-      const safeA = JSON.stringify(a).replace(/'/g,"&#39;");
-      return `<div class="fln-item tap" onclick='openArticle(${safeA})'>
+    articles.slice(0,4).map(rawA => {
+      const a = normalizeArticle(rawA);
+      return `<div class="fln-item tap" onclick='openArticle(${JSON.stringify(a).replace(/'/g,"&#39;")})'>
         <div class="fln-time">${timeAgo(a.published_at)||'Just now'}</div>
         <div><div class="fln-title">${a.title}</div><div class="fln-src">${a.source}</div></div>
       </div>`;
@@ -2627,14 +2501,13 @@ function renderLatestBlock(articles, container) {
   container.appendChild(block);
 }
 
-// ── RENDER STRUCTURED FEED (15 → bulletin → 5 → latest → 20 → repeat) ──
+// ── RENDER STRUCTURED FEED ──
 function renderStructuredFeed(articles, container, reset=false) {
   if (reset) { container.innerHTML=''; structuredFeedOffset=0; }
-  const pool = articles;
-  let idx = structuredFeedOffset;
+  const pool    = articles;
+  let idx       = structuredFeedOffset;
   const pattern = [15, 'bulletin', 5, 'latest', 20];
   let pi = 0;
-
   while (idx < pool.length) {
     const step = pattern[pi % pattern.length];
     if (step === 'bulletin') {
@@ -2645,12 +2518,11 @@ function renderStructuredFeed(articles, container, reset=false) {
       renderLatestBlock(pool.slice(idx, idx+4), container);
       pi++; continue;
     }
-    // normal articles
     const chunk = pool.slice(idx, idx + step);
     chunk.forEach(a => renderArticleCard(a, container));
     idx += chunk.length;
     pi++;
-    if (chunk.length < step) break; // not enough articles for full chunk
+    if (chunk.length < step) break;
   }
   structuredFeedOffset = idx;
 }
@@ -2658,9 +2530,11 @@ function renderStructuredFeed(articles, container, reset=false) {
 // ── LOAD FEED ──
 async function loadFeed(reset = false) {
   if (feedLoading) return;
-  if (reset) { feedPage=1; homeArticles=[]; structuredFeedData=[]; structuredFeedOffset=0; document.getElementById('home-feed').innerHTML=''; }
+  if (reset) {
+    feedPage = 1; homeArticles = []; structuredFeedData = []; structuredFeedOffset = 0;
+    document.getElementById('home-feed').innerHTML = '';
+  }
   feedLoading = true;
-
   const loadEl = document.createElement('div');
   loadEl.id = 'feed-loader';
   loadEl.style.cssText = 'text-align:center;padding:20px;color:var(--t3);font-size:0.8rem';
@@ -2668,18 +2542,12 @@ async function loadFeed(reset = false) {
   document.getElementById('home-feed').appendChild(loadEl);
 
   try {
+    // Use /explore for category filter, /feed for "all"
     const url = curChip === 'all'
-      ? `/feed?page=${feedPage}`
-      : `/explore?category=${curChip}&page=${feedPage}`;
+      ? `/feed?page=${feedPage}&limit=20`
+      : `/explore?category=${curChip}&page=${feedPage}&limit=30`;
     const data = await api(url);
-    
-const articles = (data.articles || []).map(a => ({
-  ...a,
-  title: a.headline,
-  source: a.source_name,
-  preview: a.summary_60,
-  body_ai: a.full_body
-}));
+    const articles = (data.articles || []).map(normalizeArticle);
 
     document.getElementById('feed-loader')?.remove();
     const c = document.getElementById('home-feed');
@@ -2691,10 +2559,22 @@ const articles = (data.articles || []).map(a => ({
 
     homeArticles = homeArticles.concat(articles);
     structuredFeedData = homeArticles;
-    renderStructuredFeed(structuredFeedData, c, reset);
+
+    if (curChip === 'all') {
+      renderStructuredFeed(structuredFeedData, c, reset);
+    } else {
+      // Category filter: show flat list
+      articles.forEach(a => renderArticleCard(a, c));
+    }
+
     if (data.has_more) feedPage++;
 
-    if (feedPage === 2) updateExpGrid(articles.slice(0,14));
+    // Feed explore grid after first load
+    if (feedPage === 2 && homeArticles.length) {
+      renderExpHeroWithArticles(homeArticles);
+      updateExpGrid(homeArticles.slice(0, 14));
+      renderFeedArticles();
+    }
 
   } catch(e) {
     document.getElementById('feed-loader')?.remove();
@@ -2715,13 +2595,11 @@ const articles = (data.articles || []).map(a => ({
 function toggleLike(id, category, el) {
   const i = ST.likes.indexOf(id);
   if (i===-1) {
-    ST.likes.push(id);
-    el.classList.add('red');
+    ST.likes.push(id); el.classList.add('red');
     el.querySelector('i').className='fa-solid fa-heart';
     logInteract(id, category, 'like');
   } else {
-    ST.likes.splice(i,1);
-    el.classList.remove('red');
+    ST.likes.splice(i,1); el.classList.remove('red');
     el.querySelector('i').className='fa-regular fa-heart';
   }
   el.style.animation='heartPop 0.35s forwards';
@@ -2732,14 +2610,11 @@ function toggleLike(id, category, el) {
 function toggleSave(id, category, el) {
   const i = ST.saves.indexOf(id);
   if (i===-1) {
-    ST.saves.push(id);
-    el.classList.add('acc');
+    ST.saves.push(id); el.classList.add('acc');
     el.querySelector('i').className='fa-solid fa-bookmark';
-    toast('🔖 Saved!');
-    logInteract(id, category, 'save');
+    toast('🔖 Saved!'); logInteract(id, category, 'save');
   } else {
-    ST.saves.splice(i,1);
-    el.classList.remove('acc');
+    ST.saves.splice(i,1); el.classList.remove('acc');
     el.querySelector('i').className='fa-regular fa-bookmark';
     toast('✓ Removed');
   }
@@ -2754,12 +2629,15 @@ function toggleSave(id, category, el) {
 async function logInteract(articleId, category, action, duration=0) {
   if (!ST.token) return;
   try {
-    await api('/interact', { method:'POST', body: JSON.stringify({ article_id: articleId, category, action, duration_sec: duration }) });
+    await api('/interact', { method:'POST', body: JSON.stringify({
+      article_id: parseInt(articleId) || 0, category, action, duration_sec: duration
+    })});
   } catch(e) {}
 }
 
-// ── OPEN ARTICLE FULL SCREEN ──
-function openArticle(a) {
+// ── OPEN ARTICLE ──
+function openArticle(rawA) {
+  const a = normalizeArticle(rawA);
   if (!a || !a.id) return;
   currentArticle = a;
   const cc = CATS[a.category] || CATS.tech;
@@ -2767,37 +2645,38 @@ function openArticle(a) {
   const aoHero = document.querySelector('.ao-hero');
   if (aoHero) {
     aoHero.innerHTML = '';
-    const heroWrap = smartImg(a.image_url, a.category, '', '');
-    heroWrap.style.cssText = 'width:100%;height:100%;position:relative;';
-    const overlay = document.createElement('div');
-    overlay.className = 'ao-hero-overlay';
-    const pill = document.createElement('div');
-    pill.className = 'ao-hero-cat';
-    pill.id = 'ao-cat-pill';
-    aoHero.appendChild(heroWrap);
-    aoHero.appendChild(overlay);
-    aoHero.appendChild(pill);
+    const overlay = document.createElement('div'); overlay.className = 'ao-hero-overlay';
+    const pill    = document.createElement('div'); pill.className = 'ao-hero-cat'; pill.id = 'ao-cat-pill';
+    if (a.image_url) {
+      const img = document.createElement('img'); img.id = 'ao-img';
+      img.src = a.image_url; img.alt = ''; img.loading = 'lazy';
+      img.onerror = () => {
+        aoHero.style.background = CAT_GRADIENTS[a.category] || CAT_GRADIENTS.tech;
+        img.remove();
+      };
+      aoHero.appendChild(img);
+    } else {
+      aoHero.style.background = CAT_GRADIENTS[a.category] || CAT_GRADIENTS.tech;
+      const ph = document.createElement('div');
+      ph.style.cssText='width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:3rem;opacity:0.6';
+      ph.textContent = cc.icon; aoHero.appendChild(ph);
+    }
+    aoHero.appendChild(overlay); aoHero.appendChild(pill);
   }
-  const imgEl = document.getElementById('ao-img') || {src:'',style:{}};
 
   document.getElementById('ao-title-hdr').textContent = a.title;
-
   const catPill = document.getElementById('ao-cat-pill');
   catPill.style.color = cc.hex; catPill.textContent = cc.label;
-
   const srcDot = document.getElementById('ao-src-dot');
   srcDot.textContent = (a.source||'S').charAt(0).toUpperCase();
   srcDot.style.background = cc.bg; srcDot.style.color = cc.hex;
-
   document.getElementById('ao-src-name').textContent = a.source || '';
   document.getElementById('ao-src-time').textContent = timeAgo(a.published_at) || '';
   document.getElementById('ao-main-title').textContent = a.title;
-
   const body = a.body_ai || a.preview || '';
   document.getElementById('ao-text').textContent = body +
     (body.length < 200 ? '' : '\n\nThis story continues to develop. Our editorial team is tracking additional details.');
 
-  // Like/save state
   const likeEl = document.getElementById('ao-like');
   const saveEl = document.getElementById('ao-save');
   likeEl.className = 'ao-act tap' + (ST.likes.includes(a.id) ? ' liked' : '');
@@ -2805,17 +2684,19 @@ function openArticle(a) {
   saveEl.className = 'ao-act tap' + (ST.saves.includes(a.id) ? ' saved' : '');
   saveEl.querySelector('i').className = ST.saves.includes(a.id) ? 'fa-solid fa-bookmark' : 'fa-regular fa-bookmark';
 
-  // Related articles from what's loaded
-  const related = homeArticles.filter(x => x.category === a.category && x.id !== a.id).slice(0,3);
+  // Related articles (same pillar/category)
+  const related = homeArticles.map(normalizeArticle).filter(x => x.category === a.category && x.id !== a.id).slice(0,3);
   const rc = document.getElementById('ao-related');
   rc.innerHTML = '';
   related.forEach(ra => {
     const rcc = CATS[ra.category] || CATS.tech;
-    const d = document.createElement('div');
+    const d   = document.createElement('div');
     d.className = 'ao-related-card tap';
-    d.onclick = () => openArticle(ra);
+    d.onclick   = () => openArticle(ra);
     d.innerHTML = `
-      ${ra.image_url ? `<img class="ao-related-img" src="${ra.image_url}" loading="lazy" alt="" onerror="this.style.background=CAT_GRADIENTS[this.closest('[data-cat]')?.dataset?.cat||'tech']||'var(--bg3)';this.style.display='none'">` : '<div class="ao-related-img" style="background:var(--bg3)"></div>'}
+      ${ra.image_url ? `<img class="ao-related-img" src="${ra.image_url}" loading="lazy" alt=""
+        onerror="this.style.background='${CAT_GRADIENTS[ra.category]||CAT_GRADIENTS.tech}';this.style.display='none'">` :
+        `<div class="ao-related-img" style="background:${CAT_GRADIENTS[ra.category]||CAT_GRADIENTS.tech};display:flex;align-items:center;justify-content:center;font-size:1.2rem">${rcc.icon}</div>`}
       <div class="ao-related-info">
         <div class="ao-related-cat" style="color:${rcc.hex}">${rcc.short}</div>
         <div class="ao-related-title">${ra.title}</div>
@@ -2823,38 +2704,6 @@ function openArticle(a) {
       </div>`;
     rc.appendChild(d);
   });
-
-  // Quiz (if available)
-  const quiz = a.quiz;
-  if (quiz && quiz.length > 0 && rc.parentNode) {
-    const qcard = document.createElement('div');
-    qcard.className = 'explore-quiz-card';
-    qcard.style.marginBottom = '16px';
-    const q = quiz[0];
-    let qAnswered = false;
-    qcard.innerHTML = `
-      <div style="font-size:0.62rem;font-weight:700;color:var(--accent);letter-spacing:1px;margin-bottom:8px">ARTICLE QUIZ</div>
-      <div class="quiz-q">${q.question}</div>
-      <div class="quiz-opts">
-        ${(q.options||[]).map((o,i)=>`<div class="quiz-opt tap" data-i="${i}">${o}</div>`).join('')}
-      </div>`;
-    qcard.querySelectorAll('.quiz-opt').forEach(optEl => {
-      optEl.onclick = () => {
-        if (qAnswered) return;
-        qAnswered = true;
-        const chosen = parseInt(optEl.dataset.i);
-        const correct = q.answer_index ?? 0;
-        qcard.querySelectorAll('.quiz-opt').forEach((o,i) => {
-          if (i===correct) o.classList.add('correct');
-          else if (i===chosen && chosen!==correct) o.classList.add('wrong');
-        });
-        toast(chosen===correct ? '🎉 Correct!' : '❌ Wrong! See the highlight.');
-        logInteract(a.id, a.category, 'quiz_complete');
-      };
-    });
-    const body = document.querySelector('.ao-body');
-    if (body) body.insertBefore(qcard, rc);
-  }
 
   document.getElementById('ao-scroll').scrollTop = 0;
   document.getElementById('article-overlay').classList.add('open');
@@ -2864,14 +2713,13 @@ function openArticle(a) {
 function closeArticle() {
   document.getElementById('article-overlay').classList.remove('open');
   currentArticle = null;
-  // Clean up quiz cards
   document.querySelectorAll('.ao-body .explore-quiz-card').forEach(e=>e.remove());
 }
 
 function aoLike() {
   if (!currentArticle) return;
   const el = document.getElementById('ao-like');
-  const i = ST.likes.indexOf(currentArticle.id);
+  const i  = ST.likes.indexOf(currentArticle.id);
   if (i===-1) {
     ST.likes.push(currentArticle.id); el.classList.add('liked');
     el.querySelector('i').className='fa-solid fa-heart';
@@ -2886,7 +2734,7 @@ function aoLike() {
 function aoSave() {
   if (!currentArticle) return;
   const el = document.getElementById('ao-save');
-  const i = ST.saves.indexOf(currentArticle.id);
+  const i  = ST.saves.indexOf(currentArticle.id);
   if (i===-1) {
     ST.saves.push(currentArticle.id); el.classList.add('saved');
     el.querySelector('i').className='fa-solid fa-bookmark'; toast('🔖 Saved!');
@@ -2901,11 +2749,10 @@ function aoSave() {
 }
 
 // ── EXPLORE ──
-function renderExpHeroWithArticles(arts) {
-  expHeroArts = arts.filter(a => a.image_url);
+function renderExpHeroWithArticles(rawArts) {
+  expHeroArts = rawArts.map(normalizeArticle).filter(a => a.image_url);
   if (!expHeroArts.length) return;
-  expHeroIdx = 0;
-  renderExpHeroSlide();
+  expHeroIdx = 0; renderExpHeroSlide();
   clearInterval(expHeroTimer);
   expHeroTimer = setInterval(() => { expHeroIdx++; renderExpHeroSlide(); }, 5000);
 }
@@ -2917,7 +2764,7 @@ function renderExpHeroSlide() {
   const cc = CATS[a.category] || CATS.tech;
   wrap.innerHTML = `
     <div class="exp-hero tap" onclick='openArticle(${JSON.stringify(a).replace(/'/g,"&#39;")})'>
-      <img src="${a.image_url}" loading="lazy" alt="" onerror="this.src=''">
+      <img src="${a.image_url}" loading="lazy" alt="" onerror="this.parentNode.style.background='${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}';this.remove()">
       <div class="exp-hero-overlay">
         <div class="exp-hero-badge"><span style="color:${cc.hex}">${cc.icon}</span> ${cc.short}</div>
         <div class="exp-hero-title">${a.title}</div>
@@ -2929,16 +2776,20 @@ function renderExpHeroSlide() {
     </div>`;
 }
 
-function updateExpGrid(articles) {
+function updateExpGrid(rawArticles) {
   const c = document.getElementById('exp-grid');
   c.innerHTML = '';
-  articles.forEach((a,i) => {
+  rawArticles.map(normalizeArticle).forEach((a,i) => {
     const cc = CATS[a.category] || CATS.tech;
-    const d = document.createElement('div');
+    const d  = document.createElement('div');
     d.className = 'exp-card fadein tap' + (i%7===0?' tall':'');
-    d.onclick = () => openArticle(a);
+    d.onclick   = () => openArticle(a);
     d.innerHTML = `
-      ${a.image_url ? `<img src="${a.image_url}" loading="lazy" alt="" onerror="this.style.background=CAT_GRADIENTS[this.closest('[data-cat]')?.dataset?.cat||'tech']||'var(--bg3)';this.style.display='none'">` : `<div style="height:120px;background:${cc.bg}"></div>`}
+      ${a.image_url
+        ? `<img src="${a.image_url}" loading="lazy" alt="" style="min-height:120px"
+             onerror="this.parentNode.style.background='${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}';this.remove()">`
+        : `<div style="height:120px;background:${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech};display:flex;align-items:center;justify-content:center;font-size:1.8rem;opacity:0.6">${cc.icon}</div>`
+      }
       <div class="exp-card-info">
         <div class="exp-card-cat" style="color:${cc.hex}">${cc.icon} ${cc.short}</div>
         <div class="exp-card-title">${a.title}</div>
@@ -2951,18 +2802,24 @@ function renderExpCats() {
   const c = document.getElementById('exp-cat-row');
   if (c.children.length) return;
   const cats = [
-    { label:'Arts',      color:'#E53935', icon:'fa-palette',    cat:'arts' },
-    { label:'Well-being',color:'#FB8C00', icon:'fa-heart',      cat:'selfwell' },
-    { label:'Business',  color:'#FBC02D', icon:'fa-chart-line', cat:'economy' },
-    { label:'Nature',    color:'#43A047', icon:'fa-leaf',       cat:'nature' },
-    { label:'Society',   color:'#1E88E5', icon:'fa-users',      cat:'society' },
-    { label:'Sci & Tech',color:'#3949AB', icon:'fa-flask',      cat:'tech' },
-    { label:'Philosophy',color:'#8E24AA', icon:'fa-book-open',  cat:'philo' },
+    { label:'Arts',       color:'#E53935', icon:'fa-palette',    cat:'arts' },
+    { label:'Well-being', color:'#FB8C00', icon:'fa-heart',      cat:'selfwell' },
+    { label:'Business',   color:'#FBC02D', icon:'fa-chart-line', cat:'economy' },
+    { label:'Nature',     color:'#43A047', icon:'fa-leaf',       cat:'nature' },
+    { label:'Society',    color:'#1E88E5', icon:'fa-users',      cat:'society' },
+    { label:'Sci & Tech', color:'#3949AB', icon:'fa-flask',      cat:'tech' },
+    { label:'Philosophy', color:'#8E24AA', icon:'fa-book-open',  cat:'philo' },
+    { label:'Lifestyle',  color:'#00ACC1', icon:'fa-globe',      cat:'lifestyle' },
+    { label:'Sports',     color:'#546E7A', icon:'fa-trophy',     cat:'sports' },
   ];
   cats.forEach(ct => {
     const d = document.createElement('div');
     d.className = 'exp-cat-item tap';
-    d.onclick = () => { navTo('home'); selectChip(document.querySelector(`[onclick*="${ct.cat}"]`), ct.cat); };
+    d.onclick = () => {
+      navTo('home');
+      const chipEl = document.querySelector(`.chip[onclick*="'${ct.cat}'"]`);
+      if (chipEl) selectChip(chipEl, ct.cat);
+    };
     d.innerHTML = `<div class="exp-cat-icon" style="color:${ct.color};background:${ct.color}20">
       <i class="fa-solid ${ct.icon}" style="color:${ct.color}"></i>
     </div><div class="exp-cat-label">${ct.label}</div>`;
@@ -3024,37 +2881,29 @@ function answerQuiz(el, idx, ans) {
 async function renderBM() {
   const c = document.getElementById('bm-feed');
   c.innerHTML = '<div style="text-align:center;color:var(--t3);padding:30px;font-size:0.8rem">Loading...</div>';
-
   try {
     let savedArticles = [];
     if (ST.token) {
       const data = await api('/bookmarks');
-      savedArticles = (data.articles || []).map(a => ({
-  ...a,
-  title: a.headline,
-  source: a.source_name,
-  preview: a.summary_60,
-  body_ai: a.full_body
-}));
-
+      savedArticles = (data.articles || []).map(normalizeArticle);
     } else {
-      // Local saves — find from homeArticles
-      savedArticles = homeArticles.filter(a => ST.saves.includes(a.id));
+      savedArticles = homeArticles.map(normalizeArticle).filter(a => ST.saves.includes(a.id));
     }
-
     c.innerHTML = '';
     if (!savedArticles.length) {
       c.innerHTML = '<div style="text-align:center;color:var(--t3);padding:50px 20px;font-size:0.88rem">No bookmarks yet.<br><span style="font-size:0.78rem;opacity:0.6">Tap the bookmark icon on any article.</span></div>';
       return;
     }
-
     savedArticles.forEach(a => {
       const cc = CATS[a.category] || CATS.tech;
-      const d = document.createElement('div');
+      const d  = document.createElement('div');
       d.className = 'bm-card fadein tap';
-      d.onclick = (e) => { if (!e.target.closest('.bm-act')) openArticle(a); };
+      d.onclick   = (e) => { if (!e.target.closest('.bm-act')) openArticle(a); };
       d.innerHTML = `
-        ${a.image_url ? `<img class="bm-img" src="${a.image_url}" loading="lazy" alt="" onerror="this.style.background=CAT_GRADIENTS[this.closest('[data-cat]')?.dataset?.cat||'tech']||'var(--bg3)';this.style.display='none'">` : `<div class="bm-img" style="background:${cc.bg}"></div>`}
+        ${a.image_url
+          ? `<img class="bm-img" src="${a.image_url}" loading="lazy" alt="" onerror="this.style.background='${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}';this.style.display='none'">`
+          : `<div class="bm-img" style="background:${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech};display:flex;align-items:center;justify-content:center;font-size:1.2rem">${cc.icon}</div>`
+        }
         <div class="bm-info">
           <div class="bm-title">${a.title}</div>
           <div class="bm-src">${a.source} · ${cc.short}</div>
@@ -3076,10 +2925,10 @@ function renderNotifs() {
   const c = document.getElementById('notifs-feed');
   c.innerHTML = '';
   const notifData = [
-    { img:'', title:'Your feed has been updated with new articles', time:'Just now' },
-    { img:'', title:'You have 3 unread articles in Sci & Tech', time:'10 min ago' },
-    { img:'', title:'Daily quiz is ready — test your knowledge', time:'1 hr ago' },
-    { img:'', title:'New trending story in Business & Economy', time:'2 hr ago' },
+    { title:'Your feed has been updated with new articles', time:'Just now' },
+    { title:'You have new articles in Sports & Gaming', time:'10 min ago' },
+    { title:'Daily quiz is ready — test your knowledge', time:'1 hr ago' },
+    { title:'New trending story in Business & Economy', time:'2 hr ago' },
   ];
   notifData.forEach(n => {
     const d = document.createElement('div');
@@ -3097,15 +2946,14 @@ function renderFeedFilterChips() {
   c.innerHTML = '';
   Object.entries(CATS).forEach(([key,cat]) => {
     const on = activeFeedCats.has(key);
-    const d = document.createElement('div');
+    const d  = document.createElement('div');
     d.className = `ffc tap${on?' on':''}`;
     d.style.color      = on ? '#fff' : cat.hex;
     d.style.borderColor= on ? 'transparent' : 'var(--line)';
     d.style.background = on ? cat.hex : 'transparent';
     d.textContent      = cat.icon + ' ' + cat.short;
     d.onclick = () => {
-      if (activeFeedCats.has(key)) activeFeedCats.delete(key);
-      else activeFeedCats.add(key);
+      if (activeFeedCats.has(key)) activeFeedCats.delete(key); else activeFeedCats.add(key);
       renderFeedFilterChips(); renderFeedCatCards(); renderFeedArticles();
     };
     c.appendChild(d);
@@ -3113,27 +2961,28 @@ function renderFeedFilterChips() {
 }
 
 function renderFeedCatCards() {
-  const c = document.getElementById('feed-cats-grid');
+  const c   = document.getElementById('feed-cats-grid');
   c.innerHTML = '';
-  const pcts = { arts:72, selfwell:45, economy:88, nature:56, society:63, tech:91, philo:38 };
+  const pcts = { arts:72, selfwell:45, economy:88, nature:56, society:63, tech:91, philo:38, lifestyle:55, sports:77 };
+  const catGrads = {
+    arts:    'linear-gradient(135deg,#E53935CC,#E5393588)',
+    selfwell:'linear-gradient(135deg,#FB8C00CC,#FB8C0088)',
+    economy: 'linear-gradient(135deg,#FBC02DCC,#FBC02D88)',
+    nature:  'linear-gradient(135deg,#43A047CC,#43A04788)',
+    society: 'linear-gradient(135deg,#1E88E5CC,#1E88E588)',
+    tech:    'linear-gradient(135deg,#3949ABCC,#3949AB88)',
+    philo:   'linear-gradient(135deg,#8E24AACC,#8E24AA88)',
+    lifestyle:'linear-gradient(135deg,#00ACC1CC,#00ACC188)',
+    sports:  'linear-gradient(135deg,#546E7ACC,#546E7A88)',
+  };
   Object.entries(CATS).forEach(([key,cat]) => {
     const pct = pcts[key]||50;
     const on  = activeFeedCats.has(key);
     const d   = document.createElement('div');
     d.className = 'fcat-card';
-    const catGrads = {
-      arts:    'linear-gradient(135deg,#E53935CC,#E5393588)',
-      selfwell:'linear-gradient(135deg,#FB8C00CC,#FB8C0088)',
-      economy: 'linear-gradient(135deg,#FBC02DCC,#FBC02D88)',
-      nature:  'linear-gradient(135deg,#43A047CC,#43A04788)',
-      society: 'linear-gradient(135deg,#1E88E5CC,#1E88E588)',
-      tech:    'linear-gradient(135deg,#3949ABCC,#3949AB88)',
-      philo:   'linear-gradient(135deg,#8E24AACC,#8E24AA88)',
-    };
-    d.style.background = catGrads[key] || `linear-gradient(135deg, ${cat.hex}CC, ${cat.hex}88)`;
+    d.style.background = catGrads[key] || `linear-gradient(135deg,${cat.hex}CC,${cat.hex}88)`;
     d.onclick = () => {
-      if (activeFeedCats.has(key)) activeFeedCats.delete(key);
-      else activeFeedCats.add(key);
+      if (activeFeedCats.has(key)) activeFeedCats.delete(key); else activeFeedCats.add(key);
       renderFeedCatCards(); renderFeedFilterChips(); renderFeedArticles();
     };
     d.innerHTML = `
@@ -3148,59 +2997,43 @@ function renderFeedCatCards() {
 }
 
 function renderFeedTopics() {
-  // 60+ topics from the comprehensive SherByte database (PDF spec)
   const ALL_TOPICS = [
-    // Society & Governance
-    'Politics','Global Affairs','Law & Justice','Urban Life','Activism','Social Sciences',
-    // Business & Economy
-    'Markets','Startups','Macroeconomics','Marketing','Real Estate','FinTech','Insurance',
-    // Science & Technology
-    'AI','Software','Hardware','Internet Culture','Future Tech','Space','Mathematics','Engineering',
-    // Arts, Culture & Recreation
-    'Aesthetics','Fashion','Cinema','Music','Gaming','Literature','Subcultures','Photography',
-    // Natural World
-    'Gardening','Animals','Environment','Geography','Biology','Natural Phenomena',
-    // Self & Well-being
-    'Fitness','Mental Health','Nutrition','Lifestyle','Parenting','Relationships','Productivity',
-    // Philosophy & Belief
-    'Spirituality','Philosophy','Religion','Ethics','Consciousness','Mythology',
-    // Cross-cutting
-    'Climate','Finance','Cricket','Bollywood','Science','Health','Education','Defence',
-    'Crypto','Infrastructure','Geopolitics','Cybersecurity','Sustainability','IPL',
+    'Politics','Global Affairs','Law & Justice','Activism','AI','Software','Hardware','Space','Climate','Finance',
+    'Cricket','Bollywood','Science','Health','Education','Defence','Crypto','Infrastructure','Fashion','Cinema',
+    'Music','Gaming','Fitness','Mental Health','Nutrition','Productivity','Spirituality','Philosophy','Religion',
+    'Ethics','Consciousness','Mythology','Startups','Markets','Macroeconomics','Real Estate','Animals','Environment',
+    'Geography','Biology','Natural Phenomena','Cybersecurity','Future Tech','Mathematics','Engineering','Photography',
+    'Literature','IPL','Geopolitics','Sustainability','Sports','Travel','Food','Lifestyle','Social Media',
   ];
-  const c = document.getElementById('feed-topics');
-  c.innerHTML = '';
+  const c      = document.getElementById('feed-topics');
+  c.innerHTML  = '';
   const colors = Object.values(CATS).map(c=>c.hex);
   ALL_TOPICS.forEach((t,i) => {
     const on    = activeFeedTopics.has(t);
     const color = colors[i % colors.length];
     const d     = document.createElement('div');
-    d.className  = `feed-topic${on?' on':''}`;
+    d.className = `feed-topic${on?' on':''}`;
     d.style.color       = on ? '#fff' : color;
     d.style.borderColor = on ? color  : 'var(--line)';
     d.style.background  = on ? color  : 'transparent';
     d.textContent = t;
     d.onclick = () => {
-      if (activeFeedTopics.has(t)) activeFeedTopics.delete(t);
-      else activeFeedTopics.add(t);
-      renderFeedTopics();
-      toast((on?'✓ Removed':'✓ Added') + ': ' + t);
+      if (activeFeedTopics.has(t)) activeFeedTopics.delete(t); else activeFeedTopics.add(t);
+      renderFeedTopics(); toast((on?'✓ Removed':'✓ Added') + ': ' + t);
     };
     c.appendChild(d);
   });
 }
 
 function renderFeedArticles() {
-  const c = document.getElementById('feed-articles');
-  c.innerHTML = '';
+  const c         = document.getElementById('feed-articles');
+  c.innerHTML     = '';
   const activeArr = Array.from(activeFeedCats);
-  const pool = homeArticles.filter(a => activeArr.includes(a.category)).slice(0,12);
-
+  const pool      = homeArticles.map(normalizeArticle).filter(a => activeArr.includes(a.category)).slice(0,12);
   if (!pool.length) {
     c.innerHTML = '<div style="text-align:center;color:var(--t3);padding:30px 0">Enable categories above to see articles.</div>';
     return;
   }
-
   pool.forEach(a => {
     const cc = CATS[a.category] || CATS.tech;
     const d  = document.createElement('div');
@@ -3208,7 +3041,10 @@ function renderFeedArticles() {
     d.onclick   = () => openArticle(a);
     d.innerHTML = `
       <div class="fac-stripe" style="background:${cc.hex}"></div>
-      ${a.image_url ? `<img class="fac-img" src="${a.image_url}" loading="lazy" alt="" onerror="this.style.background=CAT_GRADIENTS[this.closest('[data-cat]')?.dataset?.cat||'tech']||'var(--bg3)';this.style.display='none'">` : `<div class="fac-img" style="background:${cc.bg}"></div>`}
+      ${a.image_url
+        ? `<img class="fac-img" src="${a.image_url}" loading="lazy" alt="" onerror="this.style.background='${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}';this.style.display='none'">`
+        : `<div class="fac-img" style="background:${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech};display:flex;align-items:center;justify-content:center;font-size:1.2rem">${cc.icon}</div>`
+      }
       <div class="fac-info">
         <div class="fac-cat" style="color:${cc.hex}">${cc.icon} ${cc.short}</div>
         <div class="fac-title">${a.title}</div>
@@ -3220,47 +3056,48 @@ function renderFeedArticles() {
 
 // ── FEED EDIT MODAL ──
 function openFeedEditModal() {
-  const modal = document.getElementById('feed-edit-modal');
-  modal.classList.add('open');
-  renderFemCats();
-  renderFemTopics();
+  document.getElementById('feed-edit-modal').classList.add('open');
+  renderFemCats(); renderFemTopics();
 }
 function closeFeedEditModal(e) {
-  if (!e || e.target === document.getElementById('feed-edit-modal')) {
+  if (!e || e.target === document.getElementById('feed-edit-modal'))
     document.getElementById('feed-edit-modal').classList.remove('open');
-  }
 }
 function renderFemCats() {
   const c = document.getElementById('fem-cat-grid');
   c.innerHTML = '';
   Object.entries(CATS).forEach(([key,cat]) => {
     const on = activeFeedCats.has(key);
-    const d = document.createElement('div');
+    const d  = document.createElement('div');
     d.className = `fem-cat-btn${on?' on':''}`;
-    d.style.background = on ? cat.hex+'22' : 'var(--bg2)';
+    d.style.background  = on ? cat.hex+'22' : 'var(--bg2)';
     d.style.borderColor = on ? cat.hex : 'var(--line2)';
     d.innerHTML = `<div class="fem-cat-ico">${cat.icon}</div><div class="fem-cat-name" style="color:${on?cat.hex:'var(--t2)'}">${cat.short}</div>`;
     d.onclick = () => {
-      if (activeFeedCats.has(key)) activeFeedCats.delete(key);
-      else activeFeedCats.add(key);
+      if (activeFeedCats.has(key)) activeFeedCats.delete(key); else activeFeedCats.add(key);
       renderFemCats();
     };
     c.appendChild(d);
   });
 }
 function renderFemTopics() {
-  const ALL_TOPICS = ['Politics','Global Affairs','Law & Justice','Activism','AI','Software','Hardware','Space','Climate','Finance','Cricket','Bollywood','Science','Health','Education','Defence','Crypto','Infrastructure','Fashion','Cinema','Music','Gaming','Fitness','Mental Health','Nutrition','Productivity','Spirituality','Philosophy','Religion','Ethics','Consciousness','Mythology','Startups','Markets','Macroeconomics','Real Estate','Animals','Environment','Geography','Biology','Natural Phenomena','Cybersecurity','Future Tech','Mathematics','Engineering','Photography','Literature','IPL','Geopolitics','Sustainability'];
-  const c = document.getElementById('fem-topics-grid');
+  const ALL = ['Politics','Global Affairs','Law & Justice','Activism','AI','Software','Hardware','Space','Climate',
+    'Finance','Cricket','Bollywood','Science','Health','Education','Defence','Crypto','Infrastructure','Fashion',
+    'Cinema','Music','Gaming','Fitness','Mental Health','Nutrition','Productivity','Spirituality','Philosophy',
+    'Religion','Ethics','Consciousness','Mythology','Startups','Markets','Macroeconomics','Real Estate','Animals',
+    'Environment','Geography','Biology','Natural Phenomena','Cybersecurity','Future Tech','Mathematics','Engineering',
+    'Photography','Literature','IPL','Geopolitics','Sustainability'];
+  const c  = document.getElementById('fem-topics-grid');
   c.innerHTML = '';
   const colors = Object.values(CATS).map(c=>c.hex);
-  ALL_TOPICS.forEach((t,i) => {
-    const on = activeFeedTopics.has(t);
+  ALL.forEach((t,i) => {
+    const on    = activeFeedTopics.has(t);
     const color = colors[i % colors.length];
-    const d = document.createElement('div');
+    const d     = document.createElement('div');
     d.className = `fem-topic${on?' on':''}`;
-    d.style.color = on ? '#fff' : color;
-    d.style.borderColor = on ? color : 'var(--line)';
-    d.style.background = on ? color : 'transparent';
+    d.style.color       = on ? '#fff' : color;
+    d.style.borderColor = on ? color  : 'var(--line)';
+    d.style.background  = on ? color  : 'transparent';
     d.textContent = t;
     d.onclick = () => {
       if (activeFeedTopics.has(t)) activeFeedTopics.delete(t); else activeFeedTopics.add(t);
@@ -3270,54 +3107,42 @@ function renderFemTopics() {
   });
 }
 function saveFeedEdit() {
-  renderFeedFilterChips();
-  renderFeedCatCards();
-  renderFeedTopics();
-  renderFeedArticles();
+  renderFeedFilterChips(); renderFeedCatCards(); renderFeedTopics(); renderFeedArticles();
   document.getElementById('feed-edit-modal').classList.remove('open');
   toast('✦ Feed preferences saved!');
   if (ST.token) {
-    api('/me/feed', { method:'PUT', body: JSON.stringify({ categories: Array.from(activeFeedCats), topics: Array.from(activeFeedTopics) }) }).catch(()=>{});
+    api('/me/feed', { method:'PUT', body: JSON.stringify({
+      categories: Array.from(activeFeedCats), topics: Array.from(activeFeedTopics)
+    })}).catch(()=>{});
   }
 }
 
-// ── EDIT PROFILE MODAL ──
+// ── EDIT PROFILE ──
 function openEditProfile() {
-  const modal = document.getElementById('edit-profile-modal');
-  modal.classList.add('open');
-  // Pre-fill with current values
+  document.getElementById('edit-profile-modal').classList.add('open');
   const nameEl = document.getElementById('prof-name');
   const bioEl  = document.getElementById('prof-bio');
   if (nameEl) document.getElementById('epm-name').value = nameEl.textContent !== '—' ? nameEl.textContent : '';
-  if (bioEl) document.getElementById('epm-bio').value = bioEl.textContent !== 'Tap Edit Profile to set your bio' ? bioEl.textContent : '';
+  if (bioEl)  document.getElementById('epm-bio').value  = bioEl.textContent !== 'Tap Edit Profile to set your bio' ? bioEl.textContent : '';
 }
 function closeEditProfile(e) {
-  if (!e || e.target === document.getElementById('edit-profile-modal')) {
+  if (!e || e.target === document.getElementById('edit-profile-modal'))
     document.getElementById('edit-profile-modal').classList.remove('open');
-  }
 }
 async function saveProfile() {
   const name  = document.getElementById('epm-name').value.trim();
   const bio   = document.getElementById('epm-bio').value.trim();
   const link  = document.getElementById('epm-link').value.trim();
   const uname = document.getElementById('epm-username').value.trim();
-
-  // Update UI immediately
-  if (name) {
-    document.getElementById('prof-name').textContent = name;
-    document.getElementById('sb-name').textContent = name;
-  }
-  if (bio) document.getElementById('prof-bio').textContent = bio;
+  if (name) { document.getElementById('prof-name').textContent = name; document.getElementById('sb-name').textContent = name; }
+  if (bio)  { document.getElementById('prof-bio').textContent = bio; }
   if (uname) {
     document.getElementById('prof-handle').textContent = '@' + uname.replace('@','') + ' ✦';
-    document.getElementById('sb-handle').textContent = '@' + uname.replace('@','') + ' ✦';
+    document.getElementById('sb-handle').textContent   = '@' + uname.replace('@','') + ' ✦';
   }
-
-  // Persist to backend
   if (ST.token) {
-    try {
-      await api('/me', { method:'PUT', body: JSON.stringify({ display_name: name||undefined, bio: bio||undefined, link: link||undefined }) });
-    } catch(e) {}
+    try { await api('/me', { method:'PUT', body: JSON.stringify({ display_name: name||undefined, bio: bio||undefined, link: link||undefined }) }); }
+    catch(e) {}
   }
   document.getElementById('edit-profile-modal').classList.remove('open');
   toast('✦ Profile updated!');
@@ -3332,7 +3157,6 @@ function navTo(name) {
   document.querySelectorAll('.nb').forEach(b => b.classList.remove('on'));
   document.getElementById(VIEW_MAP[name])?.classList.add('active');
   document.getElementById(NB_MAP[name])?.classList.add('on');
-
   navEl.classList.remove('hidden');
   lastScrollY = 0;
 
@@ -3340,8 +3164,7 @@ function navTo(name) {
   const hPage   = document.getElementById('h-page');
   const hSearch = document.getElementById('h-search');
   const langBtn = document.getElementById('lang-btn');
-
-  hBrand.style.display='flex'; hPage.style.display='none'; hSearch.style.display='none';
+  hBrand.style.display = 'flex'; hPage.style.display = 'none'; hSearch.style.display = 'none';
 
   if (name==='explore') {
     hBrand.style.display='none'; hPage.style.display='block'; hPage.textContent='Explore';
@@ -3354,9 +3177,7 @@ function navTo(name) {
     const lbls = { profile:'Profile', bookmarks:'Bookmarks', notifs:'Notifications' };
     hPage.textContent = lbls[name];
     langBtn.style.display='none';
-  } else {
-    langBtn.style.display='flex';
-  }
+  } else { langBtn.style.display='flex'; }
 
   if (name==='bookmarks') renderBM();
   if (name==='notifs')    renderNotifs();
@@ -3364,26 +3185,21 @@ function navTo(name) {
     document.getElementById('saved-ct').textContent = ST.saves.length;
     if (ST.token) loadProfileFromAPI();
   }
-  if (name==='feed') {
-    renderFeedArticles();
-  }
+  if (name==='feed') renderFeedArticles();
 }
 
 async function loadProfileFromAPI() {
   try {
     const me = await api('/me');
-    if (me.display_name) {
-      document.getElementById('prof-name').textContent = me.display_name;
-      document.getElementById('sb-name').textContent = me.display_name;
-    }
+    const n  = me.display_name || me.name;
+    if (n) { document.getElementById('prof-name').textContent = n; document.getElementById('sb-name').textContent = n; }
     if (me.email) {
       const handle = '@' + me.email.split('@')[0] + ' ✦';
       document.getElementById('prof-handle').textContent = handle;
-      document.getElementById('sb-handle').textContent = handle;
+      document.getElementById('sb-handle').textContent   = handle;
     }
     if (me.bio) document.getElementById('prof-bio').textContent = me.bio;
-    ST.interests = me.interests || {};
-    persist();
+    ST.interests = me.interests || {}; persist();
   } catch(e) {}
 }
 
@@ -3392,7 +3208,7 @@ function timeAgo(dateStr) {
   if (!dateStr) return '';
   try {
     const diff = Date.now() - new Date(dateStr).getTime();
-    const h = Math.floor(diff / 3600000);
+    const h    = Math.floor(diff / 3600000);
     if (h < 1) return Math.floor(diff/60000) + 'm ago';
     if (h < 24) return h + 'h ago';
     return Math.floor(h/24) + 'd ago';
@@ -3400,67 +3216,116 @@ function timeAgo(dateStr) {
 }
 
 // ── SCROLL HIDE/SHOW NAV ──
-let navHideTimer = null;
 function handleNavScroll(e) {
   const st = e.target.scrollTop;
-  if (st > lastScrollY + 10) { navEl.classList.add('hidden'); clearTimeout(navHideTimer); }
+  if (st > lastScrollY + 10) { navEl.classList.add('hidden'); }
   else if (st < lastScrollY - 10) navEl.classList.remove('hidden');
   lastScrollY = st;
 }
 document.getElementById('v-home').addEventListener('scroll', e => {
   handleNavScroll(e);
-  if (e.target.scrollTop + e.target.clientHeight >= e.target.scrollHeight - 240) loadFeed();
+  // Infinite scroll trigger
+  if (e.target.scrollTop + e.target.clientHeight >= e.target.scrollHeight - 300) {
+    loadFeed(false);
+  }
 });
 document.getElementById('v-explore').addEventListener('scroll', handleNavScroll);
 
-// ── SIDEBAR LOGOUT WIRE ──
+// ── SIDEBAR LOGOUT ──
 document.querySelector('.sb-logout').addEventListener('click', signOut);
 
-// ── SIDEBAR AUTH ITEM ──
-// Replace sidebar profile item with login trigger if not logged in
-function updateSidebarAuth() {
-  const sbHead = document.querySelector('.sb-head');
-  if (!sbHead) return;
-  const sbName = document.querySelector('.sb-name');
-  const sbHandle = document.querySelector('.sb-handle');
-  if (!ST.token) {
-    if (sbName) sbName.textContent = 'Sign In / Register';
-    if (sbHandle) sbHandle.textContent = 'Tap to get a personalised feed';
-    sbHead.onclick = () => { sbClose(); showAuthModal(); };
-    sbHead.style.cursor = 'pointer';
+function signOut() {
+  ST.token = null; ST.userId = null; persist(); sbClose(); toast('👋 Signed out'); loadFeed(true);
+}
+
+// ── AUTH ──
+function showAuthModal() {
+  const existing = document.getElementById('auth-modal');
+  if (existing) { existing.style.display='flex'; return; }
+  const modal = document.createElement('div');
+  modal.id = 'auth-modal';
+  modal.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.8);display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(8px);';
+  modal.innerHTML = `
+    <div style="background:var(--bg1);border-radius:24px;padding:24px;width:100%;max-width:340px;border:1px solid var(--line);box-shadow:0 20px 60px rgba(0,0,0,0.5)">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px">
+        <div style="width:36px;height:36px;border-radius:12px;background:linear-gradient(135deg,#041642,#002063,#1565e8);display:flex;align-items:center;justify-content:center;font-size:1.2rem">⚡</div>
+        <div style="font-family:var(--fd);font-size:1.1rem;font-weight:700;color:var(--t1)">SherByte</div>
+        <div style="margin-left:auto;cursor:pointer;color:var(--t3);font-size:1.2rem" onclick="document.getElementById('auth-modal').style.display='none'">✕</div>
+      </div>
+      <div style="display:flex;background:var(--bg2);border-radius:12px;padding:3px;margin-bottom:16px;border:1px solid var(--line2)" id="auth-tabs">
+        <div onclick="authTab('login')" id="tab-login" style="flex:1;text-align:center;padding:7px;border-radius:10px;font-size:0.8rem;font-weight:700;cursor:pointer;background:var(--bg4);color:var(--t1)">Sign In</div>
+        <div onclick="authTab('register')" id="tab-register" style="flex:1;text-align:center;padding:7px;border-radius:10px;font-size:0.8rem;font-weight:700;cursor:pointer;color:var(--t3)">Register</div>
+      </div>
+      <div id="auth-error" style="display:none;background:rgba(255,91,91,0.1);border:1px solid rgba(255,91,91,0.3);border-radius:10px;padding:8px 12px;margin-bottom:12px;font-size:0.76rem;color:#FF5B5B"></div>
+      <input id="auth-name" type="text" placeholder="Display name" style="display:none;width:100%;padding:10px 14px;margin-bottom:10px;background:var(--bg2);border:1px solid var(--line);border-radius:12px;color:var(--t1);font-size:0.84rem;font-family:var(--f);outline:none">
+      <input id="auth-email" type="email" placeholder="Email address" style="width:100%;padding:10px 14px;margin-bottom:10px;background:var(--bg2);border:1px solid var(--line);border-radius:12px;color:var(--t1);font-size:0.84rem;font-family:var(--f);outline:none">
+      <input id="auth-pass" type="password" placeholder="Password" style="width:100%;padding:10px 14px;margin-bottom:16px;background:var(--bg2);border:1px solid var(--line);border-radius:12px;color:var(--t1);font-size:0.84rem;font-family:var(--f);outline:none">
+      <button onclick="doAuth()" id="auth-btn" style="width:100%;padding:11px;background:linear-gradient(135deg,#002063,#1565e8);color:#fff;border:none;border-radius:12px;font-size:0.88rem;font-weight:700;cursor:pointer;font-family:var(--f)">Sign In</button>
+      <div style="text-align:center;margin-top:12px;font-size:0.72rem;color:var(--t3)">Your feed personalises as you read.</div>
+    </div>`;
+  document.querySelector('.phone').appendChild(modal);
+}
+
+let authMode = 'login';
+function authTab(mode) {
+  authMode = mode;
+  document.getElementById('tab-login').style.background    = mode==='login'    ? 'var(--bg4)' : 'transparent';
+  document.getElementById('tab-login').style.color         = mode==='login'    ? 'var(--t1)'  : 'var(--t3)';
+  document.getElementById('tab-register').style.background = mode==='register' ? 'var(--bg4)' : 'transparent';
+  document.getElementById('tab-register').style.color      = mode==='register' ? 'var(--t1)'  : 'var(--t3)';
+  document.getElementById('auth-name').style.display       = mode==='register' ? 'block' : 'none';
+  document.getElementById('auth-btn').textContent          = mode==='login'    ? 'Sign In' : 'Create Account';
+  document.getElementById('auth-error').style.display      = 'none';
+}
+
+async function doAuth() {
+  const email = document.getElementById('auth-email').value.trim();
+  const pass  = document.getElementById('auth-pass').value;
+  const name  = document.getElementById('auth-name').value.trim();
+  const errEl = document.getElementById('auth-error');
+  const btn   = document.getElementById('auth-btn');
+  if (!email || !pass) { errEl.textContent='Enter email and password'; errEl.style.display='block'; return; }
+  btn.textContent = '...'; btn.disabled = true;
+  try {
+    let data;
+    if (authMode === 'login') {
+      data = await api('/login', { method:'POST', body: JSON.stringify({ email, password: pass }) });
+    } else {
+      data = await api('/signup', { method:'POST', body: JSON.stringify({ email, password: pass, name: name || undefined }) });
+    }
+    ST.token = data.token; ST.userId = data.user_id; persist();
+    document.getElementById('auth-modal').style.display = 'none';
+    toast('✦ Signed in!');
+    loadFeed(true);
+    updateProfileUI(data);
+  } catch(e) {
+    errEl.textContent = e.message; errEl.style.display = 'block';
+  } finally {
+    btn.textContent = authMode === 'login' ? 'Sign In' : 'Create Account'; btn.disabled = false;
   }
 }
 
-// ── INIT ──
-window.addEventListener('load', () => {
-  obInit();
-  if (ST.token) setTimeout(() => document.getElementById('splash').classList.add('gone'), 1800);
-});
+function updateProfileUI(data) {
+  if (!data) return;
+  const n = data.display_name || data.name;
+  if (n) {
+    const nameEl = document.getElementById('prof-name');
+    const sbEl   = document.getElementById('sb-name');
+    if (nameEl) nameEl.textContent = n;
+    if (sbEl)   sbEl.textContent   = n;
+  }
+}
 
-document.addEventListener('DOMContentLoaded', () => {
-  // Initial renders
-  renderExpCats();
-  renderExpInteractions();
-  renderQuiz();
-  renderFeedFilterChips();
-  renderFeedCatCards();
-  renderFeedTopics();
-  updateSidebarAuth();
-
-  // Update saved count
-  document.getElementById('saved-ct').textContent = ST.saves.length;
-
-  // Load live feed
-  loadFeed(true).then(() => {
-    // After feed loads, populate explore hero and grid
-    if (homeArticles.length) {
-      renderExpHeroWithArticles(homeArticles);
-      updateExpGrid(homeArticles.slice(0,14));
-      renderFeedArticles();
-    }
-  });
-});
-
+function updateSidebarAuth() {
+  if (!ST.token) {
+    const sbName   = document.querySelector('.sb-name');
+    const sbHandle = document.querySelector('.sb-handle');
+    const sbHead   = document.querySelector('.sb-head');
+    if (sbName)   sbName.textContent   = 'Sign In / Register';
+    if (sbHandle) sbHandle.textContent = 'Tap to personalise your feed';
+    if (sbHead)   { sbHead.onclick = () => { sbClose(); showAuthModal(); }; sbHead.style.cursor = 'pointer'; }
+  }
+}
 
 // ── ONBOARDING ──────────────────────────────────────────────────────────────
 const OB_PILLARS = [
@@ -3481,20 +3346,19 @@ function obInit() {
   const screen = document.getElementById('ob-screen');
   if (!screen) return;
   if (ST.token) { screen.classList.add('gone'); return; }
-  // Hide the splash when onboarding shows
   document.getElementById('splash').classList.add('gone');
 }
 
 function obSwitchTab(t) {
   const isL = t === 'login';
   document.getElementById('ob-login-form').style.display = isL ? '' : 'none';
-  document.getElementById('ob-reg-form').style.display = isL ? 'none' : '';
-  document.getElementById('ob-tab-login').className = 'ob-tab' + (isL ? ' active' : '');
-  document.getElementById('ob-tab-reg').className = 'ob-tab' + (isL ? '' : ' active');
+  document.getElementById('ob-reg-form').style.display   = isL ? 'none' : '';
+  document.getElementById('ob-tab-login').className  = 'ob-tab' + (isL ? ' active' : '');
+  document.getElementById('ob-tab-reg').className    = 'ob-tab' + (isL ? '' : ' active');
 }
 
 async function obDoLogin() {
-  const btn = document.getElementById('ob-lbtn');
+  const btn   = document.getElementById('ob-lbtn');
   const email = document.getElementById('ob-le').value.trim();
   const pass  = document.getElementById('ob-lp').value;
   const err   = document.getElementById('ob-lerr');
@@ -3505,9 +3369,7 @@ async function obDoLogin() {
     const data = await api('/login', { method:'POST', body: JSON.stringify({ email, password: pass }) });
     ST.token = data.token; ST.userId = data.user_id; persist();
     document.getElementById('ob-screen').classList.add('gone');
-    updateProfileUI(data);
-    loadFeed(true);
-    toast('✦ Welcome back!');
+    updateProfileUI(data); loadFeed(true); toast('✦ Welcome back!');
   } catch(e) {
     err.textContent = e.message || 'Login failed';
   } finally {
@@ -3524,7 +3386,6 @@ function obStep1() {
   if (!email || !pass) { err.textContent = 'Fill all fields'; return; }
   if (pass.length < 6) { err.textContent = 'Password must be at least 6 characters'; return; }
   obSD = { email, password: pass, name };
-  // Switch step FIRST, then populate (DOM must be visible)
   document.getElementById('ob-step-auth').classList.remove('active');
   document.getElementById('ob-step-topics').classList.add('active');
   obPopulateTopics();
@@ -3537,24 +3398,11 @@ function obPopulateTopics() {
   ps.innerHTML = '<button class="ob-ppill active" style="background:linear-gradient(135deg,#002063,#1565e8);border-color:transparent" onclick="obFilterPillar(0,this)">All</button>';
   OB_PILLARS.forEach(p => {
     const btn = document.createElement('button');
-    btn.className = 'ob-ppill';
-    btn.textContent = p.e + ' ' + p.s;
+    btn.className = 'ob-ppill'; btn.textContent = p.e + ' ' + p.s;
     btn.onclick = () => obFilterPillar(p.id, btn);
     ps.appendChild(btn);
   });
   obRenderChips(obAllT);
-  // Enrich from backend silently
-  fetch(API_URL + '/topics').then(r=>r.json()).then(d=>{
-    if (!d.pillars) return;
-    const en = [];
-    d.pillars.forEach(p => p.topics.forEach(t => en.push({name:t.name, pid:p.id, c:p.color})));
-    if (en.length > obAllT.length) {
-      obAllT = en;
-      const q = document.getElementById('ob-tsearch').value || '';
-      const src = obPF === 0 ? obAllT : obAllT.filter(t=>t.pid===obPF);
-      obRenderChips(q ? src.filter(t=>t.name.toLowerCase().includes(q.toLowerCase())) : src);
-    }
-  }).catch(()=>{});
 }
 
 function obRenderChips(topics) {
@@ -3571,23 +3419,15 @@ function obFilterPillar(pid, el) {
   document.querySelectorAll('#ob-pscroll .ob-ppill').forEach(e => {
     e.classList.remove('active'); e.style.background = ''; e.style.borderColor = '';
   });
-  el.classList.add('active');
-  el.style.background = 'linear-gradient(135deg,#002063,#1565e8)';
-  el.style.borderColor = 'transparent';
-  obPF = pid;
-  obRerender();
+  el.classList.add('active'); el.style.background = 'linear-gradient(135deg,#002063,#1565e8)'; el.style.borderColor = 'transparent';
+  obPF = pid; obRerender();
 }
-
-function obFilterT(q) {
-  obRerender(q);
-}
-
+function obFilterT(q) { obRerender(q); }
 function obRerender(q) {
-  const qv = q !== undefined ? q : (document.getElementById('ob-tsearch').value || '');
+  const qv  = q !== undefined ? q : (document.getElementById('ob-tsearch').value || '');
   const src = obPF === 0 ? obAllT : obAllT.filter(t => t.pid === obPF);
   obRenderChips(qv ? src.filter(t => t.name.toLowerCase().includes(qv.toLowerCase())) : src);
 }
-
 function obToggleT(name, color) {
   if (!name) return;
   obSelT.has(name) ? obSelT.delete(name) : obSelT.add(name);
@@ -3602,13 +3442,13 @@ async function obFinish() {
   const btn = document.getElementById('ob-finish');
   btn.disabled = true; btn.textContent = 'Building feed…';
   try {
-    const sd = obSD || {};
-    const data = await api('/signup', { method:'POST', body: JSON.stringify({ email: sd.email, password: sd.password, name: sd.name||'', topics: Array.from(obSelT) }) });
+    const sd   = obSD || {};
+    const data = await api('/signup', { method:'POST', body: JSON.stringify({
+      email: sd.email, password: sd.password, name: sd.name||'', topics: Array.from(obSelT)
+    })});
     ST.token = data.token; ST.userId = data.user_id; persist();
     document.getElementById('ob-screen').classList.add('gone');
-    updateProfileUI(data);
-    loadFeed(true);
-    toast('✦ Welcome to SherByte!');
+    updateProfileUI(data); loadFeed(true); toast('✦ Welcome to SherByte!');
   } catch(e) {
     toast('Error: ' + (e.message || 'Signup failed'));
     btn.disabled = false; btn.textContent = 'Build My Feed →';
@@ -3616,22 +3456,42 @@ async function obFinish() {
 }
 
 async function obSkip() {
-  const sd = obSD;
+  const sd  = obSD;
   if (!sd) { toast('Please fill in your details first'); return; }
   const btn = document.getElementById('ob-skip');
   if (btn) { btn.disabled = true; btn.textContent = 'Skipping…'; }
   try {
-    const data = await api('/signup', { method:'POST', body: JSON.stringify({ email: sd.email, password: sd.password, name: sd.name||'', topics: [] }) });
+    const data = await api('/signup', { method:'POST', body: JSON.stringify({
+      email: sd.email, password: sd.password, name: sd.name||'', topics: []
+    })});
     ST.token = data.token; ST.userId = data.user_id; persist();
     document.getElementById('ob-screen').classList.add('gone');
-    updateProfileUI(data);
-    loadFeed(true);
-    toast('✦ Welcome! Add topics from your profile anytime.');
+    updateProfileUI(data); loadFeed(true); toast('✦ Welcome! Add topics anytime.');
   } catch(e) {
     toast('Error: ' + (e.message || 'Signup failed'));
     if (btn) { btn.disabled = false; btn.textContent = 'Skip for now'; }
   }
 }
+
+// ── INIT ──
+window.addEventListener('load', () => {
+  obInit();
+  if (ST.token) setTimeout(() => document.getElementById('splash').classList.add('gone'), 1500);
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+  renderExpCats();
+  renderExpInteractions();
+  renderQuiz();
+  renderFeedFilterChips();
+  renderFeedCatCards();
+  renderFeedTopics();
+  updateSidebarAuth();
+  document.getElementById('saved-ct').textContent = ST.saves.length;
+  loadFeed(true);
+});
+
+
 
 </script>
 </body>
