@@ -397,14 +397,31 @@ RULES:
 - summary_60: exactly 60-63 words, factual news summary
 - full_body: 100-120 words, complete story
 - source_summary: 60-63 words, original source perspective
+- category: Choose ONLY from [society, economy, tech, arts, nature, selfwell, philo, lifestyle, sports].
 - when_info: date/time of the incident
 - where_info: exact location (city, country)
 - what_info: what happened in one sentence
 - how_info: how it happened in one sentence
+- Category Logic: If 'IPO' or 'Bank' -> economy. If 'Election' or 'War' -> society.
 Return ONLY valid JSON, no markdown:
-{{"headline":"...","summary_60":"...","full_body":"...","source_summary":"...","when_info":"...","where_info":"...","what_info":"...","how_info":"..."}}
+{{"headline":"...","summary_60":"...","full_body":"...","source_summary":"...","when_info":"...","where_info":"...","what_info":"...","how_info":"...","category":"..."}}
 ARTICLE TITLE: {title}
 ARTICLE BODY: {body[:1500]}"""
+
+
+
+prompt = f"""You are SherByte's article processor. 
+    RULES:
+    - headline: Catchy, max 10 words. NEVER use "Headline:" in the text.
+    - summary_60: Exactly 2 sentences. Max 60 words. MUST NOT repeat the headline.
+    - category: Choose ONLY from [society, economy, tech, arts, nature, selfwell, philo, lifestyle, sports].
+    - Category Logic: If 'IPO' or 'Bank' -> economy. If 'Election' or 'War' -> society. 
+    Return ONLY valid JSON:
+    {{"headline":"...","summary_60":"...","category":"...","isTrending":true/false}}
+    ARTICLE: {title} {body[:1000]}"""
+
+
+
     try:
         async with httpx.AsyncClient(timeout=20) as client:
             r = await client.post(
@@ -670,7 +687,7 @@ async def fetch_feed_async(feed_url: str, source_name: str, client: httpx.AsyncC
             return articles
         # feedparser is sync — run in executor
         feed = await asyncio.get_event_loop().run_in_executor(None, feedparser.parse, r.text)
-        for entry in feed.entries[:10]:
+        for entry in feed.entries[:36]:
             title   = getattr(entry, "title", "").strip()
             summary = getattr(entry, "summary", "") or ""
             link    = getattr(entry, "link", "").strip()

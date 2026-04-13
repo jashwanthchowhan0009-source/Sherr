@@ -2396,77 +2396,45 @@ function selScope(btn, scope) {
 
 // ── ARTICLE CARD RENDER ──
 function renderArticleCard(rawArticle, container) {
-  const a  = normalizeArticle(rawArticle);
+  const a = normalizeArticle(rawArticle);
   const cc = CATS[a.category] || CATS.tech;
-  const liked = ST.likes.includes(a.id);
-  const saved = ST.saves.includes(a.id);
-  const timeStr = timeAgo(a.published_at);
-  const safeTitle = (a.title||'').replace(/'/g, "&#39;").replace(/"/g, '&quot;');
+  const isTrending = a.isTrending === true; // Phase 1 Trigger
 
   const d = document.createElement('div');
   d.className = 'nc fadein';
-  d.dataset.id = a.id;
-
-  let clickTimer = null;
-  d.addEventListener('click', (e) => {
-    if (e.target.closest('.nc-act')) return;
-    if (clickTimer) {
-      clearTimeout(clickTimer); clickTimer = null;
-      openArticle(a);
-    } else {
-      clickTimer = setTimeout(() => { clickTimer = null; d.classList.toggle('expanded'); }, 240);
-    }
-  });
-
-  d.innerHTML = `
-    <div class="nc-meta">
-      <div class="nc-src-ico">${(a.source||'S').charAt(0)}</div>
-      <span class="nc-src">${a.source||''}</span>
-      <span style="font-size:0.66rem;color:var(--t3)">${timeStr ? '· '+timeStr : ''}</span>
-      <span class="nc-tag" style="background:${cc.bg};color:${cc.hex}">${cc.icon} ${cc.short}</span>
-    </div>
-    <div class="nc-body">
-      <div class="nc-text">
-        <div class="nc-title">${a.title}</div>
-        <div class="nc-desc">${a.preview||a.body_ai||''}</div>
-        <div class="nc-expand-extra">${a.body_ai||a.preview||''}<br><br>
-          <span style="color:var(--accent);font-weight:600;font-size:0.74rem">Double-tap to read full article →</span>
+  
+  // MODE B: Trending Strip (Horizontal)
+  if (isTrending) {
+    d.innerHTML = `
+      <div style="display:flex; align-items:center; gap:12px; padding:12px 0;">
+        <div style="flex:1;">
+          <span style="font-size:0.6rem; color:var(--accent); font-weight:700;">🔥 TRENDING</span>
+          <div class="nc-title" style="font-size:0.85rem;">${a.title}</div>
+          <span class="nc-src" style="font-size:0.6rem;">${a.source}</span>
         </div>
+        <div class="nc-img-wrap" style="width:80px; height:80px; border-radius:12px; flex-shrink:0;">
+          <img src="${a.image_url}" style="width:100%; height:100%; object-fit:cover;">
+        </div>
+      </div>`;
+  } 
+  // MODE A: Main Feed (Large Hero Card)
+  else {
+    d.innerHTML = `
+      <div class="nc-meta">
+        <span class="nc-tag" style="background:${cc.bg};color:${cc.hex}">${cc.icon} ${cc.short}</span>
       </div>
-      ${a.image_url
-        ? `<div class="nc-img-wrap"><img src="${a.image_url}" loading="lazy" alt=""
-              style="width:100%;height:100%;object-fit:cover;border-radius:10px"
-              onerror="this.parentNode.style.background='${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}';this.remove()">
-           </div>`
-        : `<div class="nc-img-wrap" style="background:${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech};display:flex;align-items:center;justify-content:center;font-size:1.4rem;opacity:0.8">${cc.icon}</div>`
-      }
-    </div>
-    <div class="nc-acts">
-      <div class="nc-act tap ${liked?'red':''}" id="lk-${a.id}" onclick="toggleLike('${a.id}','${a.category}',this)">
-        <i class="fa-${liked?'solid':'regular'} fa-heart"></i>
+      <div class="nc-hero-image" style="width:100%; aspect-ratio:16/9; border-radius:16px; overflow:hidden; margin:10px 0;">
+         <img src="${a.image_url}" style="width:100%; height:100%; object-fit:cover;">
       </div>
-      <div class="nc-act tap ${saved?'acc':''}" id="sv-${a.id}" onclick="toggleSave('${a.id}','${a.category}',this)">
-        <i class="fa-${saved?'solid':'regular'} fa-bookmark"></i>
-      </div>
-      <div class="nc-act tap" onclick="shareArt('${safeTitle}')">
-        <i class="fa-solid fa-paper-plane"></i>
-      </div>
-      <div class="nc-sp"></div>
-      <div class="nc-act tap" style="color:var(--accent);font-size:0.7rem;font-weight:700"
-           onclick="openArticle(${JSON.stringify(a).replace(/</g,'&lt;').replace(/>/g,'&gt;')})">
-        Read <i class="fa-solid fa-arrow-right" style="font-size:0.65rem"></i>
-      </div>
-    </div>`;
-
-  const observer = new IntersectionObserver(entries => {
-    if (entries[0].isIntersecting) {
-      logInteract(a.id, a.category, 'read');
-      observer.disconnect();
-    }
-  }, { threshold: 0.6 });
-  observer.observe(d);
+      <div class="nc-title" style="font-size:1.1rem; margin-top:8px;">${a.title}</div>
+      <div class="nc-desc" style="margin-bottom:12px;">${a.preview}</div>
+    `;
+  }
+  
+  d.onclick = () => openArticle(a);
   container.appendChild(d);
 }
+
 
 // ── RENDER BULLETIN BLOCK ──
 function renderBulletinBlock(articles, container) {
