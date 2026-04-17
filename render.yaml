@@ -1,10 +1,14 @@
 services:
   - type: web
-    name: sherbyte-v4
+    name: sherbyte-v5
     env: python
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash
       - key: GROK_API_KEY
         sync: false
       - key: NEWSAPI_KEY
@@ -13,3 +17,9 @@ services:
         sync: false
       - key: OPENWEATHER_KEY
         sync: false
+      - key: AI_BATCH_SIZE
+        value: "50"
+      - key: AI_CONCURRENCY
+        value: "5"
+      - key: COLLECT_INTERVAL_MIN
+        value: "25"
