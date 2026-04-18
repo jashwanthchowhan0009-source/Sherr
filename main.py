@@ -27,6 +27,9 @@ import httpx
 import feedparser
 from dotenv import load_dotenv
 
+from activity import router as activity_router, init_activity_schema
+from markets  import router as markets_router
+
 from text_utils import clean_html_fragments, title_fingerprint
 from ai_processor import process_batch, available_providers
 
@@ -441,7 +444,6 @@ def init_db():
     conn.close()
     log.info("DB ready at %s", DB_PATH)
 
-
 # ─── AUTH ────────────────────────────────────────────────────────────────────
 def hash_password(pw: str) -> str:
     return hashlib.sha256(pw.encode()).hexdigest()
@@ -792,6 +794,7 @@ scheduler = AsyncIOScheduler()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    init_activity_schema()
     asyncio.create_task(collect_news())
     scheduler.add_job(collect_news, "interval", minutes=COLLECT_INTERVAL_MIN, id="collect_news")
     scheduler.start()
@@ -807,6 +810,8 @@ app.add_middleware(
     allow_methods=["*"], allow_headers=["*"],
 )
 
+app.include_router(activity_router)
+app.include_router(markets_router)
 
 # ─── HELPERS ─────────────────────────────────────────────────────────────────
 def get_current_user(authorization: str = "") -> int:
@@ -1242,43 +1247,6 @@ async def get_notifications(authorization: str = Header("")):
             })
     conn.close()
     return {"notifications": notifs[:20]}
-
-
-@app.get("/markets")
-async def get_markets():
-    result = {"stocks": {}, "crypto": {}, "commodities": {}, "forex": {}}
-    async with httpx.AsyncClient(timeout=10) as client:
-        tickers = ["^NSEI", "^BSESN", "GC=F", "SI=F", "CL=F", "USDINR=X"]
-        try:
-            r = await client.get(
-                f"https://query1.finance.yahoo.com/v7/finance/quote?symbols={','.join(tickers)}",
-                headers={"User-Agent": "Mozilla/5.0"}
-            )
-            for quote in r.json().get("quoteResponse", {}).get("result", []):
-                sym = quote.get("symbol", "")
-                info = {"price": round(quote.get("regularMarketPrice", 0), 2),
-                        "change_pct": round(quote.get("regularMarketChangePercent", 0), 2)}
-                if sym == "^NSEI":      result["stocks"]["NIFTY"]       = info
-                elif sym == "^BSESN":   result["stocks"]["SENSEX"]      = info
-                elif sym == "GC=F":     result["commodities"]["GOLD"]   = info
-                elif sym == "SI=F":     result["commodities"]["SILVER"] = info
-                elif sym == "CL=F":     result["commodities"]["CRUDE"]  = info
-                elif sym == "USDINR=X": result["forex"]["USDINR"]       = info
-        except Exception as e:
-            log.warning("Yahoo Finance: %s", e)
-        try:
-            r = await client.get(
-                "https://api.coingecko.com/api/v3/simple/price"
-                "?ids=bitcoin,ethereum,solana,dogecoin&vs_currencies=usd&include_24hr_change=true"
-            )
-            for coin, d in r.json().items():
-                result["crypto"][coin.upper()] = {
-                    "price": d.get("usd", 0),
-                    "change_pct": round(d.get("usd_24h_change", 0), 2)
-                }
-        except Exception as e:
-            log.warning("CoinGecko: %s", e)
-    return result
 
 
 @app.get("/health")
