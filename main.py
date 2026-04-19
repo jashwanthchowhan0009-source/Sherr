@@ -27,7 +27,7 @@ import httpx
 import feedparser
 from dotenv import load_dotenv
 
-from .activity import router as activity_router, init_activity_schema
+from activity import router as activity_router, init_activity_schema
 from markets  import router as markets_router
 
 from text_utils import clean_html_fragments, title_fingerprint
@@ -1290,5 +1290,6 @@ async def search_topics(q: str = Query("")):
 # ─── RUN ─────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.getenv("PORT", 8000))
-    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=False)
+    import os
+    port = int(os.environ.get("PORT", 10000))
+    uvicorn.run("main:app", host="0.0.0.0", port=port)
