@@ -27,7 +27,7 @@ import httpx
 import feedparser
 from dotenv import load_dotenv
 
-from activity import router as activity_router, init_activity_schema
+from .activity import router as activity_router, init_activity_schema
 from markets  import router as markets_router
 
 from text_utils import clean_html_fragments, title_fingerprint
