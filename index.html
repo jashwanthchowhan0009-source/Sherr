@@ -2665,7 +2665,22 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 ══════════════════════════════════════════════════ */
 
 // ── CONFIG ──────────────────────────────────────────────────────────────
-const API_URL = "https://sherr-b3z2.onrender.com";
+// Backend base URL, resolved at load time so the same file works everywhere:
+//   1. ?api=<url> in the URL, or localStorage 'SHERR_API'  (manual override, sticky)
+//   2. <meta name="sherr-api" content="..."> in <head>      (per-deploy override)
+//   3. localhost when opened locally  → the docker-compose API on :8000
+//   4. otherwise the Render Blueprint  → matches render.yaml's `sherrbyte-api`
+const API_URL = (() => {
+  const qp = new URLSearchParams(location.search).get('api');
+  if (qp) { try { localStorage.setItem('SHERR_API', qp); } catch (e) {} }
+  const override = (() => { try { return localStorage.getItem('SHERR_API'); } catch (e) { return null; } })() || qp;
+  if (override) return override.replace(/\/+$/, '');
+  const meta = document.querySelector('meta[name="sherr-api"]');
+  if (meta && meta.content) return meta.content.replace(/\/+$/, '');
+  const h = location.hostname;
+  if (!h || h === 'localhost' || h === '127.0.0.1') return 'http://localhost:8000';
+  return 'https://sherrbyte-api.onrender.com';
+})();
 
 // ══════════════════════════════════════════════════════════════════════
 // v5.1 — ACTIVITY TRACKER (screen time + article reading progress)

@@ -1,15 +1,74 @@
-# docker-compose.yml — boot the whole stack locally with one command:
+# docker-compose.yml — run SherByte v6 against your Supabase database.
 #
-#   cp .env.example .env        # fill in GEMINI_API_KEY / GROQ_API_KEY (optional)
+#   cp .env.example .env
+#   # edit .env → set DATABASE_URL to your Supabase *transaction pooler* URI
+#   #             (host aws-0-<region>.pooler.supabase.com, port 6543,
+#   #              user postgres.<project-ref>, append ?sslmode=require)
 #   docker compose up --build
 #
-# Postgres ships with pgvector; Redis is the cache/queue/dedup store. The API
-# runs migrations automatically on boot and starts the in-process ingest loop
-# (RUN_SCHEDULER=true) so the feed fills itself within a minute.
+# Default services: the API (port 8000) + Redis. The DB lives in Supabase, so
+# no Postgres container runs by default. The API applies its migrations on boot
+# (creating the vector/pgcrypto extensions + tables in Supabase) and, with
+# RUN_SCHEDULER=true (the .env default), starts the in-process ingest loop so
+# the feed fills itself within a minute.
+#
+# Optional profiles:
+#   docker compose --profile workers up        # dedicated ARQ worker instead of
+#                                               # the in-process scheduler — set
+#                                               # RUN_SCHEDULER=false in .env first
+#   docker compose --profile local-db up        # fully-offline Postgres+pgvector,
+#                                               # for dev without touching Supabase
+#                                               # (point DATABASE_URL at the db host)
 
 services:
+  api:
+    build: .
+    env_file: .env
+    environment:
+      # Talk to the in-compose Redis regardless of what .env says (which is
+      # tuned for host/Upstash). Everything else — DATABASE_URL, AI keys,
+      # RUN_SCHEDULER — comes from .env.
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  # ─── Optional: dedicated ARQ worker (profile: workers) ─────────────────────
+  # Owns ingest/embed/signal/ALS via the Redis-backed queue + cron schedule
+  # (see app/workers/__init__.py). Use INSTEAD of the API's in-process loop:
+  # set RUN_SCHEDULER=false in .env so ingestion doesn't run twice.
+  worker:
+    build: .
+    profiles: ["workers"]
+    command: ["arq", "app.workers.WorkerSettings"]
+    env_file: .env
+    environment:
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ─── Optional: local Postgres + pgvector (profile: local-db) ───────────────
+  # For fully-offline development without Supabase. When you use this, set in
+  # .env:  DATABASE_URL=postgresql://postgres:postgres@db:5432/sherrbyte
   db:
     image: pgvector/pgvector:pg16
+    profiles: ["local-db"]
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -23,37 +82,6 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
-
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-
-  api:
-    build: .
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    environment:
-      ENV: dev
-      RUN_SCHEDULER: "true"
-      DATABASE_URL: postgresql://postgres:postgres@db:5432/sherrbyte
-      REDIS_URL: redis://redis:6379/0
-      JWT_SECRET: dev-secret-change-me
-      WATERMARK_SECRET: dev-watermark
-      # API keys are optional — without them the pipeline runs rule-based.
-      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      GROQ_API_KEY: ${GROQ_API_KEY:-}
-      NEWSAPI_KEY: ${NEWSAPI_KEY:-}
-    ports:
-      - "8000:8000"
 
 volumes:
   pgdata:
