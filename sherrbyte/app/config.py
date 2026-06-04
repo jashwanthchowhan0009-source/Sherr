@@ -60,6 +60,10 @@ class Settings(BaseSettings):
     run_scheduler: bool = Field(True, alias="RUN_SCHEDULER")
     collect_concurrency: int = Field(10, alias="COLLECT_CONCURRENCY")
     max_entries_per_feed: int = Field(36, alias="MAX_ENTRIES_PER_FEED")
+    # Hard wall-clock cap per feed fetch. httpx's read timeout resets on each
+    # received byte, so a feed that trickles data slowly can hang forever — this
+    # bounds the *total* time a single feed may take.
+    feed_fetch_timeout_sec: float = Field(10.0, alias="FEED_FETCH_TIMEOUT_SEC")
 
     # Embeddings — MiniLM all-MiniLM-L6-v2 → 384-dim pgvector
     embed_model: str = Field("sentence-transformers/all-MiniLM-L6-v2", alias="EMBED_MODEL")

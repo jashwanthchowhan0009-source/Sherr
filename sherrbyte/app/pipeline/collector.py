@@ -128,11 +128,17 @@ async def _fetch_feed(url: str, source: str, client: httpx.AsyncClient) -> list[
     import feedparser  # lazy: only needed at collection time
 
     out: list[ArticleIn] = []
+    timeout = settings.feed_fetch_timeout_sec
     try:
-        r = await client.get(
-            url,
-            headers={"User-Agent": f"SherByte/{settings.app_version} (+https://sherbyte.in)"},
-            timeout=12,
+        # Hard total-time cap: httpx's read timeout resets per received byte, so
+        # a slow-trickling feed can stall indefinitely. asyncio.wait_for bounds
+        # the whole request by wall-clock time and cancels it on expiry.
+        r = await asyncio.wait_for(
+            client.get(
+                url,
+                headers={"User-Agent": f"SherByte/{settings.app_version} (+https://sherbyte.in)"},
+            ),
+            timeout=timeout,
         )
         if r.status_code != 200:
             return out
@@ -156,6 +162,8 @@ async def _fetch_feed(url: str, source: str, client: httpx.AsyncClient) -> list[
                 image=_extract_image(entry),
                 published=published,
             ))
+    except (asyncio.TimeoutError, httpx.TimeoutException):
+        log.warning("RSS %s timed out after %.0fs — skipping", source, timeout)
     except Exception as e:
         log.warning("RSS %s failed: %s", source, e)
     return out
@@ -165,7 +173,10 @@ async def collect_rss() -> list[ArticleIn]:
     """Fetch every RSS feed concurrently (batched to be polite)."""
     results: list[ArticleIn] = []
     batch = settings.collect_concurrency
-    async with httpx.AsyncClient(follow_redirects=True) as client:
+    async with httpx.AsyncClient(
+        follow_redirects=True,
+        timeout=httpx.Timeout(settings.feed_fetch_timeout_sec),
+    ) as client:
         for i in range(0, len(RSS_FEEDS), batch):
             chunk = RSS_FEEDS[i:i + batch]
             tasks = [_fetch_feed(u, s, client) for u, s in chunk]
