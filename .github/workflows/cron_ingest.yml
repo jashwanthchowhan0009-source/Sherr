@@ -24,7 +24,7 @@ jobs:
   ingest:
     if: github.event.schedule != '0 3 * * *'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
     defaults:
       run:
         working-directory: sherrbyte
