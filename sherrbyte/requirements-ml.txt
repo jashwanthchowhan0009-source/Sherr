@@ -1,0 +1,19 @@
+# ─── Optional ML stack (heavy) — high-quality semantic features ───────────
+# Install on top of requirements.txt to upgrade from the fallbacks to the real
+# models:
+#   pip install -r requirements.txt -r requirements-ml.txt
+#
+#   sentence-transformers → real 384-d MiniLM embeddings (vs hash fallback)
+#   implicit + scipy      → true ALS collaborative filtering (vs SVD fallback)
+#   supabase              → supabase-py client for auth/storage helpers
+#   spaCy                 → statistical NER (vs regex fallback); also run:
+#                             python -m spacy download en_core_web_sm
+#
+# These pull in Torch and are large (>2 GB); they need a paid/larger instance.
+# The core app does NOT require them.
+
+sentence-transformers==3.1.1
+scipy==1.13.1
+implicit==0.7.2
+supabase==2.7.4
+spacy==3.7.6

@@ -1,8 +1,40 @@
 # Deploying SherByte v6
 
-Two paths: **local** (Docker, free, for development) and **production**
-(Supabase + Upstash + Fly.io). The app runs its own SQL migrations on boot, so
-there's no separate migration step.
+Fastest path to a **live link**: the Render Blueprint (one click, free, zero
+credentials to share). Below that: local Docker, and a Fly.io production setup.
+The app runs its own SQL migrations on boot — no separate migration step.
+
+---
+
+## 0. Live link in ~5 minutes — Render Blueprint (recommended)
+
+The repo root has a `render.yaml` Blueprint that provisions **everything**:
+the API (Docker), Postgres with **pgvector**, and a Redis/Key-Value store —
+auto-wiring `DATABASE_URL` and `REDIS_URL`.
+
+1. Push this branch (done) or merge to `main`.
+2. Go to **render.com → New → Blueprint**.
+3. Connect this GitHub repo and pick the branch.
+4. Render detects `render.yaml`. Click **Apply**.
+5. After the build (~3–5 min) you get a live URL like
+   `https://sherrbyte-api.onrender.com`.
+
+Verify:
+```
+https://sherrbyte-api.onrender.com/health      # status + counts
+https://sherrbyte-api.onrender.com/docs        # interactive API
+https://sherrbyte-api.onrender.com/feed/trending
+```
+
+**AI keys are optional.** With none set, the app runs rule-based understanding +
+hash embeddings (fully functional, lighter quality). Add `GEMINI_API_KEY` in the
+Render dashboard → Environment to switch on real AI summaries; no redeploy of
+infra needed. For the high-quality semantic stack (MiniLM embeddings, true ALS,
+spaCy NER), add `requirements-ml.txt` and a larger instance.
+
+> Free Render web services sleep after ~15 min idle and cold-start on the next
+> request (the feed re-ingests on wake). Fine for a demo; upgrade the instance
+> for always-on.
 
 ---
 

@@ -1,4 +1,10 @@
-# ─── Web ──────────────────────────────────────────────────────────────────
+# ─── Core (light) — everything needed to run the app & pipeline ───────────
+# The app boots and the full pipeline runs with ONLY these + a Postgres URL.
+# Redis and AI keys are optional; missing heavy ML libs fall back gracefully
+# (rule-based understanding, hash embeddings, SVD ALS). See requirements-ml.txt
+# to enable the high-quality semantic stack.
+
+# Web
 fastapi==0.115.0
 uvicorn[standard]==0.30.6
 gunicorn==23.0.0
@@ -7,29 +13,23 @@ pydantic==2.9.2
 pydantic-settings==2.5.2
 email-validator==2.2.0
 
-# ─── Data / DB ────────────────────────────────────────────────────────────
+# Data / DB
 asyncpg==0.29.0
 pgvector==0.3.3
-supabase==2.7.4
 redis==5.0.8
 
-# ─── Pipeline / collection ────────────────────────────────────────────────
+# Pipeline / collection
 httpx==0.27.2
 feedparser==6.0.11
 apscheduler==3.10.4
 python-dotenv==1.0.1
 
-# ─── ML / embeddings / recsys ─────────────────────────────────────────────
-sentence-transformers==3.1.1
+# Numerics (MMR re-ranker + ALS SVD fallback — light, no torch)
 numpy==1.26.4
-scipy==1.13.1
-implicit==0.7.2
-# spaCy is optional for NER; install the model separately if used:
-#   pip install spacy==3.7.6 && python -m spacy download en_core_web_sm
 
-# ─── Workers ──────────────────────────────────────────────────────────────
+# Workers
 arq==0.26.1
 
-# ─── Tests ────────────────────────────────────────────────────────────────
+# Tests
 pytest==8.3.3
 pytest-asyncio==0.24.0
