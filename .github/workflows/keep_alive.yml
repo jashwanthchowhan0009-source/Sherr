@@ -1,0 +1,49 @@
+name: keep-alive
+
+# Pings the live backend's /health every ~10 min so the free Render instance
+# doesn't sleep (free web services idle out after ~15 min). Doubles as an
+# uptime check: the job FAILS if the service is unreachable or reports
+# db:false, which sends the usual GitHub failed-workflow notification.
+#
+# Override the target without editing this file: set a repo variable
+# BACKEND_URL (Settings → Secrets and variables → Actions → Variables).
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
+
+concurrency:
+  group: keep-alive
+  cancel-in-progress: true
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ping /health
+        env:
+          BACKEND_URL: ${{ vars.BACKEND_URL || 'https://sherrbyte-api.onrender.com' }}
+        run: |
+          set -euo pipefail
+          url="${BACKEND_URL%/}/health"
+          echo "Pinging $url"
+          # Retry a few times: a slept free instance cold-starts (~30s+).
+          for attempt in 1 2 3 4; do
+            if body=$(curl -fsS --max-time 90 "$url"); then
+              echo "Response: $body"
+              status=$(echo "$body" | jq -r '.status // "missing"')
+              db=$(echo "$body" | jq -r '.db // "missing"')
+              echo "status=$status db=$db"
+              if [ "$status" = "ok" ] && [ "$db" = "true" ]; then
+                echo "✅ Backend healthy (db connected)."
+                exit 0
+              fi
+              echo "::error::Backend reachable but unhealthy (status=$status, db=$db)."
+              exit 1
+            fi
+            echo "Attempt $attempt failed (likely cold start); waiting ${attempt}0s…"
+            sleep "${attempt}0"
+          done
+          echo "::error::Backend unreachable at $url after retries."
+          exit 1
