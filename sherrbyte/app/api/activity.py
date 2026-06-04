@@ -86,9 +86,11 @@ async def get_me(user_id: str = Depends(require_user)):
 
 @router.put("/me")
 async def update_profile(req: UpdateProfileReq, user_id: str = Depends(require_user)):
+    name = req.name or req.display_name  # MVP sends display_name
+    fields = {"name": name, "bio": req.bio,
+              "avatar_url": req.avatar_url, "language": req.language}
     updates, args = [], []
-    for field in ("name", "bio", "avatar_url", "language"):
-        val = getattr(req, field)
+    for field, val in fields.items():
         if val is not None:
             args.append(val)
             updates.append(f"{field}=${len(args)}")
@@ -100,9 +102,10 @@ async def update_profile(req: UpdateProfileReq, user_id: str = Depends(require_u
 
 @router.put("/me/topics")
 async def update_topics(req: UpdateTopicsReq, user_id: str = Depends(require_user)):
+    topics = list(dict.fromkeys([*req.topics, *req.categories]))  # merge MVP alias
     async with db.acquire() as conn:
         await conn.execute("DELETE FROM user_preferences WHERE user_id=$1", user_id)
-        for topic in req.topics:
+        for topic in topics:
             await conn.execute(
                 """
                 INSERT INTO user_preferences (user_id, topic, pillar_id, weight)
@@ -110,7 +113,7 @@ async def update_topics(req: UpdateTopicsReq, user_id: str = Depends(require_use
                 """,
                 user_id, topic, _pillar_for_topic(topic),
             )
-    return {"status": "ok", "topics_saved": len(req.topics)}
+    return {"status": "ok", "topics_saved": len(topics)}
 
 
 # ─── Heartbeat ────────────────────────────────────────────────────────────────

@@ -57,6 +57,7 @@ class TokenPair(BaseModel):
 # ─── Profile updates ──────────────────────────────────────────────────────────
 class UpdateProfileReq(BaseModel):
     name: Optional[str] = None
+    display_name: Optional[str] = None  # MVP alias for name
     bio: Optional[str] = None
     avatar_url: Optional[str] = None
     language: Optional[str] = None
@@ -64,3 +65,4 @@ class UpdateProfileReq(BaseModel):
 
 class UpdateTopicsReq(BaseModel):
     topics: list[str] = Field(default_factory=list)
+    categories: list[str] = Field(default_factory=list)  # MVP alias, merged in
