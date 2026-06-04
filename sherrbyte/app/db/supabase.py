@@ -47,6 +47,14 @@ class Database:
             max_size=settings.db_pool_max,
             init=self._init_connection,
             command_timeout=30,
+            # Supabase's connection pooler (pgbouncer, transaction mode on
+            # port 6543 — the IPv4 endpoint Render needs) does not keep the
+            # same backend across statements, so server-side prepared-statement
+            # caching breaks ("prepared statement does not exist"). Disabling
+            # the cache makes asyncpg prepare+execute+discard within one
+            # protocol round-trip, which is pooler-safe. Harmless on a direct
+            # connection — it only forgoes a minor caching optimisation.
+            statement_cache_size=0,
         )
         log.info("Postgres pool ready (min=%d max=%d)",
                  settings.db_pool_min, settings.db_pool_max)

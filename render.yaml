@@ -1,20 +1,25 @@
 # render.yaml — One-click Render Blueprint for SherByte v6.
 #
+# This blueprint runs the API container on Render and points it at YOUR
+# existing Supabase Postgres (pgvector). Render only provisions the API and a
+# free Redis/Key-Value store; the database stays in Supabase.
+#
 # How to get a live link:
 #   1. Push this branch (done).
-#   2. On render.com: New ➜ Blueprint ➜ connect this repo ➜ select this branch.
-#   3. Render reads this file and provisions: the API (Docker), a Postgres
-#      database (with pgvector), and a Redis/Key-Value store — wiring
-#      DATABASE_URL and REDIS_URL automatically.
-#   4. Click "Apply". In ~3-5 min you get a https://sherrbyte-api.onrender.com link.
+#   2. In Supabase ➜ Project Settings ➜ Database ➜ Connection string, copy the
+#      *Transaction pooler* URI (host: aws-0-<region>.pooler.supabase.com,
+#      port 6543, user: postgres.<project-ref>). Use the POOLER, not the direct
+#      connection — Render's free tier is IPv4-only and the pooler is the IPv4
+#      endpoint. Append ?sslmode=require if it isn't already present.
+#   3. On render.com: New ➜ Blueprint ➜ connect this repo ➜ select this branch.
+#   4. Render reads this file. When prompted, paste the Supabase URI into
+#      DATABASE_URL (it's marked sync:false so it's never committed to git).
+#   5. Click "Apply". In ~3-5 min you get https://sherrbyte-api.onrender.com.
+#      The app auto-runs its migrations on boot (creates the `vector` +
+#      `pgcrypto` extensions and all tables) against your Supabase database.
 #
 # AI keys are OPTIONAL — leave them blank and the app runs rule-based + hash
 # embeddings. Add GEMINI_API_KEY later in the dashboard for real summaries.
-
-databases:
-  - name: sherrbyte-db
-    plan: free
-    postgresMajorVersion: "16"
 
 services:
   # ─── API (also runs the in-process ingest scheduler on free tier) ──────────
@@ -29,9 +34,7 @@ services:
     autoDeploy: true
     envVars:
       - key: DATABASE_URL
-        fromDatabase:
-          name: sherrbyte-db
-          property: connectionString
+        sync: false             # paste your Supabase *transaction pooler* URI
       - key: REDIS_URL
         fromService:
           type: keyvalue
@@ -47,6 +50,12 @@ services:
         generateValue: true
       - key: WATERMARK_SECRET
         generateValue: true
+      # Optional: supabase-py client (auth/storage helpers). The app's own JWT
+      # auth works without these; set them only if you use Supabase Auth/Storage.
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
       - key: GEMINI_API_KEY
         sync: false             # optional — add in dashboard for real AI
       - key: GROQ_API_KEY
@@ -54,7 +63,9 @@ services:
       - key: NEWSAPI_KEY
         sync: false
 
-  # ─── Redis / Key-Value (cache + dedup + queue) ─────────────────────────────
+  # ─── Redis / Key-Value (cache + dedup + ARQ queue) ─────────────────────────
+  # Supabase has no Redis, so Render provides a free Key-Value store. The app
+  # degrades gracefully if it's ever unavailable.
   - type: keyvalue
     name: sherrbyte-kv
     plan: free
