@@ -1,0 +1,43 @@
+name: deploy
+
+# Deploys the API to Fly.io on push to main. Requires the FLY_API_TOKEN secret.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "sherrbyte/**"
+  workflow_dispatch: {}
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sherrbyte
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Run unit tests
+        run: pytest -q tests
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sherrbyte
+    steps:
+      - uses: actions/checkout@v4
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Deploy to Fly
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: flyctl deploy --remote-only

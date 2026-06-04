@@ -1,0 +1,39 @@
+# fly.toml — SherByte API on Fly.io
+# Secrets (set via `fly secrets set ...`): DATABASE_URL, SUPABASE_URL,
+# SUPABASE_KEY, REDIS_URL, JWT_SECRET, GEMINI_API_KEY, GROQ_API_KEY, NEWSAPI_KEY.
+
+app = "sherrbyte"
+primary_region = "bom"   # Mumbai — closest to the Indian audience
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  ENV = "prod"
+  PORT = "8000"
+  # Ingestion is owned by the GitHub-Actions cron / ARQ worker in prod.
+  RUN_SCHEDULER = "false"
+  LOG_LEVEL = "INFO"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = "suspend"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 200
+    hard_limit = 250
+
+[[http_service.checks]]
+  interval = "30s"
+  timeout = "5s"
+  grace_period = "40s"
+  method = "GET"
+  path = "/health"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "1gb"
