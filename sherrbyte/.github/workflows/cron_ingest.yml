@@ -1,0 +1,60 @@
+name: cron-ingest
+
+# Runs the ingestion pipeline every 15 minutes (Collect → … → Connect),
+# plus an embed top-up. Nightly ALS retrain runs at 03:00 UTC.
+on:
+  schedule:
+    - cron: "*/15 * * * *"   # every 15 min — ingest
+    - cron: "0 3 * * *"      # 03:00 UTC   — ALS retrain
+  workflow_dispatch: {}
+
+concurrency:
+  group: cron-ingest
+  cancel-in-progress: false
+
+jobs:
+  ingest:
+    if: github.event.schedule != '0 3 * * *'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: sherrbyte
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Run ingest cycle
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          REDIS_URL: ${{ secrets.REDIS_URL }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          NEWSAPI_KEY: ${{ secrets.NEWSAPI_KEY }}
+          RUN_SCHEDULER: "false"
+        run: python -m app.workers.ingest_worker
+
+  als-retrain:
+    if: github.event.schedule == '0 3 * * *'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: sherrbyte
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Retrain ALS
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          REDIS_URL: ${{ secrets.REDIS_URL }}
+        run: python -m app.workers.als_worker

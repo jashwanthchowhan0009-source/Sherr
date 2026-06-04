@@ -1,0 +1,235 @@
+"""
+pipeline/understander.py — Stage 02: UNDERSTAND.
+
+Turns a raw article into structured understanding:
+  • NER          — named entities (spaCy if available, regex fallback).
+  • WWWW         — Who / What / Where / When / Why (LLM, with rule fallback).
+  • Topic + Pillar classification (LLM, with keyword-rule fallback).
+  • Sentiment + scope.
+
+The LLM path goes through the Gemini→Groq router; if no provider is configured
+(or the call fails) we degrade gracefully to deterministic rules so the pipeline
+never stalls.
+"""
+
+from __future__ import annotations
+
+import logging
+import re
+from dataclasses import dataclass, field
+
+from app.config import PILLAR_ALIASES, PILLARS, SLUG_TO_PILLAR, VALID_CATEGORY_SLUGS
+from app.models.article import ArticleIn
+from app.models.info_object import Entity, WWWW
+from app.sherr.router import complete_json
+from app.text_utils import clean_html_fragments, extract_sentences
+
+log = logging.getLogger("sherbyte.understander")
+
+
+@dataclass
+class Understanding:
+    headline: str
+    summary: str
+    body: str
+    wwww: WWWW
+    entities: list[Entity] = field(default_factory=list)
+    topic: str = ""
+    pillar_id: int = 1
+    micro_tags: list[str] = field(default_factory=list)
+    scope: str = "global"
+    sentiment: str = "neutral"
+    is_trending: bool = False
+
+
+# ─── Rule-based classifier (fallback) ─────────────────────────────────────────
+PILLAR_KEYWORDS: dict[int, list[str]] = {
+    1: ["election", "parliament", "government", "minister", "senate", "vote", "democracy",
+        "constitution", "treaty", "diplomat", "judiciary", "supreme court", "president",
+        "prime minister", "cabinet", "lok sabha", "united nations", "nato", "sanctions",
+        "military", "army", "defence", "protest", "coup", "policy"],
+    2: ["stock market", "share price", "nifty", "sensex", "nasdaq", "bitcoin", "crypto",
+        "ethereum", "blockchain", "startup", "venture capital", "ipo", "merger",
+        "acquisition", "earnings", "inflation", "interest rate", "gdp", "recession",
+        "rbi", "federal reserve", "budget", "gst", "bank", "fintech", "real estate"],
+    3: ["artificial intelligence", "machine learning", "chatgpt", "openai", "llm",
+        "quantum computing", "robotics", "spacex", "isro", "nasa", "satellite",
+        "cybersecurity", "data breach", "semiconductor", "electric vehicle", "nvidia",
+        "software", "app update", "5g", "gene editing"],
+    4: ["box office", "oscar", "grammy", "emmy", "music album", "concert", "netflix",
+        "streaming", "art exhibition", "museum", "fashion week", "book launch",
+        "bestseller", "k-pop", "bollywood", "hollywood", "anime", "film festival", "cannes"],
+    5: ["climate change", "global warming", "carbon emissions", "wildlife", "endangered",
+        "national park", "earthquake", "tsunami", "hurricane", "cyclone", "flood",
+        "drought", "wildfire", "deforestation", "renewable energy", "biodiversity"],
+    6: ["mental health", "depression", "anxiety", "therapy", "yoga", "meditation",
+        "mindfulness", "weight loss", "obesity", "diet", "hospital", "doctor",
+        "vaccine", "covid", "pandemic", "cancer", "diabetes", "surgery", "fitness"],
+    7: ["philosophy", "buddhism", "hinduism", "christianity", "islam", "sikhism",
+        "religion", "spirituality", "astrology", "temple", "church", "mosque",
+        "mythology", "stoic", "ethics"],
+    8: ["travel", "tourism", "hotel", "restaurant", "cuisine", "chef", "fashion trend",
+        "celebrity", "dating app", "home decor", "remote work", "influencer", "content creator"],
+    9: ["cricket", "ipl", "test match", "odi", "t20", "football", "fifa", "premier league",
+        "champions league", "formula 1", "f1", "grand prix", "olympic", "world cup",
+        "tennis", "wimbledon", "nba", "esports", "gaming", "wicket"],
+}
+
+_INDIA_WORDS = ["india", "delhi", "mumbai", "bangalore", "chennai", "hyderabad", "kolkata",
+                "indian", "modi", "bjp", "congress", "rupee", "nifty", "sensex", "kerala", "tamil"]
+_LOCAL_WORDS = ["city", "district", "local", "municipal", "village", "town", "ward", "panchayat"]
+_GLOBAL_WORDS = ["world", "global", "international", "nato", "china", "russia", "europe",
+                 "america", "washington", "beijing", "moscow", "london"]
+
+
+def classify_pillar(title: str, body: str) -> tuple[int, list[str]]:
+    text = f"{title} {body}".lower()
+    scores = {pid: 0 for pid in PILLARS}
+    tags: list[str] = []
+    for pid, kws in PILLAR_KEYWORDS.items():
+        for kw in kws:
+            if kw in text:
+                scores[pid] += 2
+                tags.append(kw.title())
+    best = max(scores, key=scores.get)
+    if scores[best] == 0:
+        best = 3  # default to tech/science bucket
+    return best, list(dict.fromkeys(tags))[:8]
+
+
+def classify_scope(title: str, body: str) -> str:
+    text = f"{title} {body}".lower()
+    i = sum(1 for w in _INDIA_WORDS if w in text)
+    l = sum(1 for w in _LOCAL_WORDS if w in text)
+    g = sum(1 for w in _GLOBAL_WORDS if w in text)
+    if l >= 2 and i > 0:
+        return "local"
+    return "national" if i > g else "global"
+
+
+# ─── NER ──────────────────────────────────────────────────────────────────────
+_NLP = None
+_SPACY_TRIED = False
+
+
+def _get_spacy():
+    global _NLP, _SPACY_TRIED
+    if _SPACY_TRIED:
+        return _NLP
+    _SPACY_TRIED = True
+    try:
+        import spacy
+        _NLP = spacy.load("en_core_web_sm")
+    except Exception as e:
+        log.info("spaCy model unavailable, using regex NER fallback: %s", e)
+        _NLP = None
+    return _NLP
+
+
+def extract_entities(text: str) -> list[Entity]:
+    nlp = _get_spacy()
+    if nlp is not None:
+        doc = nlp(text[:5000])
+        seen, out = set(), []
+        for ent in doc.ents:
+            key = ent.text.strip().lower()
+            if key in seen or len(ent.text.strip()) < 2:
+                continue
+            seen.add(key)
+            out.append(Entity(name=ent.text.strip(), type=ent.label_, canonical=ent.text.strip()))
+        return out[:15]
+    # Regex fallback: runs of Capitalized Words.
+    candidates = re.findall(r"\b([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})\b", text)
+    seen, out = set(), []
+    for c in candidates:
+        key = c.lower()
+        if key in seen or len(c) < 3:
+            continue
+        seen.add(key)
+        out.append(Entity(name=c, type="MISC", canonical=c))
+    return out[:15]
+
+
+# ─── LLM extraction schema ────────────────────────────────────────────────────
+_UNDERSTAND_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "refined_title": {"type": "string"},
+        "summary":       {"type": "string"},
+        "who":           {"type": "string"},
+        "what":          {"type": "string"},
+        "where":         {"type": "string"},
+        "when":          {"type": "string"},
+        "why":           {"type": "string"},
+        "category":      {"type": "string", "enum": VALID_CATEGORY_SLUGS},
+        "topic_tags":    {"type": "array", "items": {"type": "string"}},
+        "sentiment":     {"type": "string", "enum": ["positive", "neutral", "negative"]},
+        "is_trending":   {"type": "boolean"},
+    },
+    "required": ["refined_title", "summary", "category"],
+}
+
+_UNDERSTAND_SYSTEM = """You are SherByte's news understanding engine for an Indian audience.
+Extract a clean, structured understanding of the article. Rules:
+- refined_title: <= 12 words, active voice, no "Breaking:"/"Watch:" prefixes.
+- summary: exactly 2 factual sentences, 40-55 words, must NOT restate the title.
+- who/what/where/when/why: short factual phrases ("" if genuinely absent).
+- category: exactly one of the allowed slugs.
+- topic_tags: 2-5 specific proper nouns/concepts.
+- is_trending: true only for major/record-breaking/national-or-global-impact events.
+Output JSON only."""
+
+
+async def understand(article: ArticleIn) -> Understanding:
+    """Produce structured understanding for one article. LLM-first, rule-fallback."""
+    body = clean_html_fragments(article.body)
+    entities = extract_entities(f"{article.title}. {body}")
+
+    # Deterministic baseline (always computed; used directly if the LLM is off).
+    rule_pillar, rule_tags = classify_pillar(article.title, body)
+    scope = classify_scope(article.title, body)
+
+    llm = await complete_json(
+        system=_UNDERSTAND_SYSTEM,
+        user=f"ARTICLE TITLE: {article.title}\n\nARTICLE BODY: {body[:2500]}",
+        schema=_UNDERSTAND_SCHEMA,
+        temperature=0.3,
+    )
+
+    if llm:
+        slug = str(llm.get("category", "")).lower()
+        pillar = SLUG_TO_PILLAR.get(slug) or PILLAR_ALIASES.get(slug, rule_pillar)
+        tags = [str(t).strip() for t in (llm.get("topic_tags") or []) if str(t).strip()]
+        tags = list(dict.fromkeys(tags + rule_tags))[:8]
+        return Understanding(
+            headline=(llm.get("refined_title") or article.title).strip(),
+            summary=(llm.get("summary") or extract_sentences(body, 2)).strip(),
+            body=body,
+            wwww=WWWW(
+                who=llm.get("who", ""), what=llm.get("what", ""),
+                where=llm.get("where", ""), when=llm.get("when", ""),
+                why=llm.get("why", ""),
+            ),
+            entities=entities,
+            topic=(tags[0] if tags else PILLARS[pillar]["name"]),
+            pillar_id=pillar,
+            micro_tags=tags,
+            scope=scope,
+            sentiment=llm.get("sentiment", "neutral"),
+            is_trending=bool(llm.get("is_trending", False)),
+        )
+
+    # Pure rule-based fallback.
+    return Understanding(
+        headline=article.title,
+        summary=extract_sentences(body, 2) or article.title,
+        body=body,
+        wwww=WWWW(),
+        entities=entities,
+        topic=(rule_tags[0] if rule_tags else PILLARS[rule_pillar]["name"]),
+        pillar_id=rule_pillar,
+        micro_tags=rule_tags,
+        scope=scope,
+        sentiment="neutral",
+        is_trending=False,
+    )
