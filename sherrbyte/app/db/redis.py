@@ -42,9 +42,26 @@ async def close_redis() -> None:
         _client = None
 
 
+# Redis is OPTIONAL. If REDIS_URL is unreachable, every helper here degrades to
+# a safe no-op so the app runs on Postgres alone (caching off, dedup falls back
+# to the DB layers). This keeps free-tier / single-service deploys trivial.
+_REDIS_OK = True
+
+
+def _redis_down(exc: Exception) -> None:
+    global _REDIS_OK
+    if _REDIS_OK:
+        log.warning("Redis unavailable, degrading to no-op cache/dedup: %s", exc)
+        _REDIS_OK = False
+
+
 # ─── Typed JSON cache helpers ─────────────────────────────────────────────────
 async def cache_get(key: str) -> Optional[Any]:
-    raw = await get_redis().get(key)
+    try:
+        raw = await get_redis().get(key)
+    except Exception as e:
+        _redis_down(e)
+        return None
     if raw is None:
         return None
     try:
@@ -55,24 +72,38 @@ async def cache_get(key: str) -> Optional[Any]:
 
 async def cache_set(key: str, value: Any, ttl: int = 60) -> None:
     payload = value if isinstance(value, str) else json.dumps(value, default=str)
-    await get_redis().set(key, payload, ex=ttl)
+    try:
+        await get_redis().set(key, payload, ex=ttl)
+    except Exception as e:
+        _redis_down(e)
 
 
 async def cache_delete(*keys: str) -> None:
-    if keys:
+    if not keys:
+        return
+    try:
         await get_redis().delete(*keys)
+    except Exception as e:
+        _redis_down(e)
 
 
 # ─── Dedup membership set (layer 1) ───────────────────────────────────────────
 _DEDUP_SET = "dedup:urls"
-_DEDUP_HASHES = "dedup:hashes"
 
 
 async def seen_before(member: str, bucket: str = _DEDUP_SET) -> bool:
-    """Return True if member already in the set, else add it and return False."""
-    added = await get_redis().sadd(bucket, member)
-    return added == 0
+    """True if member already in the set, else add it. Returns False if Redis is
+    down — the deduplicator then relies on its DB-backed layers 1-3."""
+    try:
+        added = await get_redis().sadd(bucket, member)
+        return added == 0
+    except Exception as e:
+        _redis_down(e)
+        return False
 
 
 async def mark_seen(member: str, bucket: str = _DEDUP_SET) -> None:
-    await get_redis().sadd(bucket, member)
+    try:
+        await get_redis().sadd(bucket, member)
+    except Exception as e:
+        _redis_down(e)

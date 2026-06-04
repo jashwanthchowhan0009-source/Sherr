@@ -1,0 +1,59 @@
+# docker-compose.yml — boot the whole stack locally with one command:
+#
+#   cp .env.example .env        # fill in GEMINI_API_KEY / GROQ_API_KEY (optional)
+#   docker compose up --build
+#
+# Postgres ships with pgvector; Redis is the cache/queue/dedup store. The API
+# runs migrations automatically on boot and starts the in-process ingest loop
+# (RUN_SCHEDULER=true) so the feed fills itself within a minute.
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: sherrbyte
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d sherrbyte"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      ENV: dev
+      RUN_SCHEDULER: "true"
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/sherrbyte
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: dev-secret-change-me
+      WATERMARK_SECRET: dev-watermark
+      # API keys are optional — without them the pipeline runs rule-based.
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      NEWSAPI_KEY: ${NEWSAPI_KEY:-}
+    ports:
+      - "8000:8000"
+
+volumes:
+  pgdata:

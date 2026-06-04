@@ -1,25 +1,62 @@
+# render.yaml — One-click Render Blueprint for SherByte v6.
+#
+# How to get a live link:
+#   1. Push this branch (done).
+#   2. On render.com: New ➜ Blueprint ➜ connect this repo ➜ select this branch.
+#   3. Render reads this file and provisions: the API (Docker), a Postgres
+#      database (with pgvector), and a Redis/Key-Value store — wiring
+#      DATABASE_URL and REDIS_URL automatically.
+#   4. Click "Apply". In ~3-5 min you get a https://sherrbyte-api.onrender.com link.
+#
+# AI keys are OPTIONAL — leave them blank and the app runs rule-based + hash
+# embeddings. Add GEMINI_API_KEY later in the dashboard for real summaries.
+
+databases:
+  - name: sherrbyte-db
+    plan: free
+    postgresMajorVersion: "16"
+
 services:
+  # ─── API (also runs the in-process ingest scheduler on free tier) ──────────
   - type: web
-    name: sherbyte-v5
-    env: python
-    buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    name: sherrbyte-api
+    runtime: docker
+    plan: free
+    rootDir: sherrbyte
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    autoDeploy: true
     envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: sherrbyte-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: sherrbyte-kv
+          property: connectionString
+      - key: ENV
+        value: prod
+      - key: RUN_SCHEDULER
+        value: "true"          # single free service owns ingestion
+      - key: LOG_LEVEL
+        value: INFO
+      - key: JWT_SECRET
+        generateValue: true
+      - key: WATERMARK_SECRET
+        generateValue: true
       - key: GEMINI_API_KEY
-        sync: false
-      - key: GEMINI_MODEL
-        value: gemini-2.5-flash
-      - key: GROK_API_KEY
+        sync: false             # optional — add in dashboard for real AI
+      - key: GROQ_API_KEY
         sync: false
       - key: NEWSAPI_KEY
         sync: false
-      - key: JWT_SECRET
-        sync: false
-      - key: OPENWEATHER_KEY
-        sync: false
-      - key: AI_BATCH_SIZE
-        value: "50"
-      - key: AI_CONCURRENCY
-        value: "5"
-      - key: COLLECT_INTERVAL_MIN
-        value: "25"
+
+  # ─── Redis / Key-Value (cache + dedup + queue) ─────────────────────────────
+  - type: keyvalue
+    name: sherrbyte-kv
+    plan: free
+    ipAllowList: []            # internal access only
+    maxmemoryPolicy: allkeys-lru
