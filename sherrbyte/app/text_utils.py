@@ -99,7 +99,12 @@ def simhash(text: str, bits: int = 64) -> int:
     for i in range(bits):
         if vector[i] > 0:
             out |= 1 << i
-    return out
+    # Mask to 63 bits so the value always fits PostgreSQL's signed BIGINT
+    # (max 2**63-1). The raw 64-bit form can set bit 63 and overflow on INSERT
+    # ("value out of int64 range"). Masking here — at the source — keeps the
+    # in-memory and stored simhash identical, so near-duplicate Hamming
+    # comparisons stay consistent.
+    return out & 0x7FFFFFFFFFFFFFFF
 
 
 def hamming_distance(a: int, b: int) -> int:

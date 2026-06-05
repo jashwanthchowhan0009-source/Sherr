@@ -108,7 +108,11 @@ async def persist_articles(articles: list[ArticleIn]) -> list[str]:
                 ON CONFLICT (url) DO NOTHING
                 RETURNING id
                 """,
-                a.url, a.url_hash, a.title, a.title_hash, a.simhash, a.body,
+                # $5: defensively bound the simhash to signed BIGINT range so a
+                # 64-bit value can never overflow Postgres ("value out of int64
+                # range"). Normally a no-op — text_utils.simhash already masks.
+                a.url, a.url_hash, a.title, a.title_hash,
+                (a.simhash or 0) & 0x7FFFFFFFFFFFFFFF, a.body,
                 a.image_url, a.source_name, a.scope, a.published_at,
             )
             if row:
