@@ -46,7 +46,11 @@ class Database:
             min_size=settings.db_pool_min,
             max_size=settings.db_pool_max,
             init=self._init_connection,
-            command_timeout=30,
+            # 60s ceilings so the Supabase pooler doesn't time out during the
+            # heavy initial sync: `timeout` caps connection acquisition + the
+            # handshake, `command_timeout` caps each query.
+            timeout=60.0,
+            command_timeout=60.0,
             # Supabase's connection pooler (pgbouncer, transaction mode on
             # port 6543 — the IPv4 endpoint Render needs) does not keep the
             # same backend across statements, so server-side prepared-statement
