@@ -59,7 +59,10 @@ class Settings(BaseSettings):
     # cron / ARQ workers own ingestion to avoid double collection.
     run_scheduler: bool = Field(True, alias="RUN_SCHEDULER")
     collect_concurrency: int = Field(10, alias="COLLECT_CONCURRENCY")
-    max_entries_per_feed: int = Field(36, alias="MAX_ENTRIES_PER_FEED")
+    # Only the latest N items per feed are processed each cycle (feed.entries is
+    # newest-first), so a cycle skips hundreds of stale historical records and
+    # stays fast. Raise MAX_ENTRIES_PER_FEED for a deeper one-off backfill.
+    max_entries_per_feed: int = Field(3, alias="MAX_ENTRIES_PER_FEED")
     # Hard wall-clock cap per feed fetch. httpx's read timeout resets on each
     # received byte, so a feed that trickles data slowly can hang forever — this
     # bounds the *total* time a single feed may take.

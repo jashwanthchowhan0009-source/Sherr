@@ -143,6 +143,7 @@ async def _fetch_feed(url: str, source: str, client: httpx.AsyncClient) -> list[
         if r.status_code != 200:
             return out
         feed = await asyncio.get_event_loop().run_in_executor(None, feedparser.parse, r.text)
+        # Latest few only (feed.entries is newest-first) — skips stale history.
         for entry in feed.entries[: settings.max_entries_per_feed]:
             title = (getattr(entry, "title", "") or "").strip()
             link = (getattr(entry, "link", "") or "").strip()
