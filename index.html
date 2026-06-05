@@ -1490,6 +1490,26 @@ nav {
 .srch-item-s { font-size: 0.72rem; color: var(--t3); }
 .srch-empty { text-align: center; color: var(--t3); padding: 40px 20px; font-size: 0.85rem; }
 
+/* ─── Phase 8: Market detail overlay (chart + related) ─── */
+#market-overlay { position: absolute; inset: 0; z-index: 710; background: var(--bg);
+  transform: translateY(100%); transition: transform 0.35s var(--snap); display: flex; flex-direction: column; }
+#market-overlay.open { transform: translateY(0); }
+.mkt-d-scroll { flex: 1; overflow-y: auto; padding: 8px 18px 30px; }
+.mkt-d-name { font-size: 0.72rem; color: var(--t3); font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
+.mkt-d-price { font-size: 2.2rem; font-weight: 800; color: var(--t1); margin-top: 4px; line-height: 1.1; }
+.mkt-d-chg { font-size: 0.92rem; font-weight: 700; margin-top: 3px; }
+.mkt-d-chg.up { color: var(--neon); } .mkt-d-chg.dn { color: #FF5B7F; }
+.mkt-d-chart { margin: 18px 0 8px; padding: 14px; height: 200px; }
+.mkt-d-chart svg { width: 100%; height: 100%; overflow: visible; }
+.mkt-d-rng { font-size: 0.72rem; color: var(--t3); text-align: center; margin-bottom: 20px; }
+.mkt-d-rel-hdr { font-size: 0.64rem; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; color: var(--t3); margin-bottom: 10px; }
+.mkt-d-rel-item { display: flex; justify-content: space-between; align-items: center; padding: 13px 15px;
+  margin-bottom: 8px; border-radius: 14px; background: var(--bgcard); border: 1px solid var(--glassB);
+  cursor: pointer; transition: transform 0.14s var(--spring); }
+.mkt-d-rel-item:active { transform: scale(0.98); }
+.mkt-d-rel-name { font-weight: 700; color: var(--t1); font-size: 0.9rem; }
+.mkt-d-rel-price { font-weight: 700; font-size: 0.9rem; color: var(--t2); }
+
 /* ═══════════════════════════════════
    RESPONSIVE / UTILITY
 ═══════════════════════════════════ */
@@ -2466,6 +2486,24 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
     <div class="srch-close tap" onclick="goBack()"><i class="fa-solid fa-xmark"></i></div>
   </div>
   <div class="srch-results" id="srch-results"><div class="srch-empty">Type to search the latest stories.</div></div>
+</div>
+
+<!-- MARKET DETAIL OVERLAY -->
+<div id="market-overlay">
+  <div class="ao-header">
+    <div class="ao-back tap" onclick="goBack()"><i class="fa-solid fa-chevron-left"></i> Back</div>
+    <div class="ao-title-hdr" id="mkt-d-hdr"></div>
+    <div style="width:60px"></div>
+  </div>
+  <div class="mkt-d-scroll">
+    <div class="mkt-d-name" id="mkt-d-name"></div>
+    <div class="mkt-d-price" id="mkt-d-price"></div>
+    <div class="mkt-d-chg" id="mkt-d-chg"></div>
+    <div class="mkt-d-chart glass" id="mkt-d-chart"></div>
+    <div class="mkt-d-rng" id="mkt-d-rng"></div>
+    <div class="mkt-d-rel-hdr">More in this category</div>
+    <div id="mkt-d-rel"></div>
+  </div>
 </div>
 
 <!-- ════════ EXPLORE ════════ -->
@@ -4117,11 +4155,13 @@ window.addEventListener('popstate', (e) => {
   try {
     const ao  = document.getElementById('article-overlay');
     const so  = document.getElementById('search-overlay');
+    const mo  = document.getElementById('market-overlay');
     const sb  = document.getElementById('sidebar');
     const sub = document.querySelector('.sub.on');
     // Close the topmost open layer first; otherwise navigate to the routed view.
     if (ao && ao.classList.contains('open'))      closeArticle();
     else if (so && so.classList.contains('open')) closeSearch();
+    else if (mo && mo.classList.contains('open')) closeMarketDetail();
     else if (sub)                                 sub.classList.remove('on');
     else if (sb && sb.classList.contains('on'))   sbClose();
     else                                          navTo((e.state && e.state.view) || 'home');
@@ -4604,6 +4644,7 @@ function fmtNum(n) {
 async function loadMarkets() {
   try {
     const data = await api('/markets?spark=true');
+    window._lastMkt = data;            // cached for the market-detail "related" list
     renderStocks(data.stocks);
     renderCrypto(data.crypto);
     renderMetals(data.metals);
@@ -4654,7 +4695,7 @@ function renderStocks(stocks) {
           const pct = d.change_pct || 0;
           const color = mktColor(pct);
           const spark = d.spark ? miniSpark(d.spark, color) : '';
-          return `<div class="mkt-tile tap" onclick="toast('${sym}: ${fmtNum(price)} (${pct.toFixed(2)}%)')">
+          return `<div class="mkt-tile tap" onclick="openMarketDetail('stocks','${sym}','${sym}')">
             <div class="mkt-tile-spark">${spark}</div>
             <div class="mkt-tile-name">${sym}</div>
             <div class="mkt-tile-price">${fmtNum(price)}</div>
@@ -4685,7 +4726,7 @@ function renderCrypto(crypto) {
         ${coins.map(c => {
           const d = (crypto && crypto[c.sym]) || {};
           const pct = d.change_pct || 0;
-          return `<div class="mkt-crypto-tile tap" onclick="toast('${c.sym}: $${fmtNum(d.price_usd||0)}')">
+          return `<div class="mkt-crypto-tile tap" onclick="openMarketDetail('crypto','${c.sym}','${c.sym}')">
             <div class="mkt-crypto-sym">
               <div class="mkt-crypto-ico" style="background:${c.color}">${c.sym[0]}</div>
               ${c.sym}
@@ -4717,7 +4758,7 @@ function renderMetals(metals) {
         ${list.map(m => {
           const d = (metals && metals[m.key]) || {};
           const pct = d.change_pct || 0;
-          return `<div class="mkt-metals-tile tap">
+          return `<div class="mkt-metals-tile tap" onclick="openMarketDetail('metals','${m.key}','${m.label}')">
             <div class="mkt-tile-name">${m.emoji} ${m.label.toUpperCase()}</div>
             ${d.price_inr_10g ? `<div class="mkt-tile-price">₹${fmtNum(d.price_inr_10g)}<span style="font-size:0.6rem;color:var(--t3);font-weight:500"> /10g</span></div>`
               : `<div class="mkt-tile-price">$${fmtNum(d.price_usd_oz || 0)}<span style="font-size:0.6rem;color:var(--t3);font-weight:500"> /oz</span></div>`}
@@ -4742,7 +4783,7 @@ function renderForex(forex) {
         ${pairs.map(p => {
           const d = (forex && forex[p]) || {};
           const pct = d.change_pct || 0;
-          return `<div class="mkt-tile tap">
+          return `<div class="mkt-tile tap" onclick="openMarketDetail('forex','${p}','${p.slice(0,3)}/${p.slice(3)}')">
             <div class="mkt-tile-name">${p.slice(0,3)}/${p.slice(3)}</div>
             <div class="mkt-tile-price">${fmtNum(d.price || 0)}</div>
             <div class="mkt-tile-change ${mktCls(pct)}">${mktArrow(pct)} ${Math.abs(pct).toFixed(2)}%</div>
@@ -4751,6 +4792,63 @@ function renderForex(forex) {
       </div>
     </div>`;
 }
+
+// ── Market detail (history chart + related items in same category) ──
+const MKT_LABELS = { crypto:'Crypto', stocks:'Stocks', metals:'Metals', forex:'Forex' };
+function _mktVal(cat, d){ if(!d) return 0;
+  if(cat==='crypto') return d.price_usd||0;
+  if(cat==='metals') return d.price_inr_10g||d.price_usd_oz||0;
+  return d.price||0; }
+function _mktFmt(cat, v){
+  if(cat==='crypto') return '$'+fmtNum(v);
+  if(cat==='metals') return (v>9999?'₹':'$')+fmtNum(v);
+  return fmtNum(v); }
+function buildSparkSVG(series, up){
+  const W=320,H=170,pad=6, ps=series.map(p=>p.p);
+  const lo=Math.min(...ps), hi=Math.max(...ps), rng=(hi-lo)||1, n=series.length;
+  const pts=series.map((p,i)=>[pad+(i/(n-1))*(W-2*pad), pad+(1-(p.p-lo)/rng)*(H-2*pad)]);
+  const line=pts.map((q,i)=>(i?'L':'M')+q[0].toFixed(1)+' '+q[1].toFixed(1)).join(' ');
+  const area=line+` L ${pts[n-1][0].toFixed(1)} ${H-pad} L ${pts[0][0].toFixed(1)} ${H-pad} Z`;
+  const col=up?'#2BFF9E':'#FF5B7F';
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"><defs>
+      <linearGradient id="mg" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="${col}" stop-opacity="0.35"/>
+        <stop offset="1" stop-color="${col}" stop-opacity="0"/></linearGradient></defs>
+    <path d="${area}" fill="url(#mg)"/>
+    <path d="${line}" fill="none" stroke="${col}" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
+}
+async function openMarketDetail(cat, sym, label){
+  document.getElementById('market-overlay').classList.add('open');
+  if(!_navReplay){ try{ history.pushState({view:'market'},''); }catch(e){} }
+  const bucket=(window._lastMkt||{})[cat]||{}, d=bucket[sym]||{};
+  const price=_mktVal(cat,d), pct=d.change_pct||0;
+  document.getElementById('mkt-d-hdr').textContent=label;
+  document.getElementById('mkt-d-name').textContent=(MKT_LABELS[cat]||'')+' · '+label;
+  document.getElementById('mkt-d-price').textContent=price?_mktFmt(cat,price):'—';
+  const chg=document.getElementById('mkt-d-chg');
+  chg.className='mkt-d-chg '+(pct>=0?'up':'dn');
+  chg.textContent=price?((pct>=0?'▲ +':'▼ ')+Math.abs(pct).toFixed(2)+'%'):'';
+  const rel=document.getElementById('mkt-d-rel'); rel.innerHTML='';
+  Object.keys(bucket).filter(k=>k!==sym).slice(0,6).forEach(k=>{
+    const it=document.createElement('div'); it.className='mkt-d-rel-item';
+    it.innerHTML=`<div class="mkt-d-rel-name">${k}</div><div class="mkt-d-rel-price">${_mktFmt(cat,_mktVal(cat,bucket[k]))}</div>`;
+    it.addEventListener('click',()=>openMarketDetail(cat,k,k));
+    rel.appendChild(it);
+  });
+  const chart=document.getElementById('mkt-d-chart');
+  chart.innerHTML='<div style="color:var(--t3);font-size:0.8rem;text-align:center;padding-top:78px">Loading chart…</div>';
+  document.getElementById('mkt-d-rng').textContent='';
+  try{
+    const days = cat==='metals'?90:30;
+    const h=await api(`/markets/history?category=${cat}&symbol=${encodeURIComponent(sym)}&days=${days}`);
+    const series=(h.series||[]).filter(p=>p&&p.p!=null);
+    if(series.length<2){ chart.innerHTML='<div style="color:var(--t3);font-size:0.8rem;text-align:center;padding-top:78px">No chart data available.</div>'; return; }
+    chart.innerHTML=buildSparkSVG(series, pct>=0);
+    const lo=Math.min(...series.map(p=>p.p)), hi=Math.max(...series.map(p=>p.p));
+    document.getElementById('mkt-d-rng').textContent=`${days}-day range · ${_mktFmt(cat,lo)} – ${_mktFmt(cat,hi)}`;
+  }catch(e){ chart.innerHTML='<div style="color:var(--t3);font-size:0.8rem;text-align:center;padding-top:78px">Chart unavailable right now.</div>'; }
+}
+function closeMarketDetail(){ document.getElementById('market-overlay').classList.remove('open'); }
 
 // ── Search (queries /search over all articles) ──
 function openSearch(){
