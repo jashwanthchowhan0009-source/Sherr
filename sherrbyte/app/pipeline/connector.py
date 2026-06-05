@@ -16,6 +16,7 @@ and timeline views.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from app.config import settings
@@ -128,7 +129,7 @@ async def connect(info_object_id: str) -> str:
         return new_id
 
 
-async def connect_pending(limit: int = 256) -> int:
+async def connect_pending(limit: int = 256, concurrency: int = 5) -> int:
     """Thread any embedded objects not yet on a thread (used by workers)."""
     rows = await db.fetch(
         """
@@ -138,8 +139,16 @@ async def connect_pending(limit: int = 256) -> int:
         """,
         limit,
     )
-    for r in rows:
-        await connect(str(r["id"]))
-    if rows:
-        log.info("[CONNECT] threaded %d info objects", len(rows))
+    if not rows:
+        return 0
+    # Thread concurrently (bounded) rather than one-at-a-time: each connect()
+    # makes several DB round-trips, so a sequential loop dominated cycle time.
+    sem = asyncio.Semaphore(concurrency)
+
+    async def _guarded(info_id: str) -> None:
+        async with sem:
+            await connect(info_id)
+
+    await asyncio.gather(*[_guarded(str(r["id"])) for r in rows])
+    log.info("[CONNECT] threaded %d info objects", len(rows))
     return len(rows)

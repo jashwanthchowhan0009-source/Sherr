@@ -93,8 +93,11 @@ async def embed_pending(limit: int = 128) -> int:
         return 0
     texts = [_embed_input(r["headline"], r["summary"], r["topic"]) for r in rows]
     vecs = embed_batch(texts)
+    # Single batched round-trip instead of one UPDATE per row.
     async with db.acquire() as conn:
-        for r, v in zip(rows, vecs):
-            await conn.execute("UPDATE info_objects SET embedding=$1 WHERE id=$2", v, r["id"])
+        await conn.executemany(
+            "UPDATE info_objects SET embedding=$1 WHERE id=$2",
+            [(v, r["id"]) for r, v in zip(rows, vecs)],
+        )
     log.info("[EMBED] vectorized %d info objects", len(rows))
     return len(rows)
