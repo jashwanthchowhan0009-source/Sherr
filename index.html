@@ -1472,6 +1472,24 @@ nav {
 .dict-res-def { font-size: 0.82rem; color: var(--t2); line-height: 1.55; margin-bottom: 8px; }
 .dict-res-def b { color: var(--neon); font-size: 0.74rem; margin-right: 6px; }
 
+/* ─── Phase 10: Search overlay ─── */
+#search-overlay { position: absolute; inset: 0; z-index: 700; background: var(--bg);
+  transform: translateY(100%); transition: transform 0.35s var(--snap);
+  display: flex; flex-direction: column; padding-top: 12px; }
+#search-overlay.open { transform: translateY(0); }
+.srch-bar { display: flex; align-items: center; gap: 10px; margin: 12px 14px; padding: 12px 16px; }
+.srch-bar > i { color: var(--neon); }
+.srch-bar input { flex: 1; background: transparent; border: none; outline: none;
+  color: var(--t1); font-size: 0.95rem; font-family: var(--f); }
+.srch-close { width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; color: var(--t2); }
+.srch-results { flex: 1; overflow-y: auto; padding: 6px 0 24px; }
+.srch-item { display: flex; gap: 12px; padding: 12px 16px; cursor: pointer; border-bottom: 1px solid var(--line2); }
+.srch-item:active { background: var(--bgcard); }
+.srch-item-img { width: 64px; height: 48px; border-radius: 10px; object-fit: cover; background: var(--bg3); flex-shrink: 0; }
+.srch-item-t { font-size: 0.88rem; font-weight: 600; color: var(--t1); line-height: 1.35; margin-bottom: 4px; }
+.srch-item-s { font-size: 0.72rem; color: var(--t3); }
+.srch-empty { text-align: center; color: var(--t3); padding: 40px 20px; font-size: 0.85rem; }
+
 /* ═══════════════════════════════════
    RESPONSIVE / UTILITY
 ═══════════════════════════════════ */
@@ -2368,7 +2386,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
     <div class="h-page" id="h-page"></div>
   </div>
   <div class="h-right">
-    <div class="hico tap" id="h-search" style="display:none" onclick="toast('🔍 Search opening soon')"><i class="fa-solid fa-magnifying-glass"></i></div>
+    <div class="hico tap" id="h-search" style="display:none" onclick="openSearch()"><i class="fa-solid fa-magnifying-glass"></i></div>
     <!-- 3D Day/Night Toggle -->
     <div class="theme-toggle-wrap tap" id="thToggle" onclick="toggleTheme()" title="Toggle theme">
       <div class="theme-toggle-track">
@@ -2437,6 +2455,17 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
       <div id="ao-related"></div>
     </div>
   </div>
+</div>
+
+<!-- SEARCH OVERLAY -->
+<div id="search-overlay">
+  <div class="srch-bar glass">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <input id="srch-input" type="text" placeholder="Search all articles…" autocomplete="off"
+      oninput="clearTimeout(window._srchT); window._srchT=setTimeout(()=>doSearch(this.value),300)">
+    <div class="srch-close tap" onclick="goBack()"><i class="fa-solid fa-xmark"></i></div>
+  </div>
+  <div class="srch-results" id="srch-results"><div class="srch-empty">Type to search the latest stories.</div></div>
 </div>
 
 <!-- ════════ EXPLORE ════════ -->
@@ -4087,10 +4116,12 @@ window.addEventListener('popstate', (e) => {
   _navReplay = true;
   try {
     const ao  = document.getElementById('article-overlay');
+    const so  = document.getElementById('search-overlay');
     const sb  = document.getElementById('sidebar');
     const sub = document.querySelector('.sub.on');
     // Close the topmost open layer first; otherwise navigate to the routed view.
     if (ao && ao.classList.contains('open'))      closeArticle();
+    else if (so && so.classList.contains('open')) closeSearch();
     else if (sub)                                 sub.classList.remove('on');
     else if (sb && sb.classList.contains('on'))   sbClose();
     else                                          navTo((e.state && e.state.view) || 'home');
@@ -4719,6 +4750,37 @@ function renderForex(forex) {
         }).join('')}
       </div>
     </div>`;
+}
+
+// ── Search (queries /search over all articles) ──
+function openSearch(){
+  document.getElementById('search-overlay').classList.add('open');
+  if (!_navReplay) { try { history.pushState({ view: 'search' }, ''); } catch (e) {} }
+  setTimeout(() => document.getElementById('srch-input').focus(), 120);
+}
+function closeSearch(){ document.getElementById('search-overlay').classList.remove('open'); }
+async function doSearch(q){
+  const box = document.getElementById('srch-results');
+  q = (q || '').trim();
+  if (q.length < 2) { box.innerHTML = '<div class="srch-empty">Type at least 2 characters…</div>'; return; }
+  box.innerHTML = '<div class="srch-empty">Searching…</div>';
+  try {
+    const data = await api('/search?q=' + encodeURIComponent(q));
+    const results = (data.articles || []).map(normalizeArticle).filter(a => a.id);
+    if (!results.length) { box.innerHTML = `<div class="srch-empty">No results for “${bEsc(q)}”.</div>`; return; }
+    box.innerHTML = '';
+    results.forEach(a => {
+      const cc = CATS[a.category] || CATS.tech;
+      const d = document.createElement('div'); d.className = 'srch-item';
+      d.innerHTML = `${a.image_url
+          ? `<img class="srch-item-img" src="${a.image_url}" loading="lazy" onerror="this.style.display='none'">`
+          : `<div class="srch-item-img" style="display:flex;align-items:center;justify-content:center;background:${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}">${cc.icon}</div>`}
+        <div><div class="srch-item-t">${bEsc(a.title)}</div>
+          <div class="srch-item-s">${cc.short} · ${bEsc(a.source||'')} · ${timeAgo(a.published_at)||''}</div></div>`;
+      d.addEventListener('click', () => openArticle(a));
+      box.appendChild(d);
+    });
+  } catch (e) { box.innerHTML = '<div class="srch-empty">Search is unavailable right now.</div>'; }
 }
 
 // ── Bytes — vertical short-news feed (WWWW corner + infinite scroll) ──
