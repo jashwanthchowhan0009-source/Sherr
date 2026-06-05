@@ -150,26 +150,13 @@ html, body {
 ═══════════════════════════════════ */
 #splash {
   position: absolute; inset: 0; z-index: 9999;
-  background: radial-gradient(ellipse at 40% 35%, #041642 0%, #060e1f 60%, #020b1a 100%);
+  background: #000;
   display: flex; flex-direction: column;
   align-items: center; justify-content: center; gap: 16px;
   transition: opacity 0.8s var(--ease), visibility 0.8s;
   overflow: hidden;
 }
-#splash::before {
-  content: '';
-  position: absolute; top: -80px; left: -80px;
-  width: 320px; height: 320px;
-  background: radial-gradient(circle, rgba(0,62,145,0.45) 0%, transparent 70%);
-  border-radius: 50%; animation: pulseBg 4s ease-in-out infinite;
-}
-#splash::after {
-  content: '';
-  position: absolute; bottom: -60px; right: -60px;
-  width: 240px; height: 240px;
-  background: radial-gradient(circle, rgba(21,101,232,0.28) 0%, transparent 70%);
-  border-radius: 50%; animation: pulseBg 4s ease-in-out infinite 2s;
-}
+#splash::before, #splash::after { content: none; }
 @keyframes pulseBg {
   0%,100%{transform:scale(1);opacity:0.6}
   50%{transform:scale(1.2);opacity:1}
@@ -221,15 +208,14 @@ html, body {
 /* ─── Claw-tear reveal (splash) ─── */
 .sp-stage { position:absolute; inset:0; }
 .sp-claw-logo {
-  position:absolute; left:50%; top:50%; height:30%; z-index:1;
+  position:absolute; left:50%; top:50%; height:44%; z-index:1;
   transform:translate(-50%,-50%) scale(.86) rotate(-6deg);
   clip-path:inset(0 100% 0 0); will-change:transform,clip-path;
 }
 .sp-claw-logo .sp-imgwrap { height:100%; }
-.sp-claw-logo img { height:100%; width:auto; display:block;
-  filter:drop-shadow(0 20px 60px rgba(0,0,0,.55)); }
+.sp-claw-logo img { height:100%; width:auto; display:block; image-rendering:auto; }
 .sp-claws {
-  position:absolute; left:0; top:50%; height:36%; opacity:0; z-index:2;
+  position:absolute; left:0; top:50%; height:52%; opacity:0; z-index:2;
   transform:translate(-40%,-50%); will-change:transform,opacity;
   filter:drop-shadow(0 0 3px rgba(255,255,255,.5));
 }
