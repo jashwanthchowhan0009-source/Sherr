@@ -1438,6 +1438,18 @@ nav {
 .ao-acts .ao-act.liked { color: #FF5B7F; }
 .ao-acts .ao-act.saved { color: var(--neon); }
 
+/* ─── Phase 7: Dictionary card + lookup result ─── */
+.dict-card { display: flex; align-items: center; gap: 12px; margin: 0 14px 10px; padding: 14px 16px; cursor: pointer; }
+.dict-ico { font-size: 1.5rem; }
+.dict-txt { flex: 1; display: flex; flex-direction: column; }
+.dict-txt b { font-size: 0.92rem; color: var(--t1); }
+.dict-txt span { font-size: 0.72rem; color: var(--t3); }
+.dict-result { margin: 0 14px 12px; padding: 14px 16px; }
+.dict-res-word { font-size: 1.05rem; font-weight: 800; color: var(--t1); margin-bottom: 8px; }
+.dict-res-word span { font-size: 0.8rem; font-weight: 500; color: var(--t3); }
+.dict-res-def { font-size: 0.82rem; color: var(--t2); line-height: 1.55; margin-bottom: 8px; }
+.dict-res-def b { color: var(--neon); font-size: 0.74rem; margin-right: 6px; }
+
 /* ═══════════════════════════════════
    RESPONSIVE / UTILITY
 ═══════════════════════════════════ */
@@ -2444,13 +2456,13 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
     <div class="exp-sec-hdr-title">📊 At a Glance</div>
   </div>
   <div class="exp-bento" style="grid-template-columns:1fr;gap:0">
-    <div class="bento-weather tap" onclick="toast('🌤 Kochi weather details')" style="margin-bottom:8px">
+    <div class="bento-weather tap" id="bento-weather" onclick="loadWeather()" style="margin-bottom:8px">
       <div>
-        <div class="bw-loc"><i class="fa-solid fa-location-dot" style="font-size:0.6rem"></i> Kochi, Kerala</div>
-        <div class="bw-temp">31°</div>
-        <div class="bw-desc">Partly cloudy · Feels 34°</div>
+        <div class="bw-loc" id="bw-loc"><i class="fa-solid fa-location-dot" style="font-size:0.6rem"></i> Kochi, Kerala</div>
+        <div class="bw-temp" id="bw-temp">—°</div>
+        <div class="bw-desc" id="bw-desc">Loading…</div>
       </div>
-      <div class="bw-icon">⛅</div>
+      <div class="bw-icon" id="bw-icon">🌡️</div>
     </div>
   </div>
   <!-- v5.1 — Live market widgets, populated by loadMarkets() -->
@@ -2459,19 +2471,24 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   <div id="mkt-metals-wrap"></div>
   <div id="mkt-forex-wrap"></div>
 
-  <!-- Discover -->
+  <!-- Dictionary (replaces Discover) -->
   <div class="exp-sec-hdr">
-    <div class="exp-sec-hdr-title">✨ Discover</div>
+    <div class="exp-sec-hdr-title">📖 Dictionary</div>
   </div>
-  <div class="exp-interact-row" id="exp-interact-row"></div>
+  <div class="dict-card glass tap" onclick="openDictionary()">
+    <div class="dict-ico">📖</div>
+    <div class="dict-txt"><b>Look up a word</b><span>Definitions, phonetics &amp; examples</span></div>
+    <i class="fa-solid fa-chevron-right" style="color:var(--t3)"></i>
+  </div>
+  <div class="dict-result glass" id="dict-result" style="display:none"></div>
 
-  <!-- Word of the Day + Quiz -->
-  <div class="exp-word-card">
+  <!-- Word of the Day (rotates daily, live) -->
+  <div class="exp-word-card" id="exp-word-card">
     <div class="ewc-label">Word of the Day</div>
-    <div class="ewc-word">Sonder</div>
-    <div class="ewc-phonetic">/ˈsɒndə/  •  noun</div>
-    <div class="ewc-def">The realization that each random passerby is living a life as vivid and complex as your own.</div>
-    <div class="ewc-example">"Standing at the airport, she was struck by a sudden sonder — every face carried an entire universe."</div>
+    <div class="ewc-word" id="ewc-word">—</div>
+    <div class="ewc-phonetic" id="ewc-phon"></div>
+    <div class="ewc-def" id="ewc-def"></div>
+    <div class="ewc-example" id="ewc-ex"></div>
   </div>
   <div class="explore-quiz-card" id="explore-quiz"></div>
 
@@ -3675,7 +3692,7 @@ function renderExpCats() {
 
 function renderExpInteractions() {
   const row = document.getElementById('exp-interact-row');
-  if (row.children.length) return;
+  if (!row || row.children.length) return;
   const cards = [
     { icon:'🔍', title:'Search',   sub:'Find any topic',  tag:'Search',  tagColor:'#4F6BD4', bg:'linear-gradient(135deg,#0D1035,#2C3D8F)', action:()=>toast('🔍 Type in search above') },
     { icon:'📊', title:'Charts',   sub:'Visual data',     tag:'New',     tagColor:'#52C17A', bg:'linear-gradient(135deg,#0a1f0a,#1a4a1a)', action:()=>toast('📊 Charts view coming soon') },
@@ -4682,8 +4699,53 @@ function renderForex(forex) {
     </div>`;
 }
 
+// ── Live: weather (Open-Meteo), word-of-day + dictionary (dictionaryapi.dev) ──
+async function loadWeather() {
+  try {
+    const w = await api('/live/weather');
+    if (!w) return;
+    const loc = document.getElementById('bw-loc');
+    if (loc) loc.innerHTML = `<i class="fa-solid fa-location-dot" style="font-size:0.6rem"></i> ${w.city || '—'}`;
+    if (w.temp_c != null) document.getElementById('bw-temp').textContent = w.temp_c + '°';
+    document.getElementById('bw-desc').textContent =
+      (w.condition || '') + (w.feels_c != null ? ` · Feels ${w.feels_c}°` : '');
+    if (w.emoji) document.getElementById('bw-icon').textContent = w.emoji;
+  } catch (e) { /* endpoint live after backend merges to main */ }
+}
+async function loadWordOfDay() {
+  try {
+    const d = await api('/live/word-of-day');
+    if (!d || !d.word) return;
+    document.getElementById('ewc-word').textContent = d.word.charAt(0).toUpperCase() + d.word.slice(1);
+    const m = (d.meanings && d.meanings[0]) || {};
+    document.getElementById('ewc-phon').textContent = [d.phonetic, m.part_of_speech].filter(Boolean).join('  •  ');
+    document.getElementById('ewc-def').textContent = m.definition || '';
+    document.getElementById('ewc-ex').textContent = m.example ? `"${m.example}"` : '';
+  } catch (e) {}
+}
+async function openDictionary() {
+  const w = (prompt('Look up a word:') || '').trim().toLowerCase();
+  if (!w) return;
+  const el = document.getElementById('dict-result');
+  el.style.display = 'block';
+  el.innerHTML = `<div class="dict-res-word">${w}</div><div class="dict-res-def">Looking up…</div>`;
+  try {
+    const d = await api('/live/dictionary/' + encodeURIComponent(w));
+    if (!d || !d.meanings || !d.meanings.length) {
+      el.innerHTML = `<div class="dict-res-word">${w}</div><div class="dict-res-def">No definition found.</div>`;
+      return;
+    }
+    el.innerHTML = `<div class="dict-res-word">${d.word}${d.phonetic ? ` <span>${d.phonetic}</span>` : ''}</div>` +
+      d.meanings.map(m => `<div class="dict-res-def"><b>${m.part_of_speech}</b> ${m.definition}${m.example ? `<br><i>"${m.example}"</i>` : ''}</div>`).join('');
+  } catch (e) {
+    el.innerHTML = `<div class="dict-res-word">${w}</div><div class="dict-res-def">Dictionary is waking up — try again shortly.</div>`;
+  }
+}
+
 function startMarketsPolling() {
   loadMarkets();
+  loadWeather();
+  loadWordOfDay();
   if (marketsTimer) clearInterval(marketsTimer);
   marketsTimer = setInterval(() => {
     const exploreView = document.getElementById('v-explore');
