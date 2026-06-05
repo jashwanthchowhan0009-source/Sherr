@@ -1422,6 +1422,22 @@ nav {
   font-size: 1.1rem; line-height: 1.7; max-width: 300px; }
 .bytes-empty span { font-size: 0.82rem; color: var(--t2); font-weight: 500; }
 
+/* ─── Phase 6: source links + glass article actions ─── */
+.ao-sources { margin: 16px 0 6px; }
+.ao-sources-hdr { font-size: 0.64rem; font-weight: 800; letter-spacing: 1px;
+  text-transform: uppercase; color: var(--t3); margin-bottom: 9px; }
+.ao-source-link { display: flex; align-items: center; gap: 10px; padding: 12px 14px;
+  margin-bottom: 8px; border-radius: 14px; color: var(--t1); font-size: 0.85rem;
+  font-weight: 600; text-decoration: none; background: var(--bgcard);
+  border: 1px solid var(--glassB); transition: transform 0.14s var(--spring);
+  backdrop-filter: blur(14px) saturate(160%); -webkit-backdrop-filter: blur(14px) saturate(160%); }
+.ao-source-link i { color: var(--neon); }
+.ao-source-link:active { transform: scale(0.98); }
+.ao-acts .ao-act { background: var(--bgcard); border: 1px solid var(--glassB);
+  border-radius: 100px; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+.ao-acts .ao-act.liked { color: #FF5B7F; }
+.ao-acts .ao-act.saved { color: var(--neon); }
+
 /* ═══════════════════════════════════
    RESPONSIVE / UTILITY
 ═══════════════════════════════════ */
@@ -2377,6 +2393,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
       </div>
       <div class="ao-main-title" id="ao-main-title"></div>
       <div class="ao-text" id="ao-text"></div>
+      <div class="ao-sources" id="ao-sources"></div>
       <div class="ao-acts">
         <div class="ao-act tap" id="ao-like" onclick="aoLike()"><i class="fa-regular fa-heart"></i><span>Like</span></div>
         <div class="ao-act tap" id="ao-save" onclick="aoSave()"><i class="fa-regular fa-bookmark"></i><span>Save</span></div>
@@ -3477,9 +3494,22 @@ function openArticle(rawA) {
   document.getElementById('ao-src-name').textContent = a.source || '';
   document.getElementById('ao-src-time').textContent = timeAgo(a.published_at) || '';
   document.getElementById('ao-main-title').textContent = a.title;
-  const body = a.body_ai || a.preview || '';
-  document.getElementById('ao-text').textContent = body +
-    (body.length < 200 ? '' : '\n\nThis story continues to develop. Our editorial team is tracking additional details.');
+  const body = a.body_ai || a.preview || a.summary || '';
+  document.getElementById('ao-text').textContent = body
+    ? body + (body.length < 200 ? '' : '\n\nThis story continues to develop. Our editorial team is tracking additional details.')
+    : 'Full context for this story is being generated. Tap a source below to read the original report.';
+
+  // Source link(s) — tapping opens the original news page in a new tab.
+  const srcWrap = document.getElementById('ao-sources');
+  if (srcWrap) {
+    const sources = (Array.isArray(a.sources) && a.sources.length)
+      ? a.sources
+      : (a.url ? [{ name: a.source || 'Read the original', url: a.url }] : []);
+    srcWrap.innerHTML = sources.length ? `
+      <div class="ao-sources-hdr">Sources — tap to read the original</div>
+      ${sources.map(s => `<a class="ao-source-link tap" href="${s.url || s}" target="_blank" rel="noopener noreferrer">
+        <i class="fa-solid fa-arrow-up-right-from-square"></i><span>${s.name || s.source || s.url || 'Read original'}</span></a>`).join('')}` : '';
+  }
 
   const likeEl = document.getElementById('ao-like');
   const saveEl = document.getElementById('ao-save');
@@ -3488,8 +3518,18 @@ function openArticle(rawA) {
   saveEl.className = 'ao-act tap' + (ST.saves.includes(a.id) ? ' saved' : '');
   saveEl.querySelector('i').className = ST.saves.includes(a.id) ? 'fa-solid fa-bookmark' : 'fa-regular fa-bookmark';
 
-  // Related articles (same pillar/category)
-  const related = homeArticles.map(normalizeArticle).filter(x => x.category === a.category && x.id !== a.id).slice(0,3);
+  // Related stories — genuinely different: drawn from the personalized feed
+  // pool, excluding the current article and ones already seen; same-category
+  // first, then fresh cross-category, then seen-same-category as a last resort.
+  const seenSet = new Set((ST.seen || []).map(String));
+  const pool = homeArticles.map(normalizeArticle).filter(x => x.id && x.id !== a.id);
+  const ordered = [
+    ...pool.filter(x => x.category === a.category && !seenSet.has(String(x.id))),
+    ...pool.filter(x => x.category !== a.category && !seenSet.has(String(x.id))),
+    ...pool.filter(x => x.category === a.category && seenSet.has(String(x.id))),
+  ];
+  const related = []; const _seenIds = new Set();
+  for (const x of ordered) { if (!_seenIds.has(x.id)) { _seenIds.add(x.id); related.push(x); } if (related.length >= 4) break; }
   const rc = document.getElementById('ao-related');
   rc.innerHTML = '';
   related.forEach(ra => {
