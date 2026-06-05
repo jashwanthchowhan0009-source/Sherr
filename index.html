@@ -218,6 +218,61 @@ html, body {
   0%{width:0%} 60%{width:70%} 100%{width:100%}
 }
 
+/* ─── Claw-tear reveal (splash) ─── */
+.sp-stage { position:absolute; inset:0; }
+.sp-claw-logo {
+  position:absolute; left:50%; top:50%; height:30%; z-index:1;
+  transform:translate(-50%,-50%) scale(.86) rotate(-6deg);
+  clip-path:inset(0 100% 0 0); will-change:transform,clip-path;
+}
+.sp-claw-logo .sp-imgwrap { height:100%; }
+.sp-claw-logo img { height:100%; width:auto; display:block;
+  filter:drop-shadow(0 20px 60px rgba(0,0,0,.55)); }
+.sp-claws {
+  position:absolute; left:0; top:50%; height:36%; opacity:0; z-index:2;
+  transform:translate(-40%,-50%); will-change:transform,opacity;
+  filter:drop-shadow(0 0 3px rgba(255,255,255,.5));
+}
+.sp-claws svg { height:100%; width:auto; overflow:visible; }
+.sp-claws path { fill:none; stroke:#fff; stroke-width:5; stroke-linecap:round; }
+.sp-streak {
+  position:absolute; left:0; height:1px; width:60%; opacity:0; z-index:2;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.5),transparent);
+}
+.sp-streak.a{top:42%}.sp-streak.b{top:54%}.sp-streak.c{top:48%}
+.sp-clawvig {
+  position:absolute; inset:0; pointer-events:none; z-index:1;
+  background:radial-gradient(125% 125% at 50% 50%, transparent 58%, rgba(0,0,0,.45));
+}
+
+#splash.go .sp-claws { animation:spSwipe .55s cubic-bezier(.3,.5,.2,1) .55s forwards; }
+#splash.go .sp-streak { animation:spStreak .5s ease-out .6s forwards; }
+#splash.go .sp-streak.b { animation-delay:.64s; }
+#splash.go .sp-streak.c { animation-delay:.58s; }
+#splash.go .sp-claw-logo { animation:spWipe .58s ease-out .62s forwards,
+                                     spSettle .85s cubic-bezier(.18,.9,.24,1.04) 1.0s forwards; }
+#splash.go .sp-claw-logo .sp-imgwrap { animation:spBreathe 6.5s ease-in-out 2.0s infinite; }
+
+@keyframes spSwipe{
+  0%{transform:translate(-40%,-50%) rotate(-7deg);opacity:0}
+  18%{opacity:1} 78%{opacity:.95}
+  100%{transform:translate(560%,-50%) rotate(-7deg);opacity:0}}
+@keyframes spStreak{
+  0%{transform:translateX(-30%);opacity:0}
+  30%{opacity:.8} 100%{transform:translateX(120%);opacity:0}}
+@keyframes spWipe{0%{clip-path:inset(0 100% 0 0)}100%{clip-path:inset(0 0 0 0)}}
+@keyframes spSettle{
+  0%{transform:translate(-50%,-50%) scale(.86) rotate(-6deg)}
+  68%{transform:translate(-50%,-50%) scale(1.035) rotate(1.2deg)}
+  100%{transform:translate(-50%,-50%) scale(1) rotate(0)}}
+@keyframes spBreathe{0%,100%{transform:scale(1)}50%{transform:scale(1.02)}}
+
+@media (prefers-reduced-motion: reduce){
+  #splash.go .sp-claws, #splash.go .sp-streak { display:none; }
+  .sp-claw-logo { clip-path:none!important;
+    transform:translate(-50%,-50%) scale(1) rotate(0)!important; }
+}
+
 /* ═══════════════════════════════════
    TOAST
 ═══════════════════════════════════ */
@@ -2187,14 +2242,21 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
 
-<!-- SPLASH -->
-<div id="splash">
-  <div class="sp-logo">
-    <div class="sp-logo-inner"><img src="logo.jpg" alt="SherByte" style="width:100%;height:100%;object-fit:cover;border-radius:28px" onerror="this.outerHTML='⚡'"></div>
+<!-- SPLASH (claw-tear reveal) -->
+<div id="splash" class="go">
+  <div class="sp-stage">
+    <div class="sp-claw-logo"><div class="sp-imgwrap"><img src="logo.jpg" alt="SherByte" onerror="this.closest('.sp-claw-logo').innerHTML='<div class=\'sp-name\'>Sherr<span>Byte</span></div>'"></div></div>
+    <div class="sp-claws">
+      <svg viewBox="0 0 200 320">
+        <path d="M40 8 Q34 160 46 312"/>
+        <path d="M84 2 Q80 158 90 316"/>
+        <path d="M128 8 Q126 160 134 312"/>
+        <path d="M170 16 Q170 162 174 306"/>
+      </svg>
+    </div>
+    <div class="sp-streak a"></div><div class="sp-streak b"></div><div class="sp-streak c"></div>
+    <div class="sp-clawvig"></div>
   </div>
-  <div class="sp-name">Sherr<span>Byte</span></div>
-  <div class="sp-tagline">Your world, curated</div>
-  <div class="sp-loader"><div class="sp-loader-fill"></div></div>
 </div>
 
 <!-- OVERLAY -->
@@ -4048,8 +4110,9 @@ let obAllT = [], obSelT = new Set(), obPF = 0, obSD = null;
 function obInit() {
   const screen = document.getElementById('ob-screen');
   if (!screen) return;
-  if (ST.token) { screen.classList.add('gone'); return; }
-  document.getElementById('splash').classList.add('gone');
+  if (ST.token) screen.classList.add('gone');
+  // The splash (and its claw-tear reveal) is dismissed by a timer in the load
+  // handler, so the animation plays for both logged-in and logged-out users.
 }
 
 function obSwitchTab(t) {
@@ -4535,7 +4598,8 @@ document.getElementById('ao-scroll')?.addEventListener('scroll', (e) => {
 // ── INIT ──
 window.addEventListener('load', () => {
   obInit();
-  if (ST.token) setTimeout(() => document.getElementById('splash').classList.add('gone'), 1500);
+  // Let the claw-tear reveal finish (~1.9s) before fading the splash out.
+  setTimeout(() => document.getElementById('splash').classList.add('gone'), 2300);
 });
 
 document.addEventListener('DOMContentLoaded', () => {
