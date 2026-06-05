@@ -1412,6 +1412,13 @@ nav {
 .nb.on .nb-lbl { color: var(--neon); }
 .nb.on .nb-icon i { filter: drop-shadow(0 0 6px var(--neon-glow)); }
 
+/* ─── Bytes view (placeholder; Phase 9 builds the snap/page-flip feed) ─── */
+#v-bytes { inset: 0; }
+.bytes-feed { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; padding: 24px; }
+.bytes-empty { padding: 28px 26px; text-align: center; color: var(--t1);
+  font-size: 1.1rem; line-height: 1.7; max-width: 300px; }
+.bytes-empty span { font-size: 0.82rem; color: var(--t2); font-weight: 500; }
+
 /* ═══════════════════════════════════
    RESPONSIVE / UTILITY
 ═══════════════════════════════════ */
@@ -2349,7 +2356,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 <!-- ARTICLE OVERLAY -->
 <div id="article-overlay">
   <div class="ao-header">
-    <div class="ao-back tap" onclick="closeArticle()"><i class="fa-solid fa-chevron-left"></i> Back</div>
+    <div class="ao-back tap" onclick="goBack()"><i class="fa-solid fa-chevron-left"></i> Back</div>
     <div class="ao-title-hdr" id="ao-title-hdr"></div>
     <div class="ao-share tap" onclick="shareArt(currentArticle?.title||'')"><i class="fa-solid fa-paper-plane"></i></div>
   </div>
@@ -2679,6 +2686,13 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 </div>
 
 <!-- ════════ FLOATING BOTTOM NAV ════════ -->
+<!-- ════════ BYTES — short-form vertical feed (Phase 9 builds the feed) ════════ -->
+<div id="v-bytes" class="view" style="padding:0;overflow:hidden">
+  <div id="bytes-feed" class="bytes-feed">
+    <div class="bytes-empty glass">⚡ <b>Bytes</b><br><span>Swipe-up short news — arriving in Phase 9.</span></div>
+  </div>
+</div>
+
 <nav>
   <div class="nb on" id="nb-home" onclick="navTo('home')">
     <div class="nb-icon"><i class="fa-solid fa-house"></i></div>
@@ -2687,6 +2701,10 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   <div class="nb" id="nb-explore" onclick="navTo('explore')">
     <div class="nb-icon"><i class="fa-solid fa-compass"></i></div>
     <span class="nb-lbl">Explore</span>
+  </div>
+  <div class="nb" id="nb-bytes" onclick="navTo('bytes')">
+    <div class="nb-icon"><i class="fa-solid fa-bolt"></i></div>
+    <span class="nb-lbl">Bytes</span>
   </div>
   <div class="nb" id="nb-profile" onclick="navTo('profile')">
     <div class="nb-icon"><i class="fa-regular fa-user"></i></div>
@@ -2964,11 +2982,11 @@ function toggleTheme() { applyTheme(!isDark); }
 })();
 
 // ── SIDEBAR ──
-function sbOpen()  { document.getElementById('sidebar').classList.add('on');  document.getElementById('overlay').classList.add('on'); }
+function sbOpen()  { document.getElementById('sidebar').classList.add('on');  document.getElementById('overlay').classList.add('on'); if(!_navReplay){try{history.pushState({layer:'sidebar'},'');}catch(e){}} }
 function sbClose() { document.getElementById('sidebar').classList.remove('on'); document.getElementById('overlay').classList.remove('on'); }
 
 // ── SUB PAGES ──
-function openSub(id) { sbClose(); document.getElementById('sub-'+id)?.classList.add('on'); }
+function openSub(id) { sbClose(); document.getElementById('sub-'+id)?.classList.add('on'); if(!_navReplay){try{history.pushState({layer:'sub'},'');}catch(e){}} }
 function closeSub(id) { document.getElementById('sub-'+id)?.classList.remove('on'); }
 function togRow(el)  { el.classList.toggle('on'); toast(el.classList.contains('on') ? '✓ Enabled' : '✗ Disabled'); }
 function selPriv(el) {
@@ -3476,6 +3494,7 @@ function openArticle(rawA) {
 
   document.getElementById('ao-scroll').scrollTop = 0;
   document.getElementById('article-overlay').classList.add('open');
+  if (!_navReplay) { try { history.pushState({ view: 'article' }, ''); } catch (e) {} }
   logInteract(a.id, a.category, 'read');
 }
 
@@ -3919,8 +3938,9 @@ async function saveProfile() {
 }
 
 // ── NAV ──
-const VIEW_MAP = { home:'v-home', explore:'v-explore', profile:'v-profile', bookmarks:'v-bookmarks', notifs:'v-notifs', feed:'v-feed' };
-const NB_MAP   = { home:'nb-home', explore:'nb-explore', profile:'nb-profile' };
+const VIEW_MAP = { home:'v-home', explore:'v-explore', bytes:'v-bytes', profile:'v-profile', bookmarks:'v-bookmarks', notifs:'v-notifs', feed:'v-feed' };
+const NB_MAP   = { home:'nb-home', explore:'nb-explore', bytes:'nb-bytes', profile:'nb-profile' };
+let _navReplay = false;   // true while applying a popstate (suppresses re-push)
 
 function navTo(name) {
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
@@ -3940,6 +3960,8 @@ function navTo(name) {
     hSearch.style.display='flex';
   } else if (name==='feed') {
     hBrand.style.display='none'; hPage.style.display='block'; hPage.textContent='FEED Pulse';
+  } else if (name==='bytes') {
+    hBrand.style.display='none'; hPage.style.display='block'; hPage.textContent='Bytes';
   } else if (['profile','bookmarks','notifs'].includes(name)) {
     hBrand.style.display='none'; hPage.style.display='block';
     const lbls = { profile:'Profile', bookmarks:'Bookmarks', notifs:'Notifications' };
@@ -3957,7 +3979,29 @@ function navTo(name) {
     startMarketsPolling();
   }
   if (name==='feed') renderFeedArticles();
+  if (name==='bytes' && typeof initBytes === 'function') initBytes();
+
+  // Push a history entry so the device/hardware back button returns here.
+  if (!_navReplay) { try { history.pushState({ view: name }, ''); } catch (e) {} }
 }
+
+// ── History routing: hardware/device back traverses in-app screens ──────────
+function goBack() { history.back(); }
+window.addEventListener('popstate', (e) => {
+  _navReplay = true;
+  try {
+    const ao  = document.getElementById('article-overlay');
+    const sb  = document.getElementById('sidebar');
+    const sub = document.querySelector('.sub.on');
+    // Close the topmost open layer first; otherwise navigate to the routed view.
+    if (ao && ao.classList.contains('open'))      closeArticle();
+    else if (sub)                                 sub.classList.remove('on');
+    else if (sb && sb.classList.contains('on'))   sbClose();
+    else                                          navTo((e.state && e.state.view) || 'home');
+  } finally { _navReplay = false; }
+});
+// Seed the root route so navigation has a base entry to return to.
+try { history.replaceState({ view: 'home' }, ''); } catch (e) {}
 
 async function loadProfileFromAPI() {
   try {
