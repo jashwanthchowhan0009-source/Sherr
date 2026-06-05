@@ -74,7 +74,7 @@ app.add_middleware(
 
 # ─── Routers ──────────────────────────────────────────────────────────────────
 from app.api import (  # noqa: E402  (import after app to avoid cycles)
-    activity, article, auth, compat, feed, markets, signal, sherr,
+    activity, article, auth, compat, feed, live, markets, signal, sherr,
 )
 
 app.include_router(auth.router)
@@ -83,6 +83,7 @@ app.include_router(article.router)
 app.include_router(signal.router)
 app.include_router(sherr.router)
 app.include_router(markets.router)
+app.include_router(live.router)
 app.include_router(activity.router)
 # MVP-compatibility routes (flat /login, /feed, /interact, …) for the v5 frontend.
 app.include_router(compat.router)

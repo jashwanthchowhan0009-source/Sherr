@@ -288,3 +288,68 @@ async def markets_forex():
 @router.get("/commodities")
 async def markets_commodities():
     return await fetch_commodities()
+
+
+# ─── Historical series (for per-item detail graphs) ────────────────────────────
+_COIN_IDS = {"BTC": "bitcoin", "ETH": "ethereum", "SOL": "solana", "DOGE": "dogecoin",
+             "ADA": "cardano", "XRP": "ripple", "BNB": "binancecoin", "DOT": "polkadot"}
+_STOCK_SYM = {"NIFTY": "^NSEI", "SENSEX": "^BSESN", "NASDAQ": "^IXIC", "SP500": "^GSPC",
+              "DOW": "^DJI", "FTSE": "^FTSE", "NIKKEI": "^N225"}
+_FOREX_SYM = {"USDINR": "USDINR=X", "EURINR": "EURINR=X", "GBPINR": "GBPINR=X",
+              "JPYINR": "JPYINR=X", "EURUSD": "EURUSD=X", "GBPUSD": "GBPUSD=X"}
+_METAL_SYM = {"GOLD": "GC=F", "SILVER": "SI=F", "PLATINUM": "PL=F", "PALLADIUM": "PA=F"}
+
+
+async def _yahoo_series(client: httpx.AsyncClient, symbol: str, rng: str) -> list[dict]:
+    try:
+        r = await client.get(
+            f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}",
+            params={"interval": "1d", "range": rng},
+            headers={"User-Agent": "Mozilla/5.0 (compatible; SherByte/6.0)"},
+            timeout=8,
+        )
+        if r.status_code != 200:
+            return []
+        res = r.json().get("chart", {}).get("result", [])
+        if not res:
+            return []
+        ts = res[0].get("timestamp", []) or []
+        closes = res[0].get("indicators", {}).get("quote", [{}])[0].get("close", []) or []
+        return [{"t": int(t) * 1000, "p": round(c, 2)}
+                for t, c in zip(ts, closes) if c is not None]
+    except Exception as e:
+        log.warning("Yahoo series %s failed: %s", symbol, e)
+        return []
+
+
+@router.get("/history")
+async def markets_history(category: str, symbol: str, days: int = 30):
+    """Historical price series for one item: CoinGecko for crypto, Yahoo for
+    stocks/forex/metals. Returns [{t: epoch_ms, p: price}, ...]."""
+    cat, sym = category.lower(), symbol.upper()
+    key = f"hist_{cat}_{sym}_{days}"
+    cached = _cget(key)
+    if cached:
+        return cached
+    series: list[dict] = []
+    async with httpx.AsyncClient() as client:
+        if cat == "crypto":
+            cid = _COIN_IDS.get(sym, sym.lower())
+            try:
+                r = await client.get(
+                    f"https://api.coingecko.com/api/v3/coins/{cid}/market_chart",
+                    params={"vs_currency": "usd", "days": days}, timeout=8,
+                )
+                if r.status_code == 200:
+                    series = [{"t": int(p[0]), "p": round(p[1], 4)}
+                              for p in r.json().get("prices", [])]
+            except Exception as e:
+                log.warning("CoinGecko history failed: %s", e)
+        else:
+            symap = {"stocks": _STOCK_SYM, "forex": _FOREX_SYM, "metals": _METAL_SYM}.get(cat, {})
+            ysym = symap.get(sym, sym)
+            rng = "1mo" if days <= 31 else ("3mo" if days <= 93 else "1y")
+            series = await _yahoo_series(client, ysym, rng)
+    out = {"category": cat, "symbol": sym, "series": series}
+    _cset(key, out, 600)
+    return out
