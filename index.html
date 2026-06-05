@@ -58,12 +58,12 @@
   --bg2:     #0d1e3a;
   --bg3:     #122248;
   --bg4:     #1a2e58;
-  --bgcard:  rgba(0,62,145,0.06);
-  --glass:   rgba(3,12,38,0.78);
-  --glass2:  rgba(5,18,52,0.94);
-  --glassB:  rgba(0,62,145,0.14);
-  --line:    rgba(0,62,145,0.22);
-  --line2:   rgba(0,62,145,0.11);
+  --bgcard:  rgba(255,255,255,0.05);
+  --glass:   rgba(10,18,40,0.55);
+  --glass2:  rgba(8,16,40,0.90);
+  --glassB:  rgba(255,255,255,0.08);
+  --line:    rgba(255,255,255,0.09);
+  --line2:   rgba(255,255,255,0.05);
   --t1:      #eef2ff;
   --t2:      #8aaad4;
   --t3:      #4a6898;
@@ -77,12 +77,12 @@
   --bg2:     #EEEDF8;
   --bg3:     #E4E2F4;
   --bg4:     #D8D6EC;
-  --bgcard:  rgba(44,61,143,0.04);
-  --glass:   rgba(240,239,248,0.80);
+  --bgcard:  rgba(255,255,255,0.55);
+  --glass:   rgba(255,255,255,0.62);
   --glass2:  rgba(255,255,255,0.95);
-  --glassB:  rgba(44,61,143,0.06);
-  --line:    rgba(44,61,143,0.12);
-  --line2:   rgba(44,61,143,0.06);
+  --glassB:  rgba(255,255,255,0.65);
+  --line:    rgba(44,61,143,0.14);
+  --line2:   rgba(44,61,143,0.07);
   --t1:      #16102A;
   --t2:      #4A4770;
   --t3:      #8A87A0;
@@ -107,6 +107,31 @@ html, body {
   width: 100vw; height: 100vh; height: 100dvh;
   background: var(--bg); display: flex; flex-direction: column;
   overflow: hidden; transition: background 0.4s;
+}
+
+/* ─── Theme backgrounds: deep starry-night (dark) / sky-cloud (light) ─── */
+[data-theme="dark"] .phone {
+  background:
+    radial-gradient(1.5px 1.5px at 18% 24%, rgba(255,255,255,.75), transparent),
+    radial-gradient(1.5px 1.5px at 68% 16%, rgba(255,255,255,.55), transparent),
+    radial-gradient(1.5px 1.5px at 42% 62%, rgba(255,255,255,.60), transparent),
+    radial-gradient(1.5px 1.5px at 83% 54%, rgba(255,255,255,.50), transparent),
+    radial-gradient(1.5px 1.5px at 30% 84%, rgba(255,255,255,.45), transparent),
+    radial-gradient(ellipse at 50% -8%, #0c2150 0%, #060e1f 46%, #03081a 100%);
+}
+[data-theme="light"] .phone {
+  background: linear-gradient(180deg, #bfe5ff 0%, #d8eeff 34%, #eaf3fb 68%, #f3f1fa 100%);
+}
+
+/* ─── Liquid-glass polish for primary modules (inert if class absent) ─── */
+.mkt-section, .mkt-tile, .mkt-crypto-tile, .mkt-metals-tile {
+  backdrop-filter: blur(12px) saturate(160%);
+  -webkit-backdrop-filter: blur(12px) saturate(160%);
+}
+.mkt-tile, .mkt-crypto-tile, .mkt-metals-tile {
+  background: var(--bgcard);
+  border: 1px solid var(--glassB);
+  box-shadow: 0 8px 30px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.06);
 }
 
 .tap {
@@ -1334,39 +1359,6 @@ nav {
 }
 
 /* ═══════════════════════════════════
-   LANGUAGE PICKER
-═══════════════════════════════════ */
-.lang-picker {
-  position: absolute; top: calc(var(--hh) + 6px); right: 10px;
-  background: var(--glass2); backdrop-filter: blur(28px) saturate(200%);
-  -webkit-backdrop-filter: blur(28px) saturate(200%);
-  border: 1px solid var(--line); border-radius: 18px;
-  z-index: 700; overflow: hidden;
-  box-shadow: 0 12px 40px rgba(0,0,0,0.4);
-  transform: scale(0.92) translateY(-6px); opacity: 0; pointer-events: none;
-  transition: all 0.22s var(--spring);
-  min-width: 190px;
-}
-.lang-picker.open { transform: scale(1) translateY(0); opacity: 1; pointer-events: auto; }
-.lang-picker-hdr {
-  padding: 10px 14px 6px;
-  font-size: 0.62rem; font-weight: 700; color: var(--t3);
-  letter-spacing: 1.5px; text-transform: uppercase;
-  border-bottom: 1px solid var(--line2);
-}
-.lang-item {
-  display: flex; align-items: center; gap: 10px;
-  padding: 10px 14px; cursor: pointer;
-  font-size: 0.82rem; font-weight: 500; color: var(--t1);
-  transition: background 0.12s; border-bottom: 1px solid var(--line2);
-}
-.lang-item:last-child { border-bottom: none; }
-.lang-item:active { background: var(--bg3); }
-.lang-item .lang-flag { font-size: 1.1rem; }
-.lang-item.active { color: var(--accent); font-weight: 700; }
-.lang-item.active::after { content: '✓'; margin-left: auto; color: var(--accent); font-size: 0.8rem; }
-
-/* ═══════════════════════════════════
    BOTTOM NAV HIDE/SHOW ON SCROLL
 ═══════════════════════════════════ */
 nav { transition: transform 0.35s var(--ease), opacity 0.35s; }
@@ -2195,19 +2187,6 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
 
-<!-- LANGUAGE PICKER -->
-<div class="lang-picker" id="lang-picker">
-  <div class="lang-picker-hdr">Choose Language</div>
-  <div class="lang-item active tap" onclick="setLang('English','🇬🇧')"><span class="lang-flag">🇬🇧</span> English</div>
-  <div class="lang-item tap" onclick="setLang('हिंदी','🇮🇳')"><span class="lang-flag">🇮🇳</span> हिंदी</div>
-  <div class="lang-item tap" onclick="setLang('தமிழ்','🌺')"><span class="lang-flag">🌺</span> தமிழ்</div>
-  <div class="lang-item tap" onclick="setLang('తెలుగు','🌸')"><span class="lang-flag">🌸</span> తెలుగు</div>
-  <div class="lang-item tap" onclick="setLang('മലയാളം','🌴')"><span class="lang-flag">🌴</span> മലയാളം</div>
-  <div class="lang-item tap" onclick="setLang('বাংলা','🐯')"><span class="lang-flag">🐯</span> বাংলা</div>
-  <div class="lang-item tap" onclick="setLang('मराठी','🎭')"><span class="lang-flag">🎭</span> मराठी</div>
-  <div class="lang-item tap" onclick="setLang('ਪੰਜਾਬੀ','🌾')"><span class="lang-flag">🌾</span> ਪੰਜਾਬੀ</div>
-</div>
-
 <!-- SPLASH -->
 <div id="splash">
   <div class="sp-logo">
@@ -2224,7 +2203,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 <!-- SIDEBAR -->
 <div class="sidebar" id="sidebar">
   <div class="sb-head">
-    <div class="sb-ava"><img src="https://i.pravatar.cc/100?img=12" alt="" id="sb-ava-img"></div>
+    <div class="sb-ava"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%231565e8'/%3E%3Cstop offset='1' stop-color='%238E24AA'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='100' height='100' fill='url(%23g)'/%3E%3Ccircle cx='50' cy='40' r='15' fill='%23fff' opacity='.92'/%3E%3Cpath d='M24 80c0-14 12-22 26-22s26 8 26 22' fill='%23fff' opacity='.92'/%3E%3C/svg%3E" alt="" id="sb-ava-img"></div>
     <div>
       <div class="sb-name" id="sb-name">SherByte User</div>
       <div class="sb-handle" id="sb-handle">@user ✦</div>
@@ -2262,10 +2241,6 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   </div>
   <div class="h-right">
     <div class="hico tap" id="h-search" style="display:none" onclick="toast('🔍 Search opening soon')"><i class="fa-solid fa-magnifying-glass"></i></div>
-    <!-- Language Changer -->
-    <div class="hico tap lang-btn" id="lang-btn" onclick="toggleLangPicker()" title="Change language">
-      <i class="fa-solid fa-language"></i>
-    </div>
     <!-- 3D Day/Night Toggle -->
     <div class="theme-toggle-wrap tap" id="thToggle" onclick="toggleTheme()" title="Toggle theme">
       <div class="theme-toggle-track">
@@ -2280,7 +2255,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
       </div>
     </div>
     <div class="h-avatar tap" onclick="navTo('profile')">
-      <img src="https://i.pravatar.cc/100?img=12" alt="">
+      <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%231565e8'/%3E%3Cstop offset='1' stop-color='%238E24AA'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='100' height='100' fill='url(%23g)'/%3E%3Ccircle cx='50' cy='40' r='15' fill='%23fff' opacity='.92'/%3E%3Cpath d='M24 80c0-14 12-22 26-22s26 8 26 22' fill='%23fff' opacity='.92'/%3E%3C/svg%3E" alt="">
     </div>
   </div>
 </header>
@@ -2338,7 +2313,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 <!-- ════════ EXPLORE ════════ -->
 <div id="v-explore" class="view">
   <div class="live-ticker">
-    <div class="ticker-inner">
+    <div class="ticker-inner" id="ticker-inner">
       <span class="tick-item"><span style="color:#43A047">NIFTY</span> 22,580 <span class="tick-up">▲ +1.1%</span></span>
       <span class="tick-item"><span style="color:#FBC02D">GOLD</span> ₹72,450 <span class="tick-up">▲ +0.4%</span></span>
       <span class="tick-item"><span style="color:#e0e0e0">SILVER</span> ₹88,200 <span class="tick-dn">▼ −0.2%</span></span>
@@ -2419,7 +2394,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   <div class="prof-hero">
     <div class="prof-row">
       <div class="prof-ava" id="prof-ava-wrap" onclick="openEditProfile()" style="cursor:pointer;position:relative;">
-        <img src="https://i.pravatar.cc/200?img=12" alt="" id="prof-ava-img">
+        <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%231565e8'/%3E%3Cstop offset='1' stop-color='%238E24AA'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='100' height='100' fill='url(%23g)'/%3E%3Ccircle cx='50' cy='40' r='15' fill='%23fff' opacity='.92'/%3E%3Cpath d='M24 80c0-14 12-22 26-22s26 8 26 22' fill='%23fff' opacity='.92'/%3E%3C/svg%3E" alt="" id="prof-ava-img">
         <div style="position:absolute;bottom:0;right:0;width:20px;height:20px;border-radius:50%;background:var(--p-blue);display:flex;align-items:center;justify-content:center;font-size:0.5rem;color:#fff;border:2px solid var(--bg)"><i class="fa-solid fa-pen"></i></div>
       </div>
       <div class="prof-info">
@@ -2577,7 +2552,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   <div class="sub-hdr"><div class="sub-back tap" onclick="closeSub('settings')"><i class="fa-solid fa-chevron-left"></i> Back</div><div class="sub-ttl">Settings</div></div>
   <div class="sub-scroll">
     <div class="sg"><div class="sg-lbl">Appearance</div><div class="sg-grp">
-      <div class="sg-row"><div class="sg-ico" style="background:#2C3D8F"><i class="fa-solid fa-moon"></i></div><span class="sg-lbl2">Dark Mode</span><div class="tog on" id="dark-tog" onclick="toggleTheme();this.classList.toggle('on')"></div></div>
+      <div class="sg-row"><div class="sg-ico" style="background:#2C3D8F"><i class="fa-solid fa-moon"></i></div><span class="sg-lbl2">Dark Mode</span><div class="tog on" id="dark-tog" onclick="toggleTheme()"></div></div>
       <div class="sg-row"><div class="sg-ico" style="background:#6A6E83"><i class="fa-solid fa-text-size"></i></div><span class="sg-lbl2">Text Size</span><span class="sg-val">Medium</span><i class="fa-solid fa-chevron-right sg-arr"></i></div>
     </div></div>
     <div class="sg"><div class="sg-lbl">Notifications</div><div class="sg-grp">
@@ -2619,7 +2594,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
     <div class="fem-title">Edit Profile <span onclick="closeEditProfile()" style="font-size:1.2rem;cursor:pointer;color:var(--t3)">✕</span></div>
     <div style="text-align:center;margin-bottom:16px">
       <div style="width:72px;height:72px;border-radius:50%;overflow:hidden;margin:0 auto 8px;border:3px solid var(--accent);cursor:pointer" onclick="toast('📷 Photo upload coming soon')">
-        <img id="epm-ava" src="https://i.pravatar.cc/200?img=12" style="width:100%;height:100%;object-fit:cover">
+        <img id="epm-ava" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%231565e8'/%3E%3Cstop offset='1' stop-color='%238E24AA'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='100' height='100' fill='url(%23g)'/%3E%3Ccircle cx='50' cy='40' r='15' fill='%23fff' opacity='.92'/%3E%3Cpath d='M24 80c0-14 12-22 26-22s26 8 26 22' fill='%23fff' opacity='.92'/%3E%3C/svg%3E" style="width:100%;height:100%;object-fit:cover">
       </div>
       <div style="font-size:0.7rem;color:var(--accent);cursor:pointer" onclick="toast('📷 Photo upload coming soon')">Change Photo</div>
     </div>
@@ -2760,15 +2735,24 @@ const ActivityTracker = (() => {
 })();
 
 // ── NORMALIZE ARTICLE ──────────────────────────────────────────────────
-// Backend returns headline/source_name/summary_60/full_body/category
-// Frontend expects title/source/preview/body_ai/category
+// Clip text to at most `max` words, trimming trailing punctuation cleanly.
+function clipWords(t, max) {
+  if (!t) return "";
+  const w = String(t).trim().split(/\s+/);
+  return w.length <= max ? w.join(" ")
+    : w.slice(0, max).join(" ").replace(/[,;:.\s]+$/, "") + "…";
+}
+
+// Backend (v6) returns headline/source_name/summary/full_body/category.
+// Frontend expects title/source/preview/body_ai/category.
 function normalizeArticle(a) {
   return {
     ...a,
-    title:    a.headline    || a.title    || "",
+    title:    a.headline    || a.refined_title || a.title || "",
     source:   a.source_name || a.source   || "",
-    preview:  a.summary_60  || a.preview  || "",
-    body_ai:  a.full_body   || a.body_ai  || "",
+    // v6 emits `summary` (≈40-55 words); older builds used summary_60. Clip to 60.
+    preview:  clipWords(a.summary_60 || a.summary || a.cached_summary || a.preview || "", 60),
+    body_ai:  a.full_body   || a.summary || a.body_ai  || "",
     // category is pillar slug: society/economy/tech/arts/nature/selfwell/philo/lifestyle/sports
     category: a.category    || a.pillar_slug || "tech",
   };
@@ -2894,10 +2878,22 @@ function toast(msg) {
 }
 
 // ── THEME ──
-function toggleTheme() {
-  isDark = !isDark;
-  document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
+function applyTheme(dark) {
+  isDark = dark;
+  document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+  // Keep both controls (header 3D toggle + settings "Dark Mode") in sync.
+  const dt = document.getElementById('dark-tog');
+  if (dt) dt.classList.toggle('on', dark);
+  try { localStorage.setItem('sb-theme', dark ? 'dark' : 'light'); } catch (e) {}
 }
+function toggleTheme() { applyTheme(!isDark); }
+// Restore the saved theme on load (defaults to dark).
+(function () {
+  try {
+    const saved = localStorage.getItem('sb-theme');
+    if (saved === 'light' || saved === 'dark') applyTheme(saved === 'dark');
+  } catch (e) {}
+})();
 
 // ── SIDEBAR ──
 function sbOpen()  { document.getElementById('sidebar').classList.add('on');  document.getElementById('overlay').classList.add('on'); }
@@ -2930,29 +2926,7 @@ const UI_STRINGS = {
   'मराठी':    { brand:'शेरबाईट',  home:'होम', explore:'शोधा', profile:'प्रोफाइल', feed:'फीड', all:'सर्व', tagline:'तुमचे जग', readmore:'वाचा', back:'मागे' },
   'ਪੰਜਾਬੀ':   { brand:'ਸ਼ੇਅਰਬਾਈਟ', home:'ਹੋਮ', explore:'ਖੋਜ', profile:'ਪ੍ਰੋਫਾਈਲ', feed:'ਫੀਡ', all:'ਸਭ', tagline:'ਤੁਹਾਡੀ ਦੁਨੀਆ', readmore:'ਪੜ੍ਹੋ', back:'ਵਾਪਸ' },
 };
-let currentLang = 'English';
-function toggleLangPicker() { document.getElementById('lang-picker').classList.toggle('open'); }
-function setLang(lang, flag) {
-  currentLang = lang;
-  const s = UI_STRINGS[lang] || UI_STRINGS['English'];
-  document.querySelectorAll('.lang-item').forEach(el => {
-    el.classList.remove('active');
-    if (el.textContent.trim().includes(lang)) el.classList.add('active');
-  });
-  const brandEl = document.getElementById('h-brand');
-  if (brandEl) brandEl.innerHTML = s.brand.slice(0,-4) + `<span style="color:var(--p-blue3)">${s.brand.slice(-4)}</span>`;
-  const nbLabels = { 'nb-home': s.home, 'nb-explore': s.explore, 'nb-profile': s.profile };
-  Object.entries(nbLabels).forEach(([id, txt]) => {
-    const el = document.getElementById(id);
-    if (el) el.querySelector('.nb-lbl').textContent = txt;
-  });
-  document.getElementById('lang-picker').classList.remove('open');
-  toast(flag + ' ' + lang);
-}
-document.addEventListener('click', (e) => {
-  if (!e.target.closest('#lang-picker') && !e.target.closest('#lang-btn'))
-    document.getElementById('lang-picker')?.classList.remove('open');
-});
+// Language changer removed — single-language (English) UI.
 
 // ── CHIP ──
 function selectChip(el, cat) {
@@ -3891,21 +3865,18 @@ function navTo(name) {
   const hBrand  = document.getElementById('h-brand');
   const hPage   = document.getElementById('h-page');
   const hSearch = document.getElementById('h-search');
-  const langBtn = document.getElementById('lang-btn');
   hBrand.style.display = 'flex'; hPage.style.display = 'none'; hSearch.style.display = 'none';
 
   if (name==='explore') {
     hBrand.style.display='none'; hPage.style.display='block'; hPage.textContent='Explore';
-    hSearch.style.display='flex'; langBtn.style.display='none';
+    hSearch.style.display='flex';
   } else if (name==='feed') {
     hBrand.style.display='none'; hPage.style.display='block'; hPage.textContent='FEED Pulse';
-    langBtn.style.display='flex';
   } else if (['profile','bookmarks','notifs'].includes(name)) {
     hBrand.style.display='none'; hPage.style.display='block';
     const lbls = { profile:'Profile', bookmarks:'Bookmarks', notifs:'Notifications' };
     hPage.textContent = lbls[name];
-    langBtn.style.display='none';
-  } else { langBtn.style.display='flex'; }
+  }
 
   if (name==='bookmarks') renderBM();
   if (name==='notifs')    renderNotifs();
@@ -4397,7 +4368,33 @@ async function loadMarkets() {
     renderCrypto(data.crypto);
     renderMetals(data.metals);
     renderForex(data.forex);
+    renderTicker(data);
   } catch(e) { /* silent */ }
+}
+
+// Rebuild the Explore ticker from live market data (falls back to the static
+// markup if nothing is live yet). Items are duplicated for the seamless scroll.
+function renderTicker(data) {
+  const el = document.getElementById('ticker-inner');
+  if (!el || !data) return;
+  const s = data.stocks || {}, m = data.metals || {}, f = data.forex || {}, comm = data.commodities || {};
+  const items = [];
+  const push = (label, color, val, pct) => {
+    if (val == null || val === '' ) return;
+    const up = (pct || 0) >= 0;
+    items.push(`<span class="tick-item"><span style="color:${color}">${label}</span> ${val} `
+      + `<span class="${up ? 'tick-up' : 'tick-dn'}">${up ? '▲' : '▼'} ${up ? '+' : '−'}${Math.abs(pct || 0).toFixed(2)}%</span></span>`);
+  };
+  const metalVal = d => d && (d.price_inr_10g ? '₹' + fmtNum(d.price_inr_10g) : (d.price_usd_oz ? '$' + fmtNum(d.price_usd_oz) : ''));
+  if (s.NIFTY?.price)  push('NIFTY', '#43A047', fmtNum(s.NIFTY.price), s.NIFTY.change_pct);
+  if (s.SENSEX?.price) push('SENSEX', '#1E88E5', fmtNum(s.SENSEX.price), s.SENSEX.change_pct);
+  if (s.NASDAQ?.price) push('NASDAQ', '#8E24AA', fmtNum(s.NASDAQ.price), s.NASDAQ.change_pct);
+  if (m.GOLD)   push('GOLD', '#FBC02D', metalVal(m.GOLD), m.GOLD.change_pct);
+  if (m.SILVER) push('SILVER', '#cfd3da', metalVal(m.SILVER), m.SILVER.change_pct);
+  if (comm.WTI_CRUDE?.price) push('CRUDE', '#E53935', '$' + fmtNum(comm.WTI_CRUDE.price), comm.WTI_CRUDE.change_pct);
+  if (f.USDINR?.price) push('USD/INR', '#FB8C00', '₹' + fmtNum(f.USDINR.price), f.USDINR.change_pct);
+  if (!items.length) return;   // keep static fallback until live data arrives
+  el.innerHTML = items.concat(items).join('');
 }
 
 function renderStocks(stocks) {

@@ -46,31 +46,48 @@ def _cset(key: str, data, ttl: int):
 
 # ─── Providers ────────────────────────────────────────────────────────────────
 async def _yahoo(client: httpx.AsyncClient, symbols: list[str]) -> dict:
+    """Quote via the v8 chart endpoint's `meta` block.
+
+    Yahoo's old /v7/finance/quote now requires a crumb+cookie session and
+    returns 401/429 for anonymous servers (which silently zeroed out stocks,
+    forex and metals). The /v8/finance/chart endpoint still serves anonymously
+    and its `meta` carries the live price + previous close, so we derive quotes
+    from there. Symbols are fetched concurrently.
+    """
+    pairs = await asyncio.gather(*[_yahoo_quote_one(client, s) for s in symbols])
+    return {sym: data for sym, data in pairs if data}
+
+
+async def _yahoo_quote_one(client: httpx.AsyncClient, symbol: str) -> tuple[str, dict]:
     try:
         r = await client.get(
-            "https://query1.finance.yahoo.com/v7/finance/quote",
-            params={"symbols": ",".join(symbols)},
+            f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}",
+            params={"interval": "5m", "range": "1d"},
             headers={"User-Agent": "Mozilla/5.0 (compatible; SherByte/6.0)"},
             timeout=8,
         )
         if r.status_code != 200:
-            return {}
-        out = {}
-        for q in r.json().get("quoteResponse", {}).get("result", []):
-            price = q.get("regularMarketPrice", 0) or 0
-            out[q["symbol"]] = {
-                "price": round(price, 2),
-                "change": round(q.get("regularMarketChange", 0) or 0, 2),
-                "change_pct": round(q.get("regularMarketChangePercent", 0) or 0, 2),
-                "high": round(q.get("regularMarketDayHigh", 0) or 0, 2),
-                "low": round(q.get("regularMarketDayLow", 0) or 0, 2),
-                "prev_close": round(q.get("regularMarketPreviousClose", 0) or 0, 2),
-                "currency": q.get("currency", ""),
-            }
-        return out
+            return symbol, {}
+        result = r.json().get("chart", {}).get("result", [])
+        if not result:
+            return symbol, {}
+        meta = result[0].get("meta", {})
+        price = meta.get("regularMarketPrice", 0) or 0
+        prev = meta.get("chartPreviousClose") or meta.get("previousClose") or 0
+        change = (price - prev) if (price and prev) else 0
+        change_pct = (change / prev * 100) if prev else 0
+        return symbol, {
+            "price": round(price, 2),
+            "change": round(change, 2),
+            "change_pct": round(change_pct, 2),
+            "high": round(meta.get("regularMarketDayHigh", 0) or 0, 2),
+            "low": round(meta.get("regularMarketDayLow", 0) or 0, 2),
+            "prev_close": round(prev, 2),
+            "currency": meta.get("currency", ""),
+        }
     except Exception as e:
-        log.warning("Yahoo fetch failed: %s", e)
-        return {}
+        log.warning("Yahoo chart %s failed: %s", symbol, e)
+        return symbol, {}
 
 
 async def _yahoo_history(client: httpx.AsyncClient, symbol: str, points: int = 20) -> list[float]:
