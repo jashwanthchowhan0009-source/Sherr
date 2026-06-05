@@ -2898,12 +2898,15 @@ function catPlaceholderHtml(category, style) {
 }
 
 // ── STATE ──
-let ST = { likes:[], saves:[], token:null, userId:null, interests:{} };
+const ST_DEFAULTS = { likes:[], saves:[], token:null, userId:null, interests:{}, scope:'national', seen:[] };
+let ST = { ...ST_DEFAULTS };
 try {
   const saved = JSON.parse(localStorage.getItem('sb21') || '{}');
-  ST = Object.assign({ likes:[], saves:[], token:null, userId:null, interests:{} }, saved);
+  ST = Object.assign({ ...ST_DEFAULTS }, saved);
 } catch(e){}
 const persist = () => { try { localStorage.setItem('sb21', JSON.stringify(ST)); } catch(e){} };
+// Record an article as seen (persisted, capped) so it survives refresh/reopen.
+function markSeen(id){ if(!id) return; id=String(id); if(!ST.seen.includes(id)){ ST.seen.push(id); if(ST.seen.length>500) ST.seen=ST.seen.slice(-500); persist(); } }
 
 // ── API HELPER ──
 async function api(path, opts = {}) {
@@ -3033,7 +3036,16 @@ function selectChip(el, cat) {
 function selScope(btn, scope) {
   btn.closest('.scope-toggle').querySelectorAll('.scope-btn').forEach(b => b.classList.remove('on'));
   btn.classList.add('on');
+  ST.scope = scope; persist();                 // persist Local/National/Global choice
   toast('📍 ' + scope.charAt(0).toUpperCase() + scope.slice(1) + ' stories');
+  loadFeed(true);                              // reload so the scope takes effect (backend filtering: Phase 7)
+}
+// Re-apply the saved scope selection to the toggle UI on load.
+function rehydrateScope() {
+  document.querySelectorAll('.scope-toggle .scope-btn').forEach(b => {
+    const s = (b.getAttribute('onclick')||'').match(/'(local|national|global)'/);
+    b.classList.toggle('on', !!s && s[1] === (ST.scope||'national'));
+  });
 }
 
 // ── ARTICLE CARD RENDER ──
@@ -3279,6 +3291,7 @@ async function loadFeed(reset = false) {
     } else {
       url = `/feed?page=${feedPage}&limit=20`;
     }
+    url += '&scope=' + encodeURIComponent(ST.scope || 'national');   // persisted Local/National/Global
     const data = await api(url);
     const articles = (data.articles || []).map(normalizeArticle);
 
@@ -3423,6 +3436,7 @@ async function logInteract(articleId, category, action, duration=0) {
 
 // ── OPEN ARTICLE ──
 function openArticle(rawA) {
+  markSeen(rawA && (rawA.id || rawA.info_object_id || rawA.info_id));   // persist "already seen"
   const a = normalizeArticle(rawA);
   if (!a || !a.id) return;
   ActivityTracker.openArticle(a.id);
@@ -4660,6 +4674,7 @@ document.addEventListener('DOMContentLoaded', () => {
   renderFeedCatCards();
   renderFeedTopics();
   updateSidebarAuth();
+  rehydrateScope();                                            // restore Local/National/Global choice
   document.getElementById('saved-ct').textContent = ST.saves.length;
   loadFeed(true);
   startMarketsPolling();
