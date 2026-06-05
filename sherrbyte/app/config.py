@@ -51,6 +51,9 @@ class Settings(BaseSettings):
     groq_api_key: str = Field("", alias="GROQ_API_KEY")
     gemini_model: str = Field("gemini-2.5-flash", alias="GEMINI_MODEL")
     groq_model: str = Field("llama-3.3-70b-versatile", alias="GROQ_MODEL")
+    # Fast, low-cost Groq model used on the quota-failover path. (llama3-8b-8192
+    # is decommissioned on Groq; llama-3.1-8b-instant is its current equivalent.)
+    groq_fallback_model: str = Field("llama-3.1-8b-instant", alias="GROQ_FALLBACK_MODEL")
 
     # Collection
     newsapi_key: str = Field("", alias="NEWSAPI_KEY")

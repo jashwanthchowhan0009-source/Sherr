@@ -48,7 +48,12 @@ async def _gemini(system: str, user: str, schema: Optional[dict],
     try:
         r = await client.post(url, json=payload, timeout=30)
         if r.status_code != 200:
-            log.warning("Gemini HTTP %d: %s", r.status_code, r.text[:200])
+            # Quota/rate-limit (429 or RESOURCE_EXHAUSTED) is the expected
+            # free-tier failure — fail over to Groq quietly rather than spamming.
+            if r.status_code == 429 or "RESOURCE_EXHAUSTED" in r.text:
+                log.warning("Gemini quota exceeded — failing over to Groq")
+            else:
+                log.warning("Gemini HTTP %d: %s", r.status_code, r.text[:200])
             return None
         parts = r.json().get("candidates", [{}])[0].get("content", {}).get("parts", [])
         return parts[0].get("text", "").strip() if parts else None
@@ -60,11 +65,11 @@ async def _gemini(system: str, user: str, schema: Optional[dict],
 # ─── Groq ─────────────────────────────────────────────────────────────────────
 async def _groq(system: str, user: str, json_mode: bool,
                 temperature: float, max_tokens: int,
-                client: httpx.AsyncClient) -> Optional[str]:
+                client: httpx.AsyncClient, model: Optional[str] = None) -> Optional[str]:
     if not settings.groq_api_key:
         return None
     body = {
-        "model": settings.groq_model,
+        "model": model or settings.groq_model,
         "messages": [
             {"role": "system", "content": system},
             {"role": "user", "content": user},
@@ -106,24 +111,32 @@ def _parse_json(text: Optional[str]) -> Optional[dict]:
 # ─── Public API ───────────────────────────────────────────────────────────────
 async def complete_json(system: str, user: str, schema: Optional[dict] = None,
                         temperature: float = 0.3, max_tokens: int = 1024) -> Optional[dict]:
-    """Structured completion. Gemini (schema-constrained) → Groq (json mode)."""
+    """Structured completion. Gemini (schema-constrained) → Groq (json mode).
+
+    On Gemini quota/failure the call fails over to Groq's fast, low-cost model.
+    If both are unavailable this returns None and the caller (e.g. the
+    understander) degrades to deterministic rule-based extraction — the
+    ingestion pipeline never crashes on a rate limit.
+    """
     async with httpx.AsyncClient() as client:
         text = await _gemini(system, user, schema, temperature, max_tokens, client)
         result = _parse_json(text)
         if result is not None:
             return result
-        text = await _groq(system, user, True, temperature, max_tokens, client)
+        text = await _groq(system, user, True, temperature, max_tokens, client,
+                           model=settings.groq_fallback_model)
         return _parse_json(text)
 
 
 async def complete_text(system: str, user: str,
                         temperature: float = 0.4, max_tokens: int = 1024) -> Optional[str]:
-    """Free-form completion. Gemini → Groq."""
+    """Free-form completion. Gemini → Groq (fast fallback model)."""
     async with httpx.AsyncClient() as client:
         text = await _gemini(system, user, None, temperature, max_tokens, client)
         if text:
             return text
-        return await _groq(system, user, False, temperature, max_tokens, client)
+        return await _groq(system, user, False, temperature, max_tokens, client,
+                           model=settings.groq_fallback_model)
 
 
 def provider_status() -> dict:
