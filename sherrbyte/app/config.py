@@ -65,7 +65,9 @@ class Settings(BaseSettings):
     # Only the latest N items per feed are processed each cycle (feed.entries is
     # newest-first), so a cycle skips hundreds of stale historical records and
     # stays fast. Raise MAX_ENTRIES_PER_FEED for a deeper one-off backfill.
-    max_entries_per_feed: int = Field(3, alias="MAX_ENTRIES_PER_FEED")
+    # Phase 7: raised 3 -> 10 for a fuller article supply (reversible tuning,
+    # not a pipeline-logic change). Larger = more articles/cycle, longer cycle.
+    max_entries_per_feed: int = Field(10, alias="MAX_ENTRIES_PER_FEED")
     # Hard wall-clock cap per feed fetch. httpx's read timeout resets on each
     # received byte, so a feed that trickles data slowly can hang forever — this
     # bounds the *total* time a single feed may take.
