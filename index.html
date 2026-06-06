@@ -4953,7 +4953,7 @@ function _mktVal(cat, d){ if(!d) return 0;
   return d.price||0; }
 function _mktFmt(cat, v){
   if(cat==='crypto') return '$'+fmtNum(v);
-  if(cat==='metals') return (v>9999?'₹':'$')+fmtNum(v);
+  if(cat==='metals') return '₹'+fmtNum(v);   // metals are always shown in ₹/10g
   return fmtNum(v); }
 function buildSparkSVG(series, up){
   const W=320,H=170,pad=6, ps=series.map(p=>p.p);
@@ -4993,7 +4993,13 @@ async function openMarketDetail(cat, sym, label){
   try{
     const days = cat==='metals'?90:30;
     const h=await api(`/markets/history?category=${cat}&symbol=${encodeURIComponent(sym)}&days=${days}`);
-    const series=(h.series||[]).filter(p=>p&&p.p!=null);
+    let series=(h.series||[]).filter(p=>p&&p.p!=null);
+    if(cat==='metals'){
+      // /markets/history serves metals in USD/oz, but the headline and tiles are
+      // ₹/10g — convert the series so the chart and range share the same unit.
+      const r=(d.price_inr_10g&&d.price_usd_oz)?(d.price_inr_10g/d.price_usd_oz):0;
+      if(r) series=series.map(p=>({t:p.t,p:Math.round(p.p*r)}));
+    }
     if(series.length<2){ chart.innerHTML='<div style="color:var(--t3);font-size:0.8rem;text-align:center;padding-top:78px">No chart data available.</div>'; return; }
     chart.innerHTML=buildSparkSVG(series, pct>=0);
     const lo=Math.min(...series.map(p=>p.p)), hi=Math.max(...series.map(p=>p.p));

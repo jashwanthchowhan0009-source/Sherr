@@ -4,7 +4,8 @@ api/markets.py — Real-time market data aggregator (ported from the MVP).
 Providers:
   • Stocks/forex/futures: Yahoo Finance (free) + optional Finnhub for stocks.
   • Crypto:               CoinGecko (free, no key).
-  • Metals:               Metals-API (optional) → Yahoo futures fallback.
+  • Metals:               gold-api.com spot (free, no key) → metals.dev (keyed)
+                          → metals-api (keyed) → Yahoo futures fallback.
 
 In-memory TTL caches per asset class; graceful degradation (returns {} on
 provider failure so the UI never crashes).
@@ -141,6 +142,63 @@ async def _coingecko(client: httpx.AsyncClient, ids: list[str]) -> dict:
         return {}
 
 
+async def _gold_api(client: httpx.AsyncClient) -> dict:
+    """gold-api.com — free, keyless live spot price (USD / troy oz).
+
+    This is the authoritative *spot* source and is preferred over Yahoo's GC=F
+    *futures* contract, whose front-month quote can run well above spot and made
+    the gold rate look wrong (e.g. an inflated ₹/10g headline). Each metal is
+    fetched concurrently; any miss falls through to the keyed providers / Yahoo.
+    """
+    out: dict = {}
+
+    async def one(sym: str, label: str) -> None:
+        try:
+            r = await client.get(
+                f"https://api.gold-api.com/price/{sym}",
+                headers={"User-Agent": "Mozilla/5.0 (compatible; SherByte/6.0)"},
+                timeout=8,
+            )
+            if r.status_code != 200:
+                return
+            price = r.json().get("price")
+            if price and float(price) > 0:
+                out[label] = {"price_usd_oz": round(float(price), 2)}
+        except Exception as e:
+            log.debug("gold-api %s failed: %s", sym, e)
+
+    await asyncio.gather(*[
+        one("XAU", "GOLD"), one("XAG", "SILVER"),
+        one("XPT", "PLATINUM"), one("XPD", "PALLADIUM"),
+    ])
+    return out
+
+
+async def _metals_dev(client: httpx.AsyncClient) -> dict:
+    """metals.dev latest spot (USD / troy oz). Keyed; empty if no key."""
+    if not METALS_DEV_KEY:
+        return {}
+    try:
+        r = await client.get(
+            "https://api.metals.dev/v1/latest",
+            params={"api_key": METALS_DEV_KEY, "currency": "USD", "unit": "toz"},
+            timeout=8,
+        )
+        if r.status_code != 200:
+            return {}
+        m = r.json().get("metals", {})
+        out = {}
+        for k, label in [("gold", "GOLD"), ("silver", "SILVER"),
+                         ("platinum", "PLATINUM"), ("palladium", "PALLADIUM")]:
+            v = m.get(k)
+            if v:
+                out[label] = {"price_usd_oz": round(float(v), 2)}
+        return out
+    except Exception as e:
+        log.warning("metals.dev failed: %s", e)
+        return {}
+
+
 async def _metals_api(client: httpx.AsyncClient) -> dict:
     if not METALS_API_KEY:
         return {}
@@ -196,31 +254,6 @@ async def fetch_crypto() -> dict:
     return data
 
 
-async def _metals_dev(client: httpx.AsyncClient) -> dict:
-    """metals.dev latest spot (USD / troy oz). Keyed; empty if no key."""
-    if not METALS_DEV_KEY:
-        return {}
-    try:
-        r = await client.get(
-            "https://api.metals.dev/v1/latest",
-            params={"api_key": METALS_DEV_KEY, "currency": "USD", "unit": "toz"},
-            timeout=8,
-        )
-        if r.status_code != 200:
-            return {}
-        m = r.json().get("metals", {})
-        out = {}
-        for k, label in [("gold", "GOLD"), ("silver", "SILVER"),
-                         ("platinum", "PLATINUM"), ("palladium", "PALLADIUM")]:
-            v = m.get(k)
-            if v:
-                out[label] = {"price_usd_oz": round(float(v), 2)}
-        return out
-    except Exception as e:
-        log.warning("metals.dev failed: %s", e)
-        return {}
-
-
 async def _snapshot_metals(metals: dict) -> None:
     """Persist one row per metal per day so we can build our own history graph
     (metals.dev historical data is paywalled on the free tier)."""
@@ -243,8 +276,19 @@ async def fetch_metals() -> dict:
     if cached:
         return cached
     async with httpx.AsyncClient() as client:
-        # Prefer metals.dev (keyed) → legacy metals-api → Yahoo futures fallback.
-        metals = await _metals_dev(client) or await _metals_api(client)
+        # Authoritative live spot first (gold-api.com, keyless), then keyed
+        # providers; fill in any metal a higher-priority source missed.
+        metals: dict = {}
+        for src in (_gold_api, _metals_dev, _metals_api):
+            try:
+                got = await src(client)
+            except Exception:
+                got = {}
+            for label, d in got.items():
+                if d.get("price_usd_oz") and label not in metals:
+                    metals[label] = dict(d)
+        # Yahoo futures: last-resort price for any metal still missing, and the
+        # source of day-change figures the spot providers don't supply.
         fut = await _yahoo(client, ["GC=F", "SI=F", "PL=F", "PA=F"])
         fb = {"GC=F": "GOLD", "SI=F": "SILVER", "PL=F": "PLATINUM", "PA=F": "PALLADIUM"}
         for sym, label in fb.items():
@@ -261,6 +305,7 @@ async def fetch_metals() -> dict:
         usd_inr = (fx.get("USDINR=X") or {}).get("price", 83.0)
         for d in metals.values():
             if "price_usd_oz" in d:
+                # 10 g = 0.32154 troy oz; ₹/10g = USD/oz × oz_per_10g × USDINR.
                 d["price_inr_10g"] = round(d["price_usd_oz"] * 0.3215 * usd_inr, 0)
     await _snapshot_metals(metals)   # build daily history for the detail graphs
     _cset("metals", metals, 180)
@@ -308,7 +353,7 @@ async def markets_all(spark: bool = False):
         "timestamp": int(time.time()),
         "providers": {
             "stocks_primary": "finnhub" if FINNHUB_KEY else "yahoo",
-            "metals_primary": "metals-api" if METALS_API_KEY else "yahoo-futures",
+            "metals_primary": "gold-api",
             "crypto": "coingecko", "forex": "yahoo",
         },
     }
@@ -374,7 +419,8 @@ async def _yahoo_series(client: httpx.AsyncClient, symbol: str, rng: str) -> lis
 @router.get("/history")
 async def markets_history(category: str, symbol: str, days: int = 30):
     """Historical price series for one item: CoinGecko for crypto, Yahoo for
-    stocks/forex/metals. Returns [{t: epoch_ms, p: price}, ...]."""
+    stocks/forex/metals. Returns [{t: epoch_ms, p: price}, ...]. Metals are in
+    USD/oz (the frontend converts to ₹/10g to match the headline)."""
     cat, sym = category.lower(), symbol.upper()
     key = f"hist_{cat}_{sym}_{days}"
     cached = _cget(key)
