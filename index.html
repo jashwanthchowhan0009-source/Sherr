@@ -2286,6 +2286,15 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 .empty-state-sub {
   font-size: 0.7rem; opacity: 0.75;
 }
+.es-retry {
+  margin-top: 16px; padding: 9px 22px; border-radius: 100px;
+  font-size: 0.78rem; font-weight: 600; cursor: pointer;
+  color: #fff; border: 1px solid var(--glassB);
+  background: linear-gradient(135deg, #0652B5, #0EB7D6);
+  box-shadow: 0 4px 14px rgba(14,183,214,0.35);
+  transition: transform 0.15s var(--spring);
+}
+.es-retry:active { transform: scale(0.93); }
 
 </style>
 </head>
@@ -3046,14 +3055,26 @@ function markSeen(id){ if(!id) return; id=String(id); if(!ST.seen.includes(id)){
 
 // ── API HELPER ──
 async function api(path, opts = {}) {
-  const headers = { "Content-Type": "application/json" };
+  const { timeout = 20000, ...rest } = opts;
+  const headers = { "Content-Type": "application/json", ...(rest.headers || {}) };
   if (ST.token) headers["Authorization"] = "Bearer " + ST.token;
-  const res = await fetch(API_URL + path, { ...opts, headers });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || "HTTP " + res.status);
+  // Abort hung requests so a slow/cold backend can never freeze the UI
+  // (otherwise fetch() waits forever and loaders like the feed skeleton stick).
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeout);
+  try {
+    const res = await fetch(API_URL + path, { ...rest, headers, signal: ctrl.signal });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || "HTTP " + res.status);
+    }
+    return await res.json();
+  } catch (e) {
+    if (e.name === 'AbortError') throw new Error('Request timed out');
+    throw e;
+  } finally {
+    clearTimeout(timer);
   }
-  return res.json();
 }
 
 // ── CATEGORY CONFIG — matches backend pillar slugs ──
@@ -3082,6 +3103,7 @@ let curChip      = 'all';
 let isDark       = true;
 let feedPage     = 1;
 let feedLoading  = false;
+let feedRetried  = false;   // one automatic cold-start retry per server-reach
 let homeArticles = [];
 let currentArticle = null;
 let expHeroTimer = null;
@@ -3497,7 +3519,8 @@ async function loadFeed(reset = false) {
       url = `/feed?page=${feedPage}&limit=20`;
     }
     url += '&scope=' + encodeURIComponent(ST.scope || 'national');   // persisted Local/National/Global
-    const data = await api(url);
+    const data = await api(url, { timeout: 25000 });   // allow for free-tier cold starts
+    feedRetried = false;   // server reached — reset the cold-start retry budget
     const articles = (data.articles || []).map(normalizeArticle);
 
     // Fetch continue-reading article only on first page if logged in
@@ -3589,8 +3612,17 @@ async function loadFeed(reset = false) {
       notice.innerHTML = `
         <div class="empty-state-ico">⚠️</div>
         <div class="empty-state-msg">Couldn't reach the server</div>
-        <div class="empty-state-sub">Check your connection or try again.</div>`;
+        <div class="empty-state-sub">The server may be waking up — this can take a moment.</div>
+        <button class="es-retry" onclick="loadFeed(true)">Retry</button>`;
       c.appendChild(notice);
+    }
+    // Render free tier spins down when idle; the first request wakes it and
+    // may time out. Auto-retry once so the user doesn't have to tap Retry.
+    if (feedPage === 1 && !feedRetried) {
+      feedRetried = true;
+      feedLoading = false;
+      setTimeout(() => loadFeed(true), 3500);
+      return;
     }
   } finally {
     feedLoading = false;
