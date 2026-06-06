@@ -2547,9 +2547,9 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 
   <!-- Local / National / Global -->
   <div class="scope-toggle">
-    <div class="scope-btn on tap" onclick="selScope(this,'local')">Local</div>
+    <div class="scope-btn tap" onclick="selScope(this,'local')">Local</div>
     <div class="scope-btn tap" onclick="selScope(this,'national')">National</div>
-    <div class="scope-btn tap" onclick="selScope(this,'global')">Global</div>
+    <div class="scope-btn on tap" onclick="selScope(this,'global')">Global</div>
   </div>
 
   <!-- Category icons: Arts, Well-being, Business, Nature, Society, Philosophy -->
@@ -3043,7 +3043,7 @@ function catPlaceholderHtml(category, style) {
 }
 
 // ── STATE ──
-const ST_DEFAULTS = { likes:[], saves:[], token:null, userId:null, interests:{}, scope:'national', seen:[] };
+const ST_DEFAULTS = { likes:[], saves:[], token:null, userId:null, interests:{}, scope:'global', seen:[] };
 let ST = { ...ST_DEFAULTS };
 try {
   const saved = JSON.parse(localStorage.getItem('sb21') || '{}');
@@ -3518,10 +3518,19 @@ async function loadFeed(reset = false) {
     } else {
       url = `/feed?page=${feedPage}&limit=20`;
     }
-    url += '&scope=' + encodeURIComponent(ST.scope || 'national');   // persisted Local/National/Global
-    const data = await api(url, { timeout: 25000 });   // allow for free-tier cold starts
+    // Geographic scope is a SOFT filter. Most stories are bucketed 'global', so
+    // 'national'/'local' can be sparse — treat 'global' as "broadest" (no filter)
+    // and only send the param otherwise.
+    const scope = ST.scope || 'global';
+    if (scope && scope !== 'global') url += '&scope=' + encodeURIComponent(scope);
+    let data = await api(url, { timeout: 25000 });   // allow for free-tier cold starts
     feedRetried = false;   // server reached — reset the cold-start retry budget
-    const articles = (data.articles || []).map(normalizeArticle);
+    let articles = (data.articles || []).map(normalizeArticle);
+    // Never show an empty feed just because the chosen scope bucket is empty.
+    if (feedPage === 1 && articles.length === 0 && scope !== 'global') {
+      data = await api(url.replace(/&scope=[^&]*/, ''), { timeout: 25000 });
+      articles = (data.articles || []).map(normalizeArticle);
+    }
 
     // Fetch continue-reading article only on first page if logged in
     if (feedPage === 1 && ST.token) {
@@ -5051,7 +5060,8 @@ async function loadBytes(reset){
   const feed = document.getElementById('bytes-feed');
   try {
     if (reset){ bytesPage = 1; bytesIds.clear(); }
-    const data = await api(`/feed?page=${bytesPage}&limit=10&scope=${encodeURIComponent(ST.scope||'national')}`);
+    const bScope = ST.scope || 'global';
+    const data = await api(`/feed?page=${bytesPage}&limit=10` + (bScope && bScope !== 'global' ? `&scope=${encodeURIComponent(bScope)}` : ''));
     const arts = (data.articles||[]).map(normalizeArticle).filter(a => a.id && !bytesIds.has(a.id));
     arts.forEach(a => bytesIds.add(a.id));
     if (reset) feed.innerHTML = '';
