@@ -4982,9 +4982,21 @@ function byteToggle(key, a, el, icon, msg, action){
 }
 
 // ── Live: weather (Open-Meteo), word-of-day + dictionary (dictionaryapi.dev) ──
+// Ask the browser for location once; cache coords so we don't re-prompt.
+function requestGeo() {
+  if (window._geoAsked || !navigator.geolocation) return;
+  window._geoAsked = true;
+  navigator.geolocation.getCurrentPosition(
+    p => { try { localStorage.setItem('sb-geo', JSON.stringify({ lat: p.coords.latitude.toFixed(3), lon: p.coords.longitude.toFixed(3) })); } catch (e) {} loadWeather(); },
+    () => {}, { timeout: 8000, maximumAge: 3600000, enableHighAccuracy: false }
+  );
+}
 async function loadWeather() {
   try {
-    const w = await api('/live/weather');
+    let qs = '', geo = null;
+    try { geo = JSON.parse(localStorage.getItem('sb-geo') || 'null'); } catch (e) {}
+    if (geo && geo.lat) qs = `?lat=${geo.lat}&lon=${geo.lon}`;
+    const w = await api('/live/weather' + qs);
     if (!w) return;
     const loc = document.getElementById('bw-loc');
     if (loc) loc.innerHTML = `<i class="fa-solid fa-location-dot" style="font-size:0.6rem"></i> ${w.city || '—'}`;
@@ -5026,6 +5038,7 @@ async function openDictionary() {
 
 function startMarketsPolling() {
   loadMarkets();
+  requestGeo();
   loadWeather();
   loadWordOfDay();
   if (marketsTimer) clearInterval(marketsTimer);
