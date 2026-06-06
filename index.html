@@ -1034,6 +1034,10 @@ header {
 .prof-ava img { width: 100%; height: 100%; object-fit: cover; }
 .prof-info { flex: 1; min-width: 0; }
 .prof-name { font-family: var(--fd); font-size: 1rem; font-weight: 700; color: var(--t1); margin-bottom: 2px; }
+.prof-name-row { display: flex; align-items: center; gap: 8px; }
+.pro-badge { font-size: 0.55rem; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase;
+  color: var(--accent2); border: 1px solid var(--accent2); border-radius: 6px; padding: 2px 6px; line-height: 1;
+  background: rgba(92,211,224,0.10); flex-shrink: 0; }
 .prof-handle { font-size: 0.72rem; color: var(--accent); margin-bottom: 4px; font-weight: 500; }
 .prof-bio { font-size: 0.76rem; color: var(--t2); line-height: 1.4; }
 .prof-stats {
@@ -2403,7 +2407,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   <div class="sb-head">
     <div class="sb-ava"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%231565e8'/%3E%3Cstop offset='1' stop-color='%238E24AA'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='100' height='100' fill='url(%23g)'/%3E%3Ccircle cx='50' cy='40' r='15' fill='%23fff' opacity='.92'/%3E%3Cpath d='M24 80c0-14 12-22 26-22s26 8 26 22' fill='%23fff' opacity='.92'/%3E%3C/svg%3E" alt="" id="sb-ava-img"></div>
     <div>
-      <div class="sb-name" id="sb-name">SherByte User</div>
+      <div class="prof-name-row"><div class="sb-name" id="sb-name">SherByte User</div><span class="pro-badge">PRO</span></div>
       <div class="sb-handle" id="sb-handle">@user ✦</div>
     </div>
     <div class="sb-close tap" onclick="sbClose()"><i class="fa-solid fa-xmark"></i></div>
@@ -2638,7 +2642,10 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
         <div style="position:absolute;bottom:0;right:0;width:20px;height:20px;border-radius:50%;background:var(--p-blue);display:flex;align-items:center;justify-content:center;font-size:0.5rem;color:#fff;border:2px solid var(--bg)"><i class="fa-solid fa-pen"></i></div>
       </div>
       <div class="prof-info">
-        <div class="prof-name" id="prof-name">—</div>
+        <div class="prof-name-row">
+          <div class="prof-name" id="prof-name">—</div>
+          <span class="pro-badge">PRO</span>
+        </div>
         <div class="prof-handle" id="prof-handle">@— ✦</div>
         <div class="prof-bio" id="prof-bio">Tap Edit Profile to set your bio</div>
       </div>
