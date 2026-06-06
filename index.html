@@ -33,11 +33,12 @@
   --glow-blue: rgba(0,62,145,0.55);
   --glow-soft: rgba(21,101,232,0.25);
 
-  /* Liquid-glass accent — neon green (active states, highlights, primary) */
-  --neon:      #2BFF9E;
-  --neon-2:    #16E0B8;
-  --neon-soft: rgba(43,255,158,0.16);
-  --neon-glow: rgba(43,255,158,0.45);
+  /* Liquid-glass accent — emerald green (active states, highlights, primary) */
+  --neon:      #2FD27E;
+  --neon-2:    #5CD3E0;
+  --neon-soft: rgba(47,210,126,0.16);
+  --neon-glow: rgba(47,210,126,0.45);
+  --accent2:   #5CD3E0;   /* secondary cyan — badges (PRO), outline chips */
 
   /* Spring / Easing */
   --spring: cubic-bezier(0.34,1.56,0.64,1);
@@ -65,18 +66,18 @@
   --bg2:     #0d1e3a;
   --bg3:     #122248;
   --bg4:     #1a2e58;
-  --bgcard:  rgba(255,255,255,0.08);
-  --glass:   rgba(255,255,255,0.07);
-  --glass2:  rgba(10,16,40,0.92);
-  --glassB:  rgba(255,255,255,0.20);
-  --line:    rgba(255,255,255,0.18);
-  --line2:   rgba(255,255,255,0.09);
-  --t1:      #f3f7ff;
-  --t2:      #b9c9e8;
-  --t3:      #8198c4;
-  --t4:      #3a4f7a;
-  --accent:  #2BFF9E;
-  --as:      rgba(43,255,158,0.14);
+  --bgcard:  rgba(255,255,255,0.10);
+  --glass:   rgba(255,255,255,0.10);
+  --glass2:  rgba(10,28,72,0.92);
+  --glassB:  rgba(255,255,255,0.22);
+  --line:    rgba(255,255,255,0.20);
+  --line2:   rgba(255,255,255,0.10);
+  --t1:      #FFFFFF;
+  --t2:      rgba(255,255,255,0.65);
+  --t3:      rgba(255,255,255,0.45);
+  --t4:      rgba(255,255,255,0.24);
+  --accent:  #2FD27E;
+  --as:      rgba(47,210,126,0.14);
 }
 [data-theme="light"] {
   --bg:      #F0EFF8;
@@ -124,10 +125,10 @@ html, body {
    Royal blue bottom-left → teal / cyan / mint bleeding from top-right. */
 [data-theme="dark"] .phone {
   background:
-    radial-gradient(135% 120% at 100% 0%,  #2BF5C8 0%, rgba(43,245,200,0) 38%),
-    radial-gradient(120% 110% at 82% 6%,   #1AB8FF 0%, rgba(26,184,255,0) 42%),
-    radial-gradient(150% 145% at 0% 100%,  #1E39E0 0%, rgba(30,57,224,0) 52%),
-    linear-gradient(150deg, #0b1c86 0%, #0a1452 52%, #070d33 100%);
+    radial-gradient(130% 120% at 100% 0%,  #57D0C2 0%, rgba(87,208,194,0) 42%),
+    radial-gradient(120% 115% at 78% 10%,  #2FA6B8 0%, rgba(47,166,184,0) 46%),
+    radial-gradient(150% 150% at 0% 100%,  #0B2A66 0%, rgba(11,42,102,0) 58%),
+    linear-gradient(145deg, #0B2A66 0%, #155FA0 50%, #2FA6B8 100%);
   background-attachment: fixed;
 }
 [data-theme="light"] .phone {
@@ -486,21 +487,32 @@ header {
 .chip.on { color: #fff; border-color: transparent; box-shadow: 0 4px 16px rgba(0,62,145,0.4); }
 
 /* ─── News Card — Free Editorial Style (no boxes) ─── */
+/* Reddit-style stacked feed: no cards, divider-separated, content-first. */
 .nc {
-  margin: 10px 14px;
-  padding: 14px;
-  border: 1px solid var(--glassB);
-  border-radius: var(--r);
-  background: var(--bgcard);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  box-shadow: inset 0 1px 1px rgba(255,255,255,0.18), 0 8px 26px rgba(3,8,30,0.22);
+  margin: 0;
+  padding: 16px;
+  background: transparent;
+  border: none; border-radius: 0;
+  backdrop-filter: none; -webkit-backdrop-filter: none;
+  box-shadow: none;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
   overflow: hidden;
   cursor: pointer;
-  transition: transform 0.15s var(--spring), background 0.15s;
+  transition: background 0.15s;
   position: relative;
 }
-.nc:active { transform: scale(0.985); }
+.nc:active { background: rgba(255,255,255,0.03); }
+/* Home feed sits on flat near-black (drops the gradient/glass here). */
+#v-home { background: #0B0B0B; }
+/* Compact action row: Like+count & Comment+count left, Share far right. */
+.nc-acts-row { display: flex; align-items: center; gap: 8px; margin-top: 13px; }
+.nc-pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 100px;
+  background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.10);
+  color: rgba(255,255,255,0.7); font-size: 0.74rem; font-weight: 600; cursor: pointer; transition: all 0.15s; }
+.nc-pill i { font-size: 0.8rem; }
+.nc-pill:active { transform: scale(0.94); }
+.nc-like.on { color: #FF5B7F; background: rgba(255,91,127,0.12); border-color: rgba(255,91,127,0.3); }
+.nc-share { margin-left: auto; }
 
 .nc-meta {
   display: flex; align-items: center; gap: 7px;
@@ -1413,12 +1425,12 @@ nav {
   transition: all 0.25s; letter-spacing: 0.3px;
 }
 .nb.on .nb-icon {
-  background: var(--neon-soft);
-  color: var(--neon);
-  box-shadow: 0 0 18px var(--neon-glow), inset 0 0 0 1px rgba(43,255,158,0.45);
+  background: rgba(255,255,255,0.16);
+  color: #fff;
+  box-shadow: 0 0 16px rgba(92,211,224,0.45), inset 0 0 0 1px rgba(255,255,255,0.45);
 }
-.nb.on .nb-lbl { color: var(--neon); }
-.nb.on .nb-icon i { filter: drop-shadow(0 0 6px var(--neon-glow)); }
+.nb.on .nb-lbl { color: #fff; }
+.nb.on .nb-icon i { filter: drop-shadow(0 0 6px rgba(92,211,224,0.55)); }
 
 /* ─── Bytes — full-screen vertical snap feed (Inshorts-style) ─── */
 #v-bytes { inset: 0; }
@@ -3284,9 +3296,21 @@ function renderTrendingStrip(articles, container) {
 }
 
 // Standard card (backward compatible with renderBulletinBlock etc.)
+// Stable pseudo-count (placeholder until a real engagement backend exists).
+function feedCount(id, salt){ let h=salt>>>0; const s=String(id||'');
+  for(let i=0;i<s.length;i++){ h=(Math.imul(h,31)+s.charCodeAt(i))>>>0; } return (h % 480) + 12; }
+function feedLike(a, el){
+  const i=ST.likes.indexOf(a.id); const span=el.querySelector('span'); const n=parseInt(span.textContent)||0;
+  if(i===-1){ ST.likes.push(a.id); el.classList.add('on'); el.querySelector('i').className='fa-solid fa-heart'; span.textContent=n+1; logInteract(a.id,a.category,'like'); markSeen(a.id); }
+  else { ST.likes.splice(i,1); el.classList.remove('on'); el.querySelector('i').className='fa-regular fa-heart'; span.textContent=Math.max(0,n-1); }
+  persist();
+}
 function renderStandardCard(rawA, container) {
   const a = normalizeArticle(rawA);
   const cc = CATS[a.category] || CATS.tech;
+  const liked = ST.likes.includes(a.id);
+  const likeN = feedCount(a.id, 7) + (liked ? 1 : 0);
+  const cmtN  = feedCount(a.id, 131);
 
   const d = document.createElement('div');
   d.className = 'nc fadein';
@@ -3294,17 +3318,24 @@ function renderStandardCard(rawA, container) {
   d.innerHTML = `
     <div class="nc-meta">
       <span class="nc-tag" style="background:${cc.bg};color:${cc.hex}">${cc.icon} ${cc.short}</span>
-      <span class="read-time" style="margin-left:auto"><i class="fa-regular fa-clock"></i> ${readTimeMinutes(a)} min</span>
+      <span class="nc-src" style="margin-left:8px">${a.source} · ${timeAgo(a.published_at)}</span>
     </div>
+    <div class="nc-title">${a.title}</div>
+    <div class="nc-desc">${a.preview}</div>
     ${a.image_url ? `
-      <div class="nc-hero-image" style="width:100%; aspect-ratio:16/9; border-radius:14px; overflow:hidden; margin:8px 0;">
+      <div class="nc-hero-image" style="width:100%; aspect-ratio:16/9; border-radius:12px; overflow:hidden; margin:10px 0 2px;">
         <img src="${a.image_url}" style="width:100%; height:100%; object-fit:cover;" loading="lazy" onerror="this.parentNode.style.background='${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}';this.remove()">
       </div>` : ''
     }
-    <div class="nc-title" style="font-size:1rem; margin-top:6px;">${a.title}</div>
-    <div class="nc-desc" style="margin-bottom:8px;">${a.preview}</div>
-    <div class="nc-src" style="font-size:0.62rem;color:var(--t3)">${a.source} · ${timeAgo(a.published_at)}</div>
+    <div class="nc-acts-row">
+      <div class="nc-pill nc-like ${liked?'on':''}"><i class="fa-${liked?'solid':'regular'} fa-heart"></i> <span>${likeN}</span></div>
+      <div class="nc-pill nc-comment"><i class="fa-regular fa-comment"></i> <span>${cmtN}</span></div>
+      <div class="nc-pill nc-share"><i class="fa-solid fa-arrow-up-from-bracket"></i></div>
+    </div>
   `;
+  d.querySelector('.nc-like').addEventListener('click', e => { e.stopPropagation(); feedLike(a, e.currentTarget); });
+  d.querySelector('.nc-comment').addEventListener('click', e => { e.stopPropagation(); toast('💬 Comments coming soon'); });
+  d.querySelector('.nc-share').addEventListener('click', e => { e.stopPropagation(); shareArt(a.title||''); });
   container.appendChild(d);
 }
 
