@@ -1473,6 +1473,8 @@ nav {
   backdrop-filter: blur(20px) saturate(180%); -webkit-backdrop-filter: blur(20px) saturate(180%); }
 .byte-act:active { transform: scale(0.86); }
 .byte-act.on { color: var(--neon); border-color: var(--neon); box-shadow: 0 0 14px var(--neon-glow); }
+.byte-act-wide { width: auto; padding: 0 14px; gap: 7px; border-radius: 24px; }
+.byte-act-wide .byte-n { font-size: 0.82rem; font-weight: 700; }
 
 /* ─── Phase 6: source links + glass article actions ─── */
 .ao-sources { margin: 16px 0 6px; }
@@ -5023,7 +5025,7 @@ function renderBytes(arts, feed){
   arts.forEach(a => {
     const cc = CATS[a.category] || CATS.tech;
     const liked = ST.likes.includes(a.id), saved = ST.saves.includes(a.id);
-    const el = document.createElement('div'); el.className = 'byte';
+    const el = document.createElement('div'); el.className = 'byte'; el.dataset.aid = a.id;
     el.innerHTML = `
       <div class="byte-bg" style="${a.image_url ? `background-image:url('${a.image_url}')` : `background:${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}`}"></div>
       <div class="byte-scrim"></div>
@@ -5034,23 +5036,43 @@ function renderBytes(arts, feed){
         <div class="byte-what">${bEsc(a.preview||'')}</div>
         <div class="byte-src">${bEsc(a.source||'')}</div>
         <div class="byte-acts">
-          <div class="byte-act b-like ${liked?'on':''}"><i class="fa-${liked?'solid':'regular'} fa-heart"></i></div>
+          <div class="byte-act byte-act-wide b-like ${liked?'on':''}"><i class="fa-${liked?'solid':'regular'} fa-heart"></i><span class="byte-n">0</span></div>
+          <div class="byte-act byte-act-wide b-comment"><i class="fa-regular fa-comment"></i><span class="byte-n">0</span></div>
           <div class="byte-act b-save ${saved?'on':''}"><i class="fa-${saved?'solid':'regular'} fa-bookmark"></i></div>
           <div class="byte-act b-share"><i class="fa-solid fa-paper-plane"></i></div>
           <div class="byte-act b-open"><i class="fa-solid fa-up-right-from-square"></i></div>
         </div>
       </div>`;
     el.querySelector('.b-like').addEventListener('click', e => { e.stopPropagation(); byteToggle('likes', a, e.currentTarget, 'fa-heart', '❤️ Liked', 'like'); markSeen(a.id); });
+    el.querySelector('.b-comment').addEventListener('click', e => { e.stopPropagation(); openArticle(a); });
     el.querySelector('.b-save').addEventListener('click', e => { e.stopPropagation(); byteToggle('saves', a, e.currentTarget, 'fa-bookmark', '🔖 Saved', 'save'); });
     el.querySelector('.b-share').addEventListener('click', e => { e.stopPropagation(); shareArt(a.title||''); });
     el.querySelector('.b-open').addEventListener('click', e => { e.stopPropagation(); openArticle(a); });
     feed.appendChild(el);
   });
+  hydrateByteCounts(arts.map(a => a.id));   // real like/comment counts
+}
+async function hydrateByteCounts(ids) {
+  ids = (ids || []).filter(Boolean);
+  if (!ids.length) return;
+  try {
+    const res = await api('/signal/counts?ids=' + encodeURIComponent(ids.join(',')));
+    const counts = (res && res.counts) || {};
+    document.querySelectorAll('.byte[data-aid]').forEach(b => {
+      const d = counts[b.dataset.aid]; if (!d) return;
+      const ln = b.querySelector('.b-like .byte-n');
+      const cn = b.querySelector('.b-comment .byte-n');
+      if (ln) ln.textContent = Math.max(d.likes || 0, ST.likes.includes(b.dataset.aid) ? 1 : 0);
+      if (cn) cn.textContent = d.comments || 0;
+    });
+  } catch (e) { /* counts live once backend deployed */ }
 }
 function byteToggle(key, a, el, icon, msg, action){
   const arr = ST[key], i = arr.indexOf(a.id);
   if (i === -1){ arr.push(a.id); el.classList.add('on'); el.querySelector('i').className = 'fa-solid '+icon; toast(msg); logInteract(a.id, a.category, action); }
   else { arr.splice(i,1); el.classList.remove('on'); el.querySelector('i').className = 'fa-regular '+icon; }
+  const n = el.querySelector('.byte-n');   // keep the like count in sync
+  if (n) n.textContent = Math.max(0, (parseInt(n.textContent) || 0) + (i === -1 ? 1 : -1));
   persist();
   if (key === 'saves'){ const sc = document.getElementById('saved-ct'); if (sc) sc.textContent = ST.saves.length; }
 }
