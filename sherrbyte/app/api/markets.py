@@ -22,12 +22,16 @@ import os
 import httpx
 from fastapi import APIRouter
 
+from app.db.supabase import db
+
 log = logging.getLogger("sherbyte.markets")
 router = APIRouter(prefix="/markets", tags=["markets"])
 
-# Optional provider keys (markets degrade gracefully to free Yahoo/CoinGecko).
-FINNHUB_KEY = os.getenv("FINNHUB_KEY", "")
-METALS_API_KEY = os.getenv("METALS_API_KEY", "")
+# Provider keys — read from env/secrets ONLY, never hardcoded.
+FINNHUB_KEY    = os.getenv("FINNHUB_KEY", "")
+METALS_API_KEY = os.getenv("METALS_API_KEY", "")      # legacy metals-api.com
+COINGECKO_KEY  = os.getenv("COINGECKO_KEY", "")       # CoinGecko demo key (x-cg-demo-api-key)
+METALS_DEV_KEY = os.getenv("METALS_DEV_KEY", "")      # metals.dev
 
 # ─── TTL cache ────────────────────────────────────────────────────────────────
 _cache: dict = {}
@@ -115,6 +119,7 @@ async def _coingecko(client: httpx.AsyncClient, ids: list[str]) -> dict:
             "https://api.coingecko.com/api/v3/simple/price",
             params={"ids": ",".join(ids), "vs_currencies": "usd,inr",
                     "include_24hr_change": "true", "include_market_cap": "true"},
+            headers=({"x-cg-demo-api-key": COINGECKO_KEY} if COINGECKO_KEY else {}),
             timeout=8,
         )
         if r.status_code != 200:
@@ -191,12 +196,55 @@ async def fetch_crypto() -> dict:
     return data
 
 
+async def _metals_dev(client: httpx.AsyncClient) -> dict:
+    """metals.dev latest spot (USD / troy oz). Keyed; empty if no key."""
+    if not METALS_DEV_KEY:
+        return {}
+    try:
+        r = await client.get(
+            "https://api.metals.dev/v1/latest",
+            params={"api_key": METALS_DEV_KEY, "currency": "USD", "unit": "toz"},
+            timeout=8,
+        )
+        if r.status_code != 200:
+            return {}
+        m = r.json().get("metals", {})
+        out = {}
+        for k, label in [("gold", "GOLD"), ("silver", "SILVER"),
+                         ("platinum", "PLATINUM"), ("palladium", "PALLADIUM")]:
+            v = m.get(k)
+            if v:
+                out[label] = {"price_usd_oz": round(float(v), 2)}
+        return out
+    except Exception as e:
+        log.warning("metals.dev failed: %s", e)
+        return {}
+
+
+async def _snapshot_metals(metals: dict) -> None:
+    """Persist one row per metal per day so we can build our own history graph
+    (metals.dev historical data is paywalled on the free tier)."""
+    try:
+        for label, d in metals.items():
+            oz = d.get("price_usd_oz")
+            if oz:
+                await db.execute(
+                    """INSERT INTO metals_history (metal, day, price_usd_oz)
+                       VALUES ($1, CURRENT_DATE, $2)
+                       ON CONFLICT (metal, day) DO UPDATE SET price_usd_oz = excluded.price_usd_oz""",
+                    label, float(oz),
+                )
+    except Exception as e:
+        log.debug("metals snapshot skipped: %s", e)
+
+
 async def fetch_metals() -> dict:
     cached = _cget("metals")
     if cached:
         return cached
     async with httpx.AsyncClient() as client:
-        metals = await _metals_api(client)
+        # Prefer metals.dev (keyed) → legacy metals-api → Yahoo futures fallback.
+        metals = await _metals_dev(client) or await _metals_api(client)
         fut = await _yahoo(client, ["GC=F", "SI=F", "PL=F", "PA=F"])
         fb = {"GC=F": "GOLD", "SI=F": "SILVER", "PL=F": "PLATINUM", "PA=F": "PALLADIUM"}
         for sym, label in fb.items():
@@ -214,6 +262,7 @@ async def fetch_metals() -> dict:
         for d in metals.values():
             if "price_usd_oz" in d:
                 d["price_inr_10g"] = round(d["price_usd_oz"] * 0.3215 * usd_inr, 0)
+    await _snapshot_metals(metals)   # build daily history for the detail graphs
     _cset("metals", metals, 180)
     return metals
 
@@ -345,8 +394,22 @@ async def markets_history(category: str, symbol: str, days: int = 30):
                               for p in r.json().get("prices", [])]
             except Exception as e:
                 log.warning("CoinGecko history failed: %s", e)
+        elif cat == "metals":
+            # Build from our own daily snapshots; fall back to Yahoo futures
+            # intraday until enough days have accumulated.
+            try:
+                rows = await db.fetch(
+                    "SELECT day, price_usd_oz FROM metals_history WHERE metal=$1 "
+                    "ORDER BY day ASC LIMIT $2", sym, days,
+                )
+                series = [{"t": int(time.mktime(r["day"].timetuple()) * 1000),
+                           "p": float(r["price_usd_oz"])} for r in rows]
+            except Exception as e:
+                log.warning("metals history failed: %s", e)
+            if len(series) < 2:
+                series = await _yahoo_series(client, _METAL_SYM.get(sym, sym), "3mo")
         else:
-            symap = {"stocks": _STOCK_SYM, "forex": _FOREX_SYM, "metals": _METAL_SYM}.get(cat, {})
+            symap = {"stocks": _STOCK_SYM, "forex": _FOREX_SYM}.get(cat, {})
             ysym = symap.get(sym, sym)
             rng = "1mo" if days <= 31 else ("3mo" if days <= 93 else "1y")
             series = await _yahoo_series(client, ysym, rng)
