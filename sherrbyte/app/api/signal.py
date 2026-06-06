@@ -9,8 +9,9 @@ into user_mutes so the scorer can exclude unwanted content immediately.
 from __future__ import annotations
 
 import logging
+import re
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from app.db.supabase import db
@@ -18,6 +19,12 @@ from app.security import require_user
 
 log = logging.getLogger("sherbyte.signal")
 router = APIRouter(prefix="/signal", tags=["signal"])
+
+_UUID_RE = re.compile(r"^[0-9a-fA-F-]{32,36}$")
+
+
+def _valid_ids(raw: str) -> list[str]:
+    return [x.strip() for x in (raw or "").split(",") if _UUID_RE.match(x.strip())][:100]
 
 # Positive signals nudge topic weights up; negatives nudge down.
 WEIGHT_DELTA = {
@@ -135,3 +142,70 @@ async def mute(req: MuteReq, user_id: str = Depends(require_user)):
         user_id, f"{req.mute_type}:{req.value}",
     )
     return {"status": "muted", "mute_type": req.mute_type, "value": req.value}
+
+
+# ─── Engagement: aggregate like/comment counts + comments ──────────────────────
+class CommentReq(BaseModel):
+    info_object_id: str
+    body: str
+
+
+@router.get("/counts")
+async def counts(ids: str = Query("")):
+    """Batch aggregate engagement for the feed pills: like count (distinct users
+    from `signals`) + comment count, keyed by info_object id."""
+    id_list = _valid_ids(ids)
+    out = {i: {"likes": 0, "comments": 0} for i in id_list}
+    if not id_list:
+        return {"counts": out}
+    try:
+        for r in await db.fetch(
+            "SELECT info_object_id::text AS id, COUNT(DISTINCT user_id) AS n "
+            "FROM signals WHERE kind='like' AND info_object_id = ANY($1::uuid[]) "
+            "GROUP BY info_object_id", id_list,
+        ):
+            out[r["id"]]["likes"] = r["n"]
+        for r in await db.fetch(
+            "SELECT info_object_id::text AS id, COUNT(*) AS n "
+            "FROM comments WHERE info_object_id = ANY($1::uuid[]) "
+            "GROUP BY info_object_id", id_list,
+        ):
+            out[r["id"]]["comments"] = r["n"]
+    except Exception as e:
+        log.warning("engagement counts failed: %s", e)
+    return {"counts": out}
+
+
+@router.get("/comments/{info_id}")
+async def list_comments(info_id: str):
+    if not _UUID_RE.match(info_id):
+        return {"comments": []}
+    rows = await db.fetch(
+        """
+        SELECT c.id, c.body, c.created_at, u.name, u.email
+        FROM comments c JOIN users u ON u.id = c.user_id
+        WHERE c.info_object_id = $1
+        ORDER BY c.created_at DESC LIMIT 100
+        """,
+        info_id,
+    )
+    return {"comments": [{
+        "id": str(r["id"]),
+        "body": r["body"],
+        "author": r["name"] or (r["email"].split("@")[0] if r["email"] else "User"),
+        "created_at": r["created_at"].isoformat() if r["created_at"] else None,
+    } for r in rows]}
+
+
+@router.post("/comment")
+async def add_comment(req: CommentReq, user_id: str = Depends(require_user)):
+    body = (req.body or "").strip()[:1000]
+    if not body or not _UUID_RE.match(req.info_object_id):
+        raise HTTPException(400, "Invalid comment")
+    row = await db.fetchrow(
+        "INSERT INTO comments (info_object_id, user_id, body) VALUES ($1,$2,$3) "
+        "RETURNING id, created_at",
+        req.info_object_id, user_id, body,
+    )
+    return {"status": "ok", "id": str(row["id"]),
+            "created_at": row["created_at"].isoformat() if row["created_at"] else None}

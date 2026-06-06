@@ -514,6 +514,19 @@ header {
 .nc-like.on { color: #FF5B7F; background: rgba(255,91,127,0.12); border-color: rgba(255,91,127,0.3); }
 .nc-share { margin-left: auto; }
 
+/* ─── Article comments ─── */
+.ao-cmt-hdr { font-size: 0.64rem; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; color: var(--t3); margin: 22px 0 10px; }
+.ao-cmt-box { display: flex; gap: 8px; align-items: flex-end; margin-bottom: 14px; }
+.ao-cmt-input { flex: 1; background: var(--bgcard); border: 1px solid var(--glassB); border-radius: 14px;
+  padding: 10px 12px; color: var(--t1); font-family: var(--f); font-size: 0.85rem; resize: none; outline: none; }
+.ao-cmt-post { background: var(--neon); color: #04241a; border: none; border-radius: 14px;
+  padding: 10px 16px; font-weight: 700; font-size: 0.82rem; cursor: pointer; white-space: nowrap; }
+.ao-cmt { padding: 11px 0; border-bottom: 1px solid var(--line2); }
+.ao-cmt-meta { font-size: 0.72rem; color: var(--t3); margin-bottom: 3px; }
+.ao-cmt-meta b { color: var(--t2); }
+.ao-cmt-body { font-size: 0.86rem; color: var(--t1); line-height: 1.5; }
+.ao-cmt-empty { font-size: 0.8rem; color: var(--t3); padding: 12px 0; }
+
 .nc-meta {
   display: flex; align-items: center; gap: 7px;
   padding: 0 0 8px;
@@ -2490,6 +2503,13 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
       </div>
       <div class="ao-related-hdr">Related Stories</div>
       <div id="ao-related"></div>
+
+      <div class="ao-cmt-hdr">Comments</div>
+      <div class="ao-cmt-box">
+        <textarea id="ao-cmt-input" class="ao-cmt-input" rows="2" maxlength="1000" placeholder="Add a comment…"></textarea>
+        <button class="ao-cmt-post tap" onclick="postArticleComment()">Post</button>
+      </div>
+      <div id="ao-cmt-list"></div>
     </div>
   </div>
 </div>
@@ -3309,11 +3329,12 @@ function renderStandardCard(rawA, container) {
   const a = normalizeArticle(rawA);
   const cc = CATS[a.category] || CATS.tech;
   const liked = ST.likes.includes(a.id);
-  const likeN = feedCount(a.id, 7) + (liked ? 1 : 0);
-  const cmtN  = feedCount(a.id, 131);
+  const likeN = liked ? 1 : 0;   // real aggregate filled in by hydrateFeedCounts()
+  const cmtN  = 0;
 
   const d = document.createElement('div');
   d.className = 'nc fadein';
+  d.dataset.aid = a.id;
   d.onclick = () => openArticle(a);
   d.innerHTML = `
     <div class="nc-meta">
@@ -3334,9 +3355,58 @@ function renderStandardCard(rawA, container) {
     </div>
   `;
   d.querySelector('.nc-like').addEventListener('click', e => { e.stopPropagation(); feedLike(a, e.currentTarget); });
-  d.querySelector('.nc-comment').addEventListener('click', e => { e.stopPropagation(); toast('💬 Comments coming soon'); });
+  d.querySelector('.nc-comment').addEventListener('click', e => { e.stopPropagation(); openArticle(a); });
   d.querySelector('.nc-share').addEventListener('click', e => { e.stopPropagation(); shareArt(a.title||''); });
   container.appendChild(d);
+}
+
+// Fill the feed pills with REAL aggregate like/comment counts (batched).
+async function hydrateFeedCounts() {
+  const cards = Array.from(document.querySelectorAll('.nc[data-aid]:not([data-eng])')).slice(0, 100);
+  if (!cards.length) return;
+  cards.forEach(c => c.dataset.eng = '1');
+  const ids = cards.map(c => c.dataset.aid);
+  try {
+    const res = await api('/signal/counts?ids=' + encodeURIComponent(ids.join(',')));
+    const counts = (res && res.counts) || {};
+    cards.forEach(c => {
+      const d = counts[c.dataset.aid]; if (!d) return;
+      const likeSpan = c.querySelector('.nc-like span');
+      const cmtSpan  = c.querySelector('.nc-comment span');
+      if (likeSpan) likeSpan.textContent = Math.max(d.likes || 0, ST.likes.includes(c.dataset.aid) ? 1 : 0);
+      if (cmtSpan)  cmtSpan.textContent  = d.comments || 0;
+    });
+  } catch (e) { /* counts endpoint goes live once the backend deploys */ }
+}
+
+// ── Article comments (read + post) ──
+async function loadArticleComments(id) {
+  const list = document.getElementById('ao-cmt-list');
+  if (!list) return;
+  list.innerHTML = '<div class="ao-cmt-empty">Loading…</div>';
+  try {
+    const res = await api('/signal/comments/' + encodeURIComponent(id));
+    const cs = (res && res.comments) || [];
+    list.innerHTML = cs.length
+      ? cs.map(c => `<div class="ao-cmt">
+          <div class="ao-cmt-meta"><b>${bEsc(c.author || 'User')}</b> · ${timeAgo(c.created_at) || ''}</div>
+          <div class="ao-cmt-body">${bEsc(c.body || '')}</div></div>`).join('')
+      : '<div class="ao-cmt-empty">No comments yet — be the first.</div>';
+  } catch (e) { list.innerHTML = '<div class="ao-cmt-empty">Comments unavailable right now.</div>'; }
+}
+async function postArticleComment() {
+  if (!currentArticle) return;
+  if (!ST.token) { toast('🔒 Log in to comment'); return; }
+  const inp = document.getElementById('ao-cmt-input');
+  const body = (inp.value || '').trim();
+  if (!body) return;
+  inp.disabled = true;
+  try {
+    await api('/signal/comment', { method: 'POST', body: JSON.stringify({ info_object_id: currentArticle.id, body }) });
+    inp.value = ''; toast('💬 Comment posted');
+    loadArticleComments(currentArticle.id);
+  } catch (e) { toast('Could not post comment'); }
+  finally { inp.disabled = false; }
 }
 
 // Dispatcher — keeps backward compat; renderBulletinBlock/renderLatestBlock still call this
@@ -3524,6 +3594,8 @@ async function loadFeed(reset = false) {
 
     if (data.has_more) feedPage++;
 
+    hydrateFeedCounts();   // fill the pills with real like/comment counts
+
     // Seed explore grid after first load (existing behavior)
     if (feedPage === 2 && homeArticles.length) {
       if (typeof renderExpHeroWithArticles === 'function') renderExpHeroWithArticles(homeArticles);
@@ -3690,6 +3762,8 @@ function openArticle(rawA) {
       </div>`;
     rc.appendChild(d);
   });
+
+  loadArticleComments(a.id);
 
   document.getElementById('ao-scroll').scrollTop = 0;
   document.getElementById('article-overlay').classList.add('open');
