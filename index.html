@@ -3121,21 +3121,36 @@ function toast(msg) {
 }
 
 // ── THEME ── (single fixed dark theme — light/dark switching removed)
+// Two options: 'system' (follow the device) or 'dark' (always neutral black).
+// In system mode, a light device shows the deep-blue gradient theme.
+function _systemDark() {
+  try { return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches); }
+  catch (e) { return true; }
+}
+function _themePref() {
+  let p = 'system';
+  try { p = localStorage.getItem('sb-theme') || 'system'; } catch (e) {}
+  return (p === 'dark' || p === 'system') ? p : 'system';
+}
 function applyTheme() {
-  let t = 'dark';
-  try { t = localStorage.getItem('sb-theme') || 'dark'; } catch (e) {}
-  if (t !== 'light' && t !== 'dark') t = 'dark';
-  document.documentElement.setAttribute('data-theme', t);
+  const pref = _themePref();
+  const effective = pref === 'dark' ? 'dark' : (_systemDark() ? 'dark' : 'light');
+  document.documentElement.setAttribute('data-theme', effective);
   const ic = document.querySelector('#h-theme i');
-  if (ic) ic.className = t === 'light' ? 'fa-solid fa-sun' : 'fa-solid fa-moon';
+  if (ic) ic.className = pref === 'dark' ? 'fa-solid fa-moon' : 'fa-solid fa-circle-half-stroke';
 }
 function toggleTheme() {
-  const cur = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
-  const next = cur === 'light' ? 'dark' : 'light';
+  const next = _themePref() === 'dark' ? 'system' : 'dark';
   try { localStorage.setItem('sb-theme', next); } catch (e) {}
   applyTheme();
+  if (typeof toast === 'function') toast(next === 'dark' ? 'Dark mode' : 'System theme');
 }
 applyTheme();
+try {
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    if (_themePref() === 'system') applyTheme();
+  });
+} catch (e) {}
 
 // ── SIDEBAR ──
 function sbOpen()  { document.getElementById('sidebar').classList.add('on');  document.getElementById('overlay').classList.add('on'); if(!_navReplay){try{history.pushState({layer:'sidebar'},'');}catch(e){}} }
