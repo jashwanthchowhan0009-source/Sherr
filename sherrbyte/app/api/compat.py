@@ -108,6 +108,16 @@ async def explore(
                               page=page, limit=limit)
 
 
+@router.get("/stats/categories")
+async def stats_categories():
+    """How many articles exist per category (pillar). For visibility/debugging."""
+    rows = await db.fetch("SELECT pillar_id, COUNT(*) AS c FROM info_objects GROUP BY pillar_id")
+    by = {r["pillar_id"]: r["c"] for r in rows}
+    cats = [{"pillar_id": pid, "slug": p["slug"], "name": p["name"], "count": int(by.get(pid, 0))}
+            for pid, p in PILLARS.items()]
+    return {"total": sum(c["count"] for c in cats), "categories": cats}
+
+
 # ─── Old single /interact endpoint → v6 signals + preference nudges ───────────
 _INTERACT_KIND = {
     "like": "like", "dislike": "dislike", "save": "save",
