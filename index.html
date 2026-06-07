@@ -365,50 +365,6 @@ header {
 .h-avatar img { width: 100%; height: 100%; object-fit: cover; }
 .h-avatar:active { transform: scale(0.88); }
 
-/* ─── Day/Night Toggle — two-state glass pill (both states visible) ─── */
-.theme-toggle-wrap {
-  position: relative; display: inline-flex; align-items: center;
-  width: 64px; height: 30px; padding: 3px; border-radius: 100px;
-  cursor: pointer; flex-shrink: 0; overflow: hidden;
-  background: var(--glass);
-  border: 1px solid var(--glassB);
-  backdrop-filter: blur(12px) saturate(160%);
-  -webkit-backdrop-filter: blur(12px) saturate(160%);
-  box-shadow: inset 0 1px 2px rgba(255,255,255,0.14),
-              inset 0 -1px 2px rgba(2,21,63,0.30),
-              0 4px 14px rgba(2,21,63,0.35);
-  transition: background 0.4s var(--ease), border-color 0.4s;
-}
-.theme-toggle-wrap:active { transform: scale(0.94); }
-/* the two always-visible state icons */
-.tt-ico {
-  position: relative; z-index: 2; flex: 1; height: 100%;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 0.72rem; color: var(--t3);
-  transition: color 0.35s var(--ease), transform 0.35s var(--ease);
-}
-/* sliding accent highlight that sits behind the active icon */
-.tt-thumb {
-  position: absolute; z-index: 1; top: 3px; left: 3px;
-  width: calc(50% - 3px); height: calc(100% - 6px); border-radius: 100px;
-  transition: transform 0.45s var(--snap), background 0.4s var(--ease),
-              box-shadow 0.4s var(--ease);
-}
-[data-theme="dark"] .tt-thumb {
-  transform: translateX(0);
-  background: linear-gradient(135deg, #02239E, #0652B5);
-  box-shadow: 0 2px 10px rgba(6,82,181,0.55),
-              inset 0 1px 1px rgba(255,255,255,0.35);
-}
-[data-theme="dark"] .tt-moon { color: #fff; }
-[data-theme="light"] .tt-thumb {
-  transform: translateX(100%);
-  background: linear-gradient(135deg, #FFC83D, #FF9800);
-  box-shadow: 0 2px 10px rgba(255,160,0,0.55),
-              inset 0 1px 1px rgba(255,255,255,0.55);
-}
-[data-theme="light"] .tt-sun { color: #fff; }
-
 /* ═══════════════════════════════════
    VIEWS
 ═══════════════════════════════════ */
@@ -2422,12 +2378,6 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   </div>
   <div class="h-right">
     <div class="hico tap" id="h-search" style="display:none" onclick="openSearch()"><i class="fa-solid fa-magnifying-glass"></i></div>
-    <!-- Day/Night Toggle — two-state glass pill -->
-    <div class="theme-toggle-wrap tap" id="thToggle" onclick="toggleTheme()" role="switch" title="Toggle theme">
-      <span class="tt-thumb"></span>
-      <span class="tt-ico tt-moon"><i class="fa-solid fa-moon"></i></span>
-      <span class="tt-ico tt-sun"><i class="fa-solid fa-sun"></i></span>
-    </div>
     <div class="h-avatar tap" onclick="navTo('profile')">
       <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%231565e8'/%3E%3Cstop offset='1' stop-color='%238E24AA'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='100' height='100' fill='url(%23g)'/%3E%3Ccircle cx='50' cy='40' r='15' fill='%23fff' opacity='.92'/%3E%3Cpath d='M24 80c0-14 12-22 26-22s26 8 26 22' fill='%23fff' opacity='.92'/%3E%3C/svg%3E" alt="">
     </div>
@@ -2771,7 +2721,6 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   <div class="sub-hdr"><div class="sub-back tap" onclick="closeSub('settings')"><i class="fa-solid fa-chevron-left"></i> Back</div><div class="sub-ttl">Settings</div></div>
   <div class="sub-scroll">
     <div class="sg"><div class="sg-lbl">Appearance</div><div class="sg-grp">
-      <div class="sg-row"><div class="sg-ico" style="background:#2C3D8F"><i class="fa-solid fa-moon"></i></div><span class="sg-lbl2">Dark Mode</span><div class="tog on" id="dark-tog" onclick="toggleTheme()"></div></div>
       <div class="sg-row"><div class="sg-ico" style="background:#6A6E83"><i class="fa-solid fa-text-size"></i></div><span class="sg-lbl2">Text Size</span><span class="sg-val">Medium</span><i class="fa-solid fa-chevron-right sg-arr"></i></div>
     </div></div>
     <div class="sg"><div class="sg-lbl">Notifications</div><div class="sg-grp">
@@ -3124,23 +3073,11 @@ function toast(msg) {
   toastTimer = setTimeout(() => el.classList.remove('show'), 2600);
 }
 
-// ── THEME ──
-function applyTheme(dark) {
-  isDark = dark;
-  document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
-  // Keep both controls (header 3D toggle + settings "Dark Mode") in sync.
-  const dt = document.getElementById('dark-tog');
-  if (dt) dt.classList.toggle('on', dark);
-  try { localStorage.setItem('sb-theme', dark ? 'dark' : 'light'); } catch (e) {}
-}
-function toggleTheme() { applyTheme(!isDark); }
-// Restore the saved theme on load (defaults to dark).
-(function () {
-  try {
-    const saved = localStorage.getItem('sb-theme');
-    if (saved === 'light' || saved === 'dark') applyTheme(saved === 'dark');
-  } catch (e) {}
-})();
+// ── THEME ── (single fixed dark theme — light/dark switching removed)
+function applyTheme() { document.documentElement.setAttribute('data-theme', 'dark'); }
+function toggleTheme() {}   // no-op kept so any stray caller can't throw
+applyTheme();
+try { localStorage.removeItem('sb-theme'); } catch (e) {}
 
 // ── SIDEBAR ──
 function sbOpen()  { document.getElementById('sidebar').classList.add('on');  document.getElementById('overlay').classList.add('on'); if(!_navReplay){try{history.pushState({layer:'sidebar'},'');}catch(e){}} }
