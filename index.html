@@ -88,29 +88,29 @@
   --as:        rgba(10,132,255,0.16);
 }
 
-/* ── Apple LIGHT (defined; app currently runs dark — light is a later pass) ── */
+/* ── LIGHT = liquid-glass blue→teal gradient tone (white text) ── */
 [data-theme="light"] {
-  --bg:        #FFFFFF;
-  --bg-grouped:#F2F2F7;
-  --surface:   #FFFFFF;
-  --surface-2: #F2F2F7;
-  --bg1:       #FFFFFF;
-  --bg2:       #F2F2F7;
-  --bg3:       #E5E5EA;
-  --bg4:       #D1D1D6;
-  --bgcard:    #FFFFFF;
-  --glass:     rgba(255,255,255,0.72);
-  --glass2:    rgba(255,255,255,0.94);
-  --glassB:    rgba(0,0,0,0.06);
-  --line:      rgba(60,60,67,0.20);
-  --line2:     rgba(60,60,67,0.10);
-  --separator: rgba(60,60,67,0.20);
-  --t1:        #1C1C1E;
-  --t2:        rgba(60,60,67,0.60);
-  --t3:        rgba(60,60,67,0.38);
-  --t4:        rgba(60,60,67,0.20);
-  --accent:    #1565E8;
-  --as:        rgba(21,101,232,0.08);
+  --bg:        #02153F;
+  --bg-grouped:#02153F;
+  --surface:   rgba(255,255,255,0.10);
+  --surface-2: rgba(255,255,255,0.16);
+  --bg1:       rgba(255,255,255,0.08);
+  --bg2:       rgba(255,255,255,0.12);
+  --bg3:       rgba(255,255,255,0.18);
+  --bg4:       rgba(255,255,255,0.24);
+  --bgcard:    rgba(255,255,255,0.10);
+  --glass:     rgba(255,255,255,0.14);
+  --glass2:    rgba(6,28,78,0.82);
+  --glassB:    rgba(255,255,255,0.28);
+  --line:      rgba(255,255,255,0.20);
+  --line2:     rgba(255,255,255,0.12);
+  --separator: rgba(255,255,255,0.20);
+  --t1:        #FFFFFF;
+  --t2:        rgba(255,255,255,0.78);
+  --t3:        rgba(255,255,255,0.60);
+  --t4:        rgba(255,255,255,0.40);
+  --accent:    #0A84FF;
+  --as:        rgba(10,132,255,0.20);
 }
 
 *, *::before, *::after {
@@ -128,6 +128,15 @@ html, body {
   width: 100vw; height: 100vh; height: 100dvh;
   background: var(--bg); display: flex; flex-direction: column;
   overflow: hidden;
+}
+/* Light mode = blue→teal liquid-glass gradient as the single app background. */
+[data-theme="light"] .phone {
+  background:
+    radial-gradient(130% 120% at 100% 0%,  #0EB7D6 0%, rgba(14,183,214,0) 44%),
+    radial-gradient(120% 115% at 80% 8%,   #0AAAC9 0%, rgba(10,170,201,0) 48%),
+    radial-gradient(150% 150% at 0% 100%,  #011A7D 0%, rgba(1,26,125,0) 60%),
+    linear-gradient(135deg, #02239E 0%, #0652B5 50%, #0EB7D6 100%);
+  background-attachment: fixed;
 }
 
 /* ─── Reusable liquid-glass surface (spec tokens) ─── */
@@ -362,8 +371,8 @@ header {
 ═══════════════════════════════════ */
 .view {
   position: absolute; inset: 0;
-  background: var(--bg); display: none;
-  overflow: hidden; transition: background 0.3s;
+  background: transparent; display: none;
+  overflow: hidden;
 }
 .view.active { display: block; animation: viewIn 0.34s var(--snap) both; }
 @keyframes viewIn { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: none; } }
@@ -385,25 +394,24 @@ header {
 #v-home { overflow-y: scroll; scroll-behavior: smooth; }
 
 /* Category chips */
+/* Free-flowing category bar — no box, scrolls away with the feed (not sticky). */
 .chips {
-  display: flex; gap: 8px; overflow-x: auto; padding: 12px 16px;
-  border-bottom: 1px solid var(--line2);
+  display: flex; gap: 4px; overflow-x: auto; padding: 8px 12px 10px;
   -webkit-overflow-scrolling: touch; touch-action: pan-x;
-  background: var(--glass);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  position: sticky; top: 0; z-index: 10;
+  scrollbar-width: none;
 }
+.chips::-webkit-scrollbar { display: none; }
 .chip {
-  flex-shrink: 0; padding: 6px 14px; border-radius: 100px;
-  font-size: 0.72rem; font-weight: 600;
-  background: transparent; color: var(--t3);
-  border: 1px solid var(--line);
-  cursor: pointer; transition: all 0.2s var(--spring);
-  white-space: nowrap;
+  flex-shrink: 0; padding: 7px 12px; border-radius: 100px;
+  font-size: 0.8rem; font-weight: 600;
+  background: transparent; color: var(--t2);
+  border: none;
+  cursor: pointer; transition: all 0.2s var(--snap);
+  white-space: nowrap; display: inline-flex; align-items: center; gap: 6px;
 }
-.chip:active { transform: scale(0.88); }
-.chip.on { color: #fff; background: var(--accent); border-color: transparent; }
+.chip i { font-size: 0.9em; opacity: 0.9; }
+.chip:active { transform: scale(0.95); }
+.chip.on { color: #fff; background: var(--accent); }
 
 /* ─── News Card — Free Editorial Style (no boxes) ─── */
 /* Reddit-style stacked feed: no cards, divider-separated, content-first. */
@@ -421,8 +429,8 @@ header {
   position: relative;
 }
 .nc:active { background: rgba(255,255,255,0.03); }
-/* Home feed sits on the neutral app background. */
-#v-home { background: var(--bg); }
+/* Home feed is transparent so the app background (neutral dark / gradient light) shows. */
+#v-home { background: transparent; }
 /* Compact action row: Like+count & Comment+count left, Share far right. */
 .nc-acts-row { display: flex; align-items: center; gap: 8px; margin-top: 13px; }
 .nc-pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 100px;
@@ -1336,25 +1344,17 @@ nav {
   display: flex; align-items: center; justify-content: space-around;
   z-index: 600;
 
-  background: rgba(255,255,255,0.08);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border: 1px solid rgba(255,255,255,0.20);
+  background:
+    linear-gradient(135deg, rgba(2,35,158,0.55) 0%, rgba(6,82,181,0.42) 52%, rgba(14,183,214,0.42) 100%);
+  backdrop-filter: blur(22px) saturate(180%);
+  -webkit-backdrop-filter: blur(22px) saturate(180%);
+  border: 1px solid rgba(255,255,255,0.28);
   border-radius: 28px;
 
   box-shadow:
-    0 10px 40px rgba(3,8,30,0.40),
-    inset 0 1px 1px rgba(255,255,255,0.20);
+    0 12px 40px rgba(3,8,30,0.45),
+    inset 0 1px 1px rgba(255,255,255,0.30);
   padding: 0 8px;
-}
-
-[data-theme="light"] nav {
-  background: rgba(250,250,255,0.82);
-  border-color: rgba(44,61,143,0.12);
-  box-shadow:
-    0 8px 40px rgba(44,61,143,0.15),
-    0 2px 0 rgba(255,255,255,0.8) inset,
-    0 0 0 1px rgba(44,61,143,0.1);
 }
 
 .nb {
@@ -1365,19 +1365,19 @@ nav {
 .nb-icon {
   width: 36px; height: 36px; border-radius: 14px;
   display: flex; align-items: center; justify-content: center;
-  font-size: 1rem; color: var(--t3);
+  font-size: 1rem; color: rgba(255,255,255,0.68);
   transition: all 0.25s var(--spring);
 }
 .nb-lbl {
-  font-size: 0.6rem; font-weight: 700; color: var(--t3);
+  font-size: 0.6rem; font-weight: 700; color: rgba(255,255,255,0.68);
   transition: all 0.25s; letter-spacing: 0.3px;
 }
 .nb.on .nb-icon {
   background: transparent;
-  color: var(--accent);
+  color: #fff;
   box-shadow: none;
 }
-.nb.on .nb-lbl { color: var(--accent); }
+.nb.on .nb-lbl { color: #fff; }
 .nb.on .nb-icon i { filter: none; }
 
 /* ─── Bytes — one structured card per screen (vertical snap) ─── */
@@ -2389,6 +2389,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   </div>
   <div class="h-right">
     <div class="hico tap" id="h-search" style="display:none" onclick="openSearch()"><i class="fa-solid fa-magnifying-glass"></i></div>
+    <div class="hico tap" id="h-theme" onclick="toggleTheme()"><i class="fa-solid fa-moon"></i></div>
     <div class="h-avatar tap" onclick="navTo('profile')">
       <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%231565e8'/%3E%3Cstop offset='1' stop-color='%238E24AA'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='100' height='100' fill='url(%23g)'/%3E%3Ccircle cx='50' cy='40' r='15' fill='%23fff' opacity='.92'/%3E%3Cpath d='M24 80c0-14 12-22 26-22s26 8 26 22' fill='%23fff' opacity='.92'/%3E%3C/svg%3E" alt="">
     </div>
@@ -3087,10 +3088,21 @@ function toast(msg) {
 }
 
 // ── THEME ── (single fixed dark theme — light/dark switching removed)
-function applyTheme() { document.documentElement.setAttribute('data-theme', 'dark'); }
-function toggleTheme() {}   // no-op kept so any stray caller can't throw
+function applyTheme() {
+  let t = 'dark';
+  try { t = localStorage.getItem('sb-theme') || 'dark'; } catch (e) {}
+  if (t !== 'light' && t !== 'dark') t = 'dark';
+  document.documentElement.setAttribute('data-theme', t);
+  const ic = document.querySelector('#h-theme i');
+  if (ic) ic.className = t === 'light' ? 'fa-solid fa-sun' : 'fa-solid fa-moon';
+}
+function toggleTheme() {
+  const cur = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+  const next = cur === 'light' ? 'dark' : 'light';
+  try { localStorage.setItem('sb-theme', next); } catch (e) {}
+  applyTheme();
+}
 applyTheme();
-try { localStorage.removeItem('sb-theme'); } catch (e) {}
 
 // ── SIDEBAR ──
 function sbOpen()  { document.getElementById('sidebar').classList.add('on');  document.getElementById('overlay').classList.add('on'); if(!_navReplay){try{history.pushState({layer:'sidebar'},'');}catch(e){}} }
