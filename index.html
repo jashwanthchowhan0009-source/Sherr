@@ -366,6 +366,34 @@ header {
 .h-avatar img { width: 100%; height: 100%; object-fit: cover; }
 .h-avatar:active { transform: scale(0.88); }
 
+/* Pull-to-refresh spinner */
+#ptr {
+  position: absolute; top: calc(var(--hh) + 4px); left: 50%;
+  width: 34px; height: 34px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--glass); backdrop-filter: blur(14px) saturate(180%);
+  -webkit-backdrop-filter: blur(14px) saturate(180%);
+  border: 1px solid var(--glassB); color: var(--accent); font-size: 0.85rem;
+  transform: translateX(-50%) translateY(-46px);
+  opacity: 0; z-index: 450; pointer-events: none; transition: opacity .2s;
+}
+#ptr.show { opacity: 1; }
+#ptr.spin i { animation: ptrspin .7s linear infinite; }
+@keyframes ptrspin { to { transform: rotate(360deg); } }
+
+/* "New stories" pill */
+#new-pill {
+  position: absolute; top: calc(var(--hh) + 10px); left: 50%;
+  transform: translateX(-50%) translateY(-16px);
+  z-index: 460; background: var(--accent); color: #fff;
+  font-size: 0.8rem; font-weight: 700; padding: 8px 16px; border-radius: 100px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.30);
+  display: flex; align-items: center; gap: 7px; cursor: pointer;
+  opacity: 0; pointer-events: none; transition: opacity .25s, transform .25s;
+}
+#new-pill.show { opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: auto; }
+#new-pill:active { transform: translateX(-50%) translateY(0) scale(0.96); }
+
 /* ═══════════════════════════════════
    VIEWS
 ═══════════════════════════════════ */
@@ -2419,6 +2447,10 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   </div>
 </header>
 
+<!-- Pull-to-refresh indicator + "new stories" pill (home feed) -->
+<div id="ptr"><i class="fa-solid fa-arrow-down"></i></div>
+<div id="new-pill" onclick="refreshFeed()"><i class="fa-solid fa-arrow-up"></i> New stories</div>
+
 <!-- ════════ HOME ════════ -->
 <div id="v-home" class="view active">
   <div class="chips" id="chip-row">
@@ -3084,6 +3116,8 @@ let isDark       = true;
 let feedPage     = 1;
 let feedLoading  = false;
 let feedRetried  = false;   // one automatic cold-start retry per server-reach
+let feedTopId    = null;    // newest article id currently shown (for "new stories")
+let _newStoriesTimer = null;
 let homeArticles = [];
 let currentArticle = null;
 let expHeroTimer = null;
@@ -3505,6 +3539,7 @@ async function loadFeed(reset = false) {
   if (reset) {
     feedPage = 1; homeArticles = []; structuredFeedData = []; structuredFeedOffset = 0;
     document.getElementById('home-feed').innerHTML = '';
+    document.getElementById('new-pill')?.classList.remove('show');
   }
   feedLoading = true;
   const c = document.getElementById('home-feed');
@@ -3535,6 +3570,7 @@ async function loadFeed(reset = false) {
     const data = await api(url, { timeout: 25000 });   // allow for free-tier cold starts
     feedRetried = false;   // server reached — reset the cold-start retry budget
     const articles = (data.articles || []).map(normalizeArticle);
+    if (feedPage === 1 && articles[0]) feedTopId = articles[0].id;
 
     // Fetch continue-reading article only on first page if logged in
     if (feedPage === 1 && ST.token) {
@@ -4457,6 +4493,70 @@ document.getElementById('v-home').addEventListener('scroll', e => {
   }
 });
 document.getElementById('v-explore').addEventListener('scroll', handleNavScroll);
+
+// ── Pull-to-refresh + "new stories" pill (home feed) ──
+function refreshFeed() {
+  document.getElementById('new-pill')?.classList.remove('show');
+  const v = document.getElementById('v-home');
+  if (v) v.scrollTo({ top: 0, behavior: 'smooth' });
+  loadFeed(true);
+}
+async function checkNewStories() {
+  const home = document.getElementById('v-home');
+  if (!home || !home.classList.contains('active') || document.hidden) return;
+  if (curChip !== 'all' || homeActiveTab !== 'foryou' || !feedTopId) return;
+  try {
+    const data = await api('/feed?page=1&limit=5');
+    const arts = (data.articles || []).filter(a => a && a.id);
+    const known = new Set(homeArticles.map(a => a.id));
+    if (arts.some(a => !known.has(a.id))) {
+      document.getElementById('new-pill')?.classList.add('show');
+    }
+  } catch (e) { /* offline / cold */ }
+}
+(function initPullToRefresh() {
+  const v = document.getElementById('v-home');
+  const ind = document.getElementById('ptr');
+  if (!v || !ind) return;
+  const icon = ind.querySelector('i');
+  let startY = 0, pulling = false, dist = 0;
+  const TH = 72;
+  v.addEventListener('touchstart', e => {
+    if (v.scrollTop <= 0) { startY = e.touches[0].clientY; pulling = true; dist = 0; }
+    else pulling = false;
+  }, { passive: true });
+  v.addEventListener('touchmove', e => {
+    if (!pulling) return;
+    dist = e.touches[0].clientY - startY;
+    if (dist > 0 && v.scrollTop <= 0) {
+      e.preventDefault();
+      ind.classList.add('show');
+      const y = Math.min(dist * 0.5 - 46, 10);
+      ind.style.transform = `translateX(-50%) translateY(${y}px) rotate(${Math.min(dist, TH) / TH * 180}deg)`;
+    }
+  }, { passive: false });
+  v.addEventListener('touchend', () => {
+    if (!pulling) return;
+    pulling = false;
+    if (dist > TH) {
+      ind.classList.add('spin', 'show');
+      ind.style.transform = 'translateX(-50%) translateY(10px)';
+      icon.className = 'fa-solid fa-arrows-rotate';
+      Promise.resolve(loadFeed(true)).finally(() => {
+        setTimeout(() => {
+          ind.classList.remove('spin', 'show');
+          ind.style.transform = '';
+          icon.className = 'fa-solid fa-arrow-down';
+        }, 500);
+      });
+    } else {
+      ind.classList.remove('show');
+      ind.style.transform = '';
+    }
+    dist = 0;
+  }, { passive: true });
+})();
+if (!_newStoriesTimer) _newStoriesTimer = setInterval(checkNewStories, 90000);
 
 // ── SIDEBAR LOGOUT ──
 document.querySelector('.sb-logout').addEventListener('click', signOut);
