@@ -2772,6 +2772,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   <div class="sub-scroll">
     <div class="sg"><div class="sg-lbl">Appearance</div><div class="sg-grp">
       <div class="sg-row tap" onclick="setTheme('system')"><div class="sg-ico" style="background:#6A6E83"><i class="fa-solid fa-circle-half-stroke"></i></div><span class="sg-lbl2">System</span><i class="fa-solid fa-check theme-check" data-pref="system" style="color:var(--accent);display:none"></i></div>
+      <div class="sg-row tap" onclick="setTheme('light')"><div class="sg-ico" style="background:#02239E"><i class="fa-solid fa-sun"></i></div><span class="sg-lbl2">Light (navy)</span><i class="fa-solid fa-check theme-check" data-pref="light" style="color:var(--accent);display:none"></i></div>
       <div class="sg-row tap" onclick="setTheme('dark')"><div class="sg-ico" style="background:#1C1C1E"><i class="fa-solid fa-moon"></i></div><span class="sg-lbl2">Dark</span><i class="fa-solid fa-check theme-check" data-pref="dark" style="color:var(--accent);display:none"></i></div>
       <div class="sg-row"><div class="sg-ico" style="background:#8E8E93"><i class="fa-solid fa-text-size"></i></div><span class="sg-lbl2">Text Size</span><span class="sg-val">Medium</span><i class="fa-solid fa-chevron-right sg-arr"></i></div>
     </div></div>
@@ -3134,29 +3135,36 @@ function _systemDark() {
   try { return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches); }
   catch (e) { return true; }
 }
+// Three options: 'system' (follow device), 'light' (navy gradient), 'dark' (black).
+const _THEME_ORDER = ['system', 'light', 'dark'];
+const _THEME_ICON  = { system: 'fa-circle-half-stroke', light: 'fa-sun', dark: 'fa-moon' };
+const _THEME_NAME  = { system: 'System theme', light: 'Light (navy)', dark: 'Dark mode' };
 function _themePref() {
   let p = 'dark';
   try { p = localStorage.getItem('sb-theme') || 'dark'; } catch (e) {}
-  return (p === 'dark' || p === 'system') ? p : 'dark';
+  return _THEME_ORDER.includes(p) ? p : 'dark';
 }
 function applyTheme() {
   const pref = _themePref();
-  const effective = pref === 'dark' ? 'dark' : (_systemDark() ? 'dark' : 'light');
+  const effective = pref === 'light' ? 'light'
+                  : pref === 'dark'  ? 'dark'
+                  : (_systemDark() ? 'dark' : 'light');   // system
   document.documentElement.setAttribute('data-theme', effective);
   const ic = document.querySelector('#h-theme i');
-  if (ic) ic.className = pref === 'dark' ? 'fa-solid fa-moon' : 'fa-solid fa-circle-half-stroke';
+  if (ic) ic.className = 'fa-solid ' + _THEME_ICON[pref];
   document.querySelectorAll('.theme-check').forEach(el => {
     el.style.display = el.dataset.pref === pref ? '' : 'none';
   });
 }
 function setTheme(pref) {
-  if (pref !== 'system' && pref !== 'dark') pref = 'system';
+  if (!_THEME_ORDER.includes(pref)) pref = 'dark';
   try { localStorage.setItem('sb-theme', pref); } catch (e) {}
   applyTheme();
 }
 function toggleTheme() {
-  setTheme(_themePref() === 'dark' ? 'system' : 'dark');
-  if (typeof toast === 'function') toast(_themePref() === 'dark' ? 'Dark mode' : 'System theme');
+  const next = _THEME_ORDER[(_THEME_ORDER.indexOf(_themePref()) + 1) % _THEME_ORDER.length];
+  setTheme(next);
+  if (typeof toast === 'function') toast(_THEME_NAME[next]);
 }
 applyTheme();
 try {
