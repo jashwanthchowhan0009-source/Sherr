@@ -78,6 +78,21 @@ async def weather(lat: float = Query(9.9312), lon: float = Query(76.2673),
                     "humidity": c.get("relative_humidity_2m"),
                     "wind_kph": round((c.get("wind_speed_10m", 0) or 0)),
                 })
+            # Resolve a real city name from the coordinates (keyless reverse geocode).
+            # Without this the response just echoed the default "Kochi" for every user.
+            try:
+                g = await client.get(
+                    "https://api.bigdatacloud.net/data/reverse-geocode-client",
+                    params={"latitude": lat, "longitude": lon, "localityLanguage": "en"},
+                )
+                if g.status_code == 200:
+                    gj = g.json()
+                    name = gj.get("city") or gj.get("locality") or gj.get("principalSubdivision")
+                    region = gj.get("principalSubdivision")
+                    if name:
+                        out["city"] = f"{name}, {region}" if region and region != name else name
+            except Exception:
+                pass
     except Exception as e:
         log.warning("weather failed: %s", e)
     _cset(key, out, 900)   # 15 min

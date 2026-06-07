@@ -394,12 +394,18 @@ header {
 #v-home { overflow-y: scroll; scroll-behavior: smooth; }
 
 /* Category chips */
-/* Free-flowing category bar — no box, scrolls away with the feed (not sticky). */
+/* Free-flowing category bar — no per-chip box; pinned, hides on scroll-down. */
 .chips {
   display: flex; gap: 4px; overflow-x: auto; padding: 8px 12px 10px;
   -webkit-overflow-scrolling: touch; touch-action: pan-x;
   scrollbar-width: none;
+  position: sticky; top: 0; z-index: 30;
+  background: var(--glass);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  transition: transform 0.32s var(--snap);
 }
+.chips.bar-hidden { transform: translateY(-130%); }
 .chips::-webkit-scrollbar { display: none; }
 .chip {
   flex-shrink: 0; padding: 7px 12px; border-radius: 100px;
@@ -422,7 +428,7 @@ header {
   border: none; border-radius: 0;
   backdrop-filter: none; -webkit-backdrop-filter: none;
   box-shadow: none;
-  border-bottom: 1px solid rgba(255,255,255,0.08);
+  border-bottom: 7px solid rgba(120,120,128,0.16);
   overflow: hidden;
   cursor: pointer;
   transition: background 0.15s;
@@ -2521,9 +2527,9 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
     <div class="exp-sec-hdr-title"><i class="fa-solid fa-chart-simple"></i> At a Glance</div>
   </div>
   <div class="exp-bento" style="grid-template-columns:1fr;gap:0">
-    <div class="bento-weather tap" id="bento-weather" onclick="loadWeather()" style="margin-bottom:8px">
+    <div class="bento-weather tap" id="bento-weather" onclick="requestGeo(true)" style="margin-bottom:8px">
       <div>
-        <div class="bw-loc" id="bw-loc"><i class="fa-solid fa-location-dot" style="font-size:0.6rem"></i> Kochi, Kerala</div>
+        <div class="bw-loc" id="bw-loc"><i class="fa-solid fa-location-dot" style="font-size:0.6rem"></i> Locating…</div>
         <div class="bw-temp" id="bw-temp">—°</div>
         <div class="bw-desc" id="bw-desc">Loading…</div>
       </div>
@@ -2555,7 +2561,6 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
     <div class="ewc-def" id="ewc-def"></div>
     <div class="ewc-example" id="ewc-ex"></div>
   </div>
-  <div class="explore-quiz-card" id="explore-quiz"></div>
 
   <!-- Trending News -->
   <div class="exp-sec-hdr">
@@ -3140,6 +3145,7 @@ function selectChip(el, cat) {
   el.classList.add('on');
   el.style.background = 'var(--accent)';
   curChip = cat;
+  homeActiveTab = 'foryou';   // tabs are an "All"-only concept
   feedPage = 1;
   homeArticles = [];
   structuredFeedData = [];
@@ -3433,6 +3439,25 @@ function renderLatestBlock(articles, container) {
   container.appendChild(block);
 }
 
+// Interleave articles so each category appears in turn (one-after-another of 9).
+function roundRobinByCat(list) {
+  const buckets = {}, order = [];
+  list.forEach(a => {
+    const k = a.category || 'tech';
+    if (!buckets[k]) { buckets[k] = []; order.push(k); }
+    buckets[k].push(a);
+  });
+  const out = [];
+  let added = true;
+  while (added) {
+    added = false;
+    for (const k of order) {
+      if (buckets[k].length) { out.push(buckets[k].shift()); added = true; }
+    }
+  }
+  return out;
+}
+
 // ── RENDER STRUCTURED FEED ──
 function renderStructuredFeed(articles, container, reset=false) {
   if (reset) { container.innerHTML=''; structuredFeedOffset=0; }
@@ -3476,16 +3501,16 @@ async function loadFeed(reset = false) {
   }
 
   try {
-    // Choose endpoint based on active tab + chip
+    // Choose endpoint: a selected category always filters; tabs only apply to "All".
     let url;
-    if (homeActiveTab === 'trending') {
-      url = `/trending?limit=30`;
-    } else if (curChip !== 'all') {
+    if (curChip !== 'all') {
       url = `/explore?category=${curChip}&page=${feedPage}&limit=30`;
+    } else if (homeActiveTab === 'trending') {
+      url = `/trending?limit=30`;
     } else if (homeActiveTab === 'latest') {
       url = `/explore?page=${feedPage}&limit=30`;
     } else {
-      url = `/feed?page=${feedPage}&limit=20`;
+      url = `/feed?page=${feedPage}&limit=30`;
     }
     // Geographic scope filtering is PARKED: the pipeline tags ~all stories
     // 'global', so 'national'/'local' starved the feed down to a couple of
@@ -3510,7 +3535,7 @@ async function loadFeed(reset = false) {
     // First page → rebuild with section tabs + hero + trending strip + standards
     if (feedPage === 1) {
       c.innerHTML = '';
-      renderSectionTabs(c);
+      if (curChip === 'all') renderSectionTabs(c);
 
       if (articles.length === 0) {
         if (FALLBACK_ARTICLES && FALLBACK_ARTICLES.length) {
@@ -3543,7 +3568,9 @@ async function loadFeed(reset = false) {
 
       // Remaining articles as standard cards (excluding hero + trending already shown)
       const shownIds = new Set([articles[0].id, ...trendingPool.map(a => a.id)]);
-      const remaining = articles.filter(a => !shownIds.has(a.id));
+      let remaining = articles.filter(a => !shownIds.has(a.id));
+      // In "All", interleave categories so every pillar shows up one after another.
+      if (curChip === 'all') remaining = roundRobinByCat(remaining);
 
       // Use existing structured renderer for variety (bulletin/latest blocks interleaved)
       if (curChip === 'all' && homeActiveTab === 'foryou' && remaining.length >= 8) {
@@ -3557,8 +3584,9 @@ async function loadFeed(reset = false) {
       }
 
     } else {
-      // Pagination — append as standard cards
-      articles.forEach(a => renderStandardCard(a, c));
+      // Pagination — append as standard cards (round-robin categories in "All")
+      const more = (curChip === 'all') ? roundRobinByCat(articles) : articles;
+      more.forEach(a => renderStandardCard(a, c));
     }
 
     if (data.has_more) feedPage++;
@@ -3576,7 +3604,7 @@ async function loadFeed(reset = false) {
     console.warn('Feed load failed', e);
     if (c.children.length === 0 || c.querySelector('.skel')) {
       c.innerHTML = '';
-      renderSectionTabs(c);
+      if (curChip === 'all') renderSectionTabs(c);
       if (typeof FALLBACK_ARTICLES !== 'undefined' && FALLBACK_ARTICLES.length) {
         FALLBACK_ARTICLES.forEach(a => renderStandardCard(a, c));
       }
@@ -4324,10 +4352,24 @@ function handleNavScroll(e) {
   else if (st < lastScrollY - 10) navEl.classList.remove('hidden');
   lastScrollY = st;
 }
+// Home: hide BOTH the bottom nav and the top category bar when scrolling down;
+// bring them back when scrolling up (only the SherrByte bar stays put).
+function handleHomeScroll(e) {
+  const st = e.target.scrollTop;
+  const chips = document.getElementById('chip-row');
+  if (st > lastScrollY + 8 && st > 60) {
+    navEl.classList.add('hidden');
+    if (chips) chips.classList.add('bar-hidden');
+  } else if (st < lastScrollY - 8 || st < 20) {
+    navEl.classList.remove('hidden');
+    if (chips) chips.classList.remove('bar-hidden');
+  }
+  lastScrollY = st;
+}
 document.getElementById('v-home').addEventListener('scroll', e => {
-  handleNavScroll(e);
-  // Infinite scroll trigger
-  if (e.target.scrollTop + e.target.clientHeight >= e.target.scrollHeight - 300) {
+  handleHomeScroll(e);
+  // Infinite scroll trigger — kick earlier for a longer continuous scroll
+  if (e.target.scrollTop + e.target.clientHeight >= e.target.scrollHeight - 800) {
     loadFeed(false);
   }
 });
@@ -5097,12 +5139,15 @@ function byteToggle(key, a, el, icon, msg, action){
 
 // ── Live: weather (Open-Meteo), word-of-day + dictionary (dictionaryapi.dev) ──
 // Ask the browser for location once; cache coords so we don't re-prompt.
-function requestGeo() {
-  if (window._geoAsked || !navigator.geolocation) return;
+function requestGeo(force) {
+  if (!navigator.geolocation) { loadWeather(); return; }
+  if (window._geoAsked && !force) return;
   window._geoAsked = true;
+  const loc = document.getElementById('bw-loc');
+  if (loc) loc.innerHTML = '<i class="fa-solid fa-location-dot" style="font-size:0.6rem"></i> Locating…';
   navigator.geolocation.getCurrentPosition(
     p => { try { localStorage.setItem('sb-geo', JSON.stringify({ lat: p.coords.latitude.toFixed(3), lon: p.coords.longitude.toFixed(3) })); } catch (e) {} loadWeather(); },
-    () => {}, { timeout: 8000, maximumAge: 3600000, enableHighAccuracy: false }
+    () => { loadWeather(); }, { timeout: 10000, maximumAge: 600000, enableHighAccuracy: !!force }
   );
 }
 async function loadWeather() {
@@ -5183,7 +5228,7 @@ window.addEventListener('load', () => {
 document.addEventListener('DOMContentLoaded', () => {
   renderExpCats();
   renderExpInteractions();
-  renderQuiz();
+  try { requestGeo(); } catch (e) {}
   renderFeedFilterChips();
   renderFeedCatCards();
   renderFeedTopics();
