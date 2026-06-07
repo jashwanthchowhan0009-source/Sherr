@@ -381,19 +381,6 @@ header {
 #ptr.spin i { animation: ptrspin .7s linear infinite; }
 @keyframes ptrspin { to { transform: rotate(360deg); } }
 
-/* "New stories" pill */
-#new-pill {
-  position: absolute; top: calc(var(--hh) + 10px); left: 50%;
-  transform: translateX(-50%) translateY(-16px);
-  z-index: 460; background: var(--accent); color: #fff;
-  font-size: 0.8rem; font-weight: 700; padding: 8px 16px; border-radius: 100px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.30);
-  display: flex; align-items: center; gap: 7px; cursor: pointer;
-  opacity: 0; pointer-events: none; transition: opacity .25s, transform .25s;
-}
-#new-pill.show { opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: auto; }
-#new-pill:active { transform: translateX(-50%) translateY(0) scale(0.96); }
-
 /* ═══════════════════════════════════
    VIEWS
 ═══════════════════════════════════ */
@@ -2447,9 +2434,8 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   </div>
 </header>
 
-<!-- Pull-to-refresh indicator + "new stories" pill (home feed) -->
+<!-- Pull-to-refresh indicator (home feed) -->
 <div id="ptr"><i class="fa-solid fa-arrow-down"></i></div>
-<div id="new-pill" onclick="refreshFeed()"><i class="fa-solid fa-arrow-up"></i> New stories</div>
 
 <!-- ════════ HOME ════════ -->
 <div id="v-home" class="view active">
@@ -3539,7 +3525,6 @@ async function loadFeed(reset = false) {
   if (reset) {
     feedPage = 1; homeArticles = []; structuredFeedData = []; structuredFeedOffset = 0;
     document.getElementById('home-feed').innerHTML = '';
-    document.getElementById('new-pill')?.classList.remove('show');
   }
   feedLoading = true;
   const c = document.getElementById('home-feed');
@@ -4494,26 +4479,7 @@ document.getElementById('v-home').addEventListener('scroll', e => {
 });
 document.getElementById('v-explore').addEventListener('scroll', handleNavScroll);
 
-// ── Pull-to-refresh + "new stories" pill (home feed) ──
-function refreshFeed() {
-  document.getElementById('new-pill')?.classList.remove('show');
-  const v = document.getElementById('v-home');
-  if (v) v.scrollTo({ top: 0, behavior: 'smooth' });
-  loadFeed(true);
-}
-async function checkNewStories() {
-  const home = document.getElementById('v-home');
-  if (!home || !home.classList.contains('active') || document.hidden) return;
-  if (curChip !== 'all' || homeActiveTab !== 'foryou' || !feedTopId) return;
-  try {
-    const data = await api('/feed?page=1&limit=5');
-    const arts = (data.articles || []).filter(a => a && a.id);
-    const known = new Set(homeArticles.map(a => a.id));
-    if (arts.some(a => !known.has(a.id))) {
-      document.getElementById('new-pill')?.classList.add('show');
-    }
-  } catch (e) { /* offline / cold */ }
-}
+// ── Pull-to-refresh (home feed) — new stories arrive only on refresh ──
 (function initPullToRefresh() {
   const v = document.getElementById('v-home');
   const ind = document.getElementById('ptr');
@@ -4556,7 +4522,6 @@ async function checkNewStories() {
     dist = 0;
   }, { passive: true });
 })();
-if (!_newStoriesTimer) _newStoriesTimer = setInterval(checkNewStories, 90000);
 
 // ── SIDEBAR LOGOUT ──
 document.querySelector('.sb-logout').addEventListener('click', signOut);
