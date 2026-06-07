@@ -441,17 +441,29 @@ header {
 .nc-share { margin-left: auto; }
 
 /* ─── Article comments ─── */
-.ao-cmt-hdr { font-size: 0.64rem; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; color: var(--t3); margin: 22px 0 10px; }
-.ao-cmt-box { display: flex; gap: 8px; align-items: flex-end; margin-bottom: 14px; }
-.ao-cmt-input { flex: 1; background: var(--bgcard); border: 1px solid var(--glassB); border-radius: 14px;
-  padding: 10px 12px; color: var(--t1); font-family: var(--f); font-size: 0.85rem; resize: none; outline: none; }
-.ao-cmt-post { background: var(--neon); color: #04241a; border: none; border-radius: 14px;
-  padding: 10px 16px; font-weight: 700; font-size: 0.82rem; cursor: pointer; white-space: nowrap; }
-.ao-cmt { padding: 11px 0; border-bottom: 1px solid var(--line2); }
+.ao-cmt-sec { margin-top: 24px; }
+.ao-cmt-hdr { font-size: 0.64rem; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; color: var(--t3); margin: 0 0 6px; text-align: center; }
+.ao-cmt-hdr span { color: var(--t2); }
+.ao-cmt { padding: 12px 0; border-bottom: 1px solid var(--line2); }
 .ao-cmt-meta { font-size: 0.72rem; color: var(--t3); margin-bottom: 3px; }
 .ao-cmt-meta b { color: var(--t2); }
 .ao-cmt-body { font-size: 0.86rem; color: var(--t1); line-height: 1.5; }
-.ao-cmt-empty { font-size: 0.8rem; color: var(--t3); padding: 12px 0; }
+.ao-cmt-empty { text-align: center; padding: 30px 0 22px; }
+.ao-cmt-empty-t { font-size: 1.2rem; font-weight: 800; color: var(--t1); margin-bottom: 5px; }
+.ao-cmt-empty-s { font-size: 0.82rem; color: var(--t3); }
+/* quick-reaction strip */
+.ao-react-row { display: flex; justify-content: space-between; gap: 4px; padding: 14px 2px 6px; }
+.ao-react { font-size: 1.5rem; line-height: 1; cursor: pointer; transition: transform 0.15s var(--spring); }
+.ao-react:active { transform: scale(1.35); }
+/* sticky composer bar */
+.ao-cmt-bar { display: flex; gap: 8px; align-items: center; position: sticky; bottom: 0;
+  padding: 10px 0 6px; background: var(--bg); }
+.ao-cmt-input { flex: 1; background: var(--bgcard); border: 1px solid var(--glassB); border-radius: 100px;
+  padding: 11px 16px; color: var(--t1); font-family: var(--f); font-size: 0.86rem; outline: none; }
+.ao-cmt-post { background: linear-gradient(135deg, #0652B5, #0EB7D6); color: #fff; border: none;
+  border-radius: 50%; width: 42px; height: 42px; flex-shrink: 0; cursor: pointer; font-size: 0.9rem;
+  display: flex; align-items: center; justify-content: center; }
+.ao-cmt-post:active { transform: scale(0.9); }
 
 .nc-meta {
   display: flex; align-items: center; gap: 7px;
@@ -1375,36 +1387,42 @@ nav {
 .nb.on .nb-lbl { color: #fff; }
 .nb.on .nb-icon i { filter: drop-shadow(0 0 6px rgba(92,211,224,0.55)); }
 
-/* ─── Bytes — full-screen vertical snap feed (Inshorts-style) ─── */
+/* ─── Bytes — one structured card per screen (vertical snap) ─── */
 #v-bytes { inset: 0; }
-.bytes-feed { width: 100%; height: 100%; overflow-y: scroll; scroll-snap-type: y mandatory; perspective: 1400px; }
+.bytes-feed { width: 100%; height: 100%; overflow-y: scroll; scroll-snap-type: y mandatory; }
 .bytes-empty { height: 100%; display: flex; align-items: center; justify-content: center;
   text-align: center; color: var(--t1); font-size: 1.05rem; line-height: 1.7; padding: 28px; }
 .bytes-empty span { font-size: 0.82rem; color: var(--t2); font-weight: 500; }
-.byte { position: relative; height: 100%; scroll-snap-align: start; overflow: hidden;
-  display: flex; flex-direction: column; justify-content: flex-end;
-  transform-origin: top center; animation: byteIn 0.5s var(--ease); }
-@keyframes byteIn { from { opacity: .35; transform: rotateX(10deg) translateY(26px); } to { opacity: 1; transform: none; } }
-.byte-bg { position: absolute; inset: 0; background-size: cover; background-position: center; transform: scale(1.06); }
-.byte-scrim { position: absolute; inset: 0;
-  background: linear-gradient(180deg, rgba(3,8,30,.15) 0%, rgba(3,8,30,.5) 42%, rgba(3,8,30,.96) 100%); }
-.byte-content { position: relative; z-index: 2; padding: 20px 20px calc(var(--nh) + 34px); }
-.byte-corner { position: absolute; top: calc(var(--hh) + 14px); left: 20px; right: 20px; z-index: 2;
-  display: flex; justify-content: space-between; font-size: 0.7rem; font-weight: 600; color: rgba(255,255,255,.82); }
-.byte-cat { display: inline-block; font-size: 0.62rem; font-weight: 800; padding: 4px 10px; border-radius: 8px; margin-bottom: 12px; }
-.byte-headline { font-size: 1.5rem; font-weight: 800; line-height: 1.2; letter-spacing: -0.5px; color: #fff; margin-bottom: 12px; }
-.byte-what { font-size: 0.92rem; line-height: 1.6; color: rgba(255,255,255,.86); margin-bottom: 10px;
-  display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; }
-.byte-src { font-size: 0.74rem; color: rgba(255,255,255,.6); margin-bottom: 16px; }
-.byte-acts { display: flex; gap: 12px; }
-.byte-act { width: 46px; height: 46px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
-  color: #fff; font-size: 1.05rem; cursor: pointer; transition: transform 0.15s var(--spring);
-  background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.2);
-  backdrop-filter: blur(20px) saturate(180%); -webkit-backdrop-filter: blur(20px) saturate(180%); }
-.byte-act:active { transform: scale(0.86); }
-.byte-act.on { color: var(--neon); border-color: var(--neon); box-shadow: 0 0 14px var(--neon-glow); }
-.byte-act-wide { width: auto; padding: 0 14px; gap: 7px; border-radius: 24px; }
-.byte-act-wide .byte-n { font-size: 0.82rem; font-weight: 700; }
+.byte { position: relative; height: 100%; scroll-snap-align: start;
+  display: flex; flex-direction: column; justify-content: center;
+  padding: calc(var(--hh) + 16px) 16px calc(var(--nh) + 18px);
+  animation: byteIn 0.45s var(--ease); }
+@keyframes byteIn { from { opacity: .35; transform: translateY(20px); } to { opacity: 1; transform: none; } }
+.byte-card { display: flex; flex-direction: column; width: 100%; max-height: 100%; overflow: hidden; }
+.byte-top { display: flex; justify-content: space-between; align-items: center;
+  padding: 13px 16px; font-size: 0.72rem; font-weight: 600; color: var(--t2);
+  border-bottom: 1px solid var(--line2); flex-shrink: 0; }
+.byte-top i { color: var(--accent2); margin-right: 5px; }
+.byte-media { position: relative; width: 100%; aspect-ratio: 16 / 10; flex-shrink: 0;
+  background-size: cover; background-position: center; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; }
+.byte-media-ico { font-size: 2rem; color: rgba(255,255,255,.55); }
+.byte-body { padding: 16px; display: flex; flex-direction: column; min-height: 0; }
+.byte-cat { display: inline-block; align-self: flex-start; font-size: 0.62rem; font-weight: 800;
+  padding: 4px 10px; border-radius: 8px; margin-bottom: 11px; }
+.byte-headline { font-size: 1.3rem; font-weight: 800; line-height: 1.22; letter-spacing: -0.4px;
+  color: var(--t1); margin-bottom: 9px; cursor: pointer;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.byte-what { font-size: 0.9rem; line-height: 1.55; color: var(--t2); margin-bottom: 16px;
+  display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden; }
+.byte-acts { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+.byte-act { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px;
+  border-radius: 100px; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.13);
+  color: var(--t2); font-size: 0.8rem; font-weight: 600; cursor: pointer;
+  transition: transform 0.15s var(--spring); }
+.byte-act:active { transform: scale(0.9); }
+.byte-act.on { color: var(--accent); border-color: var(--accent); }
+.byte-act .byte-n { font-weight: 700; }
 
 /* ─── Phase 6: source links + glass article actions ─── */
 .ao-sources { margin: 16px 0 6px; }
@@ -2432,12 +2450,24 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
       <div class="ao-related-hdr">Related Stories</div>
       <div id="ao-related"></div>
 
-      <div class="ao-cmt-hdr">Comments</div>
-      <div class="ao-cmt-box">
-        <textarea id="ao-cmt-input" class="ao-cmt-input" rows="2" maxlength="1000" placeholder="Add a comment…"></textarea>
-        <button class="ao-cmt-post tap" onclick="postArticleComment()">Post</button>
+      <div class="ao-cmt-sec">
+        <div class="ao-cmt-hdr">Comments <span id="ao-cmt-count"></span></div>
+        <div id="ao-cmt-list"></div>
+        <div class="ao-react-row">
+          <span class="ao-react" onclick="aoAddEmoji('❤️')">❤️</span>
+          <span class="ao-react" onclick="aoAddEmoji('🙌')">🙌</span>
+          <span class="ao-react" onclick="aoAddEmoji('🔥')">🔥</span>
+          <span class="ao-react" onclick="aoAddEmoji('👏')">👏</span>
+          <span class="ao-react" onclick="aoAddEmoji('🥲')">🥲</span>
+          <span class="ao-react" onclick="aoAddEmoji('😍')">😍</span>
+          <span class="ao-react" onclick="aoAddEmoji('😮')">😮</span>
+          <span class="ao-react" onclick="aoAddEmoji('😂')">😂</span>
+        </div>
+        <div class="ao-cmt-bar">
+          <input id="ao-cmt-input" class="ao-cmt-input" maxlength="1000" placeholder="Add a comment…">
+          <button class="ao-cmt-post tap" onclick="postArticleComment()" aria-label="Post comment"><i class="fa-solid fa-paper-plane"></i></button>
+        </div>
       </div>
-      <div id="ao-cmt-list"></div>
     </div>
   </div>
 </div>
@@ -3315,16 +3345,27 @@ async function hydrateFeedCounts() {
 async function loadArticleComments(id) {
   const list = document.getElementById('ao-cmt-list');
   if (!list) return;
-  list.innerHTML = '<div class="ao-cmt-empty">Loading…</div>';
+  const inp = document.getElementById('ao-cmt-input');
+  if (inp) inp.placeholder = currentArticle?.source ? 'Add a comment for ' + currentArticle.source : 'Add a comment…';
+  const cnt = document.getElementById('ao-cmt-count');
+  list.innerHTML = '<div class="ao-cmt-empty"><div class="ao-cmt-empty-s">Loading…</div></div>';
   try {
     const res = await api('/signal/comments/' + encodeURIComponent(id));
     const cs = (res && res.comments) || [];
+    if (cnt) cnt.textContent = cs.length || '';
     list.innerHTML = cs.length
       ? cs.map(c => `<div class="ao-cmt">
           <div class="ao-cmt-meta"><b>${bEsc(c.author || 'User')}</b> · ${timeAgo(c.created_at) || ''}</div>
           <div class="ao-cmt-body">${bEsc(c.body || '')}</div></div>`).join('')
-      : '<div class="ao-cmt-empty">No comments yet — be the first.</div>';
-  } catch (e) { list.innerHTML = '<div class="ao-cmt-empty">Comments unavailable right now.</div>'; }
+      : '<div class="ao-cmt-empty"><div class="ao-cmt-empty-t">No comments yet</div><div class="ao-cmt-empty-s">Start the conversation.</div></div>';
+  } catch (e) { list.innerHTML = '<div class="ao-cmt-empty"><div class="ao-cmt-empty-s">Comments unavailable right now.</div></div>'; }
+}
+// Quick-reaction strip → append the emoji to the comment box.
+function aoAddEmoji(em) {
+  const inp = document.getElementById('ao-cmt-input');
+  if (!inp) return;
+  inp.value = (inp.value || '') + em;
+  inp.focus();
 }
 async function postArticleComment() {
   if (!currentArticle) return;
@@ -5009,27 +5050,31 @@ function renderBytes(arts, feed){
     const liked = ST.likes.includes(a.id), saved = ST.saves.includes(a.id);
     const el = document.createElement('div'); el.className = 'byte'; el.dataset.aid = a.id;
     el.innerHTML = `
-      <div class="byte-bg" style="${a.image_url ? `background-image:url('${a.image_url}')` : `background:${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}`}"></div>
-      <div class="byte-scrim"></div>
-      <div class="byte-corner"><span><i class="fa-solid fa-location-dot"></i> ${bCap(a.scope||'Global')}</span><span>${timeAgo(a.published_at)||''}</span></div>
-      <div class="byte-content">
-        <div class="byte-cat" style="background:${cc.bg};color:${cc.hex}">${cc.icon} ${cc.short}</div>
-        <div class="byte-headline">${bEsc(a.title)}</div>
-        <div class="byte-what">${bEsc(a.preview||'')}</div>
-        <div class="byte-src">${bEsc(a.source||'')}</div>
-        <div class="byte-acts">
-          <div class="byte-act byte-act-wide b-like ${liked?'on':''}"><i class="fa-${liked?'solid':'regular'} fa-heart"></i><span class="byte-n">0</span></div>
-          <div class="byte-act byte-act-wide b-comment"><i class="fa-regular fa-comment"></i><span class="byte-n">0</span></div>
-          <div class="byte-act b-save ${saved?'on':''}"><i class="fa-${saved?'solid':'regular'} fa-bookmark"></i></div>
-          <div class="byte-act b-share"><i class="fa-solid fa-paper-plane"></i></div>
-          <div class="byte-act b-open"><i class="fa-solid fa-up-right-from-square"></i></div>
+      <div class="byte-card glass">
+        <div class="byte-top">
+          <span><i class="fa-solid fa-location-dot"></i>${bCap(a.scope||'Global')}</span>
+          <span>${timeAgo(a.published_at)||''}</span>
+        </div>
+        <div class="byte-media b-open" style="${a.image_url ? `background-image:url('${a.image_url}')` : `background:${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}`}">
+          ${a.image_url ? '' : '<i class="fa-regular fa-image byte-media-ico"></i>'}
+        </div>
+        <div class="byte-body">
+          <div class="byte-cat" style="background:${cc.bg};color:${cc.hex}">${cc.icon} ${cc.short}</div>
+          <div class="byte-headline b-open">${bEsc(a.title)}</div>
+          <div class="byte-what">${bEsc(a.preview||'')}</div>
+          <div class="byte-acts">
+            <div class="byte-act b-like ${liked?'on':''}"><i class="fa-${liked?'solid':'regular'} fa-heart"></i><span class="byte-n">0</span></div>
+            <div class="byte-act b-comment"><i class="fa-regular fa-comment"></i><span class="byte-n">0</span></div>
+            <div class="byte-act b-save ${saved?'on':''}"><i class="fa-${saved?'solid':'regular'} fa-bookmark"></i></div>
+            <div class="byte-act b-share"><i class="fa-solid fa-paper-plane"></i></div>
+          </div>
         </div>
       </div>`;
+    el.querySelectorAll('.b-open').forEach(o => o.addEventListener('click', e => { e.stopPropagation(); openArticle(a); }));
     el.querySelector('.b-like').addEventListener('click', e => { e.stopPropagation(); byteToggle('likes', a, e.currentTarget, 'fa-heart', '❤️ Liked', 'like'); markSeen(a.id); });
     el.querySelector('.b-comment').addEventListener('click', e => { e.stopPropagation(); openArticle(a); });
     el.querySelector('.b-save').addEventListener('click', e => { e.stopPropagation(); byteToggle('saves', a, e.currentTarget, 'fa-bookmark', '🔖 Saved', 'save'); });
     el.querySelector('.b-share').addEventListener('click', e => { e.stopPropagation(); shareArt(a.title||''); });
-    el.querySelector('.b-open').addEventListener('click', e => { e.stopPropagation(); openArticle(a); });
     feed.appendChild(el);
   });
   hydrateByteCounts(arts.map(a => a.id));   // real like/comment counts
