@@ -243,14 +243,48 @@ async def fetch_stocks(with_sparkline: bool = False) -> dict:
     return result
 
 
+async def _coincap(client: httpx.AsyncClient, ids: list[str]) -> dict:
+    """CoinCap — free & keyless. Fallback for CoinGecko's rate-limited demo tier."""
+    try:
+        r = await client.get(
+            "https://api.coincap.io/v2/assets",
+            params={"ids": ",".join(ids)}, timeout=8,
+        )
+        if r.status_code != 200:
+            return {}
+        name_map = {"bitcoin": "BTC", "ethereum": "ETH", "solana": "SOL",
+                    "dogecoin": "DOGE", "cardano": "ADA", "ripple": "XRP",
+                    "binancecoin": "BNB", "polkadot": "DOT"}
+        out = {}
+        for d in r.json().get("data", []):
+            cid = d.get("id", "")
+            price = float(d.get("priceUsd") or 0)
+            out[name_map.get(cid, (d.get("symbol") or cid).upper())] = {
+                "price_usd": round(price, 2),
+                "price_inr": round(price * 84.0, 2),   # approx; CoinCap is USD-only
+                "change_pct": round(float(d.get("changePercent24Hr") or 0), 2),
+                "market_cap_usd": int(float(d.get("marketCapUsd") or 0)),
+            }
+        return out
+    except Exception as e:
+        log.warning("CoinCap failed: %s", e)
+        return {}
+
+
 async def fetch_crypto() -> dict:
     cached = _cget("crypto")
     if cached:
         return cached
+    ids = ["bitcoin", "ethereum", "solana", "dogecoin", "cardano", "ripple", "binancecoin"]
     async with httpx.AsyncClient() as client:
-        data = await _coingecko(client, ["bitcoin", "ethereum", "solana", "dogecoin",
-                                         "cardano", "ripple", "binancecoin"])
-    _cset("crypto", data, 45)
+        data = await _coingecko(client, ids)
+        # CoinGecko's keyless tier is heavily rate-limited and frequently returns
+        # nothing → the tiles rendered $0. Fill any missing coin from CoinCap.
+        if not data or any(k not in data for k in ("BTC", "ETH", "SOL")):
+            for k, v in (await _coincap(client, ids)).items():
+                data.setdefault(k, v)
+    if data:
+        _cset("crypto", data, 45)
     return data
 
 

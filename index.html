@@ -428,13 +428,15 @@ header {
   border: none; border-radius: 0;
   backdrop-filter: none; -webkit-backdrop-filter: none;
   box-shadow: none;
-  border-bottom: 7px solid rgba(120,120,128,0.16);
+  border-bottom: 2px solid rgba(120,120,128,0.16);
   overflow: hidden;
   cursor: pointer;
   transition: background 0.15s;
   position: relative;
 }
 .nc:active { background: rgba(255,255,255,0.03); }
+/* Separator: grey in dark mode, white in light mode. */
+[data-theme="light"] .nc { border-bottom-color: rgba(255,255,255,0.55); }
 /* Home feed is transparent so the app background (neutral dark / gradient light) shows. */
 #v-home { background: transparent; }
 /* Compact action row: Like+count & Comment+count left, Share far right. */
@@ -2563,10 +2565,9 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
     <div class="ewc-example" id="ewc-ex"></div>
   </div>
 
-  <!-- Trending News -->
+  <!-- All Stories (every category, paginated) -->
   <div class="exp-sec-hdr">
-    <div class="exp-sec-hdr-title"><i class="fa-solid fa-fire"></i> Trending</div>
-    <div class="exp-sec-hdr-link tap" onclick="toast('📰 Full trending list')">See all</div>
+    <div class="exp-sec-hdr-title"><i class="fa-solid fa-layer-group"></i> All Stories</div>
   </div>
   <div class="exp-grid" id="exp-grid"></div>
   <div style="height:16px"></div>
@@ -3297,14 +3298,8 @@ function renderStandardCard(rawA, container) {
   d.dataset.aid = a.id;
   d.onclick = () => openArticle(a);
   d.innerHTML = `
-    <div class="nc-meta">
-      <span class="nc-tag" style="background:${cc.bg};color:${cc.hex}">${cc.icon} ${cc.short}</span>
-      <span class="nc-src" style="margin-left:8px">${a.source} · ${timeAgo(a.published_at)}</span>
-    </div>
-    <div class="nc-title">${a.title}</div>
-    <div class="nc-desc">${a.preview}</div>
     ${a.image_url ? `
-      <div class="nc-hero-image" style="width:100%; aspect-ratio:16/9; border-radius:12px; overflow:hidden; margin:10px 0 2px;">
+      <div class="nc-hero-image" style="width:100%; aspect-ratio:16/9; border-radius:12px; overflow:hidden; margin:0 0 12px;">
         <img src="${a.image_url}" style="width:100%; height:100%; object-fit:cover;" loading="lazy" onerror="this.parentNode.style.background='${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}';this.remove()">
       </div>` : ''
     }
@@ -3313,6 +3308,12 @@ function renderStandardCard(rawA, container) {
       <div class="nc-pill nc-comment"><i class="fa-regular fa-comment"></i> <span>${cmtN}</span></div>
       <div class="nc-pill nc-share"><i class="fa-solid fa-arrow-up-from-bracket"></i></div>
     </div>
+    <div class="nc-meta" style="margin-top:12px">
+      <span class="nc-tag" style="background:${cc.bg};color:${cc.hex}">${cc.icon} ${cc.short}</span>
+      <span class="nc-src" style="margin-left:8px">${a.source} · ${timeAgo(a.published_at)}</span>
+    </div>
+    <div class="nc-title">${a.title}</div>
+    <div class="nc-desc">${a.preview}</div>
   `;
   d.querySelector('.nc-like').addEventListener('click', e => { e.stopPropagation(); feedLike(a, e.currentTarget); });
   d.querySelector('.nc-comment').addEventListener('click', e => { e.stopPropagation(); openArticle(a); });
@@ -3594,10 +3595,9 @@ async function loadFeed(reset = false) {
 
     hydrateFeedCounts();   // fill the pills with real like/comment counts
 
-    // Seed explore grid after first load (existing behavior)
+    // Seed explore hero after first load (the grid loads independently in Explore)
     if (feedPage === 2 && homeArticles.length) {
       if (typeof renderExpHeroWithArticles === 'function') renderExpHeroWithArticles(homeArticles);
-      if (typeof updateExpGrid === 'function') updateExpGrid(homeArticles.slice(0, 14));
       if (typeof renderFeedArticles === 'function') renderFeedArticles();
     }
 
@@ -3845,9 +3845,28 @@ function renderExpHeroSlide() {
     </div>`;
 }
 
-function updateExpGrid(rawArticles) {
+let expGridPage = 1, expGridLoading = false; const expGridIds = new Set();
+// Paginated "all stories" grid for Explore — pulls the full feed, round-robined
+// across the 9 categories, and keeps loading as you scroll.
+async function loadExploreGrid(reset) {
+  if (expGridLoading) return;
+  if (reset) { expGridPage = 1; expGridLoading = false; expGridIds.clear();
+    const g = document.getElementById('exp-grid'); if (g) g.innerHTML = ''; }
+  expGridLoading = true;
+  try {
+    const data = await api(`/feed?page=${expGridPage}&limit=30`, { timeout: 25000 });
+    let arts = (data.articles || []).map(normalizeArticle).filter(a => a.id && !expGridIds.has(a.id));
+    arts = roundRobinByCat(arts);
+    arts.forEach(a => expGridIds.add(a.id));
+    updateExpGrid(arts, true);
+    if (data.has_more) expGridPage++;
+  } catch (e) { /* cold start / offline */ }
+  finally { expGridLoading = false; }
+}
+function updateExpGrid(rawArticles, append) {
   const c = document.getElementById('exp-grid');
-  c.innerHTML = '';
+  if (!c) return;
+  if (!append) c.innerHTML = '';
   rawArticles.map(normalizeArticle).forEach((a,i) => {
     const cc = CATS[a.category] || CATS.tech;
     const d  = document.createElement('div');
@@ -4379,7 +4398,12 @@ document.getElementById('v-home').addEventListener('scroll', e => {
     loadFeed(false);
   }
 });
-document.getElementById('v-explore').addEventListener('scroll', handleNavScroll);
+document.getElementById('v-explore').addEventListener('scroll', e => {
+  handleNavScroll(e);
+  if (e.target.scrollTop + e.target.clientHeight >= e.target.scrollHeight - 700) {
+    loadExploreGrid(false);
+  }
+});
 
 // ── SIDEBAR LOGOUT ──
 document.querySelector('.sb-logout').addEventListener('click', signOut);
@@ -4809,16 +4833,19 @@ function fmtNum(n) {
   return n.toLocaleString('en-IN', {maximumFractionDigits: 2});
 }
 
-async function loadMarkets() {
+async function loadMarkets(_retry) {
   try {
-    const data = await api('/markets?spark=true');
+    const data = await api('/markets?spark=true', { timeout: 25000 });
     window._lastMkt = data;            // cached for the market-detail "related" list
     renderStocks(data.stocks);
     renderCrypto(data.crypto);
     renderMetals(data.metals);
     renderForex(data.forex);
     renderTicker(data);
-  } catch(e) { /* silent */ }
+  } catch(e) {
+    // Render free tier sleeps; the first hit wakes it — retry once on the warm instance.
+    if (!_retry) setTimeout(() => loadMarkets(true), 3500);
+  }
 }
 
 // Rebuild the Explore ticker from live market data (falls back to the static
@@ -4894,13 +4921,14 @@ function renderCrypto(crypto) {
         ${coins.map(c => {
           const d = (crypto && crypto[c.sym]) || {};
           const pct = d.change_pct || 0;
+          const hasP = d.price_usd != null && d.price_usd > 0;
           return `<div class="mkt-crypto-tile tap" onclick="openMarketDetail('crypto','${c.sym}','${c.sym}')">
             <div class="mkt-crypto-sym">
               <div class="mkt-crypto-ico" style="background:${c.color}">${c.sym[0]}</div>
               ${c.sym}
             </div>
-            <div class="mkt-tile-price">$${fmtNum(d.price_usd || 0)}</div>
-            <div class="mkt-tile-change ${mktCls(pct)}">${mktArrow(pct)} ${Math.abs(pct).toFixed(2)}%</div>
+            <div class="mkt-tile-price">${hasP ? '$'+fmtNum(d.price_usd) : '—'}</div>
+            <div class="mkt-tile-change ${mktCls(pct)}">${hasP ? mktArrow(pct)+' '+Math.abs(pct).toFixed(2)+'%' : ''}</div>
           </div>`;
         }).join('')}
       </div>
@@ -5209,6 +5237,7 @@ function startMarketsPolling() {
   requestGeo();
   loadWeather();
   loadWordOfDay();
+  if (!expGridIds.size) loadExploreGrid(true);   // populate the "all stories" grid
   if (marketsTimer) clearInterval(marketsTimer);
   marketsTimer = setInterval(() => {
     const exploreView = document.getElementById('v-explore');
