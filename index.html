@@ -3135,9 +3135,9 @@ function _systemDark() {
   catch (e) { return true; }
 }
 function _themePref() {
-  let p = 'system';
-  try { p = localStorage.getItem('sb-theme') || 'system'; } catch (e) {}
-  return (p === 'dark' || p === 'system') ? p : 'system';
+  let p = 'dark';
+  try { p = localStorage.getItem('sb-theme') || 'dark'; } catch (e) {}
+  return (p === 'dark' || p === 'system') ? p : 'dark';
 }
 function applyTheme() {
   const pref = _themePref();
@@ -4416,6 +4416,7 @@ function navTo(name) {
   }
   if (name==='explore') {
     startMarketsPolling();
+    if (!_expCurCat) showExpCat('all');   // load category rows only when Explore opens
   }
   if (name==='feed') renderFeedArticles();
   if (name==='bytes' && typeof initBytes === 'function') initBytes();
@@ -5387,7 +5388,6 @@ function startMarketsPolling() {
   requestGeo();
   loadWeather();
   loadWordOfDay();
-  if (!_expCurCat) showExpCat('all');   // default: all category rows below the tiles
   if (marketsTimer) clearInterval(marketsTimer);
   marketsTimer = setInterval(() => {
     const exploreView = document.getElementById('v-explore');
@@ -5424,7 +5424,8 @@ document.addEventListener('DOMContentLoaded', () => {
   rehydrateScope();                                            // restore Local/National/Global choice
   document.getElementById('saved-ct').textContent = ST.saves.length;
   loadFeed(true);
-  startMarketsPolling();
+  // Markets/weather/Explore data load lazily when Explore is opened (navTo),
+  // so startup only hits /feed — important for the cold free-tier backend.
 });
 
 
