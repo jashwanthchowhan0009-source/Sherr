@@ -129,13 +129,9 @@ html, body {
   background: var(--bg); display: flex; flex-direction: column;
   overflow: hidden;
 }
-/* Light mode = blue→teal liquid-glass gradient as the single app background. */
+/* Light mode = the sign-in page's deep-blue radial gradient, app-wide. */
 [data-theme="light"] .phone {
-  background:
-    radial-gradient(130% 120% at 100% 0%,  #0EB7D6 0%, rgba(14,183,214,0) 44%),
-    radial-gradient(120% 115% at 80% 8%,   #0AAAC9 0%, rgba(10,170,201,0) 48%),
-    radial-gradient(150% 150% at 0% 100%,  #011A7D 0%, rgba(1,26,125,0) 60%),
-    linear-gradient(135deg, #02239E 0%, #0652B5 50%, #0EB7D6 100%);
+  background: radial-gradient(ellipse at 40% 30%, #011A7D 0%, #02153F 60%, #020b1a 100%);
   background-attachment: fixed;
 }
 
@@ -2310,7 +2306,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 <div id="ob-screen">
   <div class="ob-top">
     <div class="ob-top-logo"><img src="logo.jpg" alt="" onerror="this.outerHTML='⚡'"></div>
-    <div class="ob-top-brand">Sher<span>Byte</span></div>
+    <div class="ob-top-brand">Sherr<span>Byte</span></div>
   </div>
   <div class="ob-content">
 
