@@ -2598,7 +2598,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 
   <!-- Articles (below the dictionary) — filtered by the category tiles above -->
   <div class="exp-sec-hdr">
-    <div class="exp-sec-hdr-title"><i class="fa-solid fa-newspaper"></i> Stories</div>
+    <div class="exp-sec-hdr-title"><i class="fa-solid fa-layer-group"></i> All Stories</div>
   </div>
   <div class="exp-cat-feed" id="exp-cat-feed"></div>
 
@@ -4016,7 +4016,7 @@ function renderExpCats() {
     const d = document.createElement('div');
     d.className = 'exp-cat-item tap';
     d.dataset.cat = ct.cat;
-    d.onclick = () => showExpCat(ct.cat, true);
+    d.onclick = () => gotoCategory(ct.cat);
     d.innerHTML = `<div class="exp-cat-icon" style="color:${ct.color};background:${ct.color}20">
       <i class="fa-solid ${ct.icon}" style="color:${ct.color}"></i>
     </div><div class="exp-cat-label">${ct.label}</div>`;
