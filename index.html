@@ -2766,7 +2766,9 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   <div class="sub-hdr"><div class="sub-back tap" onclick="closeSub('settings')"><i class="fa-solid fa-chevron-left"></i> Back</div><div class="sub-ttl">Settings</div></div>
   <div class="sub-scroll">
     <div class="sg"><div class="sg-lbl">Appearance</div><div class="sg-grp">
-      <div class="sg-row"><div class="sg-ico" style="background:#6A6E83"><i class="fa-solid fa-text-size"></i></div><span class="sg-lbl2">Text Size</span><span class="sg-val">Medium</span><i class="fa-solid fa-chevron-right sg-arr"></i></div>
+      <div class="sg-row tap" onclick="setTheme('system')"><div class="sg-ico" style="background:#6A6E83"><i class="fa-solid fa-circle-half-stroke"></i></div><span class="sg-lbl2">System</span><i class="fa-solid fa-check theme-check" data-pref="system" style="color:var(--accent);display:none"></i></div>
+      <div class="sg-row tap" onclick="setTheme('dark')"><div class="sg-ico" style="background:#1C1C1E"><i class="fa-solid fa-moon"></i></div><span class="sg-lbl2">Dark</span><i class="fa-solid fa-check theme-check" data-pref="dark" style="color:var(--accent);display:none"></i></div>
+      <div class="sg-row"><div class="sg-ico" style="background:#8E8E93"><i class="fa-solid fa-text-size"></i></div><span class="sg-lbl2">Text Size</span><span class="sg-val">Medium</span><i class="fa-solid fa-chevron-right sg-arr"></i></div>
     </div></div>
     <div class="sg"><div class="sg-lbl">Notifications</div><div class="sg-grp">
       <div class="sg-row"><div class="sg-ico" style="background:#FF5B5B"><i class="fa-solid fa-bell"></i></div><span class="sg-lbl2">Push Notifications</span><div class="tog on" onclick="togRow(this)"></div></div>
@@ -3138,12 +3140,18 @@ function applyTheme() {
   document.documentElement.setAttribute('data-theme', effective);
   const ic = document.querySelector('#h-theme i');
   if (ic) ic.className = pref === 'dark' ? 'fa-solid fa-moon' : 'fa-solid fa-circle-half-stroke';
+  document.querySelectorAll('.theme-check').forEach(el => {
+    el.style.display = el.dataset.pref === pref ? '' : 'none';
+  });
+}
+function setTheme(pref) {
+  if (pref !== 'system' && pref !== 'dark') pref = 'system';
+  try { localStorage.setItem('sb-theme', pref); } catch (e) {}
+  applyTheme();
 }
 function toggleTheme() {
-  const next = _themePref() === 'dark' ? 'system' : 'dark';
-  try { localStorage.setItem('sb-theme', next); } catch (e) {}
-  applyTheme();
-  if (typeof toast === 'function') toast(next === 'dark' ? 'Dark mode' : 'System theme');
+  setTheme(_themePref() === 'dark' ? 'system' : 'dark');
+  if (typeof toast === 'function') toast(_themePref() === 'dark' ? 'Dark mode' : 'System theme');
 }
 applyTheme();
 try {
