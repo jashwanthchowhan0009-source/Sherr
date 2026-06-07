@@ -2553,9 +2553,8 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
     <div class="scope-btn on tap" onclick="selScope(this,'global')">Global</div>
   </div>
 
-  <!-- Category icons: All Stories + Arts, Well-being, Business, … (in-place filter) -->
+  <!-- Category icons: All Stories + Arts, Well-being, Business, … (filters the feed below) -->
   <div class="exp-cat-row" id="exp-cat-row"></div>
-  <div class="exp-cat-feed" id="exp-cat-feed"></div>
 
   <!-- At a Glance: Weather + Live Markets -->
   <div class="exp-sec-hdr">
@@ -2596,6 +2595,12 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
     <div class="ewc-def" id="ewc-def"></div>
     <div class="ewc-example" id="ewc-ex"></div>
   </div>
+
+  <!-- Articles (below the dictionary) — filtered by the category tiles above -->
+  <div class="exp-sec-hdr">
+    <div class="exp-sec-hdr-title"><i class="fa-solid fa-newspaper"></i> Stories</div>
+  </div>
+  <div class="exp-cat-feed" id="exp-cat-feed"></div>
 
   <div style="height:16px"></div>
 </div>
@@ -3910,12 +3915,18 @@ async function _ensureExpCounts() {
 }
 // In-place Explore filter: tap a category tile to swap its stories row below the
 // tiles; "All Stories" shows every category's row. Same grouped-row design.
-async function showExpCat(cat) {
+async function showExpCat(cat, scrollTo) {
   _expCurCat = cat;
   document.querySelectorAll('#exp-cat-row .exp-cat-item').forEach(it =>
     it.classList.toggle('on', it.dataset.cat === cat));
   const feed = document.getElementById('exp-cat-feed');
   if (!feed) return;
+  // Tapping a tile scrolls down to the stories (the feed lives below the dictionary).
+  if (scrollTo) {
+    const ev = document.getElementById('v-explore');
+    const hdr = feed.previousElementSibling;
+    if (ev && hdr) ev.scrollTo({ top: Math.max(0, hdr.offsetTop - 64), behavior: 'smooth' });
+  }
   feed.innerHTML = '<div class="exp-cat-load">Loading…</div>';
   const counts = await _ensureExpCounts();
   if (_expCurCat !== cat) return;            // user switched while counts loaded
@@ -4005,7 +4016,7 @@ function renderExpCats() {
     const d = document.createElement('div');
     d.className = 'exp-cat-item tap';
     d.dataset.cat = ct.cat;
-    d.onclick = () => showExpCat(ct.cat);
+    d.onclick = () => showExpCat(ct.cat, true);
     d.innerHTML = `<div class="exp-cat-icon" style="color:${ct.color};background:${ct.color}20">
       <i class="fa-solid ${ct.icon}" style="color:${ct.color}"></i>
     </div><div class="exp-cat-label">${ct.label}</div>`;
