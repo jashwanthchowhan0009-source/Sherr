@@ -876,8 +876,22 @@ header {
 .bc-live-lbl { font-size: 0.56rem; font-weight: 700; color: var(--c-red); letter-spacing: 0.5px; }
 @keyframes livePulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.3;transform:scale(0.7)} }
 
-/* Masonry explore grid */
-.exp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 0 14px 12px; }
+/* All Stories — grouped per-category rows */
+.exp-grid { display: block; padding: 0 0 12px; }
+.exp-cat-sec { margin-bottom: 18px; }
+.exp-cat-sec-hdr { display: flex; align-items: center; justify-content: space-between; padding: 0 16px 9px; }
+.exp-cat-sec-title { font-family: var(--fd); font-size: 1rem; font-weight: 800; display: flex; align-items: center; gap: 8px; }
+.exp-cat-sec-count { font-style: normal; font-size: 0.7rem; font-weight: 700; color: var(--t2);
+  background: var(--surface-2); padding: 2px 8px; border-radius: 100px; }
+.exp-cat-sec-all { font-size: 0.78rem; font-weight: 700; color: var(--accent); }
+.exp-srow { display: flex; gap: 10px; overflow-x: auto; padding: 0 16px 4px; scrollbar-width: none; }
+.exp-srow::-webkit-scrollbar { display: none; }
+.exp-rcard { flex: 0 0 152px; width: 152px; cursor: pointer; }
+.exp-rcard img, .exp-rcard-ph { width: 100%; height: 96px; border-radius: 12px; object-fit: cover; display: block; }
+.exp-rcard-ph { display: flex; align-items: center; justify-content: center; font-size: 1.6rem; color: rgba(255,255,255,.6); }
+.exp-rcard-t { font-size: 0.8rem; font-weight: 600; color: var(--t1); line-height: 1.32; margin-top: 7px;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.exp-cat-load { font-size: 0.78rem; color: var(--t3); padding: 6px 16px; }
 .exp-card {
   border-radius: 16px; overflow: hidden; cursor: pointer;
   background: var(--bg2); position: relative;
@@ -3845,23 +3859,55 @@ function renderExpHeroSlide() {
     </div>`;
 }
 
-let expGridPage = 1, expGridLoading = false; const expGridIds = new Set();
-// Paginated "all stories" grid for Explore — pulls the full feed, round-robined
-// across the 9 categories, and keeps loading as you scroll.
-async function loadExploreGrid(reset) {
-  if (expGridLoading) return;
-  if (reset) { expGridPage = 1; expGridLoading = false; expGridIds.clear();
-    const g = document.getElementById('exp-grid'); if (g) g.innerHTML = ''; }
-  expGridLoading = true;
+let _expSecLoaded = false;
+// Explore "All Stories" grouped by category: header + count + a horizontal row,
+// with "See all" jumping to the Home feed filtered to that category.
+async function loadExploreSections() {
+  const c = document.getElementById('exp-grid');
+  if (!c || _expSecLoaded) return;
+  _expSecLoaded = true;
+  c.innerHTML = '';
+  let counts = {};
   try {
-    const data = await api(`/feed?page=${expGridPage}&limit=30`, { timeout: 25000 });
-    let arts = (data.articles || []).map(normalizeArticle).filter(a => a.id && !expGridIds.has(a.id));
-    arts = roundRobinByCat(arts);
-    arts.forEach(a => expGridIds.add(a.id));
-    updateExpGrid(arts, true);
-    if (data.has_more) expGridPage++;
-  } catch (e) { /* cold start / offline */ }
-  finally { expGridLoading = false; }
+    const s = await api('/stats/categories');
+    (s.categories || []).forEach(x => counts[x.slug] = x.count);
+  } catch (e) {}
+  const order = ['society','economy','tech','arts','nature','selfwell','philo','lifestyle','sports'];
+  for (const cat of order) {
+    const cc = CATS[cat]; if (!cc) continue;
+    const sec = document.createElement('div'); sec.className = 'exp-cat-sec';
+    sec.innerHTML =
+      `<div class="exp-cat-sec-hdr">
+         <span class="exp-cat-sec-title" style="color:${cc.hex}">${cc.icon} <span style="color:var(--t1)">${cc.short}</span>${counts[cat]!=null?` <em class="exp-cat-sec-count">${counts[cat]}</em>`:''}</span>
+         <span class="exp-cat-sec-all tap">See all</span>
+       </div>
+       <div class="exp-srow"><div class="exp-cat-load">Loading…</div></div>`;
+    c.appendChild(sec);
+    sec.querySelector('.exp-cat-sec-all').onclick = () => gotoCategory(cat);
+    const row = sec.querySelector('.exp-srow');
+    try {
+      const data = await api(`/explore?category=${cat}&page=1&limit=12`);
+      const arts = (data.articles || []).map(normalizeArticle).filter(a => a.id);
+      row.innerHTML = '';
+      if (!arts.length) { row.innerHTML = '<div class="exp-cat-load">No stories yet</div>'; continue; }
+      arts.forEach(a => {
+        const d = document.createElement('div'); d.className = 'exp-rcard tap';
+        d.onclick = () => openArticle(a);
+        d.innerHTML =
+          `${a.image_url
+            ? `<img src="${a.image_url}" loading="lazy" alt="" onerror="this.parentNode.style.background='${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}';this.remove()">`
+            : `<div class="exp-rcard-ph" style="background:${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}">${cc.icon}</div>`}
+           <div class="exp-rcard-t">${bEsc(a.title)}</div>`;
+        row.appendChild(d);
+      });
+    } catch (e) { row.innerHTML = '<div class="exp-cat-load">Couldn’t load</div>'; }
+  }
+}
+function gotoCategory(cat) {
+  navTo('home');
+  const target = [...document.querySelectorAll('#chip-row .chip')]
+    .find(c => (c.getAttribute('onclick') || '').includes("'" + cat + "'"));
+  if (target) selectChip(target, cat);
 }
 function updateExpGrid(rawArticles, append) {
   const c = document.getElementById('exp-grid');
@@ -4398,12 +4444,7 @@ document.getElementById('v-home').addEventListener('scroll', e => {
     loadFeed(false);
   }
 });
-document.getElementById('v-explore').addEventListener('scroll', e => {
-  handleNavScroll(e);
-  if (e.target.scrollTop + e.target.clientHeight >= e.target.scrollHeight - 700) {
-    loadExploreGrid(false);
-  }
-});
+document.getElementById('v-explore').addEventListener('scroll', handleNavScroll);
 
 // ── SIDEBAR LOGOUT ──
 document.querySelector('.sb-logout').addEventListener('click', signOut);
@@ -5237,7 +5278,7 @@ function startMarketsPolling() {
   requestGeo();
   loadWeather();
   loadWordOfDay();
-  if (!expGridIds.size) loadExploreGrid(true);   // populate the "all stories" grid
+  loadExploreSections();   // grouped "all stories" by category
   if (marketsTimer) clearInterval(marketsTimer);
   marketsTimer = setInterval(() => {
     const exploreView = document.getElementById('v-explore');
