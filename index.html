@@ -4480,35 +4480,35 @@ document.getElementById('v-home').addEventListener('scroll', e => {
 document.getElementById('v-explore').addEventListener('scroll', handleNavScroll);
 
 // ── Pull-to-refresh (home feed) — new stories arrive only on refresh ──
-(function initPullToRefresh() {
-  const v = document.getElementById('v-home');
+// Reusable pull-to-refresh: pull down at the top of `scrollEl` to run onRefresh().
+function attachPullToRefresh(scrollEl, onRefresh) {
   const ind = document.getElementById('ptr');
-  if (!v || !ind) return;
+  if (!scrollEl || !ind) return;
   const icon = ind.querySelector('i');
   let startY = 0, pulling = false, dist = 0;
   const TH = 72;
-  v.addEventListener('touchstart', e => {
-    if (v.scrollTop <= 0) { startY = e.touches[0].clientY; pulling = true; dist = 0; }
+  scrollEl.addEventListener('touchstart', e => {
+    if (scrollEl.scrollTop <= 0) { startY = e.touches[0].clientY; pulling = true; dist = 0; }
     else pulling = false;
   }, { passive: true });
-  v.addEventListener('touchmove', e => {
+  scrollEl.addEventListener('touchmove', e => {
     if (!pulling) return;
     dist = e.touches[0].clientY - startY;
-    if (dist > 0 && v.scrollTop <= 0) {
+    if (dist > 0 && scrollEl.scrollTop <= 0) {
       e.preventDefault();
       ind.classList.add('show');
       const y = Math.min(dist * 0.5 - 46, 10);
       ind.style.transform = `translateX(-50%) translateY(${y}px) rotate(${Math.min(dist, TH) / TH * 180}deg)`;
     }
   }, { passive: false });
-  v.addEventListener('touchend', () => {
+  scrollEl.addEventListener('touchend', () => {
     if (!pulling) return;
     pulling = false;
     if (dist > TH) {
       ind.classList.add('spin', 'show');
       ind.style.transform = 'translateX(-50%) translateY(10px)';
       icon.className = 'fa-solid fa-arrows-rotate';
-      Promise.resolve(loadFeed(true)).finally(() => {
+      Promise.resolve(onRefresh()).finally(() => {
         setTimeout(() => {
           ind.classList.remove('spin', 'show');
           ind.style.transform = '';
@@ -4521,7 +4521,8 @@ document.getElementById('v-explore').addEventListener('scroll', handleNavScroll)
     }
     dist = 0;
   }, { passive: true });
-})();
+}
+attachPullToRefresh(document.getElementById('v-home'), () => loadFeed(true));
 
 // ── SIDEBAR LOGOUT ──
 document.querySelector('.sb-logout').addEventListener('click', signOut);
@@ -5212,6 +5213,7 @@ async function initBytes(){
   feed.addEventListener('scroll', () => {
     if (feed.scrollTop + feed.clientHeight >= feed.scrollHeight - feed.clientHeight * 1.5) loadBytes(false);
   }, { passive: true });
+  attachPullToRefresh(feed, () => loadBytes(true));   // pull at the first byte → fresh batch
 }
 async function loadBytes(reset){
   if (bytesLoading) return; bytesLoading = true;
