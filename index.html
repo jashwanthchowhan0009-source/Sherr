@@ -1387,36 +1387,39 @@ nav {
 .bytes-empty { height: 100%; display: flex; align-items: center; justify-content: center;
   text-align: center; color: var(--t1); font-size: 1.05rem; line-height: 1.7; padding: 28px; }
 .bytes-empty span { font-size: 0.82rem; color: var(--t2); font-weight: 500; }
+/* inshorts-style: full-bleed card, image on top, body, "tap to know more" foot */
 .byte { position: relative; height: 100%; scroll-snap-align: start;
-  display: flex; flex-direction: column; justify-content: center;
-  padding: calc(var(--hh) + 16px) 16px calc(var(--nh) + 18px);
+  display: flex; flex-direction: column;
+  padding: var(--hh) 0 calc(var(--nh) + 22px);
   animation: byteIn 0.45s var(--ease); }
 @keyframes byteIn { from { opacity: .35; transform: translateY(20px); } to { opacity: 1; transform: none; } }
-.byte-card { display: flex; flex-direction: column; width: 100%; max-height: 100%; overflow: hidden; }
-.byte-top { display: flex; justify-content: space-between; align-items: center;
-  padding: 13px 16px; font-size: 0.72rem; font-weight: 600; color: var(--t2);
-  border-bottom: 1px solid var(--line2); flex-shrink: 0; }
-.byte-top i { color: var(--accent2); margin-right: 5px; }
-.byte-media { position: relative; width: 100%; aspect-ratio: 16 / 10; flex-shrink: 0;
+.byte-card { display: flex; flex-direction: column; width: 100%; height: 100%; overflow: hidden;
+  background: #0E0E11; color: #fff; }
+[data-theme="light"] .byte-card { background: #FFFFFF; color: #1C1C1E; }
+.byte-media { position: relative; width: 100%; height: 44%; min-height: 190px; flex-shrink: 0;
   background-size: cover; background-position: center; cursor: pointer;
   display: flex; align-items: center; justify-content: center; }
-.byte-media-ico { font-size: 2rem; color: rgba(255,255,255,.55); }
-.byte-body { padding: 16px; display: flex; flex-direction: column; min-height: 0; }
-.byte-cat { display: inline-block; align-self: flex-start; font-size: 0.62rem; font-weight: 800;
-  padding: 4px 10px; border-radius: 8px; margin-bottom: 11px; }
-.byte-headline { font-size: 1.3rem; font-weight: 800; line-height: 1.22; letter-spacing: -0.4px;
-  color: var(--t1); margin-bottom: 9px; cursor: pointer;
-  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-.byte-what { font-size: 0.9rem; line-height: 1.55; color: var(--t2); margin-bottom: 16px;
-  display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden; }
-.byte-acts { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
-.byte-act { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px;
-  border-radius: 100px; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.13);
-  color: var(--t2); font-size: 0.8rem; font-weight: 600; cursor: pointer;
-  transition: transform 0.15s var(--spring); }
-.byte-act:active { transform: scale(0.9); }
-.byte-act.on { color: var(--accent); border-color: var(--accent); }
-.byte-act .byte-n { font-weight: 700; }
+.byte-media-ico { font-size: 2.4rem; color: rgba(255,255,255,.55); }
+.byte-body { flex: 1; min-height: 0; overflow-y: auto;
+  padding: 15px 18px 10px; display: flex; flex-direction: column; gap: 11px; }
+.byte-srcrow { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.byte-src { display: flex; align-items: center; gap: 8px; font-size: 0.82rem; font-weight: 800; min-width: 0; }
+.byte-src-logo { width: 22px; height: 22px; border-radius: 6px; flex-shrink: 0; background: var(--accent);
+  display: flex; align-items: center; justify-content: center; color: #fff; font-size: 0.68rem; font-weight: 800; }
+.byte-src-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.byte-srcacts { display: flex; gap: 18px; flex-shrink: 0; }
+.byte-srcacts span { cursor: pointer; }
+.byte-srcacts i { font-size: 1.05rem; opacity: 0.62; }
+.byte-srcacts .on i { opacity: 1; color: var(--accent); }
+.byte-headline { font-family: var(--fd); font-size: 1.4rem; font-weight: 800; line-height: 1.26;
+  letter-spacing: -0.3px; cursor: pointer; }
+.byte-what { font-size: 1rem; line-height: 1.6; opacity: 0.82; }
+.byte-meta { font-size: 0.72rem; opacity: 0.5; margin-top: auto; padding-top: 8px; }
+.byte-foot { flex-shrink: 0; padding: 13px 18px 15px; cursor: pointer;
+  border-top: 1px solid rgba(128,128,128,0.22); background: rgba(128,128,128,0.08); }
+.byte-foot-title { font-size: 0.95rem; font-weight: 700; }
+.byte-foot-sub { font-size: 0.78rem; opacity: 0.6; margin-top: 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* ─── Phase 6: source links + glass article actions ─── */
 .ao-sources { margin: 16px 0 6px; }
@@ -5085,30 +5088,33 @@ function renderBytes(arts, feed){
     const cc = CATS[a.category] || CATS.tech;
     const liked = ST.likes.includes(a.id), saved = ST.saves.includes(a.id);
     const el = document.createElement('div'); el.className = 'byte'; el.dataset.aid = a.id;
+    const src = a.source || 'SherrByte';
     el.innerHTML = `
-      <div class="byte-card glass">
-        <div class="byte-top">
-          <span><i class="fa-solid fa-location-dot"></i>${bCap(a.scope||'Global')}</span>
-          <span>${timeAgo(a.published_at)||''}</span>
-        </div>
+      <div class="byte-card">
         <div class="byte-media b-open" style="${a.image_url ? `background-image:url('${a.image_url}')` : `background:${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}`}">
           ${a.image_url ? '' : '<i class="fa-regular fa-image byte-media-ico"></i>'}
         </div>
         <div class="byte-body">
-          <div class="byte-cat" style="background:${cc.bg};color:${cc.hex}">${cc.icon} ${cc.short}</div>
+          <div class="byte-srcrow">
+            <div class="byte-src">
+              <span class="byte-src-logo">${bEsc(src.charAt(0).toUpperCase())}</span>
+              <span class="byte-src-name">${bEsc(src)}</span>
+            </div>
+            <div class="byte-srcacts">
+              <span class="b-save ${saved?'on':''}"><i class="fa-${saved?'solid':'regular'} fa-bookmark"></i></span>
+              <span class="b-share"><i class="fa-solid fa-arrow-up-from-bracket"></i></span>
+            </div>
+          </div>
           <div class="byte-headline b-open">${bEsc(a.title)}</div>
           <div class="byte-what">${bEsc(a.preview||'')}</div>
-          <div class="byte-acts">
-            <div class="byte-act b-like ${liked?'on':''}"><i class="fa-${liked?'solid':'regular'} fa-heart"></i><span class="byte-n">0</span></div>
-            <div class="byte-act b-comment"><i class="fa-regular fa-comment"></i><span class="byte-n">0</span></div>
-            <div class="byte-act b-save ${saved?'on':''}"><i class="fa-${saved?'solid':'regular'} fa-bookmark"></i></div>
-            <div class="byte-act b-share"><i class="fa-solid fa-paper-plane"></i></div>
-          </div>
+          <div class="byte-meta">${timeAgo(a.published_at)||'Just now'} · ${bEsc(src)}</div>
+        </div>
+        <div class="byte-foot b-open">
+          <div class="byte-foot-title">Tap to know more</div>
+          <div class="byte-foot-sub">Read the full story on ${bEsc(src)}</div>
         </div>
       </div>`;
-    el.querySelectorAll('.b-open').forEach(o => o.addEventListener('click', e => { e.stopPropagation(); openArticle(a); }));
-    el.querySelector('.b-like').addEventListener('click', e => { e.stopPropagation(); byteToggle('likes', a, e.currentTarget, 'fa-heart', '❤️ Liked', 'like'); markSeen(a.id); });
-    el.querySelector('.b-comment').addEventListener('click', e => { e.stopPropagation(); openArticle(a); });
+    el.querySelectorAll('.b-open').forEach(o => o.addEventListener('click', e => { e.stopPropagation(); markSeen(a.id); openArticle(a); }));
     el.querySelector('.b-save').addEventListener('click', e => { e.stopPropagation(); byteToggle('saves', a, e.currentTarget, 'fa-bookmark', '🔖 Saved', 'save'); });
     el.querySelector('.b-share').addEventListener('click', e => { e.stopPropagation(); shareArt(a.title||''); });
     feed.appendChild(el);
