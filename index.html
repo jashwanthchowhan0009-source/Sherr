@@ -878,6 +878,9 @@ header {
 
 /* All Stories — grouped per-category rows */
 .exp-grid { display: block; padding: 0 0 12px; }
+.exp-cat-feed { padding-top: 6px; padding-bottom: 4px; min-height: 4px; }
+.exp-cat-item.on .exp-cat-icon { box-shadow: 0 0 0 2px currentColor; }
+.exp-cat-item.on .exp-cat-label { color: var(--t1); font-weight: 800; }
 .exp-cat-sec { margin-bottom: 18px; }
 .exp-cat-sec-hdr { display: flex; align-items: center; justify-content: space-between; padding: 0 16px 9px; }
 .exp-cat-sec-title { font-family: var(--fd); font-size: 1rem; font-weight: 800; display: flex; align-items: center; gap: 8px; }
@@ -2536,8 +2539,9 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
     <div class="scope-btn on tap" onclick="selScope(this,'global')">Global</div>
   </div>
 
-  <!-- Category icons: Arts, Well-being, Business, Nature, Society, Philosophy -->
+  <!-- Category icons: All Stories + Arts, Well-being, Business, … (in-place filter) -->
   <div class="exp-cat-row" id="exp-cat-row"></div>
+  <div class="exp-cat-feed" id="exp-cat-feed"></div>
 
   <!-- At a Glance: Weather + Live Markets -->
   <div class="exp-sec-hdr">
@@ -2579,11 +2583,6 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
     <div class="ewc-example" id="ewc-ex"></div>
   </div>
 
-  <!-- All Stories (every category, paginated) -->
-  <div class="exp-sec-hdr">
-    <div class="exp-sec-hdr-title"><i class="fa-solid fa-layer-group"></i> All Stories</div>
-  </div>
-  <div class="exp-grid" id="exp-grid"></div>
   <div style="height:16px"></div>
 </div>
 
@@ -3859,49 +3858,64 @@ function renderExpHeroSlide() {
     </div>`;
 }
 
-let _expSecLoaded = false;
-// Explore "All Stories" grouped by category: header + count + a horizontal row,
-// with "See all" jumping to the Home feed filtered to that category.
-async function loadExploreSections() {
-  const c = document.getElementById('exp-grid');
-  if (!c || _expSecLoaded) return;
-  _expSecLoaded = true;
-  c.innerHTML = '';
-  let counts = {};
+let _expCurCat = null, _expCounts = null;
+async function _ensureExpCounts() {
+  if (_expCounts) return _expCounts;
+  _expCounts = {};
   try {
     const s = await api('/stats/categories');
-    (s.categories || []).forEach(x => counts[x.slug] = x.count);
+    (s.categories || []).forEach(x => _expCounts[x.slug] = x.count);
   } catch (e) {}
-  const order = ['society','economy','tech','arts','nature','selfwell','philo','lifestyle','sports'];
-  for (const cat of order) {
-    const cc = CATS[cat]; if (!cc) continue;
-    const sec = document.createElement('div'); sec.className = 'exp-cat-sec';
-    sec.innerHTML =
-      `<div class="exp-cat-sec-hdr">
-         <span class="exp-cat-sec-title" style="color:${cc.hex}">${cc.icon} <span style="color:var(--t1)">${cc.short}</span>${counts[cat]!=null?` <em class="exp-cat-sec-count">${counts[cat]}</em>`:''}</span>
-         <span class="exp-cat-sec-all tap">See all</span>
-       </div>
-       <div class="exp-srow"><div class="exp-cat-load">Loading…</div></div>`;
-    c.appendChild(sec);
-    sec.querySelector('.exp-cat-sec-all').onclick = () => gotoCategory(cat);
-    const row = sec.querySelector('.exp-srow');
-    try {
-      const data = await api(`/explore?category=${cat}&page=1&limit=12`);
-      const arts = (data.articles || []).map(normalizeArticle).filter(a => a.id);
-      row.innerHTML = '';
-      if (!arts.length) { row.innerHTML = '<div class="exp-cat-load">No stories yet</div>'; continue; }
-      arts.forEach(a => {
-        const d = document.createElement('div'); d.className = 'exp-rcard tap';
-        d.onclick = () => openArticle(a);
-        d.innerHTML =
-          `${a.image_url
-            ? `<img src="${a.image_url}" loading="lazy" alt="" onerror="this.parentNode.style.background='${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}';this.remove()">`
-            : `<div class="exp-rcard-ph" style="background:${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}">${cc.icon}</div>`}
-           <div class="exp-rcard-t">${bEsc(a.title)}</div>`;
-        row.appendChild(d);
-      });
-    } catch (e) { row.innerHTML = '<div class="exp-cat-load">Couldn’t load</div>'; }
+  return _expCounts;
+}
+// In-place Explore filter: tap a category tile to swap its stories row below the
+// tiles; "All Stories" shows every category's row. Same grouped-row design.
+async function showExpCat(cat) {
+  _expCurCat = cat;
+  document.querySelectorAll('#exp-cat-row .exp-cat-item').forEach(it =>
+    it.classList.toggle('on', it.dataset.cat === cat));
+  const feed = document.getElementById('exp-cat-feed');
+  if (!feed) return;
+  feed.innerHTML = '<div class="exp-cat-load">Loading…</div>';
+  const counts = await _ensureExpCounts();
+  if (_expCurCat !== cat) return;            // user switched while counts loaded
+  feed.innerHTML = '';
+  const order = cat === 'all'
+    ? ['society','economy','tech','arts','nature','selfwell','philo','lifestyle','sports']
+    : [cat];
+  for (const k of order) {
+    if (_expCurCat !== cat) return;          // user switched mid-load
+    await renderExpCatSection(k, feed, counts[k]);
   }
+}
+async function renderExpCatSection(cat, feed, count) {
+  const cc = CATS[cat]; if (!cc) return;
+  const sec = document.createElement('div'); sec.className = 'exp-cat-sec';
+  sec.innerHTML =
+    `<div class="exp-cat-sec-hdr">
+       <span class="exp-cat-sec-title" style="color:${cc.hex}">${cc.icon} <span style="color:var(--t1)">${cc.short}</span>${count!=null?` <em class="exp-cat-sec-count">${count}</em>`:''}</span>
+       <span class="exp-cat-sec-all tap">See all</span>
+     </div>
+     <div class="exp-srow"><div class="exp-cat-load">Loading…</div></div>`;
+  feed.appendChild(sec);
+  sec.querySelector('.exp-cat-sec-all').onclick = () => gotoCategory(cat);
+  const row = sec.querySelector('.exp-srow');
+  try {
+    const data = await api(`/explore?category=${cat}&page=1&limit=14`);
+    const arts = (data.articles || []).map(normalizeArticle).filter(a => a.id);
+    row.innerHTML = '';
+    if (!arts.length) { row.innerHTML = '<div class="exp-cat-load">No stories yet</div>'; return; }
+    arts.forEach(a => {
+      const d = document.createElement('div'); d.className = 'exp-rcard tap';
+      d.onclick = () => openArticle(a);
+      d.innerHTML =
+        `${a.image_url
+          ? `<img src="${a.image_url}" loading="lazy" alt="" onerror="this.parentNode.style.background='${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}';this.remove()">`
+          : `<div class="exp-rcard-ph" style="background:${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}">${cc.icon}</div>`}
+         <div class="exp-rcard-t">${bEsc(a.title)}</div>`;
+      row.appendChild(d);
+    });
+  } catch (e) { row.innerHTML = '<div class="exp-cat-load">Couldn’t load</div>'; }
 }
 function gotoCategory(cat) {
   navTo('home');
@@ -3936,6 +3950,7 @@ function renderExpCats() {
   const c = document.getElementById('exp-cat-row');
   if (c.children.length) return;
   const cats = [
+    { label:'All Stories',color:'#8E8E93', icon:'fa-layer-group', cat:'all' },
     { label:'Arts',       color:'#E53935', icon:'fa-palette',    cat:'arts' },
     { label:'Well-being', color:'#FB8C00', icon:'fa-heart',      cat:'selfwell' },
     { label:'Business',   color:'#FBC02D', icon:'fa-chart-line', cat:'economy' },
@@ -3949,11 +3964,8 @@ function renderExpCats() {
   cats.forEach(ct => {
     const d = document.createElement('div');
     d.className = 'exp-cat-item tap';
-    d.onclick = () => {
-      navTo('home');
-      const chipEl = document.querySelector(`.chip[onclick*="'${ct.cat}'"]`);
-      if (chipEl) selectChip(chipEl, ct.cat);
-    };
+    d.dataset.cat = ct.cat;
+    d.onclick = () => showExpCat(ct.cat);
     d.innerHTML = `<div class="exp-cat-icon" style="color:${ct.color};background:${ct.color}20">
       <i class="fa-solid ${ct.icon}" style="color:${ct.color}"></i>
     </div><div class="exp-cat-label">${ct.label}</div>`;
@@ -5278,7 +5290,7 @@ function startMarketsPolling() {
   requestGeo();
   loadWeather();
   loadWordOfDay();
-  loadExploreSections();   // grouped "all stories" by category
+  if (!_expCurCat) showExpCat('all');   // default: all category rows below the tiles
   if (marketsTimer) clearInterval(marketsTimer);
   marketsTimer = setInterval(() => {
     const exploreView = document.getElementById('v-explore');
