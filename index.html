@@ -42,9 +42,9 @@
   /* Structural */
   --hh: 56px;
   --nh: 74px;
-  --r:        16px;   /* squircle cards — calmer than the old 24 */
-  --r-card:   16px;
-  --r-button: 12px;
+  --r:        18px;   /* squircle cards — refined, a touch softer */
+  --r-card:   18px;
+  --r-button: 14px;
   --r-pill:   999px;
 
   /* iOS type scale */
@@ -121,6 +121,14 @@
 html, body {
   width: 100%; height: 100%; overflow: hidden;
   background: var(--bg); font-family: var(--f);
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+/* Finishing: tasteful negative tracking on display headings (premium feel). */
+.h-brand, .h-page, .ob-big-title, .exp-hero-title, .nc-title, .byte-headline,
+.prof-name, .sub-ttl, .exp-cat-sec-title, .hero-card-title, .mkt-d-price,
+.empty-state-msg, .ewc-word, .bytes-empty b {
+  letter-spacing: -0.022em;
 }
 
 .phone {
@@ -138,12 +146,17 @@ html, body {
 /* ─── Reusable liquid-glass surface (spec tokens) ─── */
 .glass {
   background: var(--bgcard);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border: 1px solid var(--glassB);
+  backdrop-filter: blur(22px) saturate(185%);
+  -webkit-backdrop-filter: blur(22px) saturate(185%);
+  border: 0.5px solid var(--glassB);
   border-radius: var(--r);
-  box-shadow: inset 0 1px 1px rgba(255,255,255,0.20), 0 8px 30px rgba(3,8,30,0.28);
+  box-shadow: inset 0 0.5px 0 rgba(255,255,255,0.12), 0 10px 34px rgba(0,0,0,0.26);
 }
+
+/* Finishing: soft depth on imagery so cards read as layered, not flat-pasted. */
+.nc-hero-image { box-shadow: 0 6px 22px rgba(0,0,0,0.22); }
+.exp-rcard img, .exp-rcard-ph { box-shadow: 0 4px 14px rgba(0,0,0,0.20); }
+.byte-media { box-shadow: inset 0 -40px 60px -30px rgba(0,0,0,0.45); }
 
 /* ─── Liquid-glass polish for primary modules (inert if class absent) ─── */
 .mkt-section, .mkt-tile, .mkt-crypto-tile, .mkt-metals-tile {
