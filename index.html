@@ -488,9 +488,20 @@ header {
 .ao-react-row { display: flex; justify-content: space-between; gap: 4px; padding: 14px 2px 6px; }
 .ao-react { font-size: 1.5rem; line-height: 1; cursor: pointer; transition: transform 0.15s var(--spring); }
 .ao-react:active { transform: scale(1.35); }
-/* sticky composer bar */
-.ao-cmt-bar { display: flex; gap: 8px; align-items: center; position: sticky; bottom: 0;
-  padding: 10px 0 6px; background: var(--bg); }
+/* Article key points (who/what/where/when/why) */
+.ao-keypoints:empty { display: none; }
+.ao-keypoints { margin: 18px 0 4px; padding: 14px 16px; border-radius: var(--r-card);
+  background: var(--surface-2); border: 0.5px solid var(--glassB); }
+.ao-kp-hdr { font-size: 0.62rem; font-weight: 800; letter-spacing: 1px; text-transform: uppercase;
+  color: var(--t3); margin-bottom: 10px; }
+.ao-kp { display: flex; gap: 12px; padding: 6px 0; border-top: 0.5px solid var(--line2); }
+.ao-kp:first-of-type { border-top: none; padding-top: 0; }
+.ao-kp-k { flex: 0 0 52px; font-size: 0.74rem; font-weight: 700; color: var(--accent); }
+.ao-kp-v { flex: 1; font-size: 0.82rem; line-height: 1.5; color: var(--t1); }
+
+/* composer bar (inline — comments list renders below it) */
+.ao-cmt-bar { display: flex; gap: 8px; align-items: center;
+  padding: 4px 0 12px; }
 .ao-cmt-input { flex: 1; background: var(--bgcard); border: 1px solid var(--glassB); border-radius: 100px;
   padding: 11px 16px; color: var(--t1); font-family: var(--f); font-size: 0.86rem; outline: none; }
 .ao-cmt-post { background: var(--accent); color: #fff; border: none;
@@ -512,7 +523,7 @@ header {
 .nc-src { font-size: 0.7rem; color: var(--t3); font-weight: 500; }
 .nc-tag {
   font-size: 0.6rem; font-weight: 700; padding: 2px 8px;
-  border-radius: 6px; margin-left: auto;
+  border-radius: 6px;
   letter-spacing: 0.3px;
 }
 .nc-body {
@@ -709,19 +720,20 @@ header {
   white-space: pre-line;
 }
 .ao-acts {
-  display: flex; gap: 8px; padding: 12px 0;
+  display: flex; align-items: center; gap: 8px; padding: 11px 0;
   border-top: 1px solid var(--line2); border-bottom: 1px solid var(--line2);
   margin-bottom: 20px;
 }
 .ao-act {
-  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px;
-  padding: 10px 8px; border-radius: 14px;
-  font-size: 0.62rem; font-weight: 600; color: var(--t3);
+  display: inline-flex; flex-direction: row; align-items: center; gap: 7px;
+  padding: 7px 14px; border-radius: 100px;
+  font-size: 0.76rem; font-weight: 600; color: var(--t2);
   cursor: pointer; transition: all 0.15s var(--spring);
   background: var(--bgcard); border: 1px solid var(--line2);
 }
-.ao-act:active { transform: scale(0.92); }
-.ao-act i { font-size: 1.1rem; }
+.ao-act-share { margin-left: auto; }
+.ao-act:active { transform: scale(0.94); }
+.ao-act i { font-size: 0.92rem; }
 .ao-act.liked { color: var(--c-red); background: rgba(255,91,91,0.08); border-color: rgba(255,91,91,0.2); }
 .ao-act.saved { color: var(--accent); background: var(--as); border-color: rgba(79,107,212,0.2); }
 .ao-related-hdr {
@@ -1497,10 +1509,13 @@ nav {
   transform: translateY(100%); transition: transform 0.35s var(--snap);
   display: flex; flex-direction: column; padding-top: 12px; }
 #search-overlay.open { transform: translateY(0); }
-.srch-bar { display: flex; align-items: center; gap: 10px; margin: 12px 14px; padding: 12px 16px; }
-.srch-bar > i { color: var(--neon); }
+.srch-bar { display: flex; align-items: center; gap: 12px; margin: 14px; padding: 13px 18px;
+  border-radius: 100px; border: 1.5px solid var(--accent);
+  box-shadow: 0 0 0 3px var(--as), 0 0 20px -3px var(--accent); }
+.srch-bar > i { color: var(--accent); font-size: 1rem; }
 .srch-bar input { flex: 1; background: transparent; border: none; outline: none;
-  color: var(--t1); font-size: 0.95rem; font-family: var(--f); }
+  color: var(--t1); font-size: 0.98rem; font-weight: 500; font-family: var(--f); }
+.srch-bar input::placeholder { color: var(--t3); }
 .srch-close { width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; color: var(--t2); }
 .srch-results { flex: 1; overflow-y: auto; padding: 6px 0 24px; }
 .srch-item { display: flex; gap: 12px; padding: 12px 16px; cursor: pointer; border-bottom: 1px solid var(--line2); }
@@ -2485,23 +2500,25 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
       </div>
       <div class="ao-main-title" id="ao-main-title"></div>
       <div class="ao-text" id="ao-text"></div>
+      <div class="ao-keypoints" id="ao-keypoints"></div>
       <div class="ao-sources" id="ao-sources"></div>
       <div class="ao-acts">
         <div class="ao-act tap" id="ao-like" onclick="aoLike()"><i class="fa-regular fa-heart"></i><span>Like</span></div>
         <div class="ao-act tap" id="ao-save" onclick="aoSave()"><i class="fa-regular fa-bookmark"></i><span>Save</span></div>
-        <div class="ao-act tap" onclick="shareArt(currentArticle?.title||'')"><i class="fa-solid fa-paper-plane"></i><span>Share</span></div>
+        <div class="ao-act tap ao-act-share" onclick="shareArt(currentArticle?.title||'')"><i class="fa-solid fa-arrow-up-from-bracket"></i><span>Share</span></div>
       </div>
-      <div class="ao-related-hdr">Related Stories</div>
-      <div id="ao-related"></div>
 
       <div class="ao-cmt-sec">
         <div class="ao-cmt-hdr">Comments <span id="ao-cmt-count"></span></div>
-        <div id="ao-cmt-list"></div>
         <div class="ao-cmt-bar">
           <input id="ao-cmt-input" class="ao-cmt-input" maxlength="1000" placeholder="Add a comment…">
           <button class="ao-cmt-post tap" onclick="postArticleComment()" aria-label="Post comment"><i class="fa-solid fa-paper-plane"></i></button>
         </div>
+        <div id="ao-cmt-list"></div>
       </div>
+
+      <div class="ao-related-hdr">Related Stories</div>
+      <div id="ao-related"></div>
     </div>
   </div>
 </div>
@@ -3388,7 +3405,7 @@ function renderStandardCard(rawA, container) {
     </div>
     <div class="nc-meta" style="margin-top:12px">
       <span class="nc-tag" style="background:${cc.bg};color:${cc.hex}">${cc.icon} ${cc.short}</span>
-      <span class="nc-src" style="margin-left:8px">${a.source} · ${timeAgo(a.published_at)}</span>
+      <span class="nc-src" style="margin-left:auto">${a.source} · ${timeAgo(a.published_at)}</span>
     </div>
     <div class="nc-title">${a.title}</div>
     <div class="nc-desc">${a.preview}</div>
@@ -3755,6 +3772,25 @@ async function logInteract(articleId, category, action, duration=0) {
 }
 
 // ── OPEN ARTICLE ──
+// Pull the full body + who/what/where/when/why for richer article context.
+async function aoLoadFullContext(id) {
+  if (!id) return;
+  try {
+    const d = await api('/article/' + encodeURIComponent(id) + '/full');
+    if (!d || !currentArticle || String(currentArticle.id) !== String(id)) return;
+    if (d.body && d.body.trim().length > 60) {
+      document.getElementById('ao-text').textContent = d.body.trim();
+    }
+    const kp = document.getElementById('ao-keypoints');
+    const w = d.wwww || {};
+    const rows = [['Who', w.who], ['What', w.what], ['Where', w.where], ['When', w.when], ['Why', w.why]]
+      .filter(([, v]) => v && String(v).trim() && String(v).trim() !== '—');
+    if (kp) kp.innerHTML = rows.length
+      ? `<div class="ao-kp-hdr">Key points</div>` +
+        rows.map(([k, v]) => `<div class="ao-kp"><span class="ao-kp-k">${k}</span><span class="ao-kp-v">${bEsc(v)}</span></div>`).join('')
+      : '';
+  } catch (e) { /* full endpoint not reachable */ }
+}
 function openArticle(rawA) {
   markSeen(rawA && (rawA.id || rawA.info_object_id || rawA.info_id));   // persist "already seen"
   const a = normalizeArticle(rawA);
@@ -3796,8 +3832,10 @@ function openArticle(rawA) {
   document.getElementById('ao-main-title').textContent = a.title;
   const body = a.body_ai || a.preview || a.summary || '';
   document.getElementById('ao-text').textContent = body
-    ? body + (body.length < 200 ? '' : '\n\nThis story continues to develop. Our editorial team is tracking additional details.')
-    : 'Full context for this story is being generated. Tap a source below to read the original report.';
+    || 'Full context for this story is being generated. Tap a source below to read the original report.';
+  document.getElementById('ao-keypoints').innerHTML = '';
+  // Fetch the fuller article body + key points (who/what/where/when/why).
+  aoLoadFullContext(a.id);
 
   // Source link(s) — tapping opens the original news page in a new tab.
   const srcWrap = document.getElementById('ao-sources');
