@@ -16,31 +16,25 @@
    Font: Poppins
 ══════════════════════════════════════════════════ */
 :root {
-  /* App-wide font: Inter (founder-confirmed) */
-  --f:   'Inter', sans-serif;
-  --fd:  'Inter', sans-serif;
+  /* App font — Apple system (SF Pro) with graceful fallbacks */
+  --f:   -apple-system, "SF Pro Text", "SF Pro Display", "Inter", system-ui, sans-serif;
+  --fd:  -apple-system, "SF Pro Display", "Inter", system-ui, sans-serif;
 
-  /* Brand Palette */
-  --p-deep:    #011A7D;
-  --p-blue:    #02239E;
-  --p-blue2:   #0652B5;
-  --p-blue3:   #0EB7D6;
-  --p-bg:      #02153F;
-  --p-sub:     #4a6898;
-  --p-border:  #3a6090;
+  /* Brand palette — reserved for the logo / splash only, NOT app chrome */
+  --p-deep:  #011A7D; --p-blue: #02239E; --p-blue2: #0652B5; --p-blue3: #0EB7D6;
+  --p-bg:    #02153F; --p-sub: #4a6898; --p-border: #3a6090;
 
-  /* Glows */
-  --glow-blue: rgba(6,82,181,0.55);
-  --glow-soft: rgba(14,183,214,0.28);
+  /* Single accent: mapped per-theme below. Legacy names alias to it so the old
+     green/teal disappear everywhere they were used. */
+  --neon:      var(--accent);
+  --neon-2:    var(--accent);
+  --accent2:   var(--accent);
+  --neon-soft: var(--as);
+  --neon-glow: rgba(10,132,255,0.30);
+  --glow-blue: rgba(10,132,255,0.30);
+  --glow-soft: rgba(10,132,255,0.18);
 
-  /* Liquid-glass accent — emerald green (active states, highlights, primary) */
-  --neon:      #2FD27E;
-  --neon-2:    #5CD3E0;
-  --neon-soft: rgba(47,210,126,0.16);
-  --neon-glow: rgba(47,210,126,0.45);
-  --accent2:   #5CD3E0;   /* secondary cyan — badges (PRO), outline chips */
-
-  /* Spring / Easing */
+  /* Easing */
   --spring: cubic-bezier(0.34,1.56,0.64,1);
   --ease:   cubic-bezier(0.22,1,0.36,1);
   --snap:   cubic-bezier(0.32,0.72,0,1);
@@ -48,60 +42,75 @@
   /* Structural */
   --hh: 56px;
   --nh: 74px;
-  --r:  24px;
+  --r:        16px;   /* squircle cards — calmer than the old 24 */
+  --r-card:   16px;
+  --r-button: 12px;
+  --r-pill:   999px;
 
-  /* VIBGYOR accents — exact SherByte spec */
-  --c-red:    #E53935;
-  --c-orange: #FB8C00;
-  --c-yellow: #FBC02D;
-  --c-green:  #43A047;
-  --c-blue:   #1E88E5;
-  --c-indigo: #3949AB;
-  --c-violet: #8E24AA;
+  /* iOS type scale */
+  --t-large-title: 700 32px/1.2 var(--fd);
+  --t-title1: 700 26px/1.25 var(--fd);
+  --t-title2: 700 21px/1.3 var(--fd);
+  --t-title3: 600 19px/1.3 var(--fd);
+  --t-headline: 600 16px/1.4 var(--f);
+  --t-body: 400 16px/1.5 var(--f);
+  --t-subhead: 400 14px/1.4 var(--f);
+  --t-footnote: 400 12px/1.4 var(--f);
+
+  /* Category tints (used only for small icon tiles) */
+  --c-red:#FF453A; --c-orange:#FF9F0A; --c-yellow:#FFD60A; --c-green:#30D158;
+  --c-blue:#0A84FF; --c-indigo:#5E5CE6; --c-violet:#BF5AF2;
+  --positive:#30D158; --negative:#FF453A;
 }
 
+/* ── Apple DARK (active) ───────────────────────────────────────── */
 [data-theme="dark"] {
-  --bg:      #02153F;
-  --bg1:     #04205E;
-  --bg2:     #063079;
-  --bg3:     #0A3F97;
-  --bg4:     #0C52B5;
-  --bgcard:  rgba(255,255,255,0.10);
-  --glass:   rgba(255,255,255,0.10);
-  --glass2:  rgba(3,24,86,0.92);
-  --glassB:  rgba(255,255,255,0.22);
-  --line:    rgba(255,255,255,0.20);
-  --line2:   rgba(255,255,255,0.10);
-  --t1:      #FFFFFF;
-  --t2:      rgba(255,255,255,0.65);
-  --t3:      rgba(255,255,255,0.45);
-  --t4:      rgba(255,255,255,0.24);
-  --accent:  #2FD27E;
-  --as:      rgba(47,210,126,0.14);
+  --bg:        #000000;
+  --bg-grouped:#000000;
+  --surface:   #1C1C1E;
+  --surface-2: #2C2C2E;
+  --bg1:       #1C1C1E;
+  --bg2:       #2C2C2E;
+  --bg3:       #3A3A3C;
+  --bg4:       #48484A;
+  --bgcard:    #1C1C1E;
+  --glass:     rgba(30,30,32,0.62);
+  --glass2:    rgba(28,28,30,0.94);
+  --glassB:    rgba(255,255,255,0.10);
+  --line:      rgba(84,84,88,0.60);
+  --line2:     rgba(84,84,88,0.34);
+  --separator: rgba(84,84,88,0.60);
+  --t1:        #FFFFFF;
+  --t2:        rgba(235,235,245,0.60);
+  --t3:        rgba(235,235,245,0.30);
+  --t4:        rgba(235,235,245,0.18);
+  --accent:    #0A84FF;
+  --as:        rgba(10,132,255,0.16);
 }
+
+/* ── Apple LIGHT (defined; app currently runs dark — light is a later pass) ── */
 [data-theme="light"] {
-  --bg:      #F0EFF8;
-  --bg1:     #FAFAFF;
-  --bg2:     #EEEDF8;
-  --bg3:     #E4E2F4;
-  --bg4:     #D8D6EC;
-  --bgcard:  rgba(255,255,255,0.55);
-  --glass:   rgba(255,255,255,0.62);
-  --glass2:  rgba(255,255,255,0.95);
-  --glassB:  rgba(255,255,255,0.65);
-  --line:    rgba(44,61,143,0.14);
-  --line2:   rgba(44,61,143,0.07);
-  --t1:      #16102A;
-  --t2:      #4A4770;
-  --t3:      #8A87A0;
-  --t4:      #C5C3D8;
-  --accent:  #00B377;
-  --as:      rgba(0,179,119,0.10);
-  /* Readable "neon" green for active states on a light background. */
-  --neon:      #00B377;
-  --neon-2:    #009E8A;
-  --neon-soft: rgba(0,179,119,0.12);
-  --neon-glow: rgba(0,179,119,0.38);
+  --bg:        #FFFFFF;
+  --bg-grouped:#F2F2F7;
+  --surface:   #FFFFFF;
+  --surface-2: #F2F2F7;
+  --bg1:       #FFFFFF;
+  --bg2:       #F2F2F7;
+  --bg3:       #E5E5EA;
+  --bg4:       #D1D1D6;
+  --bgcard:    #FFFFFF;
+  --glass:     rgba(255,255,255,0.72);
+  --glass2:    rgba(255,255,255,0.94);
+  --glassB:    rgba(0,0,0,0.06);
+  --line:      rgba(60,60,67,0.20);
+  --line2:     rgba(60,60,67,0.10);
+  --separator: rgba(60,60,67,0.20);
+  --t1:        #1C1C1E;
+  --t2:        rgba(60,60,67,0.60);
+  --t3:        rgba(60,60,67,0.38);
+  --t4:        rgba(60,60,67,0.20);
+  --accent:    #1565E8;
+  --as:        rgba(21,101,232,0.08);
 }
 
 *, *::before, *::after {
@@ -111,33 +120,14 @@
 }
 html, body {
   width: 100%; height: 100%; overflow: hidden;
-  background: #02153F; font-family: var(--f);
+  background: var(--bg); font-family: var(--f);
 }
 
 .phone {
   position: fixed; top: 0; left: 0; right: 0; bottom: 0;
   width: 100vw; height: 100vh; height: 100dvh;
   background: var(--bg); display: flex; flex-direction: column;
-  overflow: hidden; transition: background 0.4s;
-}
-
-/* ─── Liquid-glass mesh gradient — the single app background ───
-   Royal blue bottom-left → teal / cyan / mint bleeding from top-right. */
-[data-theme="dark"] .phone {
-  background:
-    radial-gradient(130% 120% at 100% 0%,  #0EB7D6 0%, rgba(14,183,214,0) 44%),
-    radial-gradient(120% 115% at 80% 8%,   #0AAAC9 0%, rgba(10,170,201,0) 48%),
-    radial-gradient(150% 150% at 0% 100%,  #011A7D 0%, rgba(1,26,125,0) 60%),
-    linear-gradient(135deg, #02239E 0%, #0652B5 50%, #0EB7D6 100%);
-  background-attachment: fixed;
-}
-[data-theme="light"] .phone {
-  background:
-    radial-gradient(130% 120% at 100% 0%,  #8FF0DA 0%, rgba(143,240,218,0) 40%),
-    radial-gradient(120% 110% at 80% 8%,   #9AD8FF 0%, rgba(154,216,255,0) 44%),
-    radial-gradient(150% 145% at 0% 100%,  #9FB4FF 0%, rgba(159,180,255,0) 52%),
-    linear-gradient(150deg, #dfe8ff 0%, #eaf2ff 55%, #f3f6ff 100%);
-  background-attachment: fixed;
+  overflow: hidden;
 }
 
 /* ─── Reusable liquid-glass surface (spec tokens) ─── */
@@ -359,7 +349,7 @@ header {
   width: 32px; height: 32px; border-radius: 50%; overflow: hidden;
   border: 2px solid transparent;
   background: linear-gradient(var(--bg), var(--bg)) padding-box,
-              linear-gradient(135deg, #02239E, #0EB7D6) border-box;
+              var(--accent) border-box;
   cursor: pointer; transition: transform 0.15s var(--spring); flex-shrink: 0;
 }
 .h-avatar img { width: 100%; height: 100%; object-fit: cover; }
@@ -460,7 +450,7 @@ header {
   padding: 10px 0 6px; background: var(--bg); }
 .ao-cmt-input { flex: 1; background: var(--bgcard); border: 1px solid var(--glassB); border-radius: 100px;
   padding: 11px 16px; color: var(--t1); font-family: var(--f); font-size: 0.86rem; outline: none; }
-.ao-cmt-post { background: linear-gradient(135deg, #0652B5, #0EB7D6); color: #fff; border: none;
+.ao-cmt-post { background: var(--accent); color: #fff; border: none;
   border-radius: 50%; width: 42px; height: 42px; flex-shrink: 0; cursor: pointer; font-size: 0.9rem;
   display: flex; align-items: center; justify-content: center; }
 .ao-cmt-post:active { transform: scale(0.9); }
@@ -966,7 +956,7 @@ header {
   flex-shrink: 0;
   border: 2px solid transparent;
   background: linear-gradient(var(--bg), var(--bg)) padding-box,
-              linear-gradient(135deg, #02239E, #0EB7D6) border-box;
+              var(--accent) border-box;
   box-shadow: 0 0 20px rgba(0,62,145,0.4);
 }
 .prof-ava img { width: 100%; height: 100%; object-fit: cover; }
@@ -1001,7 +991,7 @@ header {
   background: var(--bg3); color: var(--t1); border: 1px solid var(--line);
 }
 .pb-feed {
-  background: linear-gradient(135deg, #02239E, #0EB7D6);
+  background: var(--accent);
   color: #fff;
   box-shadow: 0 4px 16px rgba(44,61,143,0.4);
   border: 1px solid rgba(0,62,145,0.3);
@@ -1052,7 +1042,7 @@ header {
   box-shadow: 0 1px 4px rgba(0,0,0,0.3);
 }
 .tog.on {
-  background: linear-gradient(135deg, #02239E, #0EB7D6);
+  background: var(--accent);
   border-color: rgba(79,107,212,0.4);
 }
 .tog.on::after { left: 18px; background: #fff; }
@@ -1304,7 +1294,7 @@ header {
 .sb-ava { width: 48px; height: 48px; border-radius: 50%; overflow: hidden;
   flex-shrink: 0; border: 2px solid transparent;
   background: linear-gradient(var(--bg), var(--bg)) padding-box,
-              linear-gradient(135deg, #02239E, #0EB7D6) border-box;
+              var(--accent) border-box;
 }
 .sb-ava img { width: 100%; height: 100%; object-fit: cover; }
 .sb-name { font-family: var(--fd); font-size: 0.9rem; font-weight: 700; color: var(--t1); }
@@ -1567,7 +1557,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 .fem-topic.on { background: var(--accent); color: #fff; border-color: transparent; }
 .fem-save-btn {
   width: 100%; padding: 12px; border-radius: 14px; border: none;
-  background: linear-gradient(135deg, #02239E, #0EB7D6);
+  background: var(--accent);
   color: #fff; font-family: var(--f); font-size: 0.9rem; font-weight: 700;
   cursor: pointer; box-shadow: 0 4px 16px rgba(44,61,143,0.4);
   transition: transform 0.15s;
@@ -1693,7 +1683,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   font-family: var(--f); font-weight: 700; cursor: pointer; transition: all 0.2s;
 }
 .ob-tab.active {
-  background: linear-gradient(135deg, #02239E, #0EB7D6);
+  background: var(--accent);
   color: #fff; box-shadow: 0 2px 14px rgba(0,62,145,0.5);
 }
 .ob-field { margin-bottom: 11px; }
@@ -1714,7 +1704,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 .ob-err { color: #ff6b6b; font-size: 0.7rem; margin-top: 5px; font-family: var(--fd); }
 .ob-btn-primary {
   width: 100%; padding: 12px; margin-top: 12px;
-  background: linear-gradient(135deg, #02239E, #0EB7D6);
+  background: var(--accent);
   color: #fff; border: none; border-radius: 12px;
   font-family: var(--f); font-size: 0.88rem; font-weight: 700;
   cursor: pointer; box-shadow: 0 4px 20px rgba(0,62,145,0.45);
@@ -1737,7 +1727,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 .ob-tchips { display: flex; flex-wrap: wrap; gap: 6px; max-height: 280px; overflow-y: auto; overscroll-behavior: contain; padding: 2px; }
 .ob-tchip { padding: 5px 12px; border-radius: 100px; border: 1.5px solid rgba(0,62,145,0.28); background: rgba(0,10,30,0.45); font-size: 0.7rem; font-weight: 600; cursor: pointer; color: var(--t2); transition: all 0.12s; white-space: nowrap; }
 .ob-tchip:active { transform: scale(0.94); }
-.ob-tchip.sel { background: linear-gradient(135deg,#02239E,#0EB7D6); color: #fff; border-color: transparent; }
+.ob-tchip.sel { background: var(--accent); color: #fff; border-color: transparent; }
 .ob-actions { display: flex; gap: 9px; margin-top: 16px; padding-bottom: 24px; align-items: center; flex-wrap: wrap; }
 .ob-btn-ghost { padding: 11px 20px; border-radius: 12px; border: 1px solid var(--line); background: var(--bgcard); color: var(--t2); font-family: var(--f); font-size: 0.82rem; font-weight: 700; cursor: pointer; }
 .ob-btn-ghost:active { opacity: 0.7; }
@@ -2264,7 +2254,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   margin-top: 16px; padding: 9px 22px; border-radius: 100px;
   font-size: 0.78rem; font-weight: 600; cursor: pointer;
   color: #fff; border: 1px solid var(--glassB);
-  background: linear-gradient(135deg, #0652B5, #0EB7D6);
+  background: var(--accent);
   box-shadow: 0 4px 14px rgba(14,183,214,0.35);
   transition: transform 0.15s var(--spring);
 }
@@ -2338,7 +2328,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 <!-- SPLASH (claw-tear reveal) -->
 <div id="splash" class="go">
   <div class="sp-stage">
-    <div class="sp-claw-logo"><div class="sp-imgwrap"><img src="logo.jpg" alt="SherByte" onerror="this.closest('.sp-claw-logo').innerHTML='<div class=\'sp-name\'>Sherr<span>Byte</span></div>'"></div></div>
+    <div class="sp-claw-logo"><div class="sp-imgwrap"><img src="logo.jpg" alt="SherrByte" onerror="this.closest('.sp-claw-logo').innerHTML='<div class=\'sp-name\'>Sherr<span>Byte</span></div>'"></div></div>
     <div class="sp-claws">
       <svg viewBox="0 0 200 320">
         <path d="M40 8 Q34 160 46 312"/>
@@ -2360,7 +2350,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   <div class="sb-head">
     <div class="sb-ava"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%231565e8'/%3E%3Cstop offset='1' stop-color='%238E24AA'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='100' height='100' fill='url(%23g)'/%3E%3Ccircle cx='50' cy='40' r='15' fill='%23fff' opacity='.92'/%3E%3Cpath d='M24 80c0-14 12-22 26-22s26 8 26 22' fill='%23fff' opacity='.92'/%3E%3C/svg%3E" alt="" id="sb-ava-img"></div>
     <div>
-      <div class="prof-name-row"><div class="sb-name" id="sb-name">SherByte User</div><span class="pro-badge">PRO</span></div>
+      <div class="prof-name-row"><div class="sb-name" id="sb-name">SherrByte User</div><span class="pro-badge">PRO</span></div>
       <div class="sb-handle" id="sb-handle">@user ✦</div>
     </div>
     <div class="sb-close tap" onclick="sbClose()"><i class="fa-solid fa-xmark"></i></div>
@@ -2453,16 +2443,6 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
       <div class="ao-cmt-sec">
         <div class="ao-cmt-hdr">Comments <span id="ao-cmt-count"></span></div>
         <div id="ao-cmt-list"></div>
-        <div class="ao-react-row">
-          <span class="ao-react" onclick="aoAddEmoji('❤️')">❤️</span>
-          <span class="ao-react" onclick="aoAddEmoji('🙌')">🙌</span>
-          <span class="ao-react" onclick="aoAddEmoji('🔥')">🔥</span>
-          <span class="ao-react" onclick="aoAddEmoji('👏')">👏</span>
-          <span class="ao-react" onclick="aoAddEmoji('🥲')">🥲</span>
-          <span class="ao-react" onclick="aoAddEmoji('😍')">😍</span>
-          <span class="ao-react" onclick="aoAddEmoji('😮')">😮</span>
-          <span class="ao-react" onclick="aoAddEmoji('😂')">😂</span>
-        </div>
         <div class="ao-cmt-bar">
           <input id="ao-cmt-input" class="ao-cmt-input" maxlength="1000" placeholder="Add a comment…">
           <button class="ao-cmt-post tap" onclick="postArticleComment()" aria-label="Post comment"><i class="fa-solid fa-paper-plane"></i></button>
@@ -2627,7 +2607,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
     <div class="set-grp">
       <div class="sr tap" onclick="openSub('settings')"><div class="sr-ico" style="background:#6A6E83"><i class="fa-solid fa-gear"></i></div><span class="sr-lbl">Settings</span><i class="fa-solid fa-chevron-right sr-arr"></i></div>
       <div class="sr tap" onclick="openSub('help')"><div class="sr-ico" style="background:#52C17A"><i class="fa-regular fa-circle-question"></i></div><span class="sr-lbl">Help & Support</span><i class="fa-solid fa-chevron-right sr-arr"></i></div>
-      <div class="sr tap" onclick="toast('⭐ Thank you!')"><div class="sr-ico" style="background:#FFD166"><i class="fa-solid fa-star"></i></div><span class="sr-lbl">Rate SherByte</span><i class="fa-solid fa-chevron-right sr-arr"></i></div>
+      <div class="sr tap" onclick="toast('⭐ Thank you!')"><div class="sr-ico" style="background:#FFD166"><i class="fa-solid fa-star"></i></div><span class="sr-lbl">Rate SherrByte</span><i class="fa-solid fa-chevron-right sr-arr"></i></div>
     </div>
   </div>
   <div style="height:16px"></div>
@@ -3071,8 +3051,8 @@ const CATS = {
 
 // Fallback articles shown before backend loads
 const FALLBACK_ARTICLES = [
-  {id:'f1', category:'tech',    source:'SherByte', title:'Loading your personalised feed...', preview:'Connecting to the live news pipeline. Please wait a moment.', image_url:'', published_at: new Date().toISOString() },
-  {id:'f2', category:'society', source:'SherByte', title:'Real AI-powered news is loading',   preview:'Articles are being fetched from 55+ sources and rewritten by AI.', image_url:'', published_at: new Date().toISOString() },
+  {id:'f1', category:'tech',    source:'SherrByte', title:'Loading your personalised feed...', preview:'Connecting to the live news pipeline. Please wait a moment.', image_url:'', published_at: new Date().toISOString() },
+  {id:'f2', category:'society', source:'SherrByte', title:'Real AI-powered news is loading',   preview:'Articles are being fetched from 55+ sources and rewritten by AI.', image_url:'', published_at: new Date().toISOString() },
 ];
 
 // ── NAVIGATION STATE ──
@@ -3125,7 +3105,7 @@ function selPriv(el) {
 
 // ── SHARE ──
 function shareArt(title) {
-  if (navigator.share) navigator.share({ title:'SherByte: '+title, url:location.href }).catch(()=>{});
+  if (navigator.share) navigator.share({ title:'SherrByte: '+title, url:location.href }).catch(()=>{});
   else { navigator.clipboard?.writeText(title).catch(()=>{}); toast('📋 Copied to clipboard'); }
 }
 
@@ -4360,7 +4340,7 @@ function showAuthModal() {
     <div style="background:var(--bg1);border-radius:24px;padding:24px;width:100%;max-width:340px;border:1px solid var(--line);box-shadow:0 20px 60px rgba(0,0,0,0.5)">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px">
         <div style="width:36px;height:36px;border-radius:12px;background:linear-gradient(135deg,#011A7D,#02239E,#0EB7D6);display:flex;align-items:center;justify-content:center;font-size:1.2rem">⚡</div>
-        <div style="font-family:var(--fd);font-size:1.1rem;font-weight:700;color:var(--t1)">SherByte</div>
+        <div style="font-family:var(--fd);font-size:1.1rem;font-weight:700;color:var(--t1)">SherrByte</div>
         <div style="margin-left:auto;cursor:pointer;color:var(--t3);font-size:1.2rem" onclick="document.getElementById('auth-modal').style.display='none'">✕</div>
       </div>
       <div style="display:flex;background:var(--bg2);border-radius:12px;padding:3px;margin-bottom:16px;border:1px solid var(--line2)" id="auth-tabs">
@@ -4371,7 +4351,7 @@ function showAuthModal() {
       <input id="auth-name" type="text" placeholder="Display name" style="display:none;width:100%;padding:10px 14px;margin-bottom:10px;background:var(--bg2);border:1px solid var(--line);border-radius:12px;color:var(--t1);font-size:0.84rem;font-family:var(--f);outline:none">
       <input id="auth-email" type="email" placeholder="Email address" style="width:100%;padding:10px 14px;margin-bottom:10px;background:var(--bg2);border:1px solid var(--line);border-radius:12px;color:var(--t1);font-size:0.84rem;font-family:var(--f);outline:none">
       <input id="auth-pass" type="password" placeholder="Password" style="width:100%;padding:10px 14px;margin-bottom:16px;background:var(--bg2);border:1px solid var(--line);border-radius:12px;color:var(--t1);font-size:0.84rem;font-family:var(--f);outline:none">
-      <button onclick="doAuth()" id="auth-btn" style="width:100%;padding:11px;background:linear-gradient(135deg,#02239E,#0EB7D6);color:#fff;border:none;border-radius:12px;font-size:0.88rem;font-weight:700;cursor:pointer;font-family:var(--f)">Sign In</button>
+      <button onclick="doAuth()" id="auth-btn" style="width:100%;padding:11px;background:var(--accent);color:#fff;border:none;border-radius:12px;font-size:0.88rem;font-weight:700;cursor:pointer;font-family:var(--f)">Sign In</button>
       <div style="text-align:center;margin-top:12px;font-size:0.72rem;color:var(--t3)">Your feed personalises as you read.</div>
     </div>`;
   document.querySelector('.phone').appendChild(modal);
@@ -4507,7 +4487,7 @@ function obPopulateTopics() {
   obSelT = new Set(); obAllT = []; obPF = 0;
   OB_PILLARS.forEach(p => p.t.forEach(n => obAllT.push({name:n, pid:p.id, c:p.c})));
   const ps = document.getElementById('ob-pscroll');
-  ps.innerHTML = '<button class="ob-ppill active" style="background:linear-gradient(135deg,#02239E,#0EB7D6);border-color:transparent" onclick="obFilterPillar(0,this)">All</button>';
+  ps.innerHTML = '<button class="ob-ppill active" style="background:var(--accent);border-color:transparent" onclick="obFilterPillar(0,this)">All</button>';
   OB_PILLARS.forEach(p => {
     const btn = document.createElement('button');
     btn.className = 'ob-ppill'; btn.textContent = p.e + ' ' + p.s;
@@ -4531,7 +4511,7 @@ function obFilterPillar(pid, el) {
   document.querySelectorAll('#ob-pscroll .ob-ppill').forEach(e => {
     e.classList.remove('active'); e.style.background = ''; e.style.borderColor = '';
   });
-  el.classList.add('active'); el.style.background = 'linear-gradient(135deg,#02239E,#0EB7D6)'; el.style.borderColor = 'transparent';
+  el.classList.add('active'); el.style.background = 'var(--accent)'; el.style.borderColor = 'transparent';
   obPF = pid; obRerender();
 }
 function obFilterT(q) { obRerender(q); }
@@ -4560,7 +4540,7 @@ async function obFinish() {
     })});
     ST.token = data.token; ST.userId = data.user_id; persist();
     document.getElementById('ob-screen').classList.add('gone');
-    updateProfileUI(data); loadFeed(true); toast('✦ Welcome to SherByte!');
+    updateProfileUI(data); loadFeed(true); toast('✦ Welcome to SherrByte!');
   } catch(e) {
     toast('Error: ' + (e.message || 'Signup failed'));
     btn.disabled = false; btn.textContent = 'Build My Feed →';
