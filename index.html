@@ -400,7 +400,7 @@ header {
   white-space: nowrap;
 }
 .chip:active { transform: scale(0.88); }
-.chip.on { color: #fff; border-color: transparent; box-shadow: 0 4px 16px rgba(0,62,145,0.4); }
+.chip.on { color: #fff; background: var(--accent); border-color: transparent; }
 
 /* ─── News Card — Free Editorial Style (no boxes) ─── */
 /* Reddit-style stacked feed: no cards, divider-separated, content-first. */
@@ -418,8 +418,8 @@ header {
   position: relative;
 }
 .nc:active { background: rgba(255,255,255,0.03); }
-/* Home feed sits on flat near-black (drops the gradient/glass here). */
-#v-home { background: #0B0B0B; }
+/* Home feed sits on the neutral app background. */
+#v-home { background: var(--bg); }
 /* Compact action row: Like+count & Comment+count left, Share far right. */
 .nc-acts-row { display: flex; align-items: center; gap: 8px; margin-top: 13px; }
 .nc-pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 100px;
@@ -1370,12 +1370,12 @@ nav {
   transition: all 0.25s; letter-spacing: 0.3px;
 }
 .nb.on .nb-icon {
-  background: rgba(255,255,255,0.16);
-  color: #fff;
-  box-shadow: 0 0 16px rgba(92,211,224,0.45), inset 0 0 0 1px rgba(255,255,255,0.45);
+  background: transparent;
+  color: var(--accent);
+  box-shadow: none;
 }
-.nb.on .nb-lbl { color: #fff; }
-.nb.on .nb-icon i { filter: drop-shadow(0 0 6px rgba(92,211,224,0.55)); }
+.nb.on .nb-lbl { color: var(--accent); }
+.nb.on .nb-icon i { filter: none; }
 
 /* ─── Bytes — one structured card per screen (vertical snap) ─── */
 #v-bytes { inset: 0; }
@@ -2309,7 +2309,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
         <div class="ob-subtitle">Select at least 3 topics to build your personalised feed.</div>
       </div>
       <div class="ob-selcnt">Selected: <span id="ob-selcnt">0</span> topics</div>
-      <div class="ob-sfld"><span style="color:var(--t3);font-size:0.82rem">🔍</span><input type="text" id="ob-tsearch" placeholder="Search topics…" oninput="obFilterT(this.value)"></div>
+      <div class="ob-sfld"><span style="color:var(--t3);font-size:0.82rem"><i class="fa-solid fa-magnifying-glass"></i></span><input type="text" id="ob-tsearch" placeholder="Search topics…" oninput="obFilterT(this.value)"></div>
       <div class="ob-pscroll" id="ob-pscroll"></div>
       <div class="ob-tchips" id="ob-tchips"></div>
       <div class="ob-actions">
@@ -2395,16 +2395,16 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 <!-- ════════ HOME ════════ -->
 <div id="v-home" class="view active">
   <div class="chips" id="chip-row">
-    <div class="chip on tap" onclick="selectChip(this,'all')" style="background:#1E88E5">All</div>
-    <div class="chip tap" onclick="selectChip(this,'arts')">🎭 Arts & Culture</div>
-    <div class="chip tap" onclick="selectChip(this,'selfwell')">🧘 Well-being</div>
-    <div class="chip tap" onclick="selectChip(this,'economy')">💼 Business</div>
-    <div class="chip tap" onclick="selectChip(this,'nature')">🌿 Nature</div>
-    <div class="chip tap" onclick="selectChip(this,'society')">🏛 Society</div>
-    <div class="chip tap" onclick="selectChip(this,'tech')">🔬 Sci & Tech</div>
-    <div class="chip tap" onclick="selectChip(this,'philo')">🔮 Philosophy</div>
-    <div class="chip tap" onclick="selectChip(this,'lifestyle')">✨ Lifestyle</div>
-    <div class="chip tap" onclick="selectChip(this,'sports')">⚽ Sports</div>
+    <div class="chip on tap" onclick="selectChip(this,'all')">All</div>
+    <div class="chip tap" onclick="selectChip(this,'arts')"><i class="fa-solid fa-masks-theater"></i> Arts &amp; Culture</div>
+    <div class="chip tap" onclick="selectChip(this,'selfwell')"><i class="fa-solid fa-spa"></i> Well-being</div>
+    <div class="chip tap" onclick="selectChip(this,'economy')"><i class="fa-solid fa-briefcase"></i> Business</div>
+    <div class="chip tap" onclick="selectChip(this,'nature')"><i class="fa-solid fa-leaf"></i> Nature</div>
+    <div class="chip tap" onclick="selectChip(this,'society')"><i class="fa-solid fa-landmark"></i> Society</div>
+    <div class="chip tap" onclick="selectChip(this,'tech')"><i class="fa-solid fa-flask"></i> Sci &amp; Tech</div>
+    <div class="chip tap" onclick="selectChip(this,'philo')"><i class="fa-solid fa-brain"></i> Philosophy</div>
+    <div class="chip tap" onclick="selectChip(this,'lifestyle')"><i class="fa-solid fa-wand-magic-sparkles"></i> Lifestyle</div>
+    <div class="chip tap" onclick="selectChip(this,'sports')"><i class="fa-solid fa-futbol"></i> Sports</div>
   </div>
   <div id="home-feed"></div>
   <div style="height:16px"></div>
@@ -2517,7 +2517,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 
   <!-- At a Glance: Weather + Live Markets -->
   <div class="exp-sec-hdr">
-    <div class="exp-sec-hdr-title">📊 At a Glance</div>
+    <div class="exp-sec-hdr-title"><i class="fa-solid fa-chart-simple"></i> At a Glance</div>
   </div>
   <div class="exp-bento" style="grid-template-columns:1fr;gap:0">
     <div class="bento-weather tap" id="bento-weather" onclick="loadWeather()" style="margin-bottom:8px">
@@ -2526,7 +2526,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
         <div class="bw-temp" id="bw-temp">—°</div>
         <div class="bw-desc" id="bw-desc">Loading…</div>
       </div>
-      <div class="bw-icon" id="bw-icon">🌡️</div>
+      <div class="bw-icon" id="bw-icon"><i class="fa-solid fa-cloud-sun"></i></div>
     </div>
   </div>
   <!-- v5.1 — Live market widgets, populated by loadMarkets() -->
@@ -2537,10 +2537,10 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 
   <!-- Dictionary (replaces Discover) -->
   <div class="exp-sec-hdr">
-    <div class="exp-sec-hdr-title">📖 Dictionary</div>
+    <div class="exp-sec-hdr-title"><i class="fa-solid fa-book"></i> Dictionary</div>
   </div>
   <div class="dict-card glass tap" onclick="openDictionary()">
-    <div class="dict-ico">📖</div>
+    <div class="dict-ico"><i class="fa-solid fa-book"></i></div>
     <div class="dict-txt"><b>Look up a word</b><span>Definitions, phonetics &amp; examples</span></div>
     <i class="fa-solid fa-chevron-right" style="color:var(--t3)"></i>
   </div>
@@ -2558,7 +2558,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 
   <!-- Trending News -->
   <div class="exp-sec-hdr">
-    <div class="exp-sec-hdr-title">🔥 Trending</div>
+    <div class="exp-sec-hdr-title"><i class="fa-solid fa-fire"></i> Trending</div>
     <div class="exp-sec-hdr-link tap" onclick="toast('📰 Full trending list')">See all</div>
   </div>
   <div class="exp-grid" id="exp-grid"></div>
@@ -2631,7 +2631,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 <div id="v-feed" class="view">
   <div class="feed-filter-strip">
     <div class="feed-filter-strip-title" style="display:flex;align-items:center;justify-content:space-between">
-      <span>⚡ FEED Pulse</span>
+      <span><i class="fa-solid fa-bolt"></i> FEED Pulse</span>
       <span onclick="openFeedEditModal()" style="font-size:0.68rem;color:var(--accent);font-weight:700;cursor:pointer;padding:4px 10px;border:1px solid var(--accent);border-radius:100px">Edit</span>
     </div>
     <div class="feed-filter-chips" id="feed-filter-chips"></div>
@@ -2793,7 +2793,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 <!-- ════════ BYTES — short-form vertical feed (Phase 9 builds the feed) ════════ -->
 <div id="v-bytes" class="view" style="padding:0;overflow:hidden">
   <div id="bytes-feed" class="bytes-feed">
-    <div class="bytes-empty glass">⚡ <b>Bytes</b><br><span>Swipe-up short news — arriving in Phase 9.</span></div>
+    <div class="bytes-empty glass"><b>Bytes</b><br><span>Swipe-up short news will appear here.</span></div>
   </div>
 </div>
 
@@ -3038,15 +3038,15 @@ async function api(path, opts = {}) {
 
 // ── CATEGORY CONFIG — matches backend pillar slugs ──
 const CATS = {
-  arts:    { hex:'#E53935', bg:'rgba(229,57,53,0.12)',    label:'Arts, Culture & Recreation', icon:'🎭', short:'Arts' },
-  selfwell:{ hex:'#FB8C00', bg:'rgba(251,140,0,0.12)',    label:'The Self & Well-being',       icon:'🧘', short:'Well-being' },
-  economy: { hex:'#FBC02D', bg:'rgba(251,192,45,0.12)',   label:'Business & Economy',          icon:'💼', short:'Business' },
-  nature:  { hex:'#43A047', bg:'rgba(67,160,71,0.12)',    label:'The Natural World',           icon:'🌿', short:'Nature' },
-  society: { hex:'#1E88E5', bg:'rgba(30,136,229,0.12)',   label:'Society & Governance',        icon:'🏛', short:'Society' },
-  tech:    { hex:'#3949AB', bg:'rgba(57,73,171,0.12)',    label:'Science & Technology',        icon:'🔬', short:'Sci & Tech' },
-  philo:   { hex:'#8E24AA', bg:'rgba(142,36,170,0.12)',   label:'Philosophy & Belief',         icon:'🔮', short:'Philosophy' },
-  lifestyle:{ hex:'#00ACC1',bg:'rgba(0,172,193,0.12)',    label:'Society & Lifestyle',         icon:'✨', short:'Lifestyle' },
-  sports:  { hex:'#546E7A', bg:'rgba(84,110,122,0.12)',   label:'Sports & Gaming',             icon:'⚽', short:'Sports' },
+  arts:    { hex:'#E53935', bg:'rgba(229,57,53,0.12)',    label:'Arts, Culture & Recreation', icon:'<i class="fa-solid fa-masks-theater"></i>', short:'Arts' },
+  selfwell:{ hex:'#FB8C00', bg:'rgba(251,140,0,0.12)',    label:'The Self & Well-being',       icon:'<i class="fa-solid fa-spa"></i>', short:'Well-being' },
+  economy: { hex:'#FBC02D', bg:'rgba(251,192,45,0.12)',   label:'Business & Economy',          icon:'<i class="fa-solid fa-briefcase"></i>', short:'Business' },
+  nature:  { hex:'#43A047', bg:'rgba(67,160,71,0.12)',    label:'The Natural World',           icon:'<i class="fa-solid fa-leaf"></i>', short:'Nature' },
+  society: { hex:'#1E88E5', bg:'rgba(30,136,229,0.12)',   label:'Society & Governance',        icon:'<i class="fa-solid fa-landmark"></i>', short:'Society' },
+  tech:    { hex:'#3949AB', bg:'rgba(57,73,171,0.12)',    label:'Science & Technology',        icon:'<i class="fa-solid fa-flask"></i>', short:'Sci & Tech' },
+  philo:   { hex:'#8E24AA', bg:'rgba(142,36,170,0.12)',   label:'Philosophy & Belief',         icon:'<i class="fa-solid fa-brain"></i>', short:'Philosophy' },
+  lifestyle:{ hex:'#00ACC1',bg:'rgba(0,172,193,0.12)',    label:'Society & Lifestyle',         icon:'<i class="fa-solid fa-wand-magic-sparkles"></i>', short:'Lifestyle' },
+  sports:  { hex:'#546E7A', bg:'rgba(84,110,122,0.12)',   label:'Sports & Gaming',             icon:'<i class="fa-solid fa-futbol"></i>', short:'Sports' },
 };
 
 // Fallback articles shown before backend loads
@@ -3126,8 +3126,7 @@ const UI_STRINGS = {
 function selectChip(el, cat) {
   document.querySelectorAll('.chip').forEach(c => { c.classList.remove('on'); c.style.background=''; });
   el.classList.add('on');
-  const cc = CATS[cat];
-  el.style.background = cc ? cc.hex : 'var(--p-blue)';
+  el.style.background = 'var(--accent)';
   curChip = cat;
   feedPage = 1;
   homeArticles = [];
@@ -3211,7 +3210,7 @@ function renderHeroCard(rawA, container) {
     <div class="hero-card-overlay">
       <div class="hero-badge-row">
         <span class="hero-cat-pill">${cc.icon} ${cc.short}</span>
-        ${a.isTrending ? '<span class="hero-trending">🔥 Trending</span>' : ''}
+        ${a.isTrending ? '<span class="hero-trending"><i class="fa-solid fa-fire"></i> Trending</span>' : ''}
       </div>
       <div class="hero-title">${a.title}</div>
       <div class="hero-meta">
@@ -3661,7 +3660,7 @@ function openArticle(rawA) {
       aoHero.style.background = CAT_GRADIENTS[a.category] || CAT_GRADIENTS.tech;
       const ph = document.createElement('div');
       ph.style.cssText='width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:3rem;opacity:0.6';
-      ph.textContent = cc.icon; aoHero.appendChild(ph);
+      ph.innerHTML = cc.icon; aoHero.appendChild(ph);
     }
     aoHero.appendChild(overlay); aoHero.appendChild(pill);
   }
@@ -3980,7 +3979,7 @@ function renderFeedFilterChips() {
     d.style.color      = on ? '#fff' : cat.hex;
     d.style.borderColor= on ? 'transparent' : 'var(--line)';
     d.style.background = on ? cat.hex : 'transparent';
-    d.textContent      = cat.icon + ' ' + cat.short;
+    d.innerHTML        = cat.icon + ' ' + cat.short;
     d.onclick = () => {
       if (activeFeedCats.has(key)) activeFeedCats.delete(key); else activeFeedCats.add(key);
       renderFeedFilterChips(); renderFeedCatCards(); renderFeedArticles();
@@ -4420,15 +4419,15 @@ function updateSidebarAuth() {
 
 // ── ONBOARDING ──────────────────────────────────────────────────────────────
 const OB_PILLARS = [
-  {id:1,c:"#1E88E5",e:"🏛️",s:"Society",t:["Elections2024","Supreme Court","Geopolitics","NATO","Diplomacy","Human Rights","Urban Planning","Public Policy","Federalism","Immigration Law","Constitutional Law","Education","Feminism","LGBTQ+ Rights","United Nations","Lok Sabha","NEP 2020","Brexit","Voter Behavior","Parliament"]},
-  {id:2,c:"#FBC02D",e:"💼",s:"Business",t:["Bitcoin","Stock Market","Cryptocurrency","Startup","Venture Capital","FinTech","Ethereum","Inflation","NASDAQ","Nifty 50","Real Estate","SaaS","E-Commerce","Gig Economy","GDP","Mutual Funds","Recession","Personal Finance","Wealth Management","IPO"]},
-  {id:3,c:"#3949AB",e:"🔬",s:"Science",t:["Artificial Intelligence","ChatGPT","Quantum Computing","SpaceX","ISRO","NASA","Cybersecurity","Robotics","CRISPR","Neural Networks","Generative AI","Web3","Metaverse","Semiconductors","Cloud Computing","Drones","3D Printing","Dark Web","Astrophysics","Black Holes"]},
-  {id:4,c:"#E53935",e:"🎭",s:"Arts",t:["Game of Thrones","K-Pop","Anime","Marvel Cinematic Universe","Studio Ghibli","NFTs","Filmmaking","Podcasting","Digital Art","Photography","Jazz","Electronic Music","Streetwear","Sneaker Culture","Broadway","Sci-Fi","Poetry","Cyberpunk","Typography","Modern Art"]},
-  {id:5,c:"#43A047",e:"🌿",s:"Nature",t:["Climate Change","Renewable Energy","Wildlife","Conservation","Solar Power","Biodiversity","Marine Biology","Zoology","Geology","National Parks","Hiking","Ecotourism","Rewilding","Agriculture","Sustainable Living","Urban Farming","Oceanography","Meteorology","Volcanoes","Endangered Species"]},
-  {id:6,c:"#FB8C00",e:"🧘",s:"Wellbeing",t:["Mental Health","Mindfulness","Fitness","Yoga","Nutrition","Meditation","Productivity","Sleep Hygiene","Biohacking","Therapy","Veganism","Journaling","Self-Care","Career Coaching","Atomic Habits","CrossFit","Marathon Training","Keto","Personal Growth","Longevity"]},
-  {id:7,c:"#8E24AA",e:"🔮",s:"Philosophy",t:["Stoicism","Existentialism","Buddhism","Hinduism","Philosophy","Astrology","Ethics","Consciousness","Mythology","Zen","Taoism","Nihilism","Free Will","Greek Mythology","Kabbalah","Sufism","Tarot","Mysticism","Panpsychism","Absurdism"]},
-  {id:8,c:"#00ACC1",e:"✨",s:"Lifestyle",t:["Digital Nomad","Remote Work","Travel","Food","Social Media Trends","Influencer Marketing","Coffee Culture","Sustainable Travel","Backpacking","Street Food","Work-Life Balance","Future of Work","Pop Culture","Festivals","Luxury Travel","Solo Travel","Smart Home","TikTok Trends","Privacy","Celebrity News"]},
-  {id:9,c:"#546E7A",e:"⚽",s:"Sports",t:["Cricket","IPL","Football","F1","Esports","Premier League","Olympics","Tennis","NBA","Valorant","Chess","League of Legends","Game Development","Nintendo","PlayStation","Wimbledon","MMA","Sports Analytics","Fantasy Sports","Speedrunning"]}
+  {id:1,c:"#1E88E5",e:"fa-landmark",s:"Society",t:["Elections2024","Supreme Court","Geopolitics","NATO","Diplomacy","Human Rights","Urban Planning","Public Policy","Federalism","Immigration Law","Constitutional Law","Education","Feminism","LGBTQ+ Rights","United Nations","Lok Sabha","NEP 2020","Brexit","Voter Behavior","Parliament"]},
+  {id:2,c:"#FBC02D",e:"fa-briefcase",s:"Business",t:["Bitcoin","Stock Market","Cryptocurrency","Startup","Venture Capital","FinTech","Ethereum","Inflation","NASDAQ","Nifty 50","Real Estate","SaaS","E-Commerce","Gig Economy","GDP","Mutual Funds","Recession","Personal Finance","Wealth Management","IPO"]},
+  {id:3,c:"#3949AB",e:"fa-flask",s:"Science",t:["Artificial Intelligence","ChatGPT","Quantum Computing","SpaceX","ISRO","NASA","Cybersecurity","Robotics","CRISPR","Neural Networks","Generative AI","Web3","Metaverse","Semiconductors","Cloud Computing","Drones","3D Printing","Dark Web","Astrophysics","Black Holes"]},
+  {id:4,c:"#E53935",e:"fa-masks-theater",s:"Arts",t:["Game of Thrones","K-Pop","Anime","Marvel Cinematic Universe","Studio Ghibli","NFTs","Filmmaking","Podcasting","Digital Art","Photography","Jazz","Electronic Music","Streetwear","Sneaker Culture","Broadway","Sci-Fi","Poetry","Cyberpunk","Typography","Modern Art"]},
+  {id:5,c:"#43A047",e:"fa-leaf",s:"Nature",t:["Climate Change","Renewable Energy","Wildlife","Conservation","Solar Power","Biodiversity","Marine Biology","Zoology","Geology","National Parks","Hiking","Ecotourism","Rewilding","Agriculture","Sustainable Living","Urban Farming","Oceanography","Meteorology","Volcanoes","Endangered Species"]},
+  {id:6,c:"#FB8C00",e:"fa-spa",s:"Wellbeing",t:["Mental Health","Mindfulness","Fitness","Yoga","Nutrition","Meditation","Productivity","Sleep Hygiene","Biohacking","Therapy","Veganism","Journaling","Self-Care","Career Coaching","Atomic Habits","CrossFit","Marathon Training","Keto","Personal Growth","Longevity"]},
+  {id:7,c:"#8E24AA",e:"fa-brain",s:"Philosophy",t:["Stoicism","Existentialism","Buddhism","Hinduism","Philosophy","Astrology","Ethics","Consciousness","Mythology","Zen","Taoism","Nihilism","Free Will","Greek Mythology","Kabbalah","Sufism","Tarot","Mysticism","Panpsychism","Absurdism"]},
+  {id:8,c:"#00ACC1",e:"fa-wand-magic-sparkles",s:"Lifestyle",t:["Digital Nomad","Remote Work","Travel","Food","Social Media Trends","Influencer Marketing","Coffee Culture","Sustainable Travel","Backpacking","Street Food","Work-Life Balance","Future of Work","Pop Culture","Festivals","Luxury Travel","Solo Travel","Smart Home","TikTok Trends","Privacy","Celebrity News"]},
+  {id:9,c:"#546E7A",e:"fa-futbol",s:"Sports",t:["Cricket","IPL","Football","F1","Esports","Premier League","Olympics","Tennis","NBA","Valorant","Chess","League of Legends","Game Development","Nintendo","PlayStation","Wimbledon","MMA","Sports Analytics","Fantasy Sports","Speedrunning"]}
 ];
 
 let obAllT = [], obSelT = new Set(), obPF = 0, obSD = null;
@@ -4490,7 +4489,7 @@ function obPopulateTopics() {
   ps.innerHTML = '<button class="ob-ppill active" style="background:var(--accent);border-color:transparent" onclick="obFilterPillar(0,this)">All</button>';
   OB_PILLARS.forEach(p => {
     const btn = document.createElement('button');
-    btn.className = 'ob-ppill'; btn.textContent = p.e + ' ' + p.s;
+    btn.className = 'ob-ppill'; btn.innerHTML = '<i class="fa-solid '+p.e+'"></i> '+p.s;
     btn.onclick = () => obFilterPillar(p.id, btn);
     ps.appendChild(btn);
   });
