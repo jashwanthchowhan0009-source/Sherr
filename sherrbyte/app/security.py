@@ -12,6 +12,7 @@ import base64
 import hashlib
 import hmac
 import json
+import os
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -21,15 +22,42 @@ from app.config import settings
 
 
 # ─── Passwords ────────────────────────────────────────────────────────────────
+# PBKDF2-HMAC-SHA256 with a per-user random salt. New hashes are stored as
+# "pbkdf2$<iterations>$<salt_hex>$<dk_hex>". Legacy hashes (bare hex, static
+# pepper = jwt_secret) are still verified for backward compatibility so existing
+# accounts keep working; they transparently upgrade on next login.
+_PBKDF2_ITERATIONS = 200_000
+
+
+def _pbkdf2(pw: str, salt: bytes, iterations: int) -> str:
+    return hashlib.pbkdf2_hmac("sha256", pw.encode(), salt, iterations).hex()
+
+
 def hash_password(pw: str) -> str:
-    # PBKDF2-HMAC-SHA256 with a static pepper from settings.jwt_secret.
-    salt = settings.jwt_secret.encode()
-    dk = hashlib.pbkdf2_hmac("sha256", pw.encode(), salt, 100_000)
-    return dk.hex()
+    salt = os.urandom(16)
+    dk = _pbkdf2(pw, salt, _PBKDF2_ITERATIONS)
+    return f"pbkdf2${_PBKDF2_ITERATIONS}${salt.hex()}${dk}"
+
+
+def _verify_legacy(pw: str) -> str:
+    # Original scheme: static pepper from jwt_secret, 100k iterations, bare hex.
+    return hashlib.pbkdf2_hmac("sha256", pw.encode(), settings.jwt_secret.encode(), 100_000).hex()
 
 
 def verify_password(pw: str, hashed: str) -> bool:
-    return hmac.compare_digest(hash_password(pw), hashed)
+    if hashed.startswith("pbkdf2$"):
+        try:
+            _, iters, salt_hex, dk_hex = hashed.split("$", 3)
+            return hmac.compare_digest(_pbkdf2(pw, bytes.fromhex(salt_hex), int(iters)), dk_hex)
+        except Exception:
+            return False
+    # Legacy static-pepper hash.
+    return hmac.compare_digest(_verify_legacy(pw), hashed)
+
+
+def needs_rehash(hashed: str) -> bool:
+    """True if the stored hash uses the old static-pepper scheme."""
+    return not hashed.startswith("pbkdf2$")
 
 
 # ─── Tokens ───────────────────────────────────────────────────────────────────

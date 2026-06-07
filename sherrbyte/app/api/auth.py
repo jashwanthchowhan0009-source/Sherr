@@ -15,8 +15,14 @@ from app.config import PILLAR_ALIASES, SLUG_TO_PILLAR
 from app.db.supabase import db
 from app.models.user import LoginReq, RefreshReq, RegisterReq, TokenPair
 from app.security import (
-    decode_token, hash_password, make_access_token, make_refresh_token, verify_password,
+    decode_token, hash_password, make_access_token, make_refresh_token,
+    needs_rehash, verify_password,
 )
+
+
+def _norm_email(email: str) -> str:
+    """Normalize emails so 'A@X.com ' and 'a@x.com' are the same account."""
+    return (email or "").strip().lower()
 
 log = logging.getLogger("sherbyte.auth")
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -41,15 +47,16 @@ async def _seed_topics(conn, user_id: str, topics: list[str]) -> None:
 
 @router.post("/register", response_model=TokenPair)
 async def register(req: RegisterReq) -> TokenPair:
-    existing = await db.fetchval("SELECT 1 FROM users WHERE email=$1", req.email)
+    email = _norm_email(req.email)
+    existing = await db.fetchval("SELECT 1 FROM users WHERE email=$1", email)
     if existing:
         raise HTTPException(400, "Email already registered")
 
-    name = req.name or req.email.split("@")[0]
+    name = req.name.strip() if req.name else email.split("@")[0]
     async with db.acquire() as conn:
         row = await conn.fetchrow(
             "INSERT INTO users (email, password_hash, name) VALUES ($1,$2,$3) RETURNING id",
-            req.email, hash_password(req.password), name,
+            email, hash_password(req.password), name,
         )
         user_id = str(row["id"])
         await _seed_topics(conn, user_id, req.topics)
@@ -64,10 +71,16 @@ async def register(req: RegisterReq) -> TokenPair:
 @router.post("/login", response_model=TokenPair)
 async def login(req: LoginReq) -> TokenPair:
     user = await db.fetchrow(
-        "SELECT id, password_hash, name FROM users WHERE email=$1", req.email
+        "SELECT id, password_hash, name FROM users WHERE email=$1", _norm_email(req.email)
     )
     if not user or not verify_password(req.password, user["password_hash"]):
         raise HTTPException(401, "Invalid credentials")
+    # Transparently upgrade legacy static-pepper hashes to per-user salt on login.
+    if needs_rehash(user["password_hash"]):
+        await db.execute(
+            "UPDATE users SET password_hash=$1 WHERE id=$2",
+            hash_password(req.password), user["id"],
+        )
     await db.execute("UPDATE users SET last_login=now() WHERE id=$1", user["id"])
     user_id = str(user["id"])
     return TokenPair(
