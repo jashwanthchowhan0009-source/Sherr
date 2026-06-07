@@ -1350,17 +1350,15 @@ nav {
   display: flex; align-items: center; justify-content: space-around;
   z-index: 600;
 
-  background:
-    radial-gradient(130% 170% at 100% 0%, rgba(42,96,104,0.55) 0%, rgba(42,96,104,0) 55%),
-    linear-gradient(160deg, rgba(27,41,46,0.86) 0%, rgba(9,15,18,0.93) 100%);
-  backdrop-filter: blur(24px) saturate(150%);
-  -webkit-backdrop-filter: blur(24px) saturate(150%);
-  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.12);
+  backdrop-filter: blur(30px) saturate(170%);
+  -webkit-backdrop-filter: blur(30px) saturate(170%);
+  border: 1px solid rgba(255,255,255,0.22);
   border-radius: 30px;
 
   box-shadow:
-    0 14px 40px rgba(0,0,0,0.50),
-    inset 0 1px 1px rgba(255,255,255,0.14);
+    0 14px 40px rgba(0,0,0,0.28),
+    inset 0 1px 1px rgba(255,255,255,0.18);
   padding: 0 10px;
 }
 
@@ -1372,14 +1370,14 @@ nav {
 .nb-icon {
   width: 48px; height: 40px; border-radius: 13px;
   display: flex; align-items: center; justify-content: center;
-  font-size: 1.08rem; color: rgba(255,255,255,0.55);
+  font-size: 1.08rem; color: rgba(255,255,255,0.70);
   transition: all 0.25s var(--spring);
 }
 .nb-lbl { display: none; }
 .nb.on .nb-icon {
-  background: rgba(255,255,255,0.16);
+  background: rgba(255,255,255,0.26);
   color: #fff;
-  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.10);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.18);
 }
 .nb.on .nb-icon i { filter: none; }
 
@@ -4354,15 +4352,20 @@ function handleNavScroll(e) {
 }
 // Home: hide BOTH the bottom nav and the top category bar when scrolling down;
 // bring them back when scrolling up (only the SherrByte bar stays put).
+let _barIdleTimer = null;
 function handleHomeScroll(e) {
   const st = e.target.scrollTop;
   const chips = document.getElementById('chip-row');
-  if (st > lastScrollY + 8 && st > 60) {
-    navEl.classList.add('hidden');
-    if (chips) chips.classList.add('bar-hidden');
-  } else if (st < lastScrollY - 8 || st < 20) {
-    navEl.classList.remove('hidden');
-    if (chips) chips.classList.remove('bar-hidden');
+  // Any scroll, in any direction, brings the category bar + nav back up…
+  navEl.classList.remove('hidden');
+  if (chips) chips.classList.remove('bar-hidden');
+  clearTimeout(_barIdleTimer);
+  // …then they tuck away again shortly after you stop (kept visible near the top).
+  if (st > 80) {
+    _barIdleTimer = setTimeout(() => {
+      navEl.classList.add('hidden');
+      if (chips) chips.classList.add('bar-hidden');
+    }, 1500);
   }
   lastScrollY = st;
 }
