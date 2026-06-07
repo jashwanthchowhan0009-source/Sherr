@@ -110,12 +110,25 @@ async def explore(
 
 @router.get("/stats/categories")
 async def stats_categories():
-    """How many articles exist per category (pillar). For visibility/debugging."""
+    """Per-category article counts + how many were created recently."""
     rows = await db.fetch("SELECT pillar_id, COUNT(*) AS c FROM info_objects GROUP BY pillar_id")
     by = {r["pillar_id"]: r["c"] for r in rows}
     cats = [{"pillar_id": pid, "slug": p["slug"], "name": p["name"], "count": int(by.get(pid, 0))}
             for pid, p in PILLARS.items()]
-    return {"total": sum(c["count"] for c in cats), "categories": cats}
+    recent = await db.fetchrow(
+        """
+        SELECT
+          COUNT(*) FILTER (WHERE created_at > now() - interval '6 hours')  AS h6,
+          COUNT(*) FILTER (WHERE created_at > now() - interval '12 hours') AS h12,
+          COUNT(*) FILTER (WHERE created_at > now() - interval '24 hours') AS h24
+        FROM info_objects
+        """
+    )
+    return {
+        "total": sum(c["count"] for c in cats),
+        "categories": cats,
+        "created_last": {"6h": int(recent["h6"]), "12h": int(recent["h12"]), "24h": int(recent["h24"])},
+    }
 
 
 # ─── Old single /interact endpoint → v6 signals + preference nudges ───────────
