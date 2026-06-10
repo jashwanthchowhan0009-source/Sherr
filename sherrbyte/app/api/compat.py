@@ -15,12 +15,19 @@ same Bearer access token that compat login now returns.
 from __future__ import annotations
 
 import logging
+import os
+import secrets
+import smtplib
+import time as _time
+from email.mime.text import MIMEText
 from typing import Optional
 
+import httpx
 from fastapi import APIRouter, Header, HTTPException, Query
 
 from app.api import activity, auth, feed
 from app.config import PILLARS
+from app.security import hash_password
 from app.db.supabase import db
 from app.models.user import LoginReq, RegisterReq, UpdateTopicsReq
 from app.security import decode_token
@@ -129,6 +136,81 @@ async def stats_categories():
         "categories": cats,
         "created_last": {"6h": int(recent["h6"]), "12h": int(recent["h12"]), "24h": int(recent["h24"])},
     }
+
+
+# ─── Forgot password (OTP via email) ─────────────────────────────────────────
+_RESET_OTPS: dict = {}          # email -> {"otp": str, "exp": epoch}  (in-memory, short-lived)
+_OTP_TTL = 600                  # 10 minutes
+
+
+async def _send_email(to: str, subject: str, html: str, text: str) -> bool:
+    """Send via Resend (RESEND_API_KEY) or SMTP (SMTP_HOST). Returns True if sent."""
+    sender = os.getenv("MAIL_FROM", "SherrByte <onboarding@resend.dev>")
+    key = os.getenv("RESEND_API_KEY", "")
+    if key:
+        try:
+            async with httpx.AsyncClient() as c:
+                r = await c.post(
+                    "https://api.resend.com/emails",
+                    headers={"Authorization": f"Bearer {key}"},
+                    json={"from": sender, "to": [to], "subject": subject, "html": html},
+                    timeout=10,
+                )
+                if r.status_code < 300:
+                    return True
+                log.warning("Resend failed %s: %s", r.status_code, r.text[:200])
+        except Exception as e:
+            log.warning("Resend error: %s", e)
+    host = os.getenv("SMTP_HOST", "")
+    if host:
+        try:
+            msg = MIMEText(text)
+            msg["Subject"], msg["From"], msg["To"] = subject, sender, to
+            with smtplib.SMTP(host, int(os.getenv("SMTP_PORT", "587"))) as s:
+                s.starttls()
+                s.login(os.getenv("SMTP_USER", ""), os.getenv("SMTP_PASS", ""))
+                s.send_message(msg)
+            return True
+        except Exception as e:
+            log.warning("SMTP error: %s", e)
+    log.info("[reset-otp] no email provider configured; OTP for %s = %s", to, _RESET_OTPS.get(to, {}).get("otp"))
+    return False
+
+
+@router.post("/forgot-password")
+async def forgot_password(payload: dict):
+    email = (payload.get("email") or "").strip().lower()
+    if not email:
+        raise HTTPException(400, "Email required")
+    user = await db.fetchval("SELECT 1 FROM users WHERE email=$1", email)
+    otp = f"{secrets.randbelow(1000000):06d}"
+    _RESET_OTPS[email] = {"otp": otp, "exp": _time.time() + _OTP_TTL}
+    sent = False
+    if user:
+        html = (f"<div style='font-family:sans-serif'><h2>SherrByte password reset</h2>"
+                f"<p>Your verification code is:</p>"
+                f"<p style='font-size:30px;font-weight:800;letter-spacing:6px'>{otp}</p>"
+                f"<p>It expires in 10 minutes. If you didn't request this, ignore this email.</p></div>")
+        sent = await _send_email(email, "Your SherrByte reset code", html, f"Your SherrByte code is {otp} (valid 10 min).")
+    resp = {"ok": True}          # never reveal whether the email exists
+    if os.getenv("OTP_DEBUG") and user and not sent:
+        resp["debug_otp"] = otp  # launch-prep only; remove OTP_DEBUG in prod
+    return resp
+
+
+@router.post("/reset-password")
+async def reset_password(payload: dict):
+    email = (payload.get("email") or "").strip().lower()
+    otp = (payload.get("otp") or "").strip()
+    new_pw = payload.get("password") or ""
+    if len(new_pw) < 6:
+        raise HTTPException(400, "Password must be at least 6 characters")
+    rec = _RESET_OTPS.get(email)
+    if not rec or rec["exp"] < _time.time() or rec["otp"] != otp:
+        raise HTTPException(400, "Invalid or expired code")
+    await db.execute("UPDATE users SET password_hash=$1 WHERE email=$2", hash_password(new_pw), email)
+    _RESET_OTPS.pop(email, None)
+    return {"ok": True}
 
 
 # ─── Old single /interact endpoint → v6 signals + preference nudges ───────────

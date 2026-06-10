@@ -1816,6 +1816,8 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 .ob-field input:focus { border-color: #0EB7D6; }
 .ob-field input::placeholder { color: var(--t3); }
 .ob-err { color: #ff6b6b; font-size: 0.7rem; margin-top: 5px; font-family: var(--fd); }
+.ob-forgot-link { text-align: center; margin-top: 14px; font-size: 0.8rem; font-weight: 600;
+  color: var(--accent); cursor: pointer; }
 .ob-btn-primary {
   width: 100%; padding: 12px; margin-top: 12px;
   background: var(--accent);
@@ -2404,6 +2406,17 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
           <div class="ob-field"><label>Password</label><input type="password" id="ob-lp" placeholder="Your password" autocomplete="current-password"></div>
           <div class="ob-err" id="ob-lerr"></div>
           <button class="ob-btn-primary" id="ob-lbtn" onclick="obDoLogin()">Sign In →</button>
+          <div class="ob-forgot-link tap" onclick="obShowForgot()">Forgot password?</div>
+        </div>
+        <div id="ob-forgot-form" style="display:none">
+          <div class="ob-field"><label>Email</label><input type="email" id="ob-fe" placeholder="you@example.com" autocomplete="email"></div>
+          <div id="ob-otp-fields" style="display:none">
+            <div class="ob-field"><label>Verification code</label><input type="text" id="ob-fotp" inputmode="numeric" maxlength="6" placeholder="6-digit code"></div>
+            <div class="ob-field"><label>New password</label><input type="password" id="ob-fnp" placeholder="Min. 6 characters" autocomplete="new-password"></div>
+          </div>
+          <div class="ob-err" id="ob-ferr"></div>
+          <button class="ob-btn-primary" id="ob-fbtn" onclick="obSendOtp()">Send code →</button>
+          <div class="ob-forgot-link tap" onclick="obSwitchTab('login')">← Back to sign in</div>
         </div>
         <div id="ob-reg-form" style="display:none">
           <div class="ob-field"><label>Name</label><input type="text" id="ob-rn" placeholder="Your name" autocomplete="name"></div>
@@ -4798,8 +4811,47 @@ function obSwitchTab(t) {
   const isL = t === 'login';
   document.getElementById('ob-login-form').style.display = isL ? '' : 'none';
   document.getElementById('ob-reg-form').style.display   = isL ? 'none' : '';
+  const ff = document.getElementById('ob-forgot-form'); if (ff) ff.style.display = 'none';
   document.getElementById('ob-tab-login').className  = 'ob-tab' + (isL ? ' active' : '');
   document.getElementById('ob-tab-reg').className    = 'ob-tab' + (isL ? '' : ' active');
+}
+function obShowForgot() {
+  document.getElementById('ob-login-form').style.display = 'none';
+  document.getElementById('ob-reg-form').style.display = 'none';
+  document.getElementById('ob-forgot-form').style.display = '';
+  document.getElementById('ob-otp-fields').style.display = 'none';
+  const err = document.getElementById('ob-ferr'); err.style.color = ''; err.textContent = '';
+  const b = document.getElementById('ob-fbtn'); b.textContent = 'Send code →'; b.onclick = obSendOtp;
+  const le = document.getElementById('ob-le').value.trim(); if (le) document.getElementById('ob-fe').value = le;
+}
+async function obSendOtp() {
+  const email = document.getElementById('ob-fe').value.trim();
+  const err = document.getElementById('ob-ferr'); err.style.color = ''; err.textContent = '';
+  if (!email) { err.textContent = 'Enter your email'; return; }
+  const b = document.getElementById('ob-fbtn'); b.disabled = true; b.textContent = 'Sending…';
+  try {
+    const r = await api('/forgot-password', { method: 'POST', body: JSON.stringify({ email }) });
+    document.getElementById('ob-otp-fields').style.display = '';
+    err.style.color = 'var(--t2)';
+    err.textContent = r.debug_otp ? ('Test code: ' + r.debug_otp) : 'If that email is registered, a code has been sent.';
+    b.textContent = 'Reset password →'; b.onclick = obResetPw;
+  } catch (e) { err.style.color = ''; err.textContent = e.message || 'Could not send code'; }
+  finally { b.disabled = false; }
+}
+async function obResetPw() {
+  const email = document.getElementById('ob-fe').value.trim();
+  const otp = document.getElementById('ob-fotp').value.trim();
+  const np = document.getElementById('ob-fnp').value;
+  const err = document.getElementById('ob-ferr'); err.style.color = ''; err.textContent = '';
+  if (!otp || (np || '').length < 6) { err.textContent = 'Enter the code and a 6+ character password'; return; }
+  const b = document.getElementById('ob-fbtn'); b.disabled = true; b.textContent = 'Resetting…';
+  try {
+    await api('/reset-password', { method: 'POST', body: JSON.stringify({ email, otp, password: np }) });
+    toast('✓ Password reset — please sign in');
+    obSwitchTab('login');
+    document.getElementById('ob-lp').value = ''; document.getElementById('ob-le').value = email;
+  } catch (e) { err.textContent = e.message || 'Reset failed'; b.textContent = 'Reset password →'; }
+  finally { b.disabled = false; }
 }
 
 async function obDoLogin() {
