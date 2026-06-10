@@ -1467,11 +1467,12 @@ nav {
 }
 .nb-lbl { display: none; }
 .nb.on .nb-icon {
-  background: rgba(255,255,255,0.26);
+  background: var(--accent);
   color: #fff;
-  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.18);
+  box-shadow: 0 5px 16px -3px var(--accent);
 }
 .nb.on .nb-icon i { filter: none; }
+.nb .nb-icon { transition: background .25s var(--snap), color .25s var(--snap), box-shadow .25s var(--snap); }
 
 /* ─── Bytes — one structured card per screen (vertical snap) ─── */
 #v-bytes { inset: 0; }
@@ -2370,7 +2371,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 <!-- ════════ ONBOARDING ════════ -->
 <div id="ob-screen">
   <div class="ob-top">
-    <div class="ob-top-logo"><img src="logo.jpg" alt="" onerror="this.outerHTML='⚡'"></div>
+    <div class="ob-top-logo"><img src="tiger-logo.png" alt="" onerror="this.outerHTML='⚡'"></div>
     <div class="ob-top-brand">Sherr<span>Byte</span></div>
   </div>
   <div class="ob-content">
@@ -2430,7 +2431,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 <!-- SPLASH (claw-tear reveal) -->
 <div id="splash" class="go">
   <div class="sp-stage">
-    <div class="sp-claw-logo"><div class="sp-imgwrap"><img src="logo.jpg" alt="SherrByte" onerror="this.closest('.sp-claw-logo').innerHTML='<div class=\'sp-name\'>Sherr<span>Byte</span></div>'"></div></div>
+    <div class="sp-claw-logo"><div class="sp-imgwrap"><img src="tiger-logo.png" alt="SherrByte" onerror="this.closest('.sp-claw-logo').innerHTML='<div class=\'sp-name\'>Sherr<span>Byte</span></div>'"></div></div>
     <div class="sp-claws">
       <svg viewBox="0 0 200 320">
         <path d="M40 8 Q34 160 46 312"/>
@@ -2482,7 +2483,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 <header id="hdr">
   <div class="h-left">
     <div class="hbtn tap" onclick="sbOpen()"><i class="fa-solid fa-bars-staggered"></i></div>
-    <div class="h-logo"><img src="logo.jpg" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:8px" onerror="this.outerHTML='⚡'"></div>
+    <div class="h-logo"><img src="tiger-logo.png" alt="" style="width:100%;height:100%;object-fit:contain;padding:3px" onerror="this.outerHTML='⚡'"></div>
     <div class="h-brand" id="h-brand">Sherr<span>Byte</span></div>
     <div class="h-page" id="h-page"></div>
   </div>
@@ -2538,7 +2539,6 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
       <div class="ao-main-title" id="ao-main-title"></div>
       <div class="ao-text" id="ao-text"></div>
       <div class="ao-keypoints" id="ao-keypoints"></div>
-      <div class="ao-sources" id="ao-sources"></div>
       <div class="ao-acts">
         <div class="ao-act tap" id="ao-like" onclick="aoLike()"><i class="fa-regular fa-heart"></i><span>Like</span></div>
         <div class="ao-act tap" id="ao-save" onclick="aoSave()"><i class="fa-regular fa-bookmark"></i><span>Save</span></div>
@@ -2556,6 +2556,8 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 
       <div class="ao-related-hdr">Related Stories</div>
       <div id="ao-related"></div>
+
+      <div class="ao-sources" id="ao-sources"></div>
     </div>
   </div>
 </div>
@@ -2692,8 +2694,8 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
     <div class="prof-stats">
       <div class="ps"><div class="ps-n" id="prof-followers">0</div><div class="ps-l">Followers</div></div>
       <div class="ps"><div class="ps-n" id="prof-following">0</div><div class="ps-l">Following</div></div>
-      <div class="ps"><div class="ps-n" id="prof-friends">0</div><div class="ps-l">Friends</div></div>
-      <div class="ps"><div class="ps-n" id="saved-ct">0</div><div class="ps-l">Saved</div></div>
+      <div class="ps" style="display:none"><div class="ps-n" id="prof-friends">0</div><div class="ps-l">Friends</div></div>
+      <div class="ps" style="display:none"><div class="ps-n" id="saved-ct">0</div><div class="ps-l">Saved</div></div>
     </div>
     <div class="prof-btns">
       <button class="pb pb-sec tap" onclick="openEditProfile()">Edit Profile</button>
@@ -3476,7 +3478,7 @@ async function loadArticleComments(id) {
   const list = document.getElementById('ao-cmt-list');
   if (!list) return;
   const inp = document.getElementById('ao-cmt-input');
-  if (inp) inp.placeholder = currentArticle?.source ? 'Add a comment for ' + currentArticle.source : 'Add a comment…';
+  if (inp) inp.placeholder = 'Add a comment…';
   const cnt = document.getElementById('ao-cmt-count');
   list.innerHTML = '<div class="ao-cmt-empty"><div class="ao-cmt-empty-s">Loading…</div></div>';
   try {
@@ -4502,6 +4504,15 @@ function navTo(name) {
     hPage.textContent = lbls[name];
   }
 
+  if (name==='home') {
+    // Tapping Home always returns to the "All" feed (from any category/tab).
+    if (curChip !== 'all' || homeActiveTab !== 'foryou') {
+      const allChip = document.querySelector('#chip-row .chip[onclick*="\'all\'"]');
+      if (allChip) selectChip(allChip, 'all'); else { curChip='all'; homeActiveTab='foryou'; loadFeed(true); }
+    } else {
+      document.getElementById('v-home')?.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }
   if (name==='bookmarks') renderBM();
   if (name==='notifs')    renderNotifs();
   if (name==='profile') {

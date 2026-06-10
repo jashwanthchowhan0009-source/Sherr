@@ -83,10 +83,9 @@ async def personalized(
             q += f" AND pillar_id=${len(args)+1}"; args.append(pillar_arg)
         if scope_arg:
             q += f" AND scope=${len(args)+1}"; args.append(scope_arg)
-        # Freshness-decayed importance (12h half-life) so newly-ingested stories
-        # surface on refresh instead of the feed looking static.
-        q += (" ORDER BY importance * power(0.5, GREATEST(EXTRACT(EPOCH FROM (now() - published_at)) / 43200.0, 0)) DESC,"
-              f" published_at DESC LIMIT ${len(args)+1} OFFSET ${len(args)+2}")
+        # Importance-ranked, recency tiebreak (index-friendly + fast — the
+        # computed freshness expression was unindexed and timed out /feed).
+        q += f" ORDER BY importance DESC, published_at DESC LIMIT ${len(args)+1} OFFSET ${len(args)+2}"
         args += [limit + 1, offset]
         rows = await db.fetch(q, *args)
         has_more = len(rows) > limit
@@ -116,8 +115,7 @@ async def personalized(
     if len(rows) < 5:
         # Cold start — fall back to global importance feed.
         rows = await db.fetch(
-            _SELECT + (" ORDER BY importance * power(0.5, GREATEST(EXTRACT(EPOCH FROM (now() - published_at)) / 43200.0, 0)) DESC,"
-                       " published_at DESC LIMIT $1 OFFSET $2"),
+            _SELECT + " ORDER BY importance DESC, published_at DESC LIMIT $1 OFFSET $2",
             limit + 1, offset,
         )
 

@@ -337,10 +337,14 @@ async def fetch_metals() -> dict:
                 metals[label].setdefault("change_pct", y.get("change_pct", 0))
         fx = await _yahoo(client, ["USDINR=X"])
         usd_inr = (fx.get("USDINR=X") or {}).get("price", 83.0)
+        # Indian retail = international spot + ~6% import duty + 3% GST + premium.
+        # Pure spot conversion under-reads vs the ₹/10g price Indians actually see,
+        # so apply a retail factor to land in the real retail range (24K).
+        INDIA_RETAIL_FACTOR = 1.17
         for d in metals.values():
             if "price_usd_oz" in d:
-                # 10 g = 0.32154 troy oz; ₹/10g = USD/oz × oz_per_10g × USDINR.
-                d["price_inr_10g"] = round(d["price_usd_oz"] * 0.3215 * usd_inr, 0)
+                # 10 g = 0.32154 troy oz; ₹/10g = USD/oz × oz_per_10g × USDINR × retail.
+                d["price_inr_10g"] = round(d["price_usd_oz"] * 0.3215 * usd_inr * INDIA_RETAIL_FACTOR, 0)
     await _snapshot_metals(metals)   # build daily history for the detail graphs
     _cset("metals", metals, 180)
     return metals
