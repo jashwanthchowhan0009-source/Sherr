@@ -431,6 +431,22 @@ _FOREX_SYM = {"USDINR": "USDINR=X", "EURINR": "EURINR=X", "GBPINR": "GBPINR=X",
               "JPYINR": "JPYINR=X", "EURUSD": "EURUSD=X", "GBPUSD": "GBPUSD=X"}
 _METAL_SYM = {"GOLD": "GC=F", "SILVER": "SI=F", "PLATINUM": "PL=F", "PALLADIUM": "PA=F"}
 
+# Constituent companies shown when an index is opened (symbol, display name).
+_INDEX_CONSTITUENTS = {
+    "NASDAQ": [("AAPL", "Apple"), ("MSFT", "Microsoft"), ("NVDA", "Nvidia"), ("TSLA", "Tesla"),
+               ("AMZN", "Amazon"), ("GOOGL", "Alphabet"), ("META", "Meta"), ("NFLX", "Netflix"), ("AMD", "AMD")],
+    "SP500":  [("AAPL", "Apple"), ("MSFT", "Microsoft"), ("NVDA", "Nvidia"), ("AMZN", "Amazon"),
+               ("BRK-B", "Berkshire"), ("JPM", "JPMorgan"), ("V", "Visa"), ("UNH", "UnitedHealth")],
+    "DOW":    [("AAPL", "Apple"), ("MSFT", "Microsoft"), ("JPM", "JPMorgan"), ("V", "Visa"),
+               ("HD", "Home Depot"), ("KO", "Coca-Cola"), ("MCD", "McDonald's"), ("DIS", "Disney")],
+    "NIFTY":  [("RELIANCE.NS", "Reliance"), ("TCS.NS", "TCS"), ("HDFCBANK.NS", "HDFC Bank"),
+               ("INFY.NS", "Infosys"), ("ICICIBANK.NS", "ICICI Bank"), ("TITAN.NS", "Titan"),
+               ("TATAMOTORS.NS", "Tata Motors"), ("BHARTIARTL.NS", "Airtel"), ("SBIN.NS", "SBI")],
+    "SENSEX": [("RELIANCE.NS", "Reliance"), ("TCS.NS", "TCS"), ("HDFCBANK.NS", "HDFC Bank"),
+               ("INFY.NS", "Infosys"), ("ICICIBANK.NS", "ICICI Bank"), ("ITC.NS", "ITC"),
+               ("LT.NS", "L&T"), ("SBIN.NS", "SBI")],
+}
+
 
 async def _yahoo_series(client: httpx.AsyncClient, symbol: str, rng: str, interval: str = "1d") -> list[dict]:
     try:
@@ -498,4 +514,31 @@ async def markets_history(category: str, symbol: str, range: str = "1M", days: i
             series = await _yahoo_series(client, ysym, yf_range, yf_int)
     out = {"category": cat, "symbol": sym, "range": rng, "series": series}
     _cset(key, out, 600)
+    return out
+
+
+@router.get("/constituents")
+async def markets_constituents(index: str):
+    """Live quotes for the companies that make up an index (Apple/Tesla for
+    NASDAQ, Reliance/TCS for NIFTY, …) — shown when the index is opened."""
+    idx = index.upper()
+    cons = _INDEX_CONSTITUENTS.get(idx, [])
+    if not cons:
+        return {"index": idx, "constituents": []}
+    key = f"cons_{idx}"
+    cached = _cget(key)
+    if cached:
+        return cached
+    async with httpx.AsyncClient() as client:
+        quotes = await _yahoo(client, [s for s, _ in cons])
+    items = []
+    for sym, name in cons:
+        q = quotes.get(sym, {})
+        items.append({
+            "symbol": sym, "name": name,
+            "price": q.get("price", 0), "change_pct": q.get("change_pct", 0),
+            "currency": q.get("currency", ""),
+        })
+    out = {"index": idx, "constituents": items}
+    _cset(key, out, 60)
     return out

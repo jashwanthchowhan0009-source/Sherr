@@ -1589,6 +1589,10 @@ nav {
 .mkt-d-rel-item:active { transform: scale(0.98); }
 .mkt-d-rel-name { font-weight: 700; color: var(--t1); font-size: 0.9rem; }
 .mkt-d-rel-price { font-weight: 700; font-size: 0.9rem; color: var(--t2); }
+.mkt-d-rel-right { display: flex; align-items: center; gap: 10px; }
+.mkt-d-rel-chg { font-size: 0.74rem; font-weight: 700; min-width: 52px; text-align: right; }
+.mkt-d-rel-chg.up { color: var(--positive); }
+.mkt-d-rel-chg.dn { color: var(--negative); }
 
 /* ═══════════════════════════════════
    RESPONSIVE / UTILITY
@@ -5280,23 +5284,22 @@ function buildSparkSVG(series, up){
 let _mktCtx = null;
 const MKT_RANGES = ['1D','1W','1M','6M','1Y','5Y','MAX'];
 const RANGE_LABEL = { '1D':'1 day','1W':'1 week','1M':'1 month','6M':'6 months','1Y':'1 year','5Y':'5 years','MAX':'Max' };
-async function openMarketDetail(cat, sym, label){
+const INDEX_SET = new Set(['NIFTY','SENSEX','NASDAQ','DOW','SP500','FTSE','NIKKEI']);
+function _quoteFmt(q){
+  const c = q.currency==='INR' ? '₹' : (q.currency==='USD' ? '$' : (q.currency==='GBP'?'£':(q.currency==='EUR'?'€':'')));
+  return c + fmtNum(q.price||0);
+}
+async function openMarketDetail(cat, sym, label, quote){
   document.getElementById('market-overlay').classList.add('open');
   if(!_navReplay){ try{ history.pushState({view:'market'},''); }catch(e){} }
-  const bucket=(window._lastMkt||{})[cat]||{}, d=bucket[sym]||{};
-  const price=_mktVal(cat,d);
-  _mktCtx = { cat, sym, label };
+  const bucket=(window._lastMkt||{})[cat]||{};
+  const d = quote || bucket[sym] || {};
+  const price = quote ? (quote.price||0) : _mktVal(cat,d);
+  _mktCtx = { cat, sym, label, quote: quote||null };
   document.getElementById('mkt-d-hdr').textContent=label;
   document.getElementById('mkt-d-name').textContent=(MKT_LABELS[cat]||'')+' · '+label;
-  document.getElementById('mkt-d-price').textContent=price?_mktFmt(cat,price):'—';
-  const rel=document.getElementById('mkt-d-rel'); rel.innerHTML='';
-  Object.keys(bucket).filter(k=>k!==sym).slice(0,8).forEach(k=>{
-    const it=document.createElement('div'); it.className='mkt-d-rel-item';
-    it.innerHTML=`<div class="mkt-d-rel-name">${k}</div><div class="mkt-d-rel-price">${_mktFmt(cat,_mktVal(cat,bucket[k]))}</div>`;
-    it.addEventListener('click',()=>openMarketDetail(cat,k,k));
-    rel.appendChild(it);
-  });
-  // Timeframe tabs (default 1M)
+  document.getElementById('mkt-d-price').textContent = price ? (quote ? _quoteFmt(quote) : _mktFmt(cat,price)) : '—';
+  // Timeframe tabs + chart first (don't block on the companies list).
   const tabs=document.getElementById('mkt-tf-tabs');
   tabs.innerHTML=MKT_RANGES.map(r=>`<div class="mkt-tf${r==='1M'?' on':''}" data-r="${r}">${r==='MAX'?'Max':r}</div>`).join('');
   tabs.querySelectorAll('.mkt-tf').forEach(t=>t.onclick=()=>{
@@ -5304,6 +5307,38 @@ async function openMarketDetail(cat, sym, label){
     t.classList.add('on'); loadMktChart(t.dataset.r);
   });
   loadMktChart('1M');
+  renderMktRelated(cat, sym, label);
+}
+async function renderMktRelated(cat, sym, label){
+  const rel=document.getElementById('mkt-d-rel'); const relHdr=document.querySelector('.mkt-d-rel-hdr');
+  if(!rel) return;
+  rel.innerHTML='';
+  if(cat==='stocks' && INDEX_SET.has(sym)){
+    if(relHdr) relHdr.textContent='Companies in '+label;
+    rel.innerHTML='<div class="mkt-d-rel-item" style="opacity:.55">Loading companies…</div>';
+    try{
+      const cd=await api(`/markets/constituents?index=${encodeURIComponent(sym)}`);
+      if(!_mktCtx || _mktCtx.sym!==sym) return;
+      rel.innerHTML='';
+      (cd.constituents||[]).filter(c=>c.price).forEach(c=>{
+        const it=document.createElement('div'); it.className='mkt-d-rel-item';
+        const up=(c.change_pct||0)>=0;
+        it.innerHTML=`<div class="mkt-d-rel-name">${c.name}</div><div class="mkt-d-rel-right"><span class="mkt-d-rel-price">${_quoteFmt(c)}</span><span class="mkt-d-rel-chg ${up?'up':'dn'}">${(up?'+':'')+(c.change_pct||0).toFixed(2)}%</span></div>`;
+        it.addEventListener('click',()=>openMarketDetail('stocks', c.symbol, c.name, c));
+        rel.appendChild(it);
+      });
+      if(!rel.children.length) rel.innerHTML='<div class="mkt-d-rel-item" style="opacity:.55">Companies unavailable right now.</div>';
+    }catch(e){ rel.innerHTML='<div class="mkt-d-rel-item" style="opacity:.55">Couldn’t load companies.</div>'; }
+  } else {
+    if(relHdr) relHdr.textContent='More in this category';
+    const bucket=(window._lastMkt||{})[cat]||{};
+    Object.keys(bucket).filter(k=>k!==sym).slice(0,8).forEach(k=>{
+      const it=document.createElement('div'); it.className='mkt-d-rel-item';
+      it.innerHTML=`<div class="mkt-d-rel-name">${k}</div><div class="mkt-d-rel-price">${_mktFmt(cat,_mktVal(cat,bucket[k]))}</div>`;
+      it.addEventListener('click',()=>openMarketDetail(cat,k,k));
+      rel.appendChild(it);
+    });
+  }
 }
 async function loadMktChart(range){
   if(!_mktCtx) return;
