@@ -4850,20 +4850,18 @@ function handleNavScroll(e) {
 }
 // Home: hide BOTH the bottom nav and the top category bar when scrolling down;
 // bring them back when scrolling up (only the SherrByte bar stays put).
-let _barIdleTimer = null;
 function handleHomeScroll(e) {
   const st = e.target.scrollTop;
   const chips = document.getElementById('chip-row');
-  // Any scroll, in any direction, brings the category bar + nav back up…
-  navEl.classList.remove('hidden');
-  if (chips) chips.classList.remove('bar-hidden');
-  clearTimeout(_barIdleTimer);
-  // …then they tuck away again shortly after you stop (kept visible near the top).
-  if (st > 80) {
-    _barIdleTimer = setTimeout(() => {
-      navEl.classList.add('hidden');
-      if (chips) chips.classList.add('bar-hidden');
-    }, 1500);
+  if (st < 24) {                          // at the top — always show
+    navEl.classList.remove('hidden');
+    if (chips) chips.classList.remove('bar-hidden');
+  } else if (st > lastScrollY + 6) {      // scrolling down (reading) — hide both
+    navEl.classList.add('hidden');
+    if (chips) chips.classList.add('bar-hidden');
+  } else if (st < lastScrollY - 6) {      // scrolling back up — bring both back
+    navEl.classList.remove('hidden');
+    if (chips) chips.classList.remove('bar-hidden');
   }
   lastScrollY = st;
 }
