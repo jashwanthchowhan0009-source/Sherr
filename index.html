@@ -4398,12 +4398,32 @@ async function renderBM() {
 }
 
 // ── NOTIFICATIONS ──
-function requestPushPermission() {
+async function requestPushPermission() {
   if (!('Notification' in window)) { toast('Notifications not supported here'); return; }
-  Notification.requestPermission().then(p => {
-    if (p === 'granted') { try { ST.push = true; persist(); } catch (e) {} toast('🔔 Notifications enabled'); renderNotifs(); }
-    else toast('Notifications are blocked in your browser settings');
-  });
+  const p = await Notification.requestPermission();
+  if (p !== 'granted') { toast('Notifications are blocked in your browser settings'); return; }
+  try { ST.push = true; persist(); } catch (e) {}
+  toast('🔔 Notifications enabled');
+  subscribePush();          // best-effort web-push registration (logged-in users)
+  renderNotifs();
+}
+function _urlB64ToU8(b64) {
+  const pad = '='.repeat((4 - b64.length % 4) % 4);
+  const s = (b64 + pad).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(s); const arr = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+  return arr;
+}
+async function subscribePush() {
+  try {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window) || !ST.token) return;
+    const vp = await api('/push/vapid-public');
+    if (!vp || !vp.enabled || !vp.key) return;     // server push not configured yet
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: _urlB64ToU8(vp.key) });
+    await api('/push/subscribe', { method: 'POST', body: JSON.stringify({ subscription: sub.toJSON() }) });
+  } catch (e) { /* push is optional */ }
 }
 async function renderNotifs() {
   const c = document.getElementById('notifs-feed');
