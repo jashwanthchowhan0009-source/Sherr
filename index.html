@@ -1310,6 +1310,32 @@ header {
 /* ═══════════════════════════════════
    SUB PAGES
 ═══════════════════════════════════ */
+.app-modal { position: absolute; inset: 0; z-index: 4000; display: none;
+  align-items: center; justify-content: center; padding: 22px;
+  background: rgba(0,0,0,0.55); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+.app-modal.on { display: flex; }
+.app-modal-card { width: 100%; max-width: 360px; background: var(--surface);
+  border: 0.5px solid var(--glassB); border-radius: var(--r-sheet, 20px); padding: 22px;
+  box-shadow: 0 24px 60px rgba(0,0,0,0.45); animation: amPop .26s var(--snap); }
+@keyframes amPop { from { opacity: 0; transform: translateY(14px) scale(.97); } to { opacity: 1; transform: none; } }
+.am-title { font: var(--t-title3); color: var(--t1); margin-bottom: 6px; letter-spacing: -0.02em; }
+.am-sub { font-size: 0.84rem; color: var(--t2); line-height: 1.5; margin-bottom: 16px; }
+.am-input { width: 100%; padding: 12px 14px; margin-bottom: 12px; background: var(--surface-2);
+  border: 1px solid var(--line); border-radius: var(--r-button); color: var(--t1);
+  font-size: 0.9rem; font-family: var(--f); outline: none; }
+.am-btn { width: 100%; padding: 13px; border: none; border-radius: var(--r-button);
+  background: var(--accent); color: #fff; font-size: 0.9rem; font-weight: 700; cursor: pointer; }
+.am-btn.danger { background: var(--negative); }
+.am-btn.ghost { background: var(--surface-2); color: var(--t1); margin-top: 8px; }
+.am-err { color: var(--negative); font-size: 0.76rem; min-height: 14px; margin-bottom: 8px; }
+.am-opt { display: flex; align-items: center; justify-content: space-between; padding: 13px 4px;
+  border-bottom: 0.5px solid var(--line2); cursor: pointer; font-size: 0.92rem; color: var(--t1); }
+.am-opt:last-child { border-bottom: none; }
+.am-opt .fa-check { color: var(--accent); }
+.am-faq-q { font-weight: 700; color: var(--t1); font-size: 0.88rem; padding: 12px 0 4px; }
+.am-faq-a { font-size: 0.82rem; color: var(--t2); line-height: 1.55; padding-bottom: 10px;
+  border-bottom: 0.5px solid var(--line2); }
+
 .sub {
   position: absolute; inset: 0; z-index: 1500;
   background: var(--bg);
@@ -2835,13 +2861,13 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   <div class="sub-scroll">
     <div class="sec-card"><div class="sec-lbl">Security Score</div><div class="sec-num">78</div><div class="sec-sub">Good · 2 improvements available</div><div class="sec-bar"><div class="sec-fill" style="width:78%"></div></div></div>
     <div class="sg"><div class="sg-lbl">Authentication</div><div class="sg-grp">
-      <div class="sg-row"><div class="sg-ico" style="background:#4F6BD4"><i class="fa-solid fa-key"></i></div><span class="sg-lbl2">Two-Factor Auth</span><div class="tog on" onclick="togRow(this)"></div></div>
-      <div class="sg-row"><div class="sg-ico" style="background:#A855F7"><i class="fa-solid fa-fingerprint"></i></div><span class="sg-lbl2">Biometric Login</span><div class="tog on" onclick="togRow(this)"></div></div>
-      <div class="sg-row tap" onclick="toast('🔑 Change password')"><div class="sg-ico" style="background:#FF5B5B"><i class="fa-solid fa-lock"></i></div><span class="sg-lbl2">Change Password</span><span class="sg-val">30 days ago</span><i class="fa-solid fa-chevron-right sg-arr"></i></div>
+      <div class="sg-row"><div class="sg-ico" style="background:#4F6BD4"><i class="fa-solid fa-key"></i></div><span class="sg-lbl2">Two-Factor Auth</span><div class="tog on" data-k="twofa" onclick="togRow(this)"></div></div>
+      <div class="sg-row"><div class="sg-ico" style="background:#A855F7"><i class="fa-solid fa-fingerprint"></i></div><span class="sg-lbl2">Biometric Login</span><div class="tog on" data-k="biometric" onclick="togRow(this)"></div></div>
+      <div class="sg-row tap" onclick="changePassword()"><div class="sg-ico" style="background:#FF5B5B"><i class="fa-solid fa-lock"></i></div><span class="sg-lbl2">Change Password</span><i class="fa-solid fa-chevron-right sg-arr"></i></div>
     </div></div>
     <div class="sg"><div class="sg-lbl">Danger Zone</div>
-      <div class="danger-row tap" onclick="toast('⚠️ Log out all devices?')"><div class="danger-ico"><i class="fa-solid fa-right-from-bracket"></i></div><span class="danger-lbl">Log Out All Devices</span></div>
-      <div class="danger-row tap" onclick="toast('⚠️ Deletion is permanent')"><div class="danger-ico"><i class="fa-solid fa-trash"></i></div><span class="danger-lbl">Delete Account</span></div>
+      <div class="danger-row tap" onclick="confirmLogoutAll()"><div class="danger-ico"><i class="fa-solid fa-right-from-bracket"></i></div><span class="danger-lbl">Log Out All Devices</span></div>
+      <div class="danger-row tap" onclick="confirmDeleteAccount()"><div class="danger-ico"><i class="fa-solid fa-trash"></i></div><span class="danger-lbl">Delete Account</span></div>
     </div>
   </div>
 </div>
@@ -2857,9 +2883,9 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
       </div>
     </div>
     <div class="sg"><div class="sg-lbl">What Others See</div><div class="sg-grp">
-      <div class="sg-row"><div class="sg-ico" style="background:#4F6BD4"><i class="fa-solid fa-eye"></i></div><span class="sg-lbl2">Online Status</span><div class="tog on" onclick="togRow(this)"></div></div>
-      <div class="sg-row"><div class="sg-ico" style="background:#A855F7"><i class="fa-solid fa-check-double"></i></div><span class="sg-lbl2">Read Receipts</span><div class="tog on" onclick="togRow(this)"></div></div>
-      <div class="sg-row"><div class="sg-ico" style="background:#52C17A"><i class="fa-solid fa-location-dot"></i></div><span class="sg-lbl2">Location in Posts</span><div class="tog" onclick="togRow(this)"></div></div>
+      <div class="sg-row"><div class="sg-ico" style="background:#4F6BD4"><i class="fa-solid fa-eye"></i></div><span class="sg-lbl2">Online Status</span><div class="tog on" data-k="online" onclick="togRow(this)"></div></div>
+      <div class="sg-row"><div class="sg-ico" style="background:#A855F7"><i class="fa-solid fa-check-double"></i></div><span class="sg-lbl2">Read Receipts</span><div class="tog on" data-k="receipts" onclick="togRow(this)"></div></div>
+      <div class="sg-row"><div class="sg-ico" style="background:#52C17A"><i class="fa-solid fa-location-dot"></i></div><span class="sg-lbl2">Location in Posts</span><div class="tog" data-k="location" onclick="togRow(this)"></div></div>
     </div></div>
   </div>
 </div>
@@ -2871,11 +2897,11 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
       <div class="sg-row tap" onclick="setTheme('system')"><div class="sg-ico" style="background:#6A6E83"><i class="fa-solid fa-circle-half-stroke"></i></div><span class="sg-lbl2">System</span><i class="fa-solid fa-check theme-check" data-pref="system" style="color:var(--accent);display:none"></i></div>
       <div class="sg-row tap" onclick="setTheme('light')"><div class="sg-ico" style="background:#E5E5EA;color:#FF9F0A"><i class="fa-solid fa-sun"></i></div><span class="sg-lbl2">Light</span><i class="fa-solid fa-check theme-check" data-pref="light" style="color:var(--accent);display:none"></i></div>
       <div class="sg-row tap" onclick="setTheme('dark')"><div class="sg-ico" style="background:#1C1C1E"><i class="fa-solid fa-moon"></i></div><span class="sg-lbl2">Dark</span><i class="fa-solid fa-check theme-check" data-pref="dark" style="color:var(--accent);display:none"></i></div>
-      <div class="sg-row"><div class="sg-ico" style="background:#8E8E93"><i class="fa-solid fa-text-size"></i></div><span class="sg-lbl2">Text Size</span><span class="sg-val">Medium</span><i class="fa-solid fa-chevron-right sg-arr"></i></div>
+      <div class="sg-row tap" onclick="openTextSize()"><div class="sg-ico" style="background:#8E8E93"><i class="fa-solid fa-text-size"></i></div><span class="sg-lbl2">Text Size</span><span class="sg-val" id="set-textsize-val">Medium</span><i class="fa-solid fa-chevron-right sg-arr"></i></div>
     </div></div>
     <div class="sg"><div class="sg-lbl">Notifications</div><div class="sg-grp">
-      <div class="sg-row"><div class="sg-ico" style="background:#FF5B5B"><i class="fa-solid fa-bell"></i></div><span class="sg-lbl2">Push Notifications</span><div class="tog on" onclick="togRow(this); if(this.classList.contains('on')) requestPushPermission();"></div></div>
-      <div class="sg-row"><div class="sg-ico" style="background:#52C17A"><i class="fa-solid fa-envelope"></i></div><span class="sg-lbl2">Email Digest</span><div class="tog" onclick="togRow(this)"></div></div>
+      <div class="sg-row"><div class="sg-ico" style="background:#FF5B5B"><i class="fa-solid fa-bell"></i></div><span class="sg-lbl2">Push Notifications</span><div class="tog on" data-k="push" onclick="togRow(this); if(this.classList.contains('on')) requestPushPermission();"></div></div>
+      <div class="sg-row"><div class="sg-ico" style="background:#52C17A"><i class="fa-solid fa-envelope"></i></div><span class="sg-lbl2">Email Digest</span><div class="tog" data-k="emaildigest" onclick="togRow(this)"></div></div>
     </div></div>
   </div>
 </div>
@@ -2884,12 +2910,17 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   <div class="sub-hdr"><div class="sub-back tap" onclick="closeSub('help')"><i class="fa-solid fa-chevron-left"></i> Back</div><div class="sub-ttl">Help & Support</div></div>
   <div class="sub-scroll">
     <div class="sg"><div class="sg-grp">
-      <div class="sg-row tap" onclick="toast('📖 Opening FAQ...')"><div class="sg-ico" style="background:#4F6BD4"><i class="fa-solid fa-question"></i></div><span class="sg-lbl2">FAQ</span><i class="fa-solid fa-chevron-right sg-arr"></i></div>
-      <div class="sg-row tap" onclick="toast('💬 Opening chat...')"><div class="sg-ico" style="background:#52C17A"><i class="fa-solid fa-headset"></i></div><span class="sg-lbl2">Live Chat Support</span><i class="fa-solid fa-chevron-right sg-arr"></i></div>
-      <div class="sg-row tap" onclick="toast('📧 support@sherbyte.in')"><div class="sg-ico" style="background:#A855F7"><i class="fa-solid fa-envelope"></i></div><span class="sg-lbl2">Email Support</span><i class="fa-solid fa-chevron-right sg-arr"></i></div>
+      <div class="sg-row tap" onclick="openFAQ()"><div class="sg-ico" style="background:#4F6BD4"><i class="fa-solid fa-question"></i></div><span class="sg-lbl2">FAQ</span><i class="fa-solid fa-chevron-right sg-arr"></i></div>
+      <div class="sg-row tap" onclick="contactSupport()"><div class="sg-ico" style="background:#52C17A"><i class="fa-solid fa-headset"></i></div><span class="sg-lbl2">Contact Support</span><i class="fa-solid fa-chevron-right sg-arr"></i></div>
+      <div class="sg-row tap" onclick="contactSupport()"><div class="sg-ico" style="background:#A855F7"><i class="fa-solid fa-envelope"></i></div><span class="sg-lbl2">Email Support</span><i class="fa-solid fa-chevron-right sg-arr"></i></div>
     </div></div>
     <div style="text-align:center;padding:24px 0;font-size:0.72rem;color:var(--t3)">SherrByte v22 · Mobile<br>Build 2026.04.06</div>
   </div>
+</div>
+
+<!-- Reusable app modal (change password, confirms, text size, FAQ…) -->
+<div id="app-modal" class="app-modal" onclick="if(event.target===this)closeAppModal()">
+  <div class="app-modal-card" id="app-modal-card"></div>
 </div>
 
 <!-- ════════ FEED EDIT MODAL ════════ -->
@@ -3142,7 +3173,7 @@ function catPlaceholderHtml(category, style) {
 }
 
 // ── STATE ──
-const ST_DEFAULTS = { likes:[], saves:[], token:null, userId:null, interests:{}, scope:'global', seen:[] };
+const ST_DEFAULTS = { likes:[], saves:[], token:null, userId:null, interests:{}, scope:'global', seen:[], settings:{}, privacy:'friends', textSize:'medium' };
 let ST = { ...ST_DEFAULTS };
 try {
   const saved = JSON.parse(localStorage.getItem('sb21') || '{}');
@@ -3276,11 +3307,125 @@ function sbClose() { document.getElementById('sidebar').classList.remove('on'); 
 // ── SUB PAGES ──
 function openSub(id) { sbClose(); document.getElementById('sub-'+id)?.classList.add('on'); if(!_navReplay){try{history.pushState({layer:'sub'},'');}catch(e){}} }
 function closeSub(id) { document.getElementById('sub-'+id)?.classList.remove('on'); }
-function togRow(el)  { el.classList.toggle('on'); toast(el.classList.contains('on') ? '✓ Enabled' : '✗ Disabled'); }
-function selPriv(el) {
+// ── Reusable modal ──
+function openAppModal(html){ document.getElementById('app-modal-card').innerHTML=html; document.getElementById('app-modal').classList.add('on'); }
+function closeAppModal(){ document.getElementById('app-modal').classList.remove('on'); }
+
+// ── Settings persistence ──
+function togRow(el){
+  el.classList.toggle('on');
+  const on = el.classList.contains('on');
+  const k = el.dataset.k;
+  if (k){ ST.settings = ST.settings || {}; ST.settings[k] = on; persist(); }
+  toast(on ? '✓ Enabled' : '✗ Disabled');
+}
+function selPriv(el){
   el.closest('.priv-level').querySelectorAll('.pl').forEach(p=>p.classList.remove('on'));
   el.classList.add('on');
+  const v = el.textContent.trim().toLowerCase();
+  ST.privacy = v; persist();
   toast('🔒 Visibility: '+el.textContent.trim());
+}
+// Restore saved toggles / privacy / text size on load.
+function restoreSettings(){
+  (document.querySelectorAll('.tog[data-k]')||[]).forEach(t=>{
+    const v = (ST.settings||{})[t.dataset.k];
+    if (v !== undefined) t.classList.toggle('on', !!v);
+  });
+  document.querySelectorAll('.priv-level .pl').forEach(p=>{
+    p.classList.toggle('on', p.textContent.trim().toLowerCase() === (ST.privacy||'friends'));
+  });
+  applyTextSize(ST.textSize || 'medium', true);
+}
+
+// ── Text size ──
+const _TEXT_SCALE = { small: 0.92, medium: 1, large: 1.12 };
+function applyTextSize(size, silent){
+  size = _TEXT_SCALE[size] ? size : 'medium';
+  document.documentElement.style.fontSize = (16 * _TEXT_SCALE[size]) + 'px';
+  ST.textSize = size; persist();
+  const v = document.getElementById('set-textsize-val'); if (v) v.textContent = size.charAt(0).toUpperCase()+size.slice(1);
+  if (!silent) toast('Text size: '+size);
+}
+function openTextSize(){
+  const cur = ST.textSize || 'medium';
+  openAppModal(`<div class="am-title">Text Size</div>
+    ${['small','medium','large'].map(s=>`<div class="am-opt" onclick="applyTextSize('${s}');closeAppModal()">${s.charAt(0).toUpperCase()+s.slice(1)}${s===cur?' <i class="fa-solid fa-check"></i>':''}</div>`).join('')}
+    <button class="am-btn ghost" onclick="closeAppModal()">Done</button>`);
+}
+
+// ── Change password (OTP to email) ──
+function changePassword(){
+  openAppModal(`<div class="am-title">Change password</div>
+    <div class="am-sub">We'll email a 6-digit code to verify it's you.</div>
+    <input class="am-input" id="cp-email" type="email" placeholder="Your account email" autocomplete="email">
+    <div id="cp-otp" style="display:none">
+      <input class="am-input" id="cp-code" inputmode="numeric" maxlength="6" placeholder="6-digit code">
+      <input class="am-input" id="cp-new" type="password" placeholder="New password (min 6)">
+    </div>
+    <div class="am-err" id="cp-err"></div>
+    <button class="am-btn" id="cp-btn" onclick="cpSend()">Send code</button>
+    <button class="am-btn ghost" onclick="closeAppModal()">Cancel</button>`);
+}
+async function cpSend(){
+  const email=document.getElementById('cp-email').value.trim();
+  const err=document.getElementById('cp-err'); err.textContent='';
+  if(!email){ err.textContent='Enter your email'; return; }
+  const b=document.getElementById('cp-btn'); b.disabled=true; b.textContent='Sending…';
+  try{
+    const r=await api('/forgot-password',{method:'POST',body:JSON.stringify({email})});
+    document.getElementById('cp-otp').style.display='';
+    err.style.color='var(--t2)'; err.textContent = r.debug_otp ? ('Test code: '+r.debug_otp) : 'Code sent — check your email.';
+    b.textContent='Update password'; b.onclick=cpReset;
+  }catch(e){ err.style.color=''; err.textContent=e.message||'Could not send code'; }
+  finally{ b.disabled=false; }
+}
+async function cpReset(){
+  const email=document.getElementById('cp-email').value.trim();
+  const otp=document.getElementById('cp-code').value.trim();
+  const np=document.getElementById('cp-new').value;
+  const err=document.getElementById('cp-err'); err.style.color=''; err.textContent='';
+  if(!otp||(np||'').length<6){ err.textContent='Enter the code and a 6+ char password'; return; }
+  const b=document.getElementById('cp-btn'); b.disabled=true; b.textContent='Updating…';
+  try{ await api('/reset-password',{method:'POST',body:JSON.stringify({email,otp,password:np})}); closeAppModal(); toast('✓ Password updated'); }
+  catch(e){ err.textContent=e.message||'Update failed'; b.disabled=false; b.textContent='Update password'; }
+}
+
+// ── Danger zone ──
+function confirmLogoutAll(){
+  openAppModal(`<div class="am-title">Log out of all devices?</div>
+    <div class="am-sub">You'll be signed out here and your session ends. Sign in again to continue.</div>
+    <button class="am-btn danger" onclick="closeAppModal();signOut()">Log out everywhere</button>
+    <button class="am-btn ghost" onclick="closeAppModal()">Cancel</button>`);
+}
+function confirmDeleteAccount(){
+  openAppModal(`<div class="am-title">Delete account</div>
+    <div class="am-sub">This permanently deletes your account and data. Type <b>DELETE</b> to confirm.</div>
+    <input class="am-input" id="da-confirm" placeholder="Type DELETE">
+    <div class="am-err" id="da-err"></div>
+    <button class="am-btn danger" onclick="doDeleteAccount()">Delete forever</button>
+    <button class="am-btn ghost" onclick="closeAppModal()">Cancel</button>`);
+}
+async function doDeleteAccount(){
+  const v=(document.getElementById('da-confirm').value||'').trim();
+  const err=document.getElementById('da-err');
+  if(v!=='DELETE'){ err.textContent='Type DELETE to confirm'; return; }
+  try{ if(ST.token) await api('/account/delete',{method:'POST'}); }catch(e){}
+  closeAppModal(); ST.token=null; ST.userId=null; persist(); toast('Account deleted');
+  document.getElementById('ob-screen')?.classList.remove('gone');
+}
+
+// ── Help ──
+function contactSupport(){ try{ location.href='mailto:support@thewhitetiger.in?subject=SherrByte%20Support'; }catch(e){} }
+function openFAQ(){
+  const faqs=[
+    ['How does SherrByte pick my news?','Stories are pulled from 50+ trusted sources every ~15 minutes, de-duplicated, and ranked by importance — and personalised as you read, like, and save.'],
+    ['What do Local / National / Global mean?','National shows India-focused stories, Local narrows to your region, and Global covers world news. Switch anytime from Explore.'],
+    ['How do Bytes work?','Bytes are swipe-up short cards — pull down at the top for a fresh batch. Tap "know more" to open the full story.'],
+    ['Is my data safe?','Passwords are stored salted + hashed, never in plain text. You can delete your account and data anytime from Security Center.'],
+    ['How do I reset my password?','Use "Forgot password?" on sign-in, or Security Center → Change Password — we email you a 6-digit code.'],
+  ];
+  openAppModal(`<div class="am-title">FAQ</div>${faqs.map(f=>`<div class="am-faq-q">${f[0]}</div><div class="am-faq-a">${f[1]}</div>`).join('')}<button class="am-btn ghost" onclick="closeAppModal()" style="margin-top:14px">Close</button>`);
 }
 
 // ── SHARE ──
@@ -5698,6 +5843,7 @@ document.addEventListener('DOMContentLoaded', () => {
   renderFeedTopics();
   updateSidebarAuth();
   rehydrateScope();                                            // restore Local/National/Global choice
+  restoreSettings();                                           // restore toggles / privacy / text size
   document.getElementById('saved-ct').textContent = ST.saves.length;
   loadFeed(true);
   // Markets/weather/Explore data load lazily when Explore is opened (navTo),

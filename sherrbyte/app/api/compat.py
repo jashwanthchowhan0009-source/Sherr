@@ -213,6 +213,19 @@ async def reset_password(payload: dict):
     return {"ok": True}
 
 
+@router.post("/account/delete")
+async def delete_account(authorization: str = Header("")):
+    """Permanently delete the signed-in user and their data."""
+    uid = _require_uid(authorization)
+    for tbl in ("signals", "feeds", "user_preferences"):
+        try:
+            await db.execute(f"DELETE FROM {tbl} WHERE user_id=$1", uid)
+        except Exception:
+            pass
+    await db.execute("DELETE FROM users WHERE id=$1", uid)
+    return {"ok": True}
+
+
 # ─── Old single /interact endpoint → v6 signals + preference nudges ───────────
 _INTERACT_KIND = {
     "like": "like", "dislike": "dislike", "save": "save",
