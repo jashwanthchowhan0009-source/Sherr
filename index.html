@@ -183,7 +183,8 @@ html, body {
   box-shadow: 0 12px 36px rgba(0,0,0,0.14), inset 0 1px 1px rgba(255,255,255,0.7);
 }
 [data-theme="light"] .nb-icon { color: rgba(60,60,67,0.55); }
-[data-theme="light"] .nb.on .nb-icon { background: var(--accent); color: #fff; }
+[data-theme="light"] .nb.on .nb-icon { background: rgba(0,0,0,0.07); color: var(--t1);
+  box-shadow: inset 0 0 0 0.5px rgba(0,0,0,0.08); }
 [data-theme="light"] .nc-pill { background: rgba(0,0,0,0.04); border-color: rgba(0,0,0,0.10); color: var(--t2); }
 [data-theme="light"] .nc:active { background: rgba(0,0,0,0.03); }
 [data-theme="light"] .h-brand span { color: var(--accent); }
@@ -760,10 +761,12 @@ header {
   font-family: var(--fd); font-size: 1.2rem; font-weight: 700;
   color: var(--t1); line-height: 1.35; letter-spacing: -0.3px; margin-bottom: 14px;
 }
-.ao-text {
-  font-size: 0.88rem; color: var(--t2); line-height: 1.75; margin-bottom: 18px;
-  white-space: pre-line;
-}
+.ao-text { margin-bottom: 16px; }
+.ao-p { font-size: 0.95rem; color: var(--t1); line-height: 1.72; margin-bottom: 14px; }
+.ao-p:last-child { margin-bottom: 0; }
+.ao-readmore { background: var(--surface-2); color: var(--accent); border: none;
+  border-radius: 100px; padding: 9px 18px; font-size: 0.82rem; font-weight: 700;
+  cursor: pointer; margin: 4px 0 2px; display: inline-flex; align-items: center; gap: 7px; }
 .ao-acts {
   display: flex; align-items: center; gap: 8px; padding: 11px 0;
   border-top: 1px solid var(--line2); border-bottom: 1px solid var(--line2);
@@ -1479,37 +1482,38 @@ nav {
   display: flex; align-items: center; justify-content: space-around;
   z-index: 600;
 
-  background: rgba(255,255,255,0.12);
-  backdrop-filter: blur(30px) saturate(170%);
-  -webkit-backdrop-filter: blur(30px) saturate(170%);
-  border: 1px solid rgba(255,255,255,0.22);
-  border-radius: 30px;
-
+  /* True liquid glass — transparent, lets the content show through. */
+  background: rgba(255,255,255,0.08);
+  backdrop-filter: blur(36px) saturate(180%);
+  -webkit-backdrop-filter: blur(36px) saturate(180%);
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 32px;
   box-shadow:
-    0 14px 40px rgba(0,0,0,0.28),
-    inset 0 1px 1px rgba(255,255,255,0.18);
-  padding: 0 10px;
+    0 16px 44px rgba(0,0,0,0.32),
+    inset 0 1px 1px rgba(255,255,255,0.22),
+    inset 0 -1px 1px rgba(0,0,0,0.10);
+  padding: 0 8px;
 }
 
 .nb {
   display: flex; align-items: center; justify-content: center;
-  padding: 0; border-radius: 16px; cursor: pointer;
-  transition: all 0.25s var(--spring); position: relative; flex: 1;
+  padding: 0; cursor: pointer; flex: 1;
+  transition: all 0.25s var(--spring); position: relative;
 }
 .nb-icon {
-  width: 48px; height: 40px; border-radius: 13px;
+  width: 52px; height: 44px; border-radius: 16px;
   display: flex; align-items: center; justify-content: center;
-  font-size: 1.08rem; color: rgba(255,255,255,0.70);
-  transition: all 0.25s var(--spring);
+  font-size: 1.06rem; color: rgba(255,255,255,0.62);
+  transition: background .28s var(--snap), color .28s var(--snap), box-shadow .28s var(--snap);
 }
 .nb-lbl { display: none; }
+/* Active = a frosted darker pill (not a flat accent fill) — slick iOS glass. */
 .nb.on .nb-icon {
-  background: var(--accent);
+  background: rgba(255,255,255,0.16);
   color: #fff;
-  box-shadow: 0 5px 16px -3px var(--accent);
+  box-shadow: inset 0 0 0 0.5px rgba(255,255,255,0.30), 0 2px 10px rgba(0,0,0,0.18);
 }
 .nb.on .nb-icon i { filter: none; }
-.nb .nb-icon { transition: background .25s var(--snap), color .25s var(--snap), box-shadow .25s var(--snap); }
 
 /* ─── Bytes — one structured card per screen (vertical snap) ─── */
 #v-bytes { inset: 0; }
@@ -2544,7 +2548,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 <header id="hdr">
   <div class="h-left">
     <div class="hbtn tap" onclick="sbOpen()"><i class="fa-solid fa-bars-staggered"></i></div>
-    <div class="h-logo"><img src="tiger-logo.png" alt="" style="width:100%;height:100%;object-fit:contain;padding:3px" onerror="this.outerHTML='⚡'"></div>
+    <div class="h-logo"><img src="logo.jpg" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:8px" onerror="this.outerHTML='⚡'"></div>
     <div class="h-brand" id="h-brand">Sherr<span>Byte</span></div>
     <div class="h-page" id="h-page"></div>
   </div>
@@ -3870,36 +3874,31 @@ async function loadFeed(reset = false) {
         return;
       }
 
-      if (continueArticle) renderContinueCard(continueArticle, c);
+      if (continueArticle && homeActiveTab === 'foryou') renderContinueCard(continueArticle, c);
 
-      // Hero = first article
+      // Hero = top story (every tab)
       renderHeroCard(articles[0], c);
 
-      // Trending strip from articles flagged isTrending (excluding the hero)
-      const trendingPool = articles.slice(1).filter(a => a.isTrending).slice(0, 6);
-      if (trendingPool.length >= 3) renderTrendingStrip(trendingPool, c);
-
-      // Latest News header
-      c.insertAdjacentHTML('beforeend',
-        `<div class="trending-section-hdr">
-          <div class="trending-section-title" style="margin-top:4px">Latest News</div>
-        </div>`);
-
-      // Remaining articles as standard cards (excluding hero + trending already shown)
-      const shownIds = new Set([articles[0].id, ...trendingPool.map(a => a.id)]);
-      let remaining = articles.filter(a => !shownIds.has(a.id));
-      // In "All", interleave categories so every pillar shows up one after another.
+      let remaining = articles.filter(a => a.id !== articles[0].id);
       if (curChip === 'all') remaining = roundRobinByCat(remaining);
 
-      // Use existing structured renderer for variety (bulletin/latest blocks interleaved)
-      if (curChip === 'all' && homeActiveTab === 'foryou' && remaining.length >= 8) {
-        const subContainer = document.createElement('div');
-        c.appendChild(subContainer);
-        structuredFeedData = remaining;
-        structuredFeedOffset = 0;
-        renderStructuredFeed(remaining, subContainer, false);
-      } else {
+      if (homeActiveTab === 'trending') {
+        // Trending: a Top-News bulletin, then trending stories below it.
+        renderBulletinBlock(remaining.slice(0, 5), c);
+        c.insertAdjacentHTML('beforeend',
+          `<div class="trending-section-hdr"><div class="trending-section-title" style="margin-top:4px"><i class="fa-solid fa-fire" style="color:var(--accent)"></i> Trending</div></div>`);
+        remaining.slice(5).forEach(a => renderStandardCard(a, c));
+      } else if (homeActiveTab === 'latest') {
+        // Latest: the Latest News section (recency-ordered).
+        c.insertAdjacentHTML('beforeend',
+          `<div class="trending-section-hdr"><div class="trending-section-title" style="margin-top:4px">Latest News</div></div>`);
         remaining.forEach(a => renderStandardCard(a, c));
+      } else {
+        // For You: clean personalised feed — no "Latest News" header.
+        const trendingPool = remaining.filter(a => a.isTrending).slice(0, 6);
+        if (trendingPool.length >= 3) renderTrendingStrip(trendingPool, c);
+        const shown = new Set([articles[0].id, ...trendingPool.map(a => a.id)]);
+        remaining.filter(a => !shown.has(a.id)).forEach(a => renderStandardCard(a, c));
       }
 
     } else {
@@ -3993,6 +3992,38 @@ async function logInteract(articleId, category, action, duration=0) {
 }
 
 // ── OPEN ARTICLE ──
+// Split body into readable paragraphs, with a "Read more" past the first two.
+function _toParagraphs(text){
+  text = (text || '').trim();
+  if (!text) return [];
+  let parts = text.split(/\n\s*\n+/).map(s => s.trim()).filter(Boolean);
+  if (parts.length <= 1){
+    const sents = text.replace(/\s*\n+\s*/g, ' ').match(/[^.!?]+[.!?]+(?:\s|$)|[^.!?]+$/g) || [text];
+    parts = [];
+    for (let i = 0; i < sents.length; i += 3) parts.push(sents.slice(i, i + 3).join(' ').trim());
+  }
+  return parts.filter(Boolean);
+}
+function renderArticleBody(text){
+  const el = document.getElementById('ao-text');
+  if (!el) return;
+  const paras = _toParagraphs(text);
+  if (!paras.length){ el.innerHTML = '<p class="ao-p">Full context for this story is being generated. Tap the source below to read the original report.</p>'; return; }
+  const VISIBLE = 2;
+  const head = paras.slice(0, VISIBLE).map(p => `<p class="ao-p">${bEsc(p)}</p>`).join('');
+  if (paras.length <= VISIBLE){ el.innerHTML = head; return; }
+  const rest = paras.slice(VISIBLE).map(p => `<p class="ao-p">${bEsc(p)}</p>`).join('');
+  el.innerHTML = `${head}<div id="ao-more-wrap" style="display:none">${rest}</div>
+    <button class="ao-readmore tap" id="ao-readmore" onclick="aoToggleMore()">Read more <i class="fa-solid fa-chevron-down"></i></button>`;
+}
+function aoToggleMore(){
+  const w = document.getElementById('ao-more-wrap'), b = document.getElementById('ao-readmore');
+  if (!w || !b) return;
+  const open = w.style.display !== 'none';
+  w.style.display = open ? 'none' : '';
+  b.innerHTML = open ? 'Read more <i class="fa-solid fa-chevron-down"></i>' : 'Show less <i class="fa-solid fa-chevron-up"></i>';
+}
+
 // Pull the full body + who/what/where/when/why for richer article context.
 async function aoLoadFullContext(id) {
   if (!id) return;
@@ -4000,7 +4031,7 @@ async function aoLoadFullContext(id) {
     const d = await api('/article/' + encodeURIComponent(id) + '/full');
     if (!d || !currentArticle || String(currentArticle.id) !== String(id)) return;
     if (d.body && d.body.trim().length > 60) {
-      document.getElementById('ao-text').textContent = d.body.trim();
+      renderArticleBody(d.body.trim());
     }
     const kp = document.getElementById('ao-keypoints');
     const w = d.wwww || {};
@@ -4052,8 +4083,7 @@ function openArticle(rawA) {
   document.getElementById('ao-src-time').textContent = timeAgo(a.published_at) || '';
   document.getElementById('ao-main-title').textContent = a.title;
   const body = a.body_ai || a.preview || a.summary || '';
-  document.getElementById('ao-text').textContent = body
-    || 'Full context for this story is being generated. Tap a source below to read the original report.';
+  renderArticleBody(body);
   document.getElementById('ao-keypoints').innerHTML = '';
   // Fetch the fuller article body + key points (who/what/where/when/why).
   aoLoadFullContext(a.id);
