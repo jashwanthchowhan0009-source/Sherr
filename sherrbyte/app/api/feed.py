@@ -81,8 +81,12 @@ async def personalized(
         args: list = []
         if pillar_arg:
             q += f" AND pillar_id=${len(args)+1}"; args.append(pillar_arg)
-        if scope_arg:
-            q += f" AND scope=${len(args)+1}"; args.append(scope_arg)
+        # Region: national includes local (all India); local = local only;
+        # global = everything (no filter). Fixed literals — safe (no interpolation).
+        if scope_arg == "national":
+            q += " AND scope IN ('national','local')"
+        elif scope_arg == "local":
+            q += " AND scope = 'local'"
         # Importance-ranked, recency tiebreak (index-friendly + fast — the
         # computed freshness expression was unindexed and timed out /feed).
         q += f" ORDER BY importance DESC, published_at DESC LIMIT ${len(args)+1} OFFSET ${len(args)+2}"
@@ -157,8 +161,10 @@ async def explore(
     args: list = []
     if pillar:
         q += f" AND pillar_id=${len(args)+1}"; args.append(pillar)
-    if scope:
-        q += f" AND scope=${len(args)+1}"; args.append(scope)
+    if scope == "national":
+        q += " AND scope IN ('national','local')"
+    elif scope == "local":
+        q += " AND scope = 'local'"
     q += f" ORDER BY published_at DESC LIMIT ${len(args)+1} OFFSET ${len(args)+2}"
     args += [limit + 1, offset]
 

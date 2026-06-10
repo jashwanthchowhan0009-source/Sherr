@@ -3313,7 +3313,7 @@ function selScope(btn, scope) {
 function rehydrateScope() {
   document.querySelectorAll('.scope-toggle .scope-btn').forEach(b => {
     const s = (b.getAttribute('onclick')||'').match(/'(local|national|global)'/);
-    b.classList.toggle('on', !!s && s[1] === (ST.scope||'national'));
+    b.classList.toggle('on', !!s && s[1] === (ST.scope||'global'));
   });
 }
 
@@ -3648,23 +3648,25 @@ async function loadFeed(reset = false) {
   }
 
   try {
+    // Region: national/local filter the feed; global = broadest (no filter).
+    const sc = (ST.scope && ST.scope !== 'global') ? '&scope=' + ST.scope : '';
     // Choose endpoint: a selected category always filters; tabs only apply to "All".
     let url;
     if (curChip !== 'all') {
-      url = `/explore?category=${curChip}&page=${feedPage}&limit=30`;
+      url = `/explore?category=${curChip}&page=${feedPage}&limit=30${sc}`;
     } else if (homeActiveTab === 'trending') {
       url = `/trending?limit=30`;
     } else if (homeActiveTab === 'latest') {
-      url = `/explore?page=${feedPage}&limit=30`;
+      url = `/explore?page=${feedPage}&limit=30${sc}`;
     } else {
-      url = `/feed?page=${feedPage}&limit=30`;
+      url = `/feed?page=${feedPage}&limit=30${sc}`;
     }
-    // Geographic scope filtering is PARKED: the pipeline tags ~all stories
-    // 'global', so 'national'/'local' starved the feed down to a couple of
-    // articles (and stale localStorage kept old users on 'national'). Always
-    // fetch the broadest feed until proper geo-classification lands on the
-    // backend. The Local/National/Global toggle is cosmetic for now.
-    const data = await api(url, { timeout: 25000 });   // allow for free-tier cold starts
+    let data = await api(url, { timeout: 25000 });   // allow for free-tier cold starts
+    // Region soft-fallback: if a scoped fetch is empty on page 1, broaden so the
+    // feed never starves (e.g. few 'local' stories right now).
+    if (sc && feedPage === 1 && !(data.articles || []).length) {
+      data = await api(url.replace(sc, ''), { timeout: 25000 });
+    }
     feedRetried = false;   // server reached — reset the cold-start retry budget
     const articles = (data.articles || []).map(normalizeArticle);
     if (feedPage === 1 && articles[0]) feedTopId = articles[0].id;
