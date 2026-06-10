@@ -88,10 +88,9 @@ async def personalized(
             q += " AND scope IN ('national','local')"
         elif scope_arg == "local":
             q += " AND scope = 'local'"
-        # Fresh-on-top: importance decayed by a 6h half-life so newly-ingested
-        # stories rise to the top on each refresh (recency tiebreak).
-        q += (" ORDER BY importance * power(0.5, GREATEST(EXTRACT(EPOCH FROM (now()-published_at)),0)/21600.0) DESC,"
-              f" published_at DESC LIMIT ${len(args)+1} OFFSET ${len(args)+2}")
+        # Fresh-on-top: newest first — uses idx_info_published (fast, no full
+        # computed sort). The decayed-importance variant timed out /feed.
+        q += f" ORDER BY published_at DESC LIMIT ${len(args)+1} OFFSET ${len(args)+2}"
         args += [limit + 1, offset]
         rows = await db.fetch(q, *args)
         has_more = len(rows) > limit
@@ -121,8 +120,7 @@ async def personalized(
     if len(rows) < 5:
         # Cold start — fall back to global importance feed.
         rows = await db.fetch(
-            _SELECT + (" ORDER BY importance * power(0.5, GREATEST(EXTRACT(EPOCH FROM (now()-published_at)),0)/21600.0) DESC,"
-                       " published_at DESC LIMIT $1 OFFSET $2"),
+            _SELECT + " ORDER BY published_at DESC LIMIT $1 OFFSET $2",
             limit + 1, offset,
         )
 
