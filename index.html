@@ -1572,8 +1572,15 @@ nav {
 .mkt-d-price { font-size: 2.2rem; font-weight: 800; color: var(--t1); margin-top: 4px; line-height: 1.1; }
 .mkt-d-chg { font-size: 0.92rem; font-weight: 700; margin-top: 3px; }
 .mkt-d-chg.up { color: var(--neon); } .mkt-d-chg.dn { color: #FF5B7F; }
-.mkt-d-chart { margin: 18px 0 8px; padding: 14px; height: 200px; }
-.mkt-d-chart svg { width: 100%; height: 100%; overflow: visible; }
+.mkt-tf-tabs { display: flex; gap: 4px; margin: 16px 0 2px; background: var(--surface-2);
+  border-radius: 100px; padding: 3px; }
+.mkt-tf { flex: 1; text-align: center; padding: 6px 4px; border-radius: 100px;
+  font-size: 0.72rem; font-weight: 700; color: var(--t3); cursor: pointer;
+  transition: all 0.18s var(--snap); }
+.mkt-tf.on { background: var(--accent); color: #fff; }
+.mkt-d-chart { margin: 10px 0 8px; padding: 12px 10px; height: 210px; }
+.mkt-d-chart svg { width: 100%; height: 100%; }
+.mkt-chart-load { color: var(--t3); font-size: 0.8rem; text-align: center; padding-top: 86px; }
 .mkt-d-rng { font-size: 0.72rem; color: var(--t3); text-align: center; margin-bottom: 20px; }
 .mkt-d-rel-hdr { font-size: 0.64rem; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; color: var(--t3); margin-bottom: 10px; }
 .mkt-d-rel-item { display: flex; justify-content: space-between; align-items: center; padding: 13px 15px;
@@ -2584,6 +2591,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
     <div class="mkt-d-name" id="mkt-d-name"></div>
     <div class="mkt-d-price" id="mkt-d-price"></div>
     <div class="mkt-d-chg" id="mkt-d-chg"></div>
+    <div class="mkt-tf-tabs" id="mkt-tf-tabs"></div>
     <div class="mkt-d-chart glass" id="mkt-d-chart"></div>
     <div class="mkt-d-rng" id="mkt-d-rng"></div>
     <div class="mkt-d-rel-hdr">More in this category</div>
@@ -5269,42 +5277,85 @@ function buildSparkSVG(series, up){
     <path d="${area}" fill="url(#mg)"/>
     <path d="${line}" fill="none" stroke="${col}" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
 }
+let _mktCtx = null;
+const MKT_RANGES = ['1D','1W','1M','6M','1Y','5Y','MAX'];
+const RANGE_LABEL = { '1D':'1 day','1W':'1 week','1M':'1 month','6M':'6 months','1Y':'1 year','5Y':'5 years','MAX':'Max' };
 async function openMarketDetail(cat, sym, label){
   document.getElementById('market-overlay').classList.add('open');
   if(!_navReplay){ try{ history.pushState({view:'market'},''); }catch(e){} }
   const bucket=(window._lastMkt||{})[cat]||{}, d=bucket[sym]||{};
-  const price=_mktVal(cat,d), pct=d.change_pct||0;
+  const price=_mktVal(cat,d);
+  _mktCtx = { cat, sym, label };
   document.getElementById('mkt-d-hdr').textContent=label;
   document.getElementById('mkt-d-name').textContent=(MKT_LABELS[cat]||'')+' · '+label;
   document.getElementById('mkt-d-price').textContent=price?_mktFmt(cat,price):'—';
-  const chg=document.getElementById('mkt-d-chg');
-  chg.className='mkt-d-chg '+(pct>=0?'up':'dn');
-  chg.textContent=price?((pct>=0?'▲ +':'▼ ')+Math.abs(pct).toFixed(2)+'%'):'';
   const rel=document.getElementById('mkt-d-rel'); rel.innerHTML='';
-  Object.keys(bucket).filter(k=>k!==sym).slice(0,6).forEach(k=>{
+  Object.keys(bucket).filter(k=>k!==sym).slice(0,8).forEach(k=>{
     const it=document.createElement('div'); it.className='mkt-d-rel-item';
     it.innerHTML=`<div class="mkt-d-rel-name">${k}</div><div class="mkt-d-rel-price">${_mktFmt(cat,_mktVal(cat,bucket[k]))}</div>`;
     it.addEventListener('click',()=>openMarketDetail(cat,k,k));
     rel.appendChild(it);
   });
+  // Timeframe tabs (default 1M)
+  const tabs=document.getElementById('mkt-tf-tabs');
+  tabs.innerHTML=MKT_RANGES.map(r=>`<div class="mkt-tf${r==='1M'?' on':''}" data-r="${r}">${r==='MAX'?'Max':r}</div>`).join('');
+  tabs.querySelectorAll('.mkt-tf').forEach(t=>t.onclick=()=>{
+    tabs.querySelectorAll('.mkt-tf').forEach(x=>x.classList.remove('on'));
+    t.classList.add('on'); loadMktChart(t.dataset.r);
+  });
+  loadMktChart('1M');
+}
+async function loadMktChart(range){
+  if(!_mktCtx) return;
+  const {cat, sym}=_mktCtx;
   const chart=document.getElementById('mkt-d-chart');
-  chart.innerHTML='<div style="color:var(--t3);font-size:0.8rem;text-align:center;padding-top:78px">Loading chart…</div>';
+  chart.innerHTML='<div class="mkt-chart-load">Loading chart…</div>';
   document.getElementById('mkt-d-rng').textContent='';
   try{
-    const days = cat==='metals'?90:30;
-    const h=await api(`/markets/history?category=${cat}&symbol=${encodeURIComponent(sym)}&days=${days}`);
+    const h=await api(`/markets/history?category=${cat}&symbol=${encodeURIComponent(sym)}&range=${range}`,{timeout:20000});
+    if(!_mktCtx || _mktCtx.sym!==sym) return;   // user switched
     let series=(h.series||[]).filter(p=>p&&p.p!=null);
     if(cat==='metals'){
-      // /markets/history serves metals in USD/oz, but the headline and tiles are
-      // ₹/10g — convert the series so the chart and range share the same unit.
+      const d=((window._lastMkt||{})[cat]||{})[sym]||{};
       const r=(d.price_inr_10g&&d.price_usd_oz)?(d.price_inr_10g/d.price_usd_oz):0;
       if(r) series=series.map(p=>({t:p.t,p:Math.round(p.p*r)}));
     }
-    if(series.length<2){ chart.innerHTML='<div style="color:var(--t3);font-size:0.8rem;text-align:center;padding-top:78px">No chart data available.</div>'; return; }
-    chart.innerHTML=buildSparkSVG(series, pct>=0);
+    if(series.length<2){ chart.innerHTML='<div class="mkt-chart-load">No chart data for this range.</div>'; return; }
+    const first=series[0].p, last=series[series.length-1].p, up=last>=first;
+    const pct=first?((last-first)/first*100):0;
+    const chg=document.getElementById('mkt-d-chg');
+    chg.className='mkt-d-chg '+(up?'up':'dn');
+    chg.textContent=(up?'▲ +':'▼ ')+Math.abs(pct).toFixed(2)+'% · '+RANGE_LABEL[range];
+    chart.innerHTML=buildChartSVG(series, up, v=>_mktFmt(cat,v), range);
     const lo=Math.min(...series.map(p=>p.p)), hi=Math.max(...series.map(p=>p.p));
-    document.getElementById('mkt-d-rng').textContent=`${days}-day range · ${_mktFmt(cat,lo)} – ${_mktFmt(cat,hi)}`;
-  }catch(e){ chart.innerHTML='<div style="color:var(--t3);font-size:0.8rem;text-align:center;padding-top:78px">Chart unavailable right now.</div>'; }
+    document.getElementById('mkt-d-rng').textContent=`${RANGE_LABEL[range]} range · ${_mktFmt(cat,lo)} – ${_mktFmt(cat,hi)}`;
+  }catch(e){ chart.innerHTML='<div class="mkt-chart-load">Chart unavailable right now.</div>'; }
+}
+function _fmtXLabel(d, range){
+  if(range==='1D') return d.getHours()+':'+String(d.getMinutes()).padStart(2,'0');
+  if(range==='1W'||range==='1M') return d.getDate()+' '+d.toLocaleString('en',{month:'short'});
+  if(range==='5Y'||range==='MAX') return String(d.getFullYear());
+  return d.toLocaleString('en',{month:'short'});
+}
+// Google-style chart: line + area, y-axis price labels, x-axis time labels.
+function buildChartSVG(series, up, fmt, range){
+  const W=340,H=190,padL=6,padR=48,padT=10,padB=22;
+  const ps=series.map(p=>p.p), lo=Math.min(...ps), hi=Math.max(...ps), rng=(hi-lo)||1, n=series.length;
+  const x=i=> padL+(i/(n-1))*(W-padL-padR);
+  const y=v=> padT+(1-(v-lo)/rng)*(H-padT-padB);
+  const line=series.map((p,i)=>(i?'L':'M')+x(i).toFixed(1)+' '+y(p.p).toFixed(1)).join(' ');
+  const area=line+` L ${x(n-1).toFixed(1)} ${(H-padB).toFixed(1)} L ${x(0).toFixed(1)} ${(H-padB).toFixed(1)} Z`;
+  const col=up?'#16C784':'#FF5B5B';
+  const gy=[hi,(hi+lo)/2,lo].map(v=>{const yy=y(v);return `<line x1="${padL}" y1="${yy.toFixed(1)}" x2="${(W-padR).toFixed(1)}" y2="${yy.toFixed(1)}" stroke="var(--line2)" stroke-width="0.5"/><text x="${(W-padR+5).toFixed(1)}" y="${(yy+3).toFixed(1)}" font-size="8" fill="var(--t3)">${fmt(Math.round(v))}</text>`;}).join('');
+  const gx=[0,Math.floor(n/2),n-1].map(i=>{const lbl=_fmtXLabel(new Date(series[i].t),range);const a=i===0?'start':(i===n-1?'end':'middle');return `<text x="${x(i).toFixed(1)}" y="${H-6}" font-size="8" fill="var(--t3)" text-anchor="${a}">${lbl}</text>`;}).join('');
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet"><defs>
+    <linearGradient id="mg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${col}" stop-opacity="0.26"/><stop offset="1" stop-color="${col}" stop-opacity="0"/></linearGradient></defs>
+    ${gy}
+    <path d="${area}" fill="url(#mg)"/>
+    <path d="${line}" fill="none" stroke="${col}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    <circle cx="${x(n-1).toFixed(1)}" cy="${y(series[n-1].p).toFixed(1)}" r="3" fill="${col}"/>
+    ${gx}
+  </svg>`;
 }
 function closeMarketDetail(){ document.getElementById('market-overlay').classList.remove('open'); }
 

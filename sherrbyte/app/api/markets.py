@@ -432,11 +432,11 @@ _FOREX_SYM = {"USDINR": "USDINR=X", "EURINR": "EURINR=X", "GBPINR": "GBPINR=X",
 _METAL_SYM = {"GOLD": "GC=F", "SILVER": "SI=F", "PLATINUM": "PL=F", "PALLADIUM": "PA=F"}
 
 
-async def _yahoo_series(client: httpx.AsyncClient, symbol: str, rng: str) -> list[dict]:
+async def _yahoo_series(client: httpx.AsyncClient, symbol: str, rng: str, interval: str = "1d") -> list[dict]:
     try:
         r = await client.get(
             f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}",
-            params={"interval": "1d", "range": rng},
+            params={"interval": interval, "range": rng},
             headers={"User-Agent": "Mozilla/5.0 (compatible; SherByte/6.0)"},
             timeout=8,
         )
@@ -454,24 +454,36 @@ async def _yahoo_series(client: httpx.AsyncClient, symbol: str, rng: str) -> lis
         return []
 
 
+# Range → (Yahoo range, Yahoo interval) and (CoinGecko days) for the chart tabs.
+_RANGE_YF = {
+    "1D": ("1d", "5m"), "1W": ("5d", "30m"), "1M": ("1mo", "1d"),
+    "6M": ("6mo", "1d"), "1Y": ("1y", "1d"), "5Y": ("5y", "1wk"), "MAX": ("max", "1mo"),
+}
+_RANGE_CG = {"1D": "1", "1W": "7", "1M": "30", "6M": "180", "1Y": "365", "5Y": "1825", "MAX": "max"}
+
+
 @router.get("/history")
-async def markets_history(category: str, symbol: str, days: int = 30):
-    """Historical price series for one item: CoinGecko for crypto, Yahoo for
-    stocks/forex/metals. Returns [{t: epoch_ms, p: price}, ...]. Metals are in
-    USD/oz (the frontend converts to ₹/10g to match the headline)."""
+async def markets_history(category: str, symbol: str, range: str = "1M", days: int = 0):
+    """Historical price series for one item across a timeframe (1D/1W/1M/6M/1Y/5Y/MAX).
+    CoinGecko for crypto, Yahoo for stocks/forex/metals. Returns
+    [{t: epoch_ms, p: price}, ...]. Metals are USD/oz (frontend → ₹/10g)."""
     cat, sym = category.lower(), symbol.upper()
-    key = f"hist_{cat}_{sym}_{days}"
+    rng = (range or "1M").upper()
+    if rng not in _RANGE_YF:
+        rng = "1M"
+    key = f"hist_{cat}_{sym}_{rng}"
     cached = _cget(key)
     if cached:
         return cached
     series: list[dict] = []
+    yf_range, yf_int = _RANGE_YF[rng]
     async with httpx.AsyncClient() as client:
         if cat == "crypto":
             cid = _COIN_IDS.get(sym, sym.lower())
             try:
                 r = await client.get(
                     f"https://api.coingecko.com/api/v3/coins/{cid}/market_chart",
-                    params={"vs_currency": "usd", "days": days}, timeout=8,
+                    params={"vs_currency": "usd", "days": _RANGE_CG[rng]}, timeout=8,
                 )
                 if r.status_code == 200:
                     series = [{"t": int(p[0]), "p": round(p[1], 4)}
@@ -479,24 +491,11 @@ async def markets_history(category: str, symbol: str, days: int = 30):
             except Exception as e:
                 log.warning("CoinGecko history failed: %s", e)
         elif cat == "metals":
-            # Build from our own daily snapshots; fall back to Yahoo futures
-            # intraday until enough days have accumulated.
-            try:
-                rows = await db.fetch(
-                    "SELECT day, price_usd_oz FROM metals_history WHERE metal=$1 "
-                    "ORDER BY day ASC LIMIT $2", sym, days,
-                )
-                series = [{"t": int(time.mktime(r["day"].timetuple()) * 1000),
-                           "p": float(r["price_usd_oz"])} for r in rows]
-            except Exception as e:
-                log.warning("metals history failed: %s", e)
-            if len(series) < 2:
-                series = await _yahoo_series(client, _METAL_SYM.get(sym, sym), "3mo")
+            series = await _yahoo_series(client, _METAL_SYM.get(sym, sym), yf_range, yf_int)
         else:
             symap = {"stocks": _STOCK_SYM, "forex": _FOREX_SYM}.get(cat, {})
             ysym = symap.get(sym, sym)
-            rng = "1mo" if days <= 31 else ("3mo" if days <= 93 else "1y")
-            series = await _yahoo_series(client, ysym, rng)
-    out = {"category": cat, "symbol": sym, "series": series}
+            series = await _yahoo_series(client, ysym, yf_range, yf_int)
+    out = {"category": cat, "symbol": sym, "range": rng, "series": series}
     _cset(key, out, 600)
     return out
