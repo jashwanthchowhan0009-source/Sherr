@@ -1321,6 +1321,22 @@ header {
 /* ═══════════════════════════════════
    SUB PAGES
 ═══════════════════════════════════ */
+.media-viewer { position: absolute; inset: 0; z-index: 6000; display: none;
+  align-items: center; justify-content: center; background: rgba(0,0,0,0.96);
+  touch-action: none; overflow: hidden; }
+.media-viewer.on { display: flex; }
+.mv-img { max-width: 100%; max-height: 100%; transform-origin: center center;
+  will-change: transform; user-select: none; -webkit-user-drag: none; }
+.mv-close { position: absolute; top: calc(env(safe-area-inset-top) + 14px); right: 16px; z-index: 2;
+  width: 40px; height: 40px; border-radius: 50%; background: rgba(255,255,255,0.16);
+  backdrop-filter: blur(10px); display: flex; align-items: center; justify-content: center;
+  color: #fff; font-size: 1.1rem; }
+.ao-hero img { cursor: zoom-in; }
+.ao-zoom-hint { position: absolute; right: 12px; bottom: 12px; z-index: 2; width: 30px; height: 30px;
+  border-radius: 50%; background: rgba(0,0,0,0.45); backdrop-filter: blur(8px); color: #fff;
+  display: flex; align-items: center; justify-content: center; font-size: 0.8rem; pointer-events: none; }
+.ao-video { width: 100%; height: 100%; object-fit: cover; background: #000; display: block; }
+
 .app-modal { position: absolute; inset: 0; z-index: 4000; display: none;
   align-items: center; justify-content: center; padding: 22px;
   background: rgba(0,0,0,0.55); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
@@ -2935,6 +2951,12 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   <div class="app-modal-card" id="app-modal-card"></div>
 </div>
 
+<!-- Full-screen media viewer (pinch / double-tap zoom + pan) -->
+<div id="media-viewer" class="media-viewer" onclick="if(event.target===this)closeMediaViewer()">
+  <div class="mv-close tap" onclick="closeMediaViewer()"><i class="fa-solid fa-xmark"></i></div>
+  <img id="mv-img" class="mv-img" alt="">
+</div>
+
 <!-- ════════ FEED EDIT MODAL ════════ -->
 <div class="feed-edit-modal" id="feed-edit-modal" onclick="closeFeedEditModal(event)">
   <div class="fem-sheet" onclick="event.stopPropagation()">
@@ -3991,6 +4013,45 @@ async function logInteract(articleId, category, action, duration=0) {
   } catch(e) {}
 }
 
+// ── Full-screen media viewer (pinch / double-tap zoom + pan) ──
+let _mvScale = 1, _mvX = 0, _mvY = 0;
+function _mvApply(){ const img = document.getElementById('mv-img'); if (img) img.style.transform = `translate(${_mvX}px,${_mvY}px) scale(${_mvScale})`; }
+function openMediaViewer(src){
+  if (!src) return;
+  document.getElementById('mv-img').src = src;
+  _mvScale = 1; _mvX = 0; _mvY = 0; _mvApply();
+  document.getElementById('media-viewer').classList.add('on');
+  if (!_navReplay) { try { history.pushState({ layer: 'media' }, ''); } catch (e) {} }
+}
+function closeMediaViewer(){ document.getElementById('media-viewer')?.classList.remove('on'); }
+function _mvDist(t){ return Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY); }
+(function initMediaViewer(){
+  const v = document.getElementById('media-viewer');
+  if (!v) return;
+  let pinch = null, pan = null, lastTap = 0;
+  v.addEventListener('touchstart', (e) => {
+    if (e.touches.length === 2) { pinch = { d: _mvDist(e.touches), s: _mvScale }; pan = null; }
+    else if (e.touches.length === 1) {
+      if (_mvScale > 1) pan = { x: e.touches[0].clientX - _mvX, y: e.touches[0].clientY - _mvY };
+      const now = Date.now();
+      if (now - lastTap < 300) { _mvScale = _mvScale > 1 ? 1 : 2.5; if (_mvScale === 1) { _mvX = 0; _mvY = 0; } _mvApply(); }
+      lastTap = now;
+    }
+  }, { passive: false });
+  v.addEventListener('touchmove', (e) => {
+    if (pinch && e.touches.length === 2) {
+      e.preventDefault();
+      _mvScale = Math.min(5, Math.max(1, pinch.s * (_mvDist(e.touches) / pinch.d)));
+      if (_mvScale === 1) { _mvX = 0; _mvY = 0; }
+      _mvApply();
+    } else if (pan && e.touches.length === 1 && _mvScale > 1) {
+      e.preventDefault();
+      _mvX = e.touches[0].clientX - pan.x; _mvY = e.touches[0].clientY - pan.y; _mvApply();
+    }
+  }, { passive: false });
+  v.addEventListener('touchend', (e) => { if (e.touches.length === 0) { pinch = null; pan = null; } });
+})();
+
 // ── OPEN ARTICLE ──
 // Split body into readable paragraphs, with a "Read more" past the first two.
 function _toParagraphs(text){
@@ -4056,14 +4117,23 @@ function openArticle(rawA) {
     aoHero.innerHTML = '';
     const overlay = document.createElement('div'); overlay.className = 'ao-hero-overlay';
     const pill    = document.createElement('div'); pill.className = 'ao-hero-cat'; pill.id = 'ao-cat-pill';
-    if (a.image_url) {
+    if (a.video_url) {
+      const vid = document.createElement('video'); vid.className = 'ao-video';
+      vid.src = a.video_url; vid.controls = true; vid.playsInline = true; vid.preload = 'metadata';
+      if (a.image_url) vid.poster = a.image_url;
+      aoHero.appendChild(vid);
+    } else if (a.image_url) {
       const img = document.createElement('img'); img.id = 'ao-img';
       img.src = a.image_url; img.alt = ''; img.loading = 'lazy';
       img.onerror = () => {
         aoHero.style.background = CAT_GRADIENTS[a.category] || CAT_GRADIENTS.tech;
         img.remove();
       };
+      img.onclick = () => openMediaViewer(a.image_url);
       aoHero.appendChild(img);
+      const hint = document.createElement('div'); hint.className = 'ao-zoom-hint';
+      hint.innerHTML = '<i class="fa-solid fa-magnifying-glass-plus"></i>';
+      aoHero.appendChild(hint);
     } else {
       aoHero.style.background = CAT_GRADIENTS[a.category] || CAT_GRADIENTS.tech;
       const ph = document.createElement('div');
@@ -4796,13 +4866,15 @@ function goBack() { history.back(); }
 window.addEventListener('popstate', (e) => {
   _navReplay = true;
   try {
+    const mv  = document.getElementById('media-viewer');
     const ao  = document.getElementById('article-overlay');
     const so  = document.getElementById('search-overlay');
     const mo  = document.getElementById('market-overlay');
     const sb  = document.getElementById('sidebar');
     const sub = document.querySelector('.sub.on');
     // Close the topmost open layer first; otherwise navigate to the routed view.
-    if (ao && ao.classList.contains('open'))      closeArticle();
+    if (mv && mv.classList.contains('on'))        closeMediaViewer();
+    else if (ao && ao.classList.contains('open')) closeArticle();
     else if (so && so.classList.contains('open')) closeSearch();
     else if (mo && mo.classList.contains('open')) closeMarketDetail();
     else if (sub)                                 sub.classList.remove('on');
