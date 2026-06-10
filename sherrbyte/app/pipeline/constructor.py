@@ -83,6 +83,7 @@ async def construct(article_id: str, art: ArticleIn, u: Understanding) -> InfoOb
         is_trending=u.is_trending,
         source_name=art.source_name,
         image_url=art.image_url,
+        video_url=getattr(art, "video_url", ""),
         published_at=art.published_at,
     )
 
@@ -94,8 +95,8 @@ async def persist_info_object(conn, obj: InfoObjectIn) -> str:
         INSERT INTO info_objects
             (article_id, headline, summary, body, who, what, where_info, when_info,
              why_info, entities, topic, pillar_id, micro_tags, scope, importance,
-             sentiment, is_trending, source_name, image_url, published_at)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+             sentiment, is_trending, source_name, image_url, published_at, video_url)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
         RETURNING id
         """,
         obj.article_id, obj.headline, obj.summary, obj.body,
@@ -103,7 +104,7 @@ async def persist_info_object(conn, obj: InfoObjectIn) -> str:
         json.dumps([e.model_dump() for e in obj.entities]),
         obj.topic, obj.pillar_id, json.dumps(obj.micro_tags), obj.scope,
         obj.importance, obj.sentiment, obj.is_trending,
-        obj.source_name, obj.image_url, obj.published_at,
+        obj.source_name, obj.image_url, obj.published_at, getattr(obj, "video_url", "") or "",
     )
     # Mark the source article processed.
     if obj.article_id:

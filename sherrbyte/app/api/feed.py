@@ -47,6 +47,7 @@ def row_to_feed_dict(r) -> dict:
         "sentiment": r["sentiment"],
         "is_trending": r["is_trending"],
         "image_url": r["image_url"],
+        "video_url": (r.get("video_url", "") if hasattr(r, "get") else ""),
         "source_name": r["source_name"],
         "thread_id": str(r["thread_id"]) if r["thread_id"] else None,
         "published_at": r["published_at"].isoformat() if r["published_at"] else None,
@@ -55,7 +56,7 @@ def row_to_feed_dict(r) -> dict:
 
 _SELECT = """
     SELECT id, headline, summary, topic, pillar_id, micro_tags, scope, importance,
-           sentiment, is_trending, source_name, image_url, thread_id, published_at
+           sentiment, is_trending, source_name, image_url, video_url, thread_id, published_at
     FROM info_objects
 """
 

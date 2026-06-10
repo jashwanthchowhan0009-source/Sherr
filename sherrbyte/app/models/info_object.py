@@ -53,6 +53,7 @@ class InfoObjectIn(BaseModel):
     is_trending: bool = False
     source_name: str = ""
     image_url: str = ""
+    video_url: str = ""
     published_at: datetime = Field(default_factory=datetime.utcnow)
 
 

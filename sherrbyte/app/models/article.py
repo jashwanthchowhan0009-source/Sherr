@@ -24,6 +24,7 @@ class ArticleIn(BaseModel):
     simhash: Optional[int] = None
     body: str = ""
     image_url: str = ""
+    video_url: str = ""
     source_name: str = ""
     scope: str = "global"
     published_at: datetime = Field(default_factory=datetime.utcnow)

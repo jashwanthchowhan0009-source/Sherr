@@ -108,8 +108,29 @@ def _extract_image(entry) -> str:
     return ""
 
 
+def _extract_video(entry) -> str:
+    """Direct video file (mp4/webm) from media:content or enclosures, if present."""
+    def _vid(d):
+        if not isinstance(d, dict):
+            return ""
+        t = (d.get("type") or "").lower()
+        u = d.get("url") or ""
+        if u.startswith("http") and (t.startswith("video") or u.lower().split("?")[0].endswith((".mp4", ".webm", ".m4v"))):
+            return u
+        return ""
+    for mc in (getattr(entry, "media_content", None) or []):
+        u = _vid(mc)
+        if u:
+            return u
+    for enc in (getattr(entry, "enclosures", None) or []):
+        u = _vid(enc)
+        if u:
+            return u
+    return ""
+
+
 def _build_article(title: str, body: str, link: str, source: str,
-                   image: str, published: datetime) -> ArticleIn:
+                   image: str, published: datetime, video: str = "") -> ArticleIn:
     clean = clean_html_fragments(body)
     return ArticleIn(
         url=link,
@@ -119,6 +140,7 @@ def _build_article(title: str, body: str, link: str, source: str,
         simhash=simhash(clean or title),
         body=clean,
         image_url=image,
+        video_url=video,
         source_name=source,
         published_at=published,
     )
@@ -162,6 +184,7 @@ async def _fetch_feed(url: str, source: str, client: httpx.AsyncClient) -> list[
                 source=source,
                 image=_extract_image(entry),
                 published=published,
+                video=_extract_video(entry),
             ))
     except (asyncio.TimeoutError, httpx.TimeoutException):
         log.warning("RSS %s timed out after %.0fs — skipping", source, timeout)
