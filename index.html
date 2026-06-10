@@ -1201,6 +1201,9 @@ header {
 .notif-body { flex: 1; min-width: 0; }
 .notif-title { font-size: 0.82rem; font-weight: 600; color: var(--t1); line-height: 1.4; margin-bottom: 3px; }
 .notif-time { font-size: 0.68rem; color: var(--t3); }
+.notif-enable { display: flex; align-items: center; gap: 12px; padding: 14px 16px; margin-bottom: 12px; }
+.notif-enable-btn { margin-left: auto; background: var(--accent); color: #fff; border: none;
+  border-radius: 100px; padding: 8px 16px; font-size: 0.78rem; font-weight: 700; cursor: pointer; flex-shrink: 0; }
 
 /* ═══════════════════════════════════
    FEED PULSE VIEW
@@ -2871,7 +2874,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
       <div class="sg-row"><div class="sg-ico" style="background:#8E8E93"><i class="fa-solid fa-text-size"></i></div><span class="sg-lbl2">Text Size</span><span class="sg-val">Medium</span><i class="fa-solid fa-chevron-right sg-arr"></i></div>
     </div></div>
     <div class="sg"><div class="sg-lbl">Notifications</div><div class="sg-grp">
-      <div class="sg-row"><div class="sg-ico" style="background:#FF5B5B"><i class="fa-solid fa-bell"></i></div><span class="sg-lbl2">Push Notifications</span><div class="tog on" onclick="togRow(this)"></div></div>
+      <div class="sg-row"><div class="sg-ico" style="background:#FF5B5B"><i class="fa-solid fa-bell"></i></div><span class="sg-lbl2">Push Notifications</span><div class="tog on" onclick="togRow(this); if(this.classList.contains('on')) requestPushPermission();"></div></div>
       <div class="sg-row"><div class="sg-ico" style="background:#52C17A"><i class="fa-solid fa-envelope"></i></div><span class="sg-lbl2">Email Digest</span><div class="tog" onclick="togRow(this)"></div></div>
     </div></div>
   </div>
@@ -4242,21 +4245,48 @@ async function renderBM() {
 }
 
 // ── NOTIFICATIONS ──
-function renderNotifs() {
+function requestPushPermission() {
+  if (!('Notification' in window)) { toast('Notifications not supported here'); return; }
+  Notification.requestPermission().then(p => {
+    if (p === 'granted') { try { ST.push = true; persist(); } catch (e) {} toast('🔔 Notifications enabled'); renderNotifs(); }
+    else toast('Notifications are blocked in your browser settings');
+  });
+}
+async function renderNotifs() {
   const c = document.getElementById('notifs-feed');
+  c.innerHTML = '<div style="text-align:center;color:var(--t3);padding:28px;font-size:0.82rem">Loading…</div>';
+  let items = [];
+  try { const data = await api('/notifications'); items = data.notifications || []; } catch (e) {}
+  // Fallback: surface the freshest stories from the loaded feed as "new for you".
+  if (!items.length) {
+    items = (homeArticles || []).slice(0, 10).map(a => {
+      const cc = CATS[a.category] || CATS.tech;
+      return { article_id: a.id, headline: a.title, topic: cc.short, image_url: a.image_url, color: cc.hex };
+    });
+  }
   c.innerHTML = '';
-  const notifData = [
-    { title:'Your feed has been updated with new articles', time:'Just now' },
-    { title:'You have new articles in Sports & Gaming', time:'10 min ago' },
-    { title:'Daily quiz is ready — test your knowledge', time:'1 hr ago' },
-    { title:'New trending story in Business & Economy', time:'2 hr ago' },
-  ];
-  notifData.forEach(n => {
-    const d = document.createElement('div');
-    d.className = 'notif fadein';
+  // Permission prompt (foundation for push alerts)
+  if ('Notification' in window && Notification.permission === 'default') {
+    const b = document.createElement('div'); b.className = 'notif-enable glass';
+    b.innerHTML = `<div class="notif-body"><div class="notif-title">Turn on notifications</div><div class="notif-time">Get alerted when new stories drop in your topics</div></div><button class="notif-enable-btn tap">Enable</button>`;
+    b.querySelector('.notif-enable-btn').onclick = requestPushPermission;
+    c.appendChild(b);
+  }
+  if (!items.length) {
+    c.insertAdjacentHTML('beforeend', '<div style="text-align:center;color:var(--t3);padding:34px 20px;font-size:0.85rem">No notifications yet.<br><span style="font-size:0.76rem;opacity:0.7">New stories in your topics will show up here.</span></div>');
+    return;
+  }
+  items.forEach(n => {
+    const d = document.createElement('div'); d.className = 'notif fadein tap';
     d.innerHTML = `<div class="notif-dot"></div>
-      <div style="width:44px;height:44px;border-radius:10px;background:var(--bg3);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:1.2rem">⚡</div>
-      <div class="notif-body"><div class="notif-title">${n.title}</div><div class="notif-time">${n.time}</div></div>`;
+      ${n.image_url ? `<img class="notif-img" src="${n.image_url}" loading="lazy" onerror="this.style.display='none';this.style.background='${n.color||'var(--bg3)'}'">`
+                    : `<div class="notif-img" style="background:${n.color||'var(--bg3)'}"></div>`}
+      <div class="notif-body"><div class="notif-title">${bEsc(n.headline||n.message||'')}</div><div class="notif-time">${n.topic ? 'New in '+bEsc(n.topic) : 'In your feed'}</div></div>`;
+    const aid = n.article_id;
+    if (aid) d.onclick = () => {
+      const art = (homeArticles || []).map(normalizeArticle).find(x => String(x.id) === String(aid));
+      openArticle(art || { id: aid, title: n.headline || '', preview: '', category: 'tech', source: '' });
+    };
     c.appendChild(d);
   });
 }
