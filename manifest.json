@@ -1,16 +1,19 @@
 {
+  "id": "/",
   "name": "SherrByte — AI News",
   "short_name": "SherrByte",
   "description": "AI-curated news. Your world, curated.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
   "orientation": "portrait",
   "background_color": "#02153F",
   "theme_color": "#0A84FF",
   "icons": [
     { "src": "/tiger-logo.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "/tiger-logo.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/tiger-logo.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
     { "src": "/tiger-logo.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }
