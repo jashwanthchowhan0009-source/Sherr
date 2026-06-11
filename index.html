@@ -13,6 +13,9 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="apple-touch-icon" href="/tiger-logo.png">
 <script>if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('/sw.js').catch(function(){});});}</script>
+<!-- Firebase Cloud Messaging (push notifications only) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Poppins:wght@400;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
@@ -2897,6 +2900,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
     </div></div>
     <div class="sg"><div class="sg-lbl">Notifications</div><div class="sg-grp">
       <div class="sg-row"><div class="sg-ico" style="background:#FF5B5B"><i class="fa-solid fa-bell"></i></div><span class="sg-lbl2">Push Notifications</span><div class="tog on" data-k="push" onclick="togRow(this); if(this.classList.contains('on')) requestPushPermission();"></div></div>
+      <div class="sg-row tap" onclick="sendTestPush()"><div class="sg-ico" style="background:#FF9F0A"><i class="fa-solid fa-paper-plane"></i></div><span class="sg-lbl2">Send Test Notification</span><i class="fa-solid fa-chevron-right sg-arr"></i></div>
       <div class="sg-row"><div class="sg-ico" style="background:#52C17A"><i class="fa-solid fa-envelope"></i></div><span class="sg-lbl2">Email Digest</span><div class="tog" data-k="emaildigest" onclick="togRow(this)"></div></div>
     </div></div>
   </div>
@@ -4507,32 +4511,62 @@ async function renderBM() {
 }
 
 // ── NOTIFICATIONS ──
+// ── Firebase Cloud Messaging (push notifications) ──
+// ⚠️ PASTE your Web Push VAPID key below:
+//    Firebase Console → Project settings → Cloud Messaging → Web configuration
+//    → "Web Push certificates" → Key pair.
+const FCM_VAPID_KEY = "BAB4j6j87lceNG0ZMHRIteonA1a9JirUwcyqyyMh15LlIfRiGdUCGNKlJRrSx-iT8myQ4c_vv111V8GGsvQ8qBQ";
+let _fcmMessaging = null;
+(function initFCM() {
+  try {
+    if (!window.firebase || !firebase.messaging) return;
+    firebase.initializeApp({
+      apiKey: "AIzaSyCqebJQbNp7AeiZQnScWDc8cstFYPH5wik",
+      authDomain: "sherrbyte.firebaseapp.com",
+      projectId: "sherrbyte",
+      storageBucket: "sherrbyte.firebasestorage.app",
+      messagingSenderId: "485011285385",
+      appId: "1:485011285385:web:8e2f1bcea07cf84017ed58",
+      measurementId: "G-4YT8KG56WZ"
+    });
+    _fcmMessaging = firebase.messaging();
+    // Foreground messages → in-app toast (the SW handles background).
+    _fcmMessaging.onMessage(function (payload) {
+      const d = (payload && (payload.data || payload.notification)) || {};
+      toast('🔔 ' + (d.title || 'SherrByte') + (d.body ? ' — ' + d.body : ''));
+    });
+  } catch (e) { console.warn('FCM init failed', e); }
+})();
+// Called from the Settings → Push toggle (never auto-popped on load).
 async function requestPushPermission() {
   if (!('Notification' in window)) { toast('Notifications not supported here'); return; }
+  if (!ST.token) { toast('Sign in to enable notifications'); return; }
+  if (!_fcmMessaging) { toast('Notifications unavailable in this browser'); return; }
+  if (!FCM_VAPID_KEY || FCM_VAPID_KEY.indexOf('PASTE_') === 0) { toast('Push isn’t configured yet'); return; }
   const p = await Notification.requestPermission();
   if (p !== 'granted') { toast('Notifications are blocked in your browser settings'); return; }
-  try { ST.push = true; persist(); } catch (e) {}
-  toast('🔔 Notifications enabled');
-  subscribePush();          // best-effort web-push registration (logged-in users)
-  renderNotifs();
-}
-function _urlB64ToU8(b64) {
-  const pad = '='.repeat((4 - b64.length % 4) % 4);
-  const s = (b64 + pad).replace(/-/g, '+').replace(/_/g, '/');
-  const raw = atob(s); const arr = new Uint8Array(raw.length);
-  for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
-  return arr;
-}
-async function subscribePush() {
   try {
-    if (!('serviceWorker' in navigator) || !('PushManager' in window) || !ST.token) return;
-    const vp = await api('/push/vapid-public');
-    if (!vp || !vp.enabled || !vp.key) return;     // server push not configured yet
-    const reg = await navigator.serviceWorker.ready;
-    let sub = await reg.pushManager.getSubscription();
-    if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: _urlB64ToU8(vp.key) });
-    await api('/push/subscribe', { method: 'POST', body: JSON.stringify({ subscription: sub.toJSON() }) });
-  } catch (e) { /* push is optional */ }
+    const token = await _fcmMessaging.getToken({ vapidKey: FCM_VAPID_KEY });  // auto-registers firebase-messaging-sw.js
+    if (!token) { toast('Could not get a notification token'); return; }
+    await api('/api/notifications/register', { method: 'POST', body: JSON.stringify({ fcm_token: token }) });
+    try { ST.push = true; persist(); } catch (e) {}
+    toast('🔔 Notifications enabled');
+    renderNotifs();
+  } catch (e) { console.warn('FCM enable failed', e); toast('Could not enable notifications'); }
+}
+// Settings → "Send Test Notification": pushes "SherrByte test 🐯" to this account's devices.
+async function sendTestPush() {
+  if (!ST.token) { toast('Sign in first'); return; }
+  toast('Sending test notification…');
+  try {
+    const r = await api('/api/notifications/test', { method: 'POST' });
+    toast('✅ Test sent to ' + (r.sent || 1) + ' device' + ((r.sent || 1) > 1 ? 's' : ''));
+  } catch (e) {
+    const m = String(e && e.message || '');
+    if (m.indexOf('404') >= 0 || /no registered/i.test(m)) { toast('Enable push notifications first'); }
+    else if (m.indexOf('503') >= 0 || /not configured/i.test(m)) { toast('Push isn’t configured on the server yet'); }
+    else { toast('Could not send test notification'); }
+  }
 }
 async function renderNotifs() {
   const c = document.getElementById('notifs-feed');

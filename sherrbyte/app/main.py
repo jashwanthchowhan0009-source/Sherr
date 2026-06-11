@@ -74,10 +74,11 @@ app.add_middleware(
 
 # ─── Routers ──────────────────────────────────────────────────────────────────
 from app.api import (  # noqa: E402  (import after app to avoid cycles)
-    activity, article, auth, compat, feed, live, markets, signal, sherr, push,
+    activity, article, auth, compat, feed, live, markets, signal, sherr, push, notifications,
 )
 
 app.include_router(push.router)
+app.include_router(notifications.router)
 app.include_router(auth.router)
 app.include_router(feed.router)
 app.include_router(article.router)
