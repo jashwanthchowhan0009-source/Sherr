@@ -2900,6 +2900,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
     </div></div>
     <div class="sg"><div class="sg-lbl">Notifications</div><div class="sg-grp">
       <div class="sg-row"><div class="sg-ico" style="background:#FF5B5B"><i class="fa-solid fa-bell"></i></div><span class="sg-lbl2">Push Notifications</span><div class="tog on" data-k="push" onclick="togRow(this); if(this.classList.contains('on')) requestPushPermission();"></div></div>
+      <div class="sg-row tap" onclick="sendTestPush()"><div class="sg-ico" style="background:#FF9F0A"><i class="fa-solid fa-paper-plane"></i></div><span class="sg-lbl2">Send Test Notification</span><i class="fa-solid fa-chevron-right sg-arr"></i></div>
       <div class="sg-row"><div class="sg-ico" style="background:#52C17A"><i class="fa-solid fa-envelope"></i></div><span class="sg-lbl2">Email Digest</span><div class="tog" data-k="emaildigest" onclick="togRow(this)"></div></div>
     </div></div>
   </div>
@@ -4552,6 +4553,20 @@ async function requestPushPermission() {
     toast('🔔 Notifications enabled');
     renderNotifs();
   } catch (e) { console.warn('FCM enable failed', e); toast('Could not enable notifications'); }
+}
+// Settings → "Send Test Notification": pushes "SherrByte test 🐯" to this account's devices.
+async function sendTestPush() {
+  if (!ST.token) { toast('Sign in first'); return; }
+  toast('Sending test notification…');
+  try {
+    const r = await api('/api/notifications/test', { method: 'POST' });
+    toast('✅ Test sent to ' + (r.sent || 1) + ' device' + ((r.sent || 1) > 1 ? 's' : ''));
+  } catch (e) {
+    const m = String(e && e.message || '');
+    if (m.indexOf('404') >= 0 || /no registered/i.test(m)) { toast('Enable push notifications first'); }
+    else if (m.indexOf('503') >= 0 || /not configured/i.test(m)) { toast('Push isn’t configured on the server yet'); }
+    else { toast('Could not send test notification'); }
+  }
 }
 async function renderNotifs() {
   const c = document.getElementById('notifs-feed');
