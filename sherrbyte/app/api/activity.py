@@ -59,13 +59,24 @@ async def get_me(user_id: str = Depends(require_user)):
     stats = await db.fetchrow(
         """
         SELECT
-            COUNT(*) FILTER (WHERE kind='read') AS reads,
             COUNT(*) FILTER (WHERE kind='like') AS likes,
             COUNT(*) FILTER (WHERE kind='save') AS saves
         FROM signals WHERE user_id=$1
         """,
         user_id,
     )
+    # Articles read = distinct articles the user actually engaged with (heartbeat
+    # reading-progress OR an explicit read signal) — the real, tracked count.
+    reads = await db.fetchval(
+        """
+        SELECT COUNT(*) FROM (
+            SELECT info_object_id FROM reading_progress WHERE user_id=$1
+            UNION
+            SELECT info_object_id FROM signals WHERE user_id=$1 AND kind='read'
+        ) t
+        """,
+        user_id,
+    ) or 0
     return {
         "id": str(user["id"]), "email": user["email"], "name": user["name"],
         "display_name": user["name"], "bio": user["bio"],
@@ -81,7 +92,7 @@ async def get_me(user_id: str = Depends(require_user)):
             for p in prefs
         ],
         "stats": {
-            "articles_read": stats["reads"] or 0,
+            "articles_read": int(reads),
             "likes": stats["likes"] or 0,
             "bookmarks": stats["saves"] or 0,
         },
