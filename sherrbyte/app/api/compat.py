@@ -246,31 +246,35 @@ async def interact(payload: dict, authorization: str = Header("")):
     kind = _INTERACT_KIND.get(str(payload.get("action", "")))
     if not info_id or not kind:
         return {"status": "ok"}
-    await db.execute(
-        "INSERT INTO signals (user_id, info_object_id, kind, value) VALUES ($1,$2,$3,1.0)",
-        uid, info_id, kind,
-    )
-    delta = _INTERACT_DELTA.get(kind, 0.0)
-    if delta:
-        obj = await db.fetchrow(
-            "SELECT pillar_id, micro_tags FROM info_objects WHERE id=$1", info_id
+    try:
+        await db.execute(
+            "INSERT INTO signals (user_id, info_object_id, kind, value) VALUES ($1,$2,$3,1.0)",
+            uid, info_id, kind,
         )
-        if obj:
-            tags = obj["micro_tags"]
-            if isinstance(tags, str):
-                import json
-                tags = json.loads(tags or "[]")
-            for tag in (tags or [])[:3]:
-                await db.execute(
-                    """
-                    INSERT INTO user_preferences (user_id, topic, pillar_id, weight, updated_at)
-                    VALUES ($1,$2,$3, GREATEST(0.1, 1.0 + $4), now())
-                    ON CONFLICT (user_id, topic) DO UPDATE
-                      SET weight = LEAST(5.0, GREATEST(0.1, user_preferences.weight + $4)),
-                          updated_at = now()
-                    """,
-                    uid, str(tag), obj["pillar_id"], delta,
-                )
+        delta = _INTERACT_DELTA.get(kind, 0.0)
+        if delta:
+            obj = await db.fetchrow(
+                "SELECT pillar_id, micro_tags FROM info_objects WHERE id=$1", info_id
+            )
+            if obj:
+                tags = obj["micro_tags"]
+                if isinstance(tags, str):
+                    import json
+                    tags = json.loads(tags or "[]")
+                for tag in (tags or [])[:3]:
+                    await db.execute(
+                        """
+                        INSERT INTO user_preferences (user_id, topic, pillar_id, weight, updated_at)
+                        VALUES ($1,$2,$3, GREATEST(0.1, 1.0 + $4), now())
+                        ON CONFLICT (user_id, topic) DO UPDATE
+                          SET weight = LEAST(5.0, GREATEST(0.1, user_preferences.weight + $4)),
+                              updated_at = now()
+                        """,
+                        uid, str(tag), obj["pillar_id"], delta,
+                    )
+    except Exception as e:
+        # A bad/unknown info id (e.g. not a real uuid) must never fail the client.
+        log.warning("interact signal skipped for %r: %s", info_id, e)
     return {"status": "ok"}
 
 

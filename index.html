@@ -3170,7 +3170,7 @@ function catPlaceholderHtml(category, style) {
 }
 
 // ── STATE ──
-const ST_DEFAULTS = { likes:[], saves:[], token:null, refresh:null, userId:null, username:'', interests:{}, scope:'global', seen:[], settings:{}, privacy:'friends', textSize:'medium', feedCats:null, feedTopics:null };
+const ST_DEFAULTS = { likes:[], saves:[], savedCache:{}, token:null, refresh:null, userId:null, username:'', interests:{}, scope:'global', seen:[], settings:{}, privacy:'friends', textSize:'medium', feedCats:null, feedTopics:null };
 let ST = { ...ST_DEFAULTS };
 try {
   const saved = JSON.parse(localStorage.getItem('sb21') || '{}');
@@ -3994,11 +3994,11 @@ function toggleSave(id, category, el) {
   if (i===-1) {
     ST.saves.push(id); el.classList.add('acc');
     el.querySelector('i').className='fa-solid fa-bookmark';
-    toast('🔖 Saved!');
+    toast('🔖 Saved!'); cacheSavedArticle({ id, category });
   } else {
     ST.saves.splice(i,1); el.classList.remove('acc');
     el.querySelector('i').className='fa-regular fa-bookmark';
-    toast('✓ Removed');
+    toast('✓ Removed'); uncacheSaved(id);
   }
   syncBookmark(id);                 // persist to the bookmarks table (server toggle)
   el.style.animation='heartPop 0.3s forwards';
@@ -4010,10 +4010,12 @@ function toggleSave(id, category, el) {
 
 // ── LOG INTERACTION ──
 async function logInteract(articleId, category, action, duration=0) {
-  if (!ST.token) return;
+  if (!ST.token || !articleId) return;
   try {
     await api('/interact', { method:'POST', body: JSON.stringify({
-      article_id: parseInt(articleId) || 0, category, action, duration_sec: duration
+      // article_id is the info_object UUID — send it as-is (parseInt would mangle
+      // a UUID to 0, which the backend rejects as an invalid uuid).
+      article_id: String(articleId), category, action, duration_sec: duration
     })});
   } catch(e) {}
 }
@@ -4025,6 +4027,29 @@ async function syncBookmark(id) {
   if (!ST.token || !id) return;
   try { await api('/bookmarks/' + encodeURIComponent(id), { method:'POST' }); }
   catch(e) {}
+}
+
+// Local mirror of saved articles so Bookmarks works logged-out and offline
+// (the server is authoritative when signed in; this is the fallback).
+function cacheSavedArticle(a) {
+  if (!a || !a.id) return;
+  ST.savedCache = ST.savedCache || {};
+  ST.savedCache[a.id] = {
+    id: a.id,
+    headline:    a.headline || a.title || '',
+    source_name: a.source_name || a.source || '',
+    category:    a.category || a.pillar_slug || 'tech',
+    image_url:   a.image_url || '',
+    summary:     a.summary || a.preview || '',
+  };
+}
+function uncacheSaved(id) { if (ST.savedCache) delete ST.savedCache[id]; }
+function localSavedArticles() {
+  let arts = Object.values(ST.savedCache || {});
+  if (!arts.length) {                       // legacy fallback: in-memory home feed
+    arts = (homeArticles || []).filter(a => ST.saves.includes(a.id));
+  }
+  return arts.map(normalizeArticle);
 }
 
 // ── Full-screen media viewer (pinch / double-tap zoom + pan) ──
@@ -4259,9 +4284,11 @@ function aoSave() {
   if (i===-1) {
     ST.saves.push(currentArticle.id); el.classList.add('saved');
     el.querySelector('i').className='fa-solid fa-bookmark'; toast('🔖 Saved!');
+    cacheSavedArticle(currentArticle);
   } else {
     ST.saves.splice(i,1); el.classList.remove('saved');
     el.querySelector('i').className='fa-regular fa-bookmark'; toast('✓ Removed');
+    uncacheSaved(currentArticle.id);
   }
   syncBookmark(currentArticle.id);  // persist to the bookmarks table (server toggle)
   persist();
@@ -4472,20 +4499,25 @@ function answerQuiz(el, idx, ans) {
 async function renderBM() {
   const c = document.getElementById('bm-feed');
   c.innerHTML = '<div style="text-align:center;color:var(--t3);padding:30px;font-size:0.8rem">Loading...</div>';
-  try {
-    let savedArticles = [];
-    if (ST.token) {
+  let savedArticles = [];
+  if (ST.token) {
+    try {
       const data = await api('/bookmarks');
       savedArticles = (data.articles || []).map(normalizeArticle);
-      // Reconcile local state with the server so counts/icons match what's saved.
+      // Server is authoritative when signed in: reconcile local state + cache.
       ST.saves = savedArticles.map(a => a.id);
+      ST.savedCache = {};
+      savedArticles.forEach(cacheSavedArticle);
       persist();
       const sc = document.getElementById('saved-ct');
       if (sc) sc.textContent = ST.saves.length;
-    } else {
-      savedArticles = homeArticles.map(normalizeArticle).filter(a => ST.saves.includes(a.id));
+    } catch(e) {
+      savedArticles = localSavedArticles();   // offline / server error → local cache
     }
-    c.innerHTML = '';
+  } else {
+    savedArticles = localSavedArticles();      // logged-out → local cache
+  }
+  c.innerHTML = '';
     if (!savedArticles.length) {
       c.innerHTML = '<div style="text-align:center;color:var(--t3);padding:50px 20px;font-size:0.88rem">No bookmarks yet.<br><span style="font-size:0.78rem;opacity:0.6">Tap the bookmark icon on any article.</span></div>';
       return;
@@ -4511,9 +4543,6 @@ async function renderBM() {
         </div>`;
       c.appendChild(d);
     });
-  } catch(e) {
-    c.innerHTML = '<div style="text-align:center;color:var(--t3);padding:30px">Sign in to sync bookmarks across devices.</div>';
-  }
 }
 
 // ── NOTIFICATIONS ──
@@ -6132,7 +6161,12 @@ function byteToggle(key, a, el, icon, msg, action){
   const n = el.querySelector('.byte-n');   // keep the like count in sync
   if (n) n.textContent = Math.max(0, (parseInt(n.textContent) || 0) + (i === -1 ? 1 : -1));
   persist();
-  if (key === 'saves'){ syncBookmark(a.id); const sc = document.getElementById('saved-ct'); if (sc) sc.textContent = ST.saves.length; }
+  if (key === 'saves'){
+    if (i === -1) cacheSavedArticle(a); else uncacheSaved(a.id);
+    persist();
+    syncBookmark(a.id);
+    const sc = document.getElementById('saved-ct'); if (sc) sc.textContent = ST.saves.length;
+  }
 }
 
 // ── Live: weather (Open-Meteo), word-of-day + dictionary (dictionaryapi.dev) ──
