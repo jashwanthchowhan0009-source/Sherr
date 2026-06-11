@@ -3994,12 +3994,13 @@ function toggleSave(id, category, el) {
   if (i===-1) {
     ST.saves.push(id); el.classList.add('acc');
     el.querySelector('i').className='fa-solid fa-bookmark';
-    toast('🔖 Saved!'); logInteract(id, category, 'save');
+    toast('🔖 Saved!');
   } else {
     ST.saves.splice(i,1); el.classList.remove('acc');
     el.querySelector('i').className='fa-regular fa-bookmark';
     toast('✓ Removed');
   }
+  syncBookmark(id);                 // persist to the bookmarks table (server toggle)
   el.style.animation='heartPop 0.3s forwards';
   el.addEventListener('animationend',()=>el.style.animation='',{once:true});
   persist();
@@ -4015,6 +4016,15 @@ async function logInteract(articleId, category, action, duration=0) {
       article_id: parseInt(articleId) || 0, category, action, duration_sec: duration
     })});
   } catch(e) {}
+}
+
+// Persist a bookmark toggle to the server so it shows up on the Bookmarks page,
+// which reads the `bookmarks` table (POST /bookmarks/{id} toggles + logs a save
+// signal). Best-effort; the optimistic local state is the source of truth for UI.
+async function syncBookmark(id) {
+  if (!ST.token || !id) return;
+  try { await api('/bookmarks/' + encodeURIComponent(id), { method:'POST' }); }
+  catch(e) {}
 }
 
 // ── Full-screen media viewer (pinch / double-tap zoom + pan) ──
@@ -4249,11 +4259,11 @@ function aoSave() {
   if (i===-1) {
     ST.saves.push(currentArticle.id); el.classList.add('saved');
     el.querySelector('i').className='fa-solid fa-bookmark'; toast('🔖 Saved!');
-    logInteract(currentArticle.id, currentArticle.category, 'save');
   } else {
     ST.saves.splice(i,1); el.classList.remove('saved');
     el.querySelector('i').className='fa-regular fa-bookmark'; toast('✓ Removed');
   }
+  syncBookmark(currentArticle.id);  // persist to the bookmarks table (server toggle)
   persist();
   const sc = document.getElementById('saved-ct');
   if (sc) sc.textContent = ST.saves.length;
@@ -4467,6 +4477,11 @@ async function renderBM() {
     if (ST.token) {
       const data = await api('/bookmarks');
       savedArticles = (data.articles || []).map(normalizeArticle);
+      // Reconcile local state with the server so counts/icons match what's saved.
+      ST.saves = savedArticles.map(a => a.id);
+      persist();
+      const sc = document.getElementById('saved-ct');
+      if (sc) sc.textContent = ST.saves.length;
     } else {
       savedArticles = homeArticles.map(normalizeArticle).filter(a => ST.saves.includes(a.id));
     }
@@ -6110,12 +6125,14 @@ async function hydrateByteCounts(ids) {
 }
 function byteToggle(key, a, el, icon, msg, action){
   const arr = ST[key], i = arr.indexOf(a.id);
-  if (i === -1){ arr.push(a.id); el.classList.add('on'); el.querySelector('i').className = 'fa-solid '+icon; toast(msg); logInteract(a.id, a.category, action); }
+  // Saves go through the bookmarks endpoint (which also logs the save signal);
+  // other actions (likes) keep using /interact.
+  if (i === -1){ arr.push(a.id); el.classList.add('on'); el.querySelector('i').className = 'fa-solid '+icon; toast(msg); if (action !== 'save') logInteract(a.id, a.category, action); }
   else { arr.splice(i,1); el.classList.remove('on'); el.querySelector('i').className = 'fa-regular '+icon; }
   const n = el.querySelector('.byte-n');   // keep the like count in sync
   if (n) n.textContent = Math.max(0, (parseInt(n.textContent) || 0) + (i === -1 ? 1 : -1));
   persist();
-  if (key === 'saves'){ const sc = document.getElementById('saved-ct'); if (sc) sc.textContent = ST.saves.length; }
+  if (key === 'saves'){ syncBookmark(a.id); const sc = document.getElementById('saved-ct'); if (sc) sc.textContent = ST.saves.length; }
 }
 
 // ── Live: weather (Open-Meteo), word-of-day + dictionary (dictionaryapi.dev) ──
