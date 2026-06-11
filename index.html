@@ -3172,19 +3172,48 @@ function catPlaceholderHtml(category, style) {
 // ── STATE ──
 const ST_DEFAULTS = { likes:[], saves:[], savedCache:{}, token:null, refresh:null, userId:null, username:'', interests:{}, scope:'global', seen:[], settings:{}, privacy:'friends', textSize:'medium', feedCats:null, feedTopics:null };
 let ST = { ...ST_DEFAULTS };
+// Per-user persistence: each account (and the logged-out "anon" state) keeps its
+// OWN bookmarks/likes/cache/prefs, so nothing bleeds between users on a shared
+// device. The active partition is tracked by 'sb21:cur'.
+const _userKey = (uid) => 'sb21:u:' + (uid || 'anon');
+let _curUid = 'anon';
 try {
-  const saved = JSON.parse(localStorage.getItem('sb21') || '{}');
-  ST = Object.assign({ ...ST_DEFAULTS }, saved);
+  // One-time migration from the old single-blob ('sb21') format.
+  const legacy = localStorage.getItem('sb21');
+  if (legacy && !localStorage.getItem('sb21:cur')) {
+    let lid = 'anon';
+    try { lid = JSON.parse(legacy).userId || 'anon'; } catch(e){}
+    localStorage.setItem(_userKey(lid), legacy);
+    localStorage.setItem('sb21:cur', String(lid));
+    localStorage.removeItem('sb21');
+  }
+  _curUid = localStorage.getItem('sb21:cur') || 'anon';
+  ST = Object.assign({ ...ST_DEFAULTS }, JSON.parse(localStorage.getItem(_userKey(_curUid)) || '{}'));
 } catch(e){}
-const persist = () => { try { localStorage.setItem('sb21', JSON.stringify(ST)); } catch(e){} };
+const persist = () => { try { localStorage.setItem(_userKey(_curUid), JSON.stringify(ST)); } catch(e){} };
+
+// Switch the active persistence partition (on login / logout). Flushes the
+// current partition, then loads the target user's own stored state.
+function switchUser(uid) {
+  uid = String(uid || 'anon');
+  if (uid === _curUid) return;
+  persist();
+  _curUid = uid;
+  try { localStorage.setItem('sb21:cur', uid); } catch(e){}
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(_userKey(uid)) || '{}'); } catch(e){}
+  ST = Object.assign({ ...ST_DEFAULTS }, saved);
+}
 
 // Store the token pair returned by /login or /signup (compat shape). Centralized
 // so every auth path persists the refresh token + username identically.
 function applyAuth(data) {
   if (!data) return;
+  const uid = data.user_id || ST.userId;
+  if (uid) switchUser(uid);              // move into this account's own partition first
   ST.token    = data.token || data.access_token || ST.token;
   ST.refresh  = data.refresh_token || ST.refresh;
-  ST.userId   = data.user_id || ST.userId;
+  ST.userId   = uid || ST.userId;
   if (data.username) ST.username = data.username;
   persist();
 }
@@ -3449,7 +3478,11 @@ async function doDeleteAccount(){
   const err=document.getElementById('da-err');
   if(v!=='DELETE'){ err.textContent='Type DELETE to confirm'; return; }
   try{ if(ST.token) await api('/account/delete',{method:'POST'}); }catch(e){}
-  closeAppModal(); ST.token=null; ST.userId=null; persist(); toast('Account deleted');
+  closeAppModal();
+  const _du = ST.userId;
+  switchUser('anon');
+  try{ localStorage.removeItem(_userKey(_du)); }catch(e){}   // wipe the deleted account's local data
+  ST.token=null; ST.userId=null; persist(); toast('Account deleted');
   document.getElementById('ob-screen')?.classList.remove('gone');
 }
 
@@ -5139,6 +5172,7 @@ async function bootstrapSession() {
     loadUserPrefs(me);                     // restore saved feed cats/topics
   } catch (e) {
     // Session is dead and couldn't be refreshed → sign out cleanly.
+    switchUser('anon');
     ST.token = null; ST.refresh = null; ST.userId = null; persist();
     document.getElementById('ob-screen')?.classList.remove('gone');
     updateSidebarAuth();
@@ -5239,8 +5273,9 @@ attachPullToRefresh(document.getElementById('v-home'), () => loadFeed(true));
 document.querySelector('.sb-logout').addEventListener('click', signOut);
 
 function signOut() {
+  switchUser('anon');                    // back to the logged-out partition
   ST.token = null; ST.refresh = null; ST.userId = null; ST.username = '';
-  ST.feedCats = null; ST.feedTopics = null; persist();
+  persist();
   sbClose(); toast('👋 Signed out');
   document.getElementById('ob-screen')?.classList.remove('gone');
   updateSidebarAuth();
