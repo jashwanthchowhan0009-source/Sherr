@@ -3170,7 +3170,7 @@ function catPlaceholderHtml(category, style) {
 }
 
 // ── STATE ──
-const ST_DEFAULTS = { likes:[], saves:[], savedCache:{}, token:null, refresh:null, userId:null, username:'', interests:{}, scope:'global', seen:[], settings:{}, privacy:'friends', textSize:'medium', feedCats:null, feedTopics:null };
+const ST_DEFAULTS = { likes:[], saves:[], savedCache:{}, token:null, refresh:null, userId:null, username:'', interests:{}, scope:'global', seen:[], settings:{}, privacy:'friends', feedCats:null, feedTopics:null };
 let ST = { ...ST_DEFAULTS };
 // Per-user persistence: each account (and the logged-out "anon" state) keeps its
 // OWN bookmarks/likes/cache/prefs, so nothing bleeds between users on a shared
@@ -3402,20 +3402,24 @@ function restoreSettings(){
   document.querySelectorAll('.priv-level .pl').forEach(p=>{
     p.classList.toggle('on', p.textContent.trim().toLowerCase() === (ST.privacy||'friends'));
   });
-  applyTextSize(ST.textSize || 'medium', true);
+  applyTextSize(_textSizePref(), true);
 }
 
-// ── Text size ──
+// ── Text size (device-global, like theme — shared across accounts) ──
 const _TEXT_SCALE = { small: 0.92, medium: 1, large: 1.12 };
+function _textSizePref(){
+  try { const d = localStorage.getItem('sb-textsize'); if (d) return d; } catch(e){}
+  return (typeof ST !== 'undefined' && ST.textSize) || 'medium';   // legacy fallback
+}
 function applyTextSize(size, silent){
   size = _TEXT_SCALE[size] ? size : 'medium';
   document.documentElement.style.fontSize = (16 * _TEXT_SCALE[size]) + 'px';
-  ST.textSize = size; persist();
+  try { localStorage.setItem('sb-textsize', size); } catch(e){}
   const v = document.getElementById('set-textsize-val'); if (v) v.textContent = size.charAt(0).toUpperCase()+size.slice(1);
   if (!silent) toast('Text size: '+size);
 }
 function openTextSize(){
-  const cur = ST.textSize || 'medium';
+  const cur = _textSizePref();
   openAppModal(`<div class="am-title">Text Size</div>
     ${['small','medium','large'].map(s=>`<div class="am-opt" onclick="applyTextSize('${s}');closeAppModal()">${s.charAt(0).toUpperCase()+s.slice(1)}${s===cur?' <i class="fa-solid fa-check"></i>':''}</div>`).join('')}
     <button class="am-btn ghost" onclick="closeAppModal()">Done</button>`);
