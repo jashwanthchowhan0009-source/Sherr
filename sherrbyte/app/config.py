@@ -55,6 +55,14 @@ class Settings(BaseSettings):
     # is decommissioned on Groq; llama-3.1-8b-instant is its current equivalent.)
     groq_fallback_model: str = Field("llama-3.1-8b-instant", alias="GROQ_FALLBACK_MODEL")
 
+    # Groq rate-limit guardrails. Free tier is ~12k tokens/min; we throttle below
+    # it and back off (instead of hammering) when the API still returns 429.
+    groq_tpm_limit: int = Field(12000, alias="GROQ_TPM_LIMIT")
+    groq_max_concurrency: int = Field(2, alias="GROQ_MAX_CONCURRENCY")
+    groq_max_retries: int = Field(5, alias="GROQ_MAX_RETRIES")
+    groq_backoff_base_sec: float = Field(1.0, alias="GROQ_BACKOFF_BASE_SEC")
+    groq_backoff_max_sec: float = Field(30.0, alias="GROQ_BACKOFF_MAX_SEC")
+
     # Collection
     newsapi_key: str = Field("", alias="NEWSAPI_KEY")
     collect_interval_min: int = Field(25, alias="COLLECT_INTERVAL_MIN")
