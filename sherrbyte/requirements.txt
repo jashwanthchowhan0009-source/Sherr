@@ -33,6 +33,9 @@ arq==0.26.1
 # Web push (optional — push only activates when VAPID_* env vars are set)
 pywebpush==1.14.1
 
+# Firebase Cloud Messaging (push only — activates with FIREBASE_SERVICE_ACCOUNT)
+firebase-admin==6.5.0
+
 # Tests
 pytest==8.3.3
 pytest-asyncio==0.24.0
