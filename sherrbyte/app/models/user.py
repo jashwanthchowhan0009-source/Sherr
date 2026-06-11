@@ -34,6 +34,7 @@ class RegisterReq(BaseModel):
     email: EmailStr
     password: str = Field(min_length=6)
     name: str = ""
+    username: str = ""          # optional @handle; derived from email when blank
     topics: list[str] = Field(default_factory=list)
 
 
@@ -52,12 +53,14 @@ class TokenPair(BaseModel):
     token_type: str = "bearer"
     user_id: str
     name: str = ""
+    username: str = ""
 
 
 # ─── Profile updates ──────────────────────────────────────────────────────────
 class UpdateProfileReq(BaseModel):
     name: Optional[str] = None
     display_name: Optional[str] = None  # MVP alias for name
+    username: Optional[str] = None
     bio: Optional[str] = None
     avatar_url: Optional[str] = None
     language: Optional[str] = None

@@ -23,6 +23,7 @@ from pydantic import BaseModel
 from app.api.feed import row_to_feed_dict
 from app.config import PILLARS, PILLAR_ALIASES, SLUG_TO_PILLAR
 from app.db.supabase import db
+from app.identity import normalize_username, valid_username
 from app.models.user import UpdateProfileReq, UpdateTopicsReq
 from app.security import optional_user, require_user
 
@@ -68,8 +69,11 @@ async def get_me(user_id: str = Depends(require_user)):
     return {
         "id": str(user["id"]), "email": user["email"], "name": user["name"],
         "display_name": user["name"], "bio": user["bio"],
+        "username": user["username"] if "username" in user else "",
         "avatar_url": user["avatar_url"], "language": user["language"],
         "created_at": user["created_at"].isoformat() if user["created_at"] else None,
+        "last_active": user["last_active"].isoformat()
+            if ("last_active" in user and user["last_active"]) else None,
         "preferences": [
             {"topic": p["topic"], "pillar_id": p["pillar_id"],
              "color": PILLARS.get(p["pillar_id"], PILLARS[1])["color"],
@@ -89,6 +93,19 @@ async def update_profile(req: UpdateProfileReq, user_id: str = Depends(require_u
     name = req.name or req.display_name  # MVP sends display_name
     fields = {"name": name, "bio": req.bio,
               "avatar_url": req.avatar_url, "language": req.language}
+
+    # Username is special: normalize, validate, and enforce uniqueness.
+    if req.username is not None and req.username.strip():
+        if not valid_username(req.username):
+            raise HTTPException(400, "Username must be 3–20 letters, numbers or underscores")
+        uname = normalize_username(req.username)
+        clash = await db.fetchval(
+            "SELECT 1 FROM users WHERE lower(username)=lower($1) AND id <> $2", uname, user_id
+        )
+        if clash:
+            raise HTTPException(400, "That username is already taken")
+        fields["username"] = uname
+
     updates, args = [], []
     for field, val in fields.items():
         if val is not None:
@@ -97,7 +114,7 @@ async def update_profile(req: UpdateProfileReq, user_id: str = Depends(require_u
     if updates:
         args.append(user_id)
         await db.execute(f"UPDATE users SET {', '.join(updates)} WHERE id=${len(args)}", *args)
-    return {"status": "updated"}
+    return {"status": "updated", "username": fields.get("username")}
 
 
 @router.put("/me/topics")
@@ -120,6 +137,7 @@ async def update_topics(req: UpdateTopicsReq, user_id: str = Depends(require_use
 class HeartbeatReq(BaseModel):
     duration_sec: int = 30
     info_object_id: Optional[str] = None
+    article_id: Optional[str] = None   # frontend alias for info_object_id
     scroll_pct: Optional[int] = None
 
 
@@ -139,7 +157,9 @@ async def heartbeat(req: HeartbeatReq, user_id: Optional[str] = Depends(optional
         """,
         user_id, today, secs,
     )
-    if req.info_object_id:
+    await db.execute("UPDATE users SET last_active=now() WHERE id=$1", user_id)
+    info_id = req.info_object_id or req.article_id
+    if info_id:
         sp = max(0, min(100, int(req.scroll_pct or 0)))
         await db.execute(
             """
@@ -151,7 +171,7 @@ async def heartbeat(req: HeartbeatReq, user_id: Optional[str] = Depends(optional
                 completed = (GREATEST(reading_progress.scroll_pct, excluded.scroll_pct) >= 80),
                 updated_at = now()
             """,
-            user_id, req.info_object_id, sp, secs,
+            user_id, info_id, sp, secs,
         )
     return {"status": "ok"}
 
@@ -218,11 +238,55 @@ async def my_analytics(user_id: str = Depends(require_user)):
     top_category = max(categories, key=lambda c: c["count"]) if categories else None
     active_days = sum(1 for d in daily_sec if d["seconds"] > 60)
 
+    # Articles actually read (heartbeat progress OR an explicit read signal).
+    articles_today = await db.fetchval(
+        """
+        SELECT COUNT(*) FROM (
+            SELECT info_object_id FROM reading_progress
+              WHERE user_id=$1 AND updated_at::date = CURRENT_DATE
+            UNION
+            SELECT info_object_id FROM signals
+              WHERE user_id=$1 AND kind='read' AND created_at::date = CURRENT_DATE
+        ) t
+        """,
+        user_id,
+    ) or 0
+    articles_week = await db.fetchval(
+        """
+        SELECT COUNT(*) FROM (
+            SELECT info_object_id FROM reading_progress
+              WHERE user_id=$1 AND updated_at >= $2
+            UNION
+            SELECT info_object_id FROM signals
+              WHERE user_id=$1 AND kind='read' AND created_at >= $2
+        ) t
+        """,
+        user_id, week_ago,
+    ) or 0
+
+    # "Fastest growth": the pillar with the most reads in the last 3 days.
+    fg_row = await db.fetchrow(
+        """
+        SELECT io.pillar_id, COUNT(*) AS c
+        FROM reading_progress rp JOIN info_objects io ON io.id = rp.info_object_id
+        WHERE rp.user_id=$1 AND rp.updated_at >= now() - interval '3 days'
+        GROUP BY io.pillar_id ORDER BY c DESC LIMIT 1
+        """,
+        user_id,
+    )
+    fastest_growth = None
+    if fg_row:
+        p = PILLARS.get(fg_row["pillar_id"], PILLARS[1])
+        fastest_growth = {"pillar_id": fg_row["pillar_id"], "name": p["name"],
+                          "slug": p["slug"], "color": p["color"]}
+
     return {
         "time_today_sec": time_today, "time_today_formatted": _fmt_duration(time_today),
         "time_week_sec": time_week, "time_week_formatted": _fmt_duration(time_week),
         "current_streak": current_streak, "longest_streak": longest,
         "daily_sec": daily_sec, "categories": categories, "top_category": top_category,
+        "articles_today": int(articles_today), "articles_week": int(articles_week),
+        "fastest_growth": fastest_growth,
         "avg_session_minutes": round((time_week / max(1, active_days)) / 60, 1),
         "active_days_week": active_days,
     }
