@@ -60,6 +60,7 @@ async def signup(req: RegisterReq):
         "user_id": tp.user_id,
         "display_name": tp.name,
         "name": tp.name,
+        "username": tp.username,
         "message": "Account created",
     }
 
@@ -77,6 +78,7 @@ async def login(req: LoginReq):
         "user_id": tp.user_id,
         "name": tp.name,
         "display_name": tp.name,
+        "username": tp.username,
         "has_topics": has_topics,
     }
 

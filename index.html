@@ -2477,6 +2477,8 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
         </div>
         <div id="ob-reg-form" style="display:none">
           <div class="ob-field"><label>Name</label><input type="text" id="ob-rn" placeholder="Your name" autocomplete="name"></div>
+          <div class="ob-field"><label>Username</label><input type="text" id="ob-ru" placeholder="@username" autocomplete="username" oninput="obCheckUsername()">
+            <div id="ob-ru-hint" style="font-size:0.7rem;margin-top:4px;min-height:14px;color:var(--t3)"></div></div>
           <div class="ob-field"><label>Email</label><input type="email" id="ob-re" placeholder="you@example.com" autocomplete="email"></div>
           <div class="ob-field"><label>Password</label><input type="password" id="ob-rp" placeholder="Min. 6 characters" autocomplete="new-password"></div>
           <div class="ob-err" id="ob-rerr"></div>
@@ -2534,8 +2536,8 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   <div class="sb-head">
     <div class="sb-ava"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%231565e8'/%3E%3Cstop offset='1' stop-color='%238E24AA'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='100' height='100' fill='url(%23g)'/%3E%3Ccircle cx='50' cy='40' r='15' fill='%23fff' opacity='.92'/%3E%3Cpath d='M24 80c0-14 12-22 26-22s26 8 26 22' fill='%23fff' opacity='.92'/%3E%3C/svg%3E" alt="" id="sb-ava-img"></div>
     <div>
-      <div class="prof-name-row"><div class="sb-name" id="sb-name">SherrByte User</div><span class="pro-badge">PRO</span></div>
-      <div class="sb-handle" id="sb-handle">@user ✦</div>
+      <div class="prof-name-row"><div class="sb-name" id="sb-name">SherrByte User</div></div>
+      <div class="sb-handle" id="sb-handle">@user</div>
     </div>
     <div class="sb-close tap" onclick="sbClose()"><i class="fa-solid fa-xmark"></i></div>
   </div>
@@ -2767,16 +2769,16 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
       <div class="prof-info">
         <div class="prof-name-row">
           <div class="prof-name" id="prof-name">—</div>
-          <span class="pro-badge">PRO</span>
         </div>
-        <div class="prof-handle" id="prof-handle">@— ✦</div>
+        <div class="prof-handle" id="prof-handle">@—</div>
         <div class="prof-bio" id="prof-bio">Tap Edit Profile to set your bio</div>
+        <div class="prof-join" id="prof-join" style="font-size:0.72rem;color:var(--t3);margin-top:3px"></div>
       </div>
     </div>
     <div class="prof-stats">
-      <div class="ps"><div class="ps-n" id="prof-followers">0</div><div class="ps-l">Followers</div></div>
-      <div class="ps"><div class="ps-n" id="prof-following">0</div><div class="ps-l">Following</div></div>
-      <div class="ps" style="display:none"><div class="ps-n" id="prof-friends">0</div><div class="ps-l">Friends</div></div>
+      <div class="ps"><div class="ps-n" id="prof-stat-read">0</div><div class="ps-l">Articles Read</div></div>
+      <div class="ps"><div class="ps-n" id="prof-stat-streak">0</div><div class="ps-l">Day Streak</div></div>
+      <div class="ps"><div class="ps-n" id="prof-stat-saved">0</div><div class="ps-l">Bookmarks</div></div>
       <div class="ps" style="display:none"><div class="ps-n" id="saved-ct">0</div><div class="ps-l">Saved</div></div>
     </div>
     <div class="prof-btns">
@@ -2790,9 +2792,9 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   <div class="set-sec">
     <div class="set-lbl">Account</div>
     <div class="set-grp">
-      <div class="sr tap" onclick="openSub('security')"><div class="sr-ico" style="background:#2C3D8F"><i class="fa-solid fa-shield-halved"></i></div><span class="sr-lbl">Security Center</span><span class="sr-val" style="color:var(--c-green)">Strong</span><i class="fa-solid fa-chevron-right sr-arr"></i></div>
-      <div class="sr tap" onclick="openSub('privacy')"><div class="sr-ico" style="background:#52C17A"><i class="fa-solid fa-lock"></i></div><span class="sr-lbl">Privacy</span><span class="sr-val">Friends only</span><i class="fa-solid fa-chevron-right sr-arr"></i></div>
-      <div class="sr tap"><div class="sr-ico" style="background:#4F6BD4"><i class="fa-solid fa-bell"></i></div><span class="sr-lbl">Notifications</span><span class="sr-badge">3</span><i class="fa-solid fa-chevron-right sr-arr" style="margin-left:6px"></i></div>
+      <div class="sr tap" onclick="openSub('security')"><div class="sr-ico" style="background:#2C3D8F"><i class="fa-solid fa-shield-halved"></i></div><span class="sr-lbl">Security Center</span><i class="fa-solid fa-chevron-right sr-arr"></i></div>
+      <div class="sr tap" onclick="openSub('privacy')"><div class="sr-ico" style="background:#52C17A"><i class="fa-solid fa-lock"></i></div><span class="sr-lbl">Privacy</span><i class="fa-solid fa-chevron-right sr-arr"></i></div>
+      <div class="sr tap" onclick="navTo('notifs')"><div class="sr-ico" style="background:#4F6BD4"><i class="fa-solid fa-bell"></i></div><span class="sr-lbl">Notifications</span><i class="fa-solid fa-chevron-right sr-arr"></i></div>
     </div>
     <div class="set-lbl">App</div>
     <div class="set-grp">
@@ -2829,47 +2831,15 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   </div>
   <div style="overflow-y:scroll;height:calc(100% - 72px);padding-bottom:16px;">
     <div class="feed-stats" style="margin:12px 14px 0;padding-bottom:2px;">
-      <div class="fstat"><i class="fa-solid fa-clock" style="color:var(--accent)"></i><div class="fstat-sub">Time Today</div><div class="fstat-val">45 min</div></div>
-      <div class="fstat"><i class="fa-solid fa-newspaper" style="color:#52C17A"></i><div class="fstat-sub">Articles Read</div><div class="fstat-val">12 today</div></div>
-      <div class="fstat"><i class="fa-solid fa-bolt" style="color:#FFD166"></i><div class="fstat-sub">Fastest Growth</div><div class="fstat-val">Sci & Tech</div></div>
-      <div class="fstat"><i class="fa-solid fa-compass" style="color:#A855F7"></i><div class="fstat-sub">Suggested</div><div class="fstat-val">Philosophy</div></div>
+      <div class="fstat"><i class="fa-solid fa-clock" style="color:var(--accent)"></i><div class="fstat-sub">Time Today</div><div class="fstat-val" id="fp-time">—</div></div>
+      <div class="fstat"><i class="fa-solid fa-newspaper" style="color:#52C17A"></i><div class="fstat-sub">Articles Read</div><div class="fstat-val" id="fp-read">—</div></div>
+      <div class="fstat"><i class="fa-solid fa-bolt" style="color:#FFD166"></i><div class="fstat-sub">Fastest Growth</div><div class="fstat-val" id="fp-growth">—</div></div>
+      <div class="fstat"><i class="fa-solid fa-compass" style="color:#A855F7"></i><div class="fstat-sub">Suggested</div><div class="fstat-val" id="fp-suggest">—</div></div>
     </div>
     <div class="feed-radar-wrap" style="margin:12px 14px">
       <div class="feed-radar-lbl"><i class="fa-solid fa-chart-line"></i> Knowledge Balance</div>
-      <svg class="radar-svg" viewBox="0 0 260 230" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <radialGradient id="rg" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stop-color="#0652B5" stop-opacity="0.5"/>
-            <stop offset="100%" stop-color="#0652B5" stop-opacity="0.05"/>
-          </radialGradient>
-          <filter id="glow"><feGaussianBlur stdDeviation="2.5" result="blur"/>
-            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-          </filter>
-        </defs>
-        <circle cx="130" cy="115" r="80" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>
-        <circle cx="130" cy="115" r="60" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>
-        <circle cx="130" cy="115" r="40" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>
-        <circle cx="130" cy="115" r="20" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>
-        <line x1="130" y1="115" x2="130" y2="35" stroke="rgba(255,255,255,0.07)" stroke-width="1"/>
-        <line x1="130" y1="115" x2="199" y2="75" stroke="rgba(255,255,255,0.07)" stroke-width="1"/>
-        <line x1="130" y1="115" x2="199" y2="155" stroke="rgba(255,255,255,0.07)" stroke-width="1"/>
-        <line x1="130" y1="115" x2="130" y2="195" stroke="rgba(255,255,255,0.07)" stroke-width="1"/>
-        <line x1="130" y1="115" x2="61" y2="155" stroke="rgba(255,255,255,0.07)" stroke-width="1"/>
-        <line x1="130" y1="115" x2="61" y2="75" stroke="rgba(255,255,255,0.07)" stroke-width="1"/>
-        <polygon points="130,43 158,67 154,157 130,147 100,167 92,93" fill="url(#rg)" stroke="#0652B5" stroke-width="1.5" stroke-linejoin="round" filter="url(#glow)" opacity="0.9"/>
-        <circle cx="130" cy="43" r="3" fill="#02239E"/>
-        <circle cx="158" cy="67" r="3" fill="#0652B5"/>
-        <circle cx="154" cy="157" r="3" fill="#FFD166"/>
-        <circle cx="130" cy="147" r="3" fill="#FF5B5B"/>
-        <circle cx="100" cy="167" r="3" fill="#52C17A"/>
-        <circle cx="92" cy="93" r="3" fill="#A855F7"/>
-        <text x="130" y="27" text-anchor="middle" fill="#3949AB" font-size="9" font-weight="700" font-family="Poppins,sans-serif">Sci&amp;Tech</text>
-        <text x="213" y="72" text-anchor="start" fill="#1E88E5" font-size="9" font-weight="700" font-family="Poppins,sans-serif">Society</text>
-        <text x="209" y="164" text-anchor="start" fill="#FBC02D" font-size="9" font-weight="700" font-family="Poppins,sans-serif">Business</text>
-        <text x="130" y="215" text-anchor="middle" fill="#E53935" font-size="9" font-weight="700" font-family="Poppins,sans-serif">Arts</text>
-        <text x="48" y="164" text-anchor="end" fill="#43A047" font-size="9" font-weight="700" font-family="Poppins,sans-serif">Nature</text>
-        <text x="51" y="72" text-anchor="end" fill="#8E24AA" font-size="9" font-weight="700" font-family="Poppins,sans-serif">Philo</text>
-      </svg>
+      <!-- Rendered from real /me/analytics reading mix by buildRadar(). -->
+      <div id="feed-radar"></div>
     </div>
     <div style="padding:0 14px 6px;font-family:var(--fd);font-size:0.88rem;font-weight:700;color:var(--t1)">Your Categories</div>
     <div class="feed-cats-grid" id="feed-cats-grid"></div>
@@ -2887,12 +2857,10 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 <div id="sub-security" class="sub">
   <div class="sub-hdr"><div class="sub-back tap" onclick="closeSub('security')"><i class="fa-solid fa-chevron-left"></i> Back</div><div class="sub-ttl">Security Center</div></div>
   <div class="sub-scroll">
-    <div class="sec-card"><div class="sec-lbl">Security Score</div><div class="sec-num">78</div><div class="sec-sub">Good · 2 improvements available</div><div class="sec-bar"><div class="sec-fill" style="width:78%"></div></div></div>
     <div class="sg"><div class="sg-lbl">Authentication</div><div class="sg-grp">
-      <div class="sg-row"><div class="sg-ico" style="background:#4F6BD4"><i class="fa-solid fa-key"></i></div><span class="sg-lbl2">Two-Factor Auth</span><div class="tog on" data-k="twofa" onclick="togRow(this)"></div></div>
-      <div class="sg-row"><div class="sg-ico" style="background:#A855F7"><i class="fa-solid fa-fingerprint"></i></div><span class="sg-lbl2">Biometric Login</span><div class="tog on" data-k="biometric" onclick="togRow(this)"></div></div>
       <div class="sg-row tap" onclick="changePassword()"><div class="sg-ico" style="background:#FF5B5B"><i class="fa-solid fa-lock"></i></div><span class="sg-lbl2">Change Password</span><i class="fa-solid fa-chevron-right sg-arr"></i></div>
-    </div></div>
+    </div>
+    <div class="sg-note" style="font-size:0.72rem;color:var(--t3);padding:8px 4px 0">Your password is stored salted &amp; hashed (argon2id/PBKDF2) — never in plain text.</div></div>
     <div class="sg"><div class="sg-lbl">Danger Zone</div>
       <div class="danger-row tap" onclick="confirmLogoutAll()"><div class="danger-ico"><i class="fa-solid fa-right-from-bracket"></i></div><span class="danger-lbl">Log Out All Devices</span></div>
       <div class="danger-row tap" onclick="confirmDeleteAccount()"><div class="danger-ico"><i class="fa-solid fa-trash"></i></div><span class="danger-lbl">Delete Account</span></div>
@@ -3207,19 +3175,55 @@ function catPlaceholderHtml(category, style) {
 }
 
 // ── STATE ──
-const ST_DEFAULTS = { likes:[], saves:[], token:null, userId:null, interests:{}, scope:'global', seen:[], settings:{}, privacy:'friends', textSize:'medium' };
+const ST_DEFAULTS = { likes:[], saves:[], token:null, refresh:null, userId:null, username:'', interests:{}, scope:'global', seen:[], settings:{}, privacy:'friends', textSize:'medium', feedCats:null, feedTopics:null };
 let ST = { ...ST_DEFAULTS };
 try {
   const saved = JSON.parse(localStorage.getItem('sb21') || '{}');
   ST = Object.assign({ ...ST_DEFAULTS }, saved);
 } catch(e){}
 const persist = () => { try { localStorage.setItem('sb21', JSON.stringify(ST)); } catch(e){} };
+
+// Store the token pair returned by /login or /signup (compat shape). Centralized
+// so every auth path persists the refresh token + username identically.
+function applyAuth(data) {
+  if (!data) return;
+  ST.token    = data.token || data.access_token || ST.token;
+  ST.refresh  = data.refresh_token || ST.refresh;
+  ST.userId   = data.user_id || ST.userId;
+  if (data.username) ST.username = data.username;
+  persist();
+}
+
+// Exchange the long-lived refresh token for a fresh access token. Returns true
+// on success. De-duped so concurrent 401s trigger a single refresh.
+let _refreshing = null;
+function tryRefresh() {
+  if (!ST.refresh) return Promise.resolve(false);
+  if (_refreshing) return _refreshing;
+  _refreshing = (async () => {
+    try {
+      const res = await fetch(API_URL + '/auth/refresh', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: ST.refresh }),
+      });
+      if (!res.ok) return false;
+      const d = await res.json();
+      ST.token = d.access_token || d.token || ST.token;
+      if (d.refresh_token) ST.refresh = d.refresh_token;
+      if (d.username) ST.username = d.username;
+      persist();
+      return true;
+    } catch (e) { return false; }
+    finally { _refreshing = null; }
+  })();
+  return _refreshing;
+}
 // Record an article as seen (persisted, capped) so it survives refresh/reopen.
 function markSeen(id){ if(!id) return; id=String(id); if(!ST.seen.includes(id)){ ST.seen.push(id); if(ST.seen.length>500) ST.seen=ST.seen.slice(-500); persist(); } }
 
 // ── API HELPER ──
 async function api(path, opts = {}) {
-  const { timeout = 20000, ...rest } = opts;
+  const { timeout = 20000, _retried = false, ...rest } = opts;
   const headers = { "Content-Type": "application/json", ...(rest.headers || {}) };
   if (ST.token) headers["Authorization"] = "Bearer " + ST.token;
   // Abort hung requests so a slow/cold backend can never freeze the UI
@@ -3228,6 +3232,11 @@ async function api(path, opts = {}) {
   const timer = setTimeout(() => ctrl.abort(), timeout);
   try {
     const res = await fetch(API_URL + path, { ...rest, headers, signal: ctrl.signal });
+    // Access token expired → refresh once with the stored refresh token & retry.
+    if (res.status === 401 && !_retried && ST.refresh && path.indexOf('/auth/refresh') < 0) {
+      clearTimeout(timer);
+      if (await tryRefresh()) return api(path, { ...opts, _retried: true });
+    }
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.detail || "HTTP " + res.status);
@@ -4564,6 +4573,123 @@ async function renderNotifs() {
   });
 }
 
+// ── FEED PREFERENCES (persisted per user via /me/topics, mirrored locally) ──
+// Frontend category keys map 1:1 to backend pillar slugs / ids.
+const CAT_PILLAR = { society:1, economy:2, tech:3, arts:4, nature:5, selfwell:6, philo:7, lifestyle:8, sports:9 };
+const PILLAR_CAT = Object.fromEntries(Object.entries(CAT_PILLAR).map(([k,v]) => [v,k]));
+const ALL_TOPIC_NAMES = new Set();   // filled by renderFeedTopics; used to split cats vs topics
+
+// Restore the user's saved category + topic selections. Prefers a fresh /me
+// payload; falls back to the locally cached copy so refresh feels instant.
+async function loadUserPrefs(me) {
+  // 1) Instant: hydrate from localStorage if present.
+  if (Array.isArray(ST.feedCats))   activeFeedCats   = new Set(ST.feedCats);
+  if (Array.isArray(ST.feedTopics)) activeFeedTopics = new Set(ST.feedTopics);
+  // 2) Authoritative: pull from the backend when signed in.
+  if (ST.token) {
+    try {
+      if (!me) me = await api('/me');
+      const prefs = me.preferences || [];
+      if (prefs.length) {
+        const cats = new Set(), topics = new Set();
+        prefs.forEach(p => {
+          const key = PILLAR_CAT[p.pillar_id];
+          const topic = p.topic || '';
+          if (CAT_PILLAR[topic] != null) cats.add(topic);       // a stored pillar-slug
+          else { if (key) cats.add(key); topics.add(topic); }   // a real topic name
+        });
+        if (cats.size)   activeFeedCats   = cats;
+        if (topics.size) activeFeedTopics = topics;
+        ST.feedCats = [...activeFeedCats]; ST.feedTopics = [...activeFeedTopics]; persist();
+      }
+    } catch (e) { /* keep local/default selection */ }
+  }
+  renderFeedFilterChips(); renderFeedCatCards(); renderFeedTopics();
+}
+
+// Persist the current selection to the backend (debounced) + localStorage.
+let _savePrefsTimer = null;
+function saveFeedPrefs() {
+  ST.feedCats = [...activeFeedCats]; ST.feedTopics = [...activeFeedTopics]; persist();
+  if (!ST.token) return;
+  clearTimeout(_savePrefsTimer);
+  _savePrefsTimer = setTimeout(() => {
+    api('/me/topics', { method: 'PUT', body: JSON.stringify({
+      categories: [...activeFeedCats],          // pillar slugs
+      topics:     [...activeFeedTopics],        // topic names
+    }) }).catch(() => {});
+  }, 700);
+}
+
+// Load the real Feed Pulse stats + radar from /me/analytics.
+async function loadFeedPulse() {
+  const radar  = document.getElementById('feed-radar');
+  const setTxt = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
+  if (!ST.token) {
+    _feedAnalytics = null;
+    setTxt('fp-time', '—'); setTxt('fp-read', '—'); setTxt('fp-growth', 'Sign in'); setTxt('fp-suggest', '—');
+    if (radar) radar.innerHTML = buildRadar(null);
+    renderFeedCatCards();
+    return;
+  }
+  try {
+    const a = await api('/me/analytics');
+    _feedAnalytics = a;
+    setTxt('fp-time',   a.time_today_formatted || '0m');
+    setTxt('fp-read',   (a.articles_today || 0) + ' today');
+    setTxt('fp-growth', a.fastest_growth ? a.fastest_growth.name : '—');
+    // "Suggested" = a category you've selected but read the least.
+    let suggest = '—';
+    const active = [...activeFeedCats];
+    if (active.length) {
+      active.sort((x, y) => (feedCatPct(x) || 0) - (feedCatPct(y) || 0));
+      suggest = (CATS[active[0]] || {}).short || '—';
+    }
+    setTxt('fp-suggest', suggest);
+    if (radar) radar.innerHTML = buildRadar(a);
+    renderFeedCatCards();
+  } catch (e) {
+    if (radar) radar.innerHTML = buildRadar(null);
+  }
+}
+
+// Draw the Knowledge Balance radar from real per-pillar reading share.
+function buildRadar(a) {
+  const AX = [
+    { key:'tech',    label:'Sci&Tech', color:'#3949AB' },
+    { key:'society', label:'Society',  color:'#1E88E5' },
+    { key:'economy', label:'Business', color:'#FBC02D' },
+    { key:'arts',    label:'Arts',     color:'#E53935' },
+    { key:'nature',  label:'Nature',   color:'#43A047' },
+    { key:'philo',   label:'Philo',    color:'#8E24AA' },
+  ];
+  const cx = 130, cy = 115, R = 80;
+  const cats  = (a && a.categories) || [];
+  const pctOf = k => { const r = cats.find(c => c.pillar_id === CAT_PILLAR[k]); return r ? (r.pct || 0) : 0; };
+  const vals  = AX.map(x => pctOf(x.key));
+  const maxV  = Math.max(...vals, 0);
+  const ang   = i => (-90 + i * 60) * Math.PI / 180;
+  const pt    = (i, r) => [cx + r * Math.cos(ang(i)), cy + r * Math.sin(ang(i))];
+  const rings = [20,40,60,80].map(r => `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="rgba(150,150,170,0.14)" stroke-width="1"/>`).join('');
+  const spokes = AX.map((x,i) => { const [px,py]=pt(i,R); return `<line x1="${cx}" y1="${cy}" x2="${px.toFixed(1)}" y2="${py.toFixed(1)}" stroke="rgba(150,150,170,0.16)" stroke-width="1"/>`; }).join('');
+  const labels = AX.map((x,i) => { const [px,py]=pt(i,R+18); const anchor = Math.abs(px-cx)<6 ? 'middle' : (px>cx ? 'start' : 'end'); return `<text x="${px.toFixed(0)}" y="${(py+3).toFixed(0)}" text-anchor="${anchor}" fill="${x.color}" font-size="9" font-weight="700" font-family="Poppins,sans-serif">${x.label}</text>`; }).join('');
+  if (maxV <= 0) {
+    return `<svg class="radar-svg" viewBox="0 0 260 230" xmlns="http://www.w3.org/2000/svg">${rings}${spokes}${labels}
+      <circle cx="${cx}" cy="${cy}" r="3" fill="rgba(150,150,170,0.5)"/>
+      <text x="${cx}" y="150" text-anchor="middle" fill="#8a8a9a" font-size="8.5" font-family="Poppins,sans-serif">Start reading to map your balance</text></svg>`;
+  }
+  const proj = AX.map((x,i) => pt(i, R * Math.max(0.04, vals[i] / maxV)));
+  const poly = proj.map(p => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
+  const dots = AX.map((x,i) => `<circle cx="${proj[i][0].toFixed(1)}" cy="${proj[i][1].toFixed(1)}" r="3" fill="${x.color}"/>`).join('');
+  return `<svg class="radar-svg" viewBox="0 0 260 230" xmlns="http://www.w3.org/2000/svg">
+    <defs><radialGradient id="rg" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#0652B5" stop-opacity="0.5"/><stop offset="100%" stop-color="#0652B5" stop-opacity="0.05"/>
+    </radialGradient></defs>
+    ${rings}${spokes}
+    <polygon points="${poly}" fill="url(#rg)" stroke="#0652B5" stroke-width="1.5" stroke-linejoin="round" opacity="0.9"/>
+    ${dots}${labels}</svg>`;
+}
+
 // ── FEED PULSE ──
 function renderFeedFilterChips() {
   const c = document.getElementById('feed-filter-chips');
@@ -4578,16 +4704,26 @@ function renderFeedFilterChips() {
     d.innerHTML        = cat.icon + ' ' + cat.short;
     d.onclick = () => {
       if (activeFeedCats.has(key)) activeFeedCats.delete(key); else activeFeedCats.add(key);
+      saveFeedPrefs();
       renderFeedFilterChips(); renderFeedCatCards(); renderFeedArticles();
     };
     c.appendChild(d);
   });
 }
 
+// Real per-pillar reading mix from /me/analytics (share of articles read),
+// cached here so the cards/radar can render without re-fetching on every toggle.
+let _feedAnalytics = null;
+function feedCatPct(key) {
+  if (!_feedAnalytics || !_feedAnalytics.categories) return null;
+  const pid = CAT_PILLAR[key];
+  const row = _feedAnalytics.categories.find(c => c.pillar_id === pid);
+  return row ? (row.pct || 0) : 0;
+}
+
 function renderFeedCatCards() {
   const c   = document.getElementById('feed-cats-grid');
   c.innerHTML = '';
-  const pcts = { arts:72, selfwell:45, economy:88, nature:56, society:63, tech:91, philo:38, lifestyle:55, sports:77 };
   const catGrads = {
     arts:    'linear-gradient(135deg,#E53935CC,#E5393588)',
     selfwell:'linear-gradient(135deg,#FB8C00CC,#FB8C0088)',
@@ -4600,13 +4736,16 @@ function renderFeedCatCards() {
     sports:  'linear-gradient(135deg,#546E7ACC,#546E7A88)',
   };
   Object.entries(CATS).forEach(([key,cat]) => {
-    const pct = pcts[key]||50;
+    const rawPct = feedCatPct(key);          // null = analytics not loaded yet
+    const pct    = rawPct == null ? 0 : rawPct;
+    const pctTxt = rawPct == null ? '—' : pct + '%';
     const on  = activeFeedCats.has(key);
     const d   = document.createElement('div');
     d.className = 'fcat-card';
     d.style.background = catGrads[key] || `linear-gradient(135deg,${cat.hex}CC,${cat.hex}88)`;
     d.onclick = () => {
       if (activeFeedCats.has(key)) activeFeedCats.delete(key); else activeFeedCats.add(key);
+      saveFeedPrefs();
       renderFeedCatCards(); renderFeedFilterChips(); renderFeedArticles();
     };
     d.innerHTML = `
@@ -4614,7 +4753,7 @@ function renderFeedCatCards() {
       <div class="fcat-card-icon">${cat.icon}</div>
       <div class="fcat-card-name">${cat.short}</div>
       <div class="fcat-card-desc">${cat.label}</div>
-      <div class="fcat-card-pct">${pct}%</div>
+      <div class="fcat-card-pct">${pctTxt}</div>
       <div class="fcat-card-bar"><div class="fcat-card-fill" style="width:${pct}%"></div></div>`;
     c.appendChild(d);
   });
@@ -4631,6 +4770,7 @@ function renderFeedTopics() {
   ];
   const c      = document.getElementById('feed-topics');
   c.innerHTML  = '';
+  ALL_TOPICS.forEach(t => ALL_TOPIC_NAMES.add(t));
   const colors = Object.values(CATS).map(c=>c.hex);
   ALL_TOPICS.forEach((t,i) => {
     const on    = activeFeedTopics.has(t);
@@ -4643,6 +4783,7 @@ function renderFeedTopics() {
     d.textContent = t;
     d.onclick = () => {
       if (activeFeedTopics.has(t)) activeFeedTopics.delete(t); else activeFeedTopics.add(t);
+      saveFeedPrefs();
       renderFeedTopics(); toast((on?'✓ Removed':'✓ Added') + ': ' + t);
     };
     c.appendChild(d);
@@ -4748,6 +4889,8 @@ function openEditProfile() {
   const bioEl  = document.getElementById('prof-bio');
   if (nameEl) document.getElementById('epm-name').value = nameEl.textContent !== '—' ? nameEl.textContent : '';
   if (bioEl)  document.getElementById('epm-bio').value  = bioEl.textContent !== 'Tap Edit Profile to set your bio' ? bioEl.textContent : '';
+  const unameEl = document.getElementById('epm-username');
+  if (unameEl) unameEl.value = ST.username ? '@' + ST.username : '';
 }
 function closeEditProfile(e) {
   if (!e || e.target === document.getElementById('edit-profile-modal'))
@@ -4784,23 +4927,25 @@ async function saveProfile() {
   const name  = document.getElementById('epm-name').value.trim();
   const bio   = document.getElementById('epm-bio').value.trim();
   const link  = document.getElementById('epm-link').value.trim();
-  const uname = document.getElementById('epm-username').value.trim();
-  if (name) { document.getElementById('prof-name').textContent = name; document.getElementById('sb-name').textContent = name; }
-  if (bio)  { document.getElementById('prof-bio').textContent = bio; }
-  if (uname) {
-    document.getElementById('prof-handle').textContent = '@' + uname.replace('@','') + ' ✦';
-    document.getElementById('sb-handle').textContent   = '@' + uname.replace('@','') + ' ✦';
-  }
-  if (ST.token) {
-    try { await api('/me', { method:'PUT', body: JSON.stringify({
-      display_name: name||undefined, bio: bio||undefined, link: link||undefined,
+  const uname = (document.getElementById('epm-username').value || '').trim().replace(/^@/, '').toLowerCase();
+  if (uname && !/^[a-z0-9_]{3,20}$/.test(uname)) { toast('Username: 3–20 letters, numbers or _'); return; }
+  if (!ST.token) { toast('Sign in to edit your profile'); return; }
+  try {
+    const r = await api('/me', { method:'PUT', body: JSON.stringify({
+      display_name: name || undefined, bio: bio || undefined, link: link || undefined,
+      username: uname || undefined,
       avatar_url: _pendingAvatar || undefined,
-    }) }); }
-    catch(e) {}
+    }) });
+    // Apply locally only after the backend accepted it (so a taken @handle errors out).
+    if (name) { document.getElementById('prof-name').textContent = name; document.getElementById('sb-name').textContent = name; }
+    document.getElementById('prof-bio').textContent = bio || 'Tap Edit Profile to set your bio';
+    if (uname) { ST.username = uname; persist(); setHandle(uname); }
+    if (_pendingAvatar) { setAllAvatars(_pendingAvatar); _pendingAvatar = null; }
+    document.getElementById('edit-profile-modal').classList.remove('open');
+    toast('✦ Profile updated!');
+  } catch (e) {
+    toast(e.message || 'Could not save profile');
   }
-  if (_pendingAvatar) { setAllAvatars(_pendingAvatar); _pendingAvatar = null; }
-  document.getElementById('edit-profile-modal').classList.remove('open');
-  toast('✦ Profile updated!');
 }
 
 // ── NAV ──
@@ -4854,7 +4999,7 @@ function navTo(name) {
     startMarketsPolling();
     if (!_expCurCat) showExpCat('all');   // load category rows only when Explore opens
   }
-  if (name==='feed') renderFeedArticles();
+  if (name==='feed') { loadFeedPulse(); renderFeedFilterChips(); renderFeedTopics(); renderFeedArticles(); }
   if (name==='bytes' && typeof initBytes === 'function') initBytes();
 
   // Push a history entry so the device/hardware back button returns here.
@@ -4885,20 +5030,50 @@ window.addEventListener('popstate', (e) => {
 // Seed the root route so navigation has a base entry to return to.
 try { history.replaceState({ view: 'home' }, ''); } catch (e) {}
 
+// Apply a /me payload to the profile UI — real data only, no placeholders.
+function applyMe(me) {
+  if (!me) return;
+  const n = me.display_name || me.name;
+  if (n) { document.getElementById('prof-name').textContent = n; document.getElementById('sb-name').textContent = n; }
+  const uname = me.username || (me.email ? me.email.split('@')[0] : '');
+  if (uname) { ST.username = uname; persist(); setHandle(uname); }
+  const bioEl = document.getElementById('prof-bio');
+  if (bioEl) bioEl.textContent = me.bio || 'Tap Edit Profile to set your bio';
+  if (me.avatar_url) setAllAvatars(me.avatar_url);
+  // Join date (real, from created_at).
+  const joinEl = document.getElementById('prof-join');
+  if (joinEl && me.created_at) {
+    const d = new Date(me.created_at);
+    joinEl.textContent = isNaN(d) ? '' : 'Joined ' + d.toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
+  }
+  // Real stat boxes (replaces the old fake Followers/Following).
+  const s = me.stats || {};
+  const setStat = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = (v ?? 0); };
+  setStat('prof-stat-read', s.articles_read);
+  setStat('prof-stat-saved', s.bookmarks);
+  ST.interests = me.interests || {}; persist();
+}
+
 async function loadProfileFromAPI() {
+  try { applyMe(await api('/me')); } catch (e) {}
+}
+
+// On boot / refresh: if we hold a session, verify it (auto-refreshing the access
+// token if needed) and restore the user. If it's truly invalid, drop to sign-in.
+async function bootstrapSession() {
+  if (!ST.token && !ST.refresh) return;   // anonymous — leave onboarding visible
   try {
-    const me = await api('/me');
-    const n  = me.display_name || me.name;
-    if (n) { document.getElementById('prof-name').textContent = n; document.getElementById('sb-name').textContent = n; }
-    if (me.email) {
-      const handle = '@' + me.email.split('@')[0] + ' ✦';
-      document.getElementById('prof-handle').textContent = handle;
-      document.getElementById('sb-handle').textContent   = handle;
-    }
-    if (me.bio) document.getElementById('prof-bio').textContent = me.bio;
-    if (me.avatar_url) setAllAvatars(me.avatar_url);
-    ST.interests = me.interests || {}; persist();
-  } catch(e) {}
+    const me = await api('/me');          // api() auto-refreshes on a 401
+    applyMe(me);
+    document.getElementById('ob-screen')?.classList.add('gone');
+    updateSidebarAuth();
+    loadUserPrefs(me);                     // restore saved feed cats/topics
+  } catch (e) {
+    // Session is dead and couldn't be refreshed → sign out cleanly.
+    ST.token = null; ST.refresh = null; ST.userId = null; persist();
+    document.getElementById('ob-screen')?.classList.remove('gone');
+    updateSidebarAuth();
+  }
 }
 
 // ── TIME AGO ──
@@ -4995,7 +5170,12 @@ attachPullToRefresh(document.getElementById('v-home'), () => loadFeed(true));
 document.querySelector('.sb-logout').addEventListener('click', signOut);
 
 function signOut() {
-  ST.token = null; ST.userId = null; persist(); sbClose(); toast('👋 Signed out'); loadFeed(true);
+  ST.token = null; ST.refresh = null; ST.userId = null; ST.username = '';
+  ST.feedCats = null; ST.feedTopics = null; persist();
+  sbClose(); toast('👋 Signed out');
+  document.getElementById('ob-screen')?.classList.remove('gone');
+  updateSidebarAuth();
+  loadFeed(true);
 }
 
 // ── AUTH ──
@@ -5053,7 +5233,7 @@ async function doAuth() {
     } else {
       data = await api('/signup', { method:'POST', body: JSON.stringify({ email, password: pass, name: name || undefined }) });
     }
-    ST.token = data.token; ST.userId = data.user_id; persist();
+    applyAuth(data); loadUserPrefs();
     document.getElementById('auth-modal').style.display = 'none';
     toast('✦ Signed in!');
     loadFeed(true);
@@ -5074,6 +5254,16 @@ function updateProfileUI(data) {
     if (nameEl) nameEl.textContent = n;
     if (sbEl)   sbEl.textContent   = n;
   }
+  const uname = data.username || ST.username;
+  if (uname) setHandle(uname);
+}
+
+// Show the real @handle everywhere it appears (profile + sidebar).
+function setHandle(uname) {
+  const h = '@' + String(uname).replace(/^@/, '');
+  ['prof-handle', 'sb-handle'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.textContent = h;
+  });
 }
 
 function updateSidebarAuth() {
@@ -5105,7 +5295,9 @@ let obAllT = [], obSelT = new Set(), obPF = 0, obSD = null;
 function obInit() {
   const screen = document.getElementById('ob-screen');
   if (!screen) return;
-  if (ST.token) screen.classList.add('gone');
+  // Optimistically hide onboarding if we hold a token, then verify the session
+  // (auto-refresh on expiry; drop to sign-in only if it's truly dead).
+  if (ST.token || ST.refresh) { screen.classList.add('gone'); bootstrapSession(); }
   // The splash (and its claw-tear reveal) is dismissed by a timer in the load
   // handler, so the animation plays for both logged-in and logged-out users.
 }
@@ -5167,7 +5359,7 @@ async function obDoLogin() {
   btn.disabled = true; btn.textContent = 'Signing in…';
   try {
     const data = await api('/login', { method:'POST', body: JSON.stringify({ email, password: pass }) });
-    ST.token = data.token; ST.userId = data.user_id; persist();
+    applyAuth(data); loadUserPrefs();
     document.getElementById('ob-screen').classList.add('gone');
     updateProfileUI(data); loadFeed(true); toast('✦ Welcome back!');
   } catch(e) {
@@ -5177,15 +5369,39 @@ async function obDoLogin() {
   }
 }
 
+// Normalize/validate a username the same way the backend does.
+function obNormUsername(raw) { return (raw || '').trim().replace(/^@/, '').toLowerCase(); }
+function obValidUsername(raw) { return /^[a-z0-9_]{3,20}$/.test(obNormUsername(raw)); }
+
+let _unameTimer = null;
+function obCheckUsername() {
+  const hint = document.getElementById('ob-ru-hint');
+  const raw  = document.getElementById('ob-ru').value;
+  const u    = obNormUsername(raw);
+  clearTimeout(_unameTimer);
+  if (!u) { hint.textContent = ''; return; }
+  if (!obValidUsername(u)) { hint.style.color = '#FF7A7A'; hint.textContent = '3–20 letters, numbers or _'; return; }
+  hint.style.color = 'var(--t3)'; hint.textContent = 'Checking @' + u + '…';
+  _unameTimer = setTimeout(async () => {
+    try {
+      const r = await api('/auth/check-username?u=' + encodeURIComponent(u));
+      if (r.available) { hint.style.color = '#52C17A'; hint.textContent = '✓ @' + u + ' is available'; }
+      else { hint.style.color = '#FF7A7A'; hint.textContent = '@' + u + ' is taken'; }
+    } catch (e) { hint.textContent = ''; }
+  }, 450);
+}
+
 function obStep1() {
   const email = document.getElementById('ob-re').value.trim();
   const pass  = document.getElementById('ob-rp').value;
   const name  = document.getElementById('ob-rn').value.trim();
+  const uname = obNormUsername(document.getElementById('ob-ru').value);
   const err   = document.getElementById('ob-rerr');
   err.textContent = '';
   if (!email || !pass) { err.textContent = 'Fill all fields'; return; }
   if (pass.length < 6) { err.textContent = 'Password must be at least 6 characters'; return; }
-  obSD = { email, password: pass, name };
+  if (uname && !obValidUsername(uname)) { err.textContent = 'Username: 3–20 letters, numbers or underscore'; return; }
+  obSD = { email, password: pass, name, username: uname };
   document.getElementById('ob-step-auth').classList.remove('active');
   document.getElementById('ob-step-topics').classList.add('active');
   obPopulateTopics();
@@ -5244,9 +5460,9 @@ async function obFinish() {
   try {
     const sd   = obSD || {};
     const data = await api('/signup', { method:'POST', body: JSON.stringify({
-      email: sd.email, password: sd.password, name: sd.name||'', topics: Array.from(obSelT)
+      email: sd.email, password: sd.password, name: sd.name||'', username: sd.username||'', topics: Array.from(obSelT)
     })});
-    ST.token = data.token; ST.userId = data.user_id; persist();
+    applyAuth(data); loadUserPrefs();
     document.getElementById('ob-screen').classList.add('gone');
     updateProfileUI(data); loadFeed(true); toast('✦ Welcome to SherrByte!');
   } catch(e) {
@@ -5262,9 +5478,9 @@ async function obSkip() {
   if (btn) { btn.disabled = true; btn.textContent = 'Skipping…'; }
   try {
     const data = await api('/signup', { method:'POST', body: JSON.stringify({
-      email: sd.email, password: sd.password, name: sd.name||'', topics: []
+      email: sd.email, password: sd.password, name: sd.name||'', username: sd.username||'', topics: []
     })});
-    ST.token = data.token; ST.userId = data.user_id; persist();
+    applyAuth(data); loadUserPrefs();
     document.getElementById('ob-screen').classList.add('gone');
     updateProfileUI(data); loadFeed(true); toast('✦ Welcome! Add topics anytime.');
   } catch(e) {
@@ -5337,6 +5553,9 @@ async function loadProfileAnalytics() {
     <div class="skel skel-card"></div><div class="skel skel-card"></div></div>`;
   try {
     const a = await api('/me/analytics');
+    // Mirror the real headline numbers into the profile hero stat boxes.
+    const streakEl = document.getElementById('prof-stat-streak');
+    if (streakEl) streakEl.textContent = a.current_streak ?? 0;
     const recent = await api('/me/activity?limit=8').catch(() => ({ activity: [] }));
     const dayLabels = a.daily_sec.map(d => {
       const dt = new Date(d.date);
@@ -5966,6 +6185,11 @@ document.addEventListener('DOMContentLoaded', () => {
   renderExpCats();
   renderExpInteractions();
   try { requestGeo(); } catch (e) {}
+  // Instantly restore the user's last category/topic selection from cache
+  // (the backend copy is reconciled by bootstrapSession on window.load).
+  if (Array.isArray(ST.feedCats))   activeFeedCats   = new Set(ST.feedCats);
+  if (Array.isArray(ST.feedTopics)) activeFeedTopics = new Set(ST.feedTopics);
+  if (ST.username) setHandle(ST.username);
   renderFeedFilterChips();
   renderFeedCatCards();
   renderFeedTopics();
