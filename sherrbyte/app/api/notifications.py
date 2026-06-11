@@ -24,35 +24,34 @@ from app.security import decode_token
 log = logging.getLogger("sherbyte.fcm")
 router = APIRouter(prefix="/api/notifications", tags=["notifications"])
 
-try:
-    import firebase_admin
-    from firebase_admin import credentials, messaging
-    _HAS_FIREBASE = True
-except Exception:                       # lib not installed yet
-    _HAS_FIREBASE = False
-
+# firebase-admin is imported LAZILY (inside _ensure_fcm), never at module load.
+# This keeps app boot light — importing firebase-admin pulls in grpc/google libs
+# that can OOM a small free-tier instance. Push stays a safe no-op until BOTH the
+# lib is installed AND FIREBASE_SERVICE_ACCOUNT is set.
 _fcm_ready = False
+messaging = None        # bound when firebase-admin is successfully imported
 
 
 def _ensure_fcm() -> bool:
-    """Initialize firebase-admin from FIREBASE_SERVICE_ACCOUNT (once). Returns
-    True if FCM is usable. Never raises."""
-    global _fcm_ready
+    """Import + initialize firebase-admin from FIREBASE_SERVICE_ACCOUNT (once).
+    Returns True if FCM is usable. Never raises, never imports at boot."""
+    global _fcm_ready, messaging
     if _fcm_ready:
         return True
-    if not _HAS_FIREBASE:
-        return False
     sa = os.getenv("FIREBASE_SERVICE_ACCOUNT", "")
     if not sa:
         return False
     try:
+        import firebase_admin
+        from firebase_admin import credentials, messaging as _messaging
+        messaging = _messaging
         if not firebase_admin._apps:
             cred = credentials.Certificate(json.loads(sa))
             firebase_admin.initialize_app(cred)
         _fcm_ready = True
         return True
     except Exception as e:
-        log.warning("Firebase init failed: %s", e)
+        log.warning("Firebase init/import failed: %s", e)
         return False
 
 
