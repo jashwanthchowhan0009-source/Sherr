@@ -2525,7 +2525,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
     <div class="sb-item tap" onclick="navTo('feed');sbClose()"><i class="fa-solid fa-wave-square"></i> FEED Pulse</div>
     <div class="sb-item tap" onclick="openSub('settings');sbClose()"><i class="fa-solid fa-gear"></i> Settings</div>
     <div class="sb-item tap" onclick="openSub('help');sbClose()"><i class="fa-regular fa-circle-question"></i> Help & Support</div>
-    <div class="sb-item tap" onclick="location.href='/download'"><i class="fa-solid fa-download"></i> Get the Android app</div>
+    <div class="sb-item tap" id="sb-getapp" style="display:none" onclick="location.href='/download'"><i class="fa-solid fa-download"></i> Get the app</div>
   </div>
   <div class="sb-foot">
     <div class="sb-logout tap"><i class="fa-solid fa-right-from-bracket"></i> Log Out</div>
@@ -6294,6 +6294,24 @@ window.addEventListener('load', () => {
   runIntro();
 });
 
+// Show the "Get the app" link only on Android *browsers* — hide it on iOS (the
+// APK is useless there) and whenever we're already running as an installed app
+// (standalone / TWA / fullscreen), where a download prompt makes no sense.
+function gateAppDownloadCTA() {
+  const el = document.getElementById('sb-getapp');
+  if (!el) return;
+  const ua = navigator.userAgent || '';
+  const isAndroid = /Android/i.test(ua);
+  const mm = (q) => { try { return window.matchMedia && matchMedia(q).matches; } catch (e) { return false; } };
+  const installed =
+    mm('(display-mode: standalone)') ||
+    mm('(display-mode: fullscreen)') ||
+    mm('(display-mode: minimal-ui)') ||
+    navigator.standalone === true ||                       // iOS standalone
+    (document.referrer || '').startsWith('android-app://'); // launched from the TWA
+  el.style.display = (isAndroid && !installed) ? '' : 'none';
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   renderExpCats();
   renderExpInteractions();
@@ -6310,6 +6328,7 @@ document.addEventListener('DOMContentLoaded', () => {
   rehydrateScope();                                            // restore Local/National/Global choice
   restoreSettings();                                           // restore toggles / privacy / text size
   document.getElementById('saved-ct').textContent = ST.saves.length;
+  gateAppDownloadCTA();
   loadFeed(true);
   // Markets/weather/Explore data load lazily when Explore is opened (navTo),
   // so startup only hits /feed — important for the cold free-tier backend.
