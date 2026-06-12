@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "app.vercel.sherrbyte.twa",
+      "sha256_cert_fingerprints": [
+        "6C:34:2E:3C:CF:59:64:9D:3F:F7:9B:2C:18:12:FF:10:D6:FF:05:96:62:02:2B:22:0D:89:08:7A:FF:8D:69:53"
+      ]
+    }
+  }
+]
