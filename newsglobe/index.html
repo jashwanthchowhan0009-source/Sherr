@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0B1026">
+<title>NewsGlobe</title>
+</head>
+<body>
+<div id="scene"></div>
+<div id="pastveil"></div>
+
+<div id="title" class="glass">
+  <h1><span class="dot"></span>NewsGlobe</h1>
+  <p>Spin the planet. Tap a city for its news &amp; weather. Tap a market pin for index prices — then travel back in time.</p>
+  <div class="legend">
+    <span><i style="background:var(--pin-news)"></i>News city</span>
+    <span><i style="background:var(--pin-mkt)"></i>Stock exchange</span>
+  </div>
+</div>
+
+<div id="dial" class="glass" role="group" aria-label="Time machine">
+  <button id="bYearBack" title="Back one year">« Yr</button>
+  <button id="bMonthBack" title="Back one month">‹ Mo</button>
+  <button id="bDayBack" title="Back one day">‹ Day</button>
+  <div id="dateLabel"></div>
+  <button id="bDayFwd" title="Forward one day">Day ›</button>
+  <button id="bMonthFwd" title="Forward one month">Mo ›</button>
+  <button id="todayBtn">Today</button>
+</div>
+
+<div id="hint" class="glass">drag to spin · scroll / pinch to zoom</div>
+
+<div id="panel" class="glass" aria-live="polite"></div>
+<div id="tip" class="glass"></div>
+
+<script type="module" src="/src/main.js"></script>
+</body>
+</html>
