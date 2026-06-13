@@ -141,17 +141,28 @@ globeGroup.add(new THREE.Mesh(new THREE.SphereGeometry(R*1.16,64,64),new THREE.S
   blending:THREE.AdditiveBlending,side:THREE.BackSide,transparent:true,depthWrite:false})));
 
 /* ---- load NASA Blue Marble textures from CDN (public domain, CORS-enabled) ---- */
-const CDN='https://cdn.jsdelivr.net/npm/three@0.128.0/examples/textures/planets/';
+// gh path serves straight from the three.js repo tag (always contains the
+// textures); npm path is a fallback. Each load is logged for debugging.
+const TEX_BASES=[
+  'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/textures/planets/',
+  'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/textures/planets/',
+];
 const loader=new THREE.TextureLoader();
 loader.setCrossOrigin('anonymous');
 const maxAniso=renderer.capabilities.getMaxAnisotropy?renderer.capabilities.getMaxAnisotropy():1;
-function loadTex(file){
-  return new Promise((resolve)=>{
-    loader.load(CDN+file,
-      t=>{t.anisotropy=Math.min(maxAniso,4);resolve(t);},
-      undefined,
-      ()=>resolve(null));   // never reject — degrade gracefully
-  });
+function loadFrom(url){
+  return new Promise((res,rej)=>loader.load(url,
+    t=>{t.anisotropy=Math.min(maxAniso,4);res(t);},
+    undefined,
+    ()=>rej(new Error(url))));
+}
+async function loadTex(file){
+  for(const base of TEX_BASES){
+    try{ const t=await loadFrom(base+file); console.log('[globe] texture ok:',file,'←',base); return t; }
+    catch(e){ console.warn('[globe] texture failed:',base+file); }
+  }
+  console.error('[globe] ALL sources failed for',file);
+  return null;
 }
 let texturesReady=false;
 Promise.all([
@@ -164,6 +175,7 @@ Promise.all([
   if(night){earthUniforms.nightMap.value=night;}
   if(spec){earthUniforms.specMap.value=spec;}
   if(!day){ // texture CDN unreachable → solid premium-blue fallback so it's never black
+    console.error('[globe] day texture unavailable — using solid-blue fallback');
     earth.material=new THREE.MeshPhongMaterial({color:0x1b3a6b,emissive:0x0a1830,shininess:12});
   }
   if(cloud){cloudMat.map=cloud;cloudMat.opacity=0.85;cloudMat.needsUpdate=true;}
