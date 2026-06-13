@@ -24,9 +24,22 @@ html,body{height:100%;overflow:hidden;background:var(--space);
   background:radial-gradient(ellipse at center, rgba(124,58,237,0.0) 40%, rgba(124,58,237,0.35) 100%),
              linear-gradient(rgba(251,191,36,0.06),rgba(251,191,36,0.06));}
 
-.glass{background:var(--glass);backdrop-filter:blur(18px) saturate(1.4);-webkit-backdrop-filter:blur(18px) saturate(1.4);
-  border:1px solid var(--hairline);border-radius:var(--radius);
-  box-shadow:0 8px 32px rgba(2,6,23,0.45), inset 0 1px 0 rgba(255,255,255,0.10)}
+.glass{background:linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.04));
+  backdrop-filter:blur(26px) saturate(1.7);-webkit-backdrop-filter:blur(26px) saturate(1.7);
+  border:1px solid rgba(255,255,255,0.18);border-radius:var(--radius);
+  box-shadow:0 12px 40px rgba(2,6,23,0.55), inset 0 1px 0 rgba(255,255,255,0.22)}
+
+/* globe loading overlay */
+#gl-load{position:fixed;inset:0;z-index:20;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:16px;background:radial-gradient(ellipse at center,#0b1430,#05070f 75%);transition:opacity .7s ease;}
+#gl-load.gone{opacity:0;pointer-events:none}
+.gl-orb{width:64px;height:64px;border-radius:50%;
+  background:radial-gradient(circle at 35% 30%, #5ea9ff, #1c4f9c 55%, #0a1f44 100%);
+  box-shadow:0 0 40px rgba(58,140,232,0.5), inset -8px -10px 20px rgba(0,0,0,0.45);
+  animation:glPulse 1.6s ease-in-out infinite}
+.gl-txt{font-size:12px;letter-spacing:.5px;color:var(--ink-dim)}
+@keyframes glPulse{0%,100%{transform:scale(0.9);opacity:.7}50%{transform:scale(1.06);opacity:1}}
+@media (prefers-reduced-motion:reduce){.gl-orb{animation:none}}
 
 /* title card */
 #title{position:fixed;top:max(14px,env(safe-area-inset-top));left:14px;padding:14px 18px;max-width:300px;z-index:5}
