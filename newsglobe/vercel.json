@@ -5,5 +5,13 @@
   "outputDirectory": "dist",
   "functions": {
     "api/*.js": { "memory": 256, "maxDuration": 15 }
-  }
+  },
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "Content-Security-Policy", "value": "frame-ancestors 'self' https://*.vercel.app" }
+      ]
+    }
+  ]
 }
