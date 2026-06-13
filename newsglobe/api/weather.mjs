@@ -1,6 +1,6 @@
 // Historical / current daily weather via Open-Meteo.
-// Forecast API covers the last ~92 days + today; the Archive (ERA5) API covers
-// 1940 → ~5 days ago. We pick whichever fits the requested date.
+// Uses ONLY standard Node req/res primitives (no Vercel helper methods), so it
+// can't crash on a missing res.json/req.query.
 const WMO = {
   0:['☀️','Clear skies'],1:['🌤️','Mainly clear'],2:['⛅','Partly cloudy'],3:['☁️','Overcast'],
   45:['🌫️','Fog'],48:['🌫️','Rime fog'],
@@ -13,13 +13,25 @@ const WMO = {
   85:['🌨️','Snow showers'],86:['❄️','Snow showers'],
   95:['⛈️','Thunderstorm'],96:['⛈️','Thunderstorm + hail'],99:['⛈️','Thunderstorm + hail'],
 };
-function describe(code){ return WMO[code] || ['🌍','Unknown']; }
+const describe = (c) => WMO[c] || ['🌍', 'Unknown'];
+
+function params(req) {
+  try { return new URL(req.url, 'http://localhost').searchParams; }
+  catch { return new URLSearchParams(); }
+}
+function send(res, status, obj, cache) {
+  res.statusCode = status;
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  if (cache) res.setHeader('Cache-Control', cache);
+  res.end(JSON.stringify(obj));
+}
 
 export default async function handler(req, res) {
-  try {
-    const { lat, lon, date } = req.query || {};
-    if (!lat || !lon || !date) return res.status(400).json({ error: 'lat, lon and date are required' });
+  const q = params(req);
+  const lat = q.get('lat'), lon = q.get('lon'), date = q.get('date');
+  if (!lat || !lon || !date) return send(res, 400, { error: 'lat, lon and date are required' });
 
+  try {
     const today = new Date(); today.setUTCHours(0, 0, 0, 0);
     const d = new Date(date + 'T00:00:00Z');
     const daysBack = Math.round((today - d) / 86400000);
@@ -44,9 +56,9 @@ export default async function handler(req, res) {
     else if (tmin != null) temp = Math.round(tmin);
 
     const [emoji, cond] = describe(code);
-    res.setHeader('Cache-Control', 'public, s-maxage=86400, stale-while-revalidate=604800');
-    return res.status(200).json({ temp, emoji, cond, code: code ?? null, source: 'open-meteo' });
+    return send(res, 200, { temp, emoji, cond, code: code ?? null, source: 'open-meteo' },
+      'public, s-maxage=86400, stale-while-revalidate=604800');
   } catch (e) {
-    return res.status(200).json({ temp: null, emoji: '🌍', cond: 'Weather unavailable', error: String(e) });
+    return send(res, 200, { temp: null, emoji: '🌍', cond: 'Weather unavailable', error: String(e) });
   }
 }
