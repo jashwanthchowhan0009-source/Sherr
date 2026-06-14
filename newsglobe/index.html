@@ -2,25 +2,30 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<meta name="theme-color" content="#0B1026">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#05070f">
 <title>NewsGlobe</title>
 </head>
 <body>
-<div id="scene"></div>
-<div id="pastveil"></div>
-<div id="labels"></div>
+<div id="map"></div>
 
-<div id="gl-load"><div class="gl-orb"></div><div class="gl-txt">Rendering the planet…</div></div>
+<div id="gl-load"><div class="gl-orb"></div><div class="gl-txt">Loading the world…</div></div>
 
 <div id="title" class="glass">
   <h1><span class="dot"></span>NewsGlobe</h1>
-  <p>Spin the planet. Tap a city for its news &amp; weather. Tap a market pin for index prices — then travel back in time.</p>
+  <p>Search or tap anywhere for its news &amp; weather. Tap a market for index prices — then travel back in time.</p>
   <div class="legend">
-    <span><i style="background:var(--pin-news)"></i>News city</span>
-    <span><i style="background:var(--pin-mkt)"></i>Stock exchange</span>
+    <span><i style="background:var(--pin-news)"></i>News</span>
+    <span><i style="background:var(--pin-mkt)"></i>Markets</span>
+    <span><i style="background:var(--pin-home)"></i>Anantapur</span>
   </div>
 </div>
+
+<div id="searchbar" class="glass">
+  <input id="searchInput" type="text" placeholder="Search a city or place…" autocomplete="off" spellcheck="false">
+  <button id="homeBtn" title="Go to Anantapur">🏠</button>
+</div>
+<div id="searchResults" class="glass"></div>
 
 <div id="dial" class="glass" role="group" aria-label="Time machine">
   <button id="bYearBack" title="Back one year">« Yr</button>
@@ -32,10 +37,8 @@
   <button id="todayBtn">Today</button>
 </div>
 
-<div id="hint" class="glass">drag to spin · scroll / pinch to zoom</div>
-
+<div id="hint" class="glass">drag to spin · scroll / pinch to zoom · tap anywhere for news</div>
 <div id="panel" class="glass" aria-live="polite"></div>
-<div id="tip" class="glass"></div>
 
 <script type="module" src="/src/main.js"></script>
 </body>
