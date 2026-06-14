@@ -3,9 +3,6 @@
   "framework": "vite",
   "buildCommand": "vite build",
   "outputDirectory": "dist",
-  "functions": {
-    "api/*.js": { "memory": 256, "maxDuration": 15 }
-  },
   "headers": [
     {
       "source": "/(.*)",

@@ -1,14 +1,25 @@
 // Index price history via Yahoo Finance's public chart endpoint.
-// Server-side fetch avoids the browser CORS block. Returns ~30 trading-day
-// closes up to the requested date, plus the value and previous close.
-export default async function handler(req, res) {
-  try {
-    const { symbol, date } = req.query || {};
-    if (!symbol) return res.status(400).json({ error: 'symbol is required' });
+// Standard Node req/res only (no Vercel helpers).
+function params(req) {
+  try { return new URL(req.url, 'http://localhost').searchParams; }
+  catch { return new URLSearchParams(); }
+}
+function send(res, status, obj, cache) {
+  res.statusCode = status;
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  if (cache) res.setHeader('Cache-Control', cache);
+  res.end(JSON.stringify(obj));
+}
 
+export default async function handler(req, res) {
+  const p = params(req);
+  const symbol = p.get('symbol'), date = p.get('date');
+  if (!symbol) return send(res, 400, { error: 'symbol is required' });
+
+  try {
     const end = date ? new Date(date + 'T00:00:00Z') : new Date();
-    const period2 = Math.floor(end.getTime() / 1000) + 86400;   // include the day itself
-    const period1 = period2 - 60 * 86400;                       // ~60 days → 30+ trading days
+    const period2 = Math.floor(end.getTime() / 1000) + 86400;  // include the day itself
+    const period1 = period2 - 60 * 86400;                      // ~60 days → 30+ trading days
 
     const path = `/v8/finance/chart/${encodeURIComponent(symbol)}?period1=${period1}&period2=${period2}&interval=1d`;
     let data = null;
@@ -22,7 +33,7 @@ export default async function handler(req, res) {
     }
 
     const result = data && data.chart && data.chart.result && data.chart.result[0];
-    if (!result) return res.status(200).json({ value: null, series: [], error: 'no data', source: 'yahoo' });
+    if (!result) return send(res, 200, { value: null, series: [], error: 'no data', source: 'yahoo' });
 
     const closeRaw = (result.indicators && result.indicators.quote && result.indicators.quote[0] && result.indicators.quote[0].close) || [];
     const closes = closeRaw.filter(v => v != null && isFinite(v));
@@ -31,9 +42,9 @@ export default async function handler(req, res) {
     const prevClose = series.length > 1 ? series[series.length - 2] : null;
     const currency = (result.meta && result.meta.currency) || '';
 
-    res.setHeader('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
-    return res.status(200).json({ value, prevClose, series, currency, asOf: date || null, source: 'yahoo' });
+    return send(res, 200, { value, prevClose, series, currency, asOf: date || null, source: 'yahoo' },
+      'public, s-maxage=3600, stale-while-revalidate=86400');
   } catch (e) {
-    return res.status(200).json({ value: null, series: [], error: String(e) });
+    return send(res, 200, { value: null, series: [], error: String(e) });
   }
 }
