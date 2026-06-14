@@ -2,5 +2,13 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "vite",
   "buildCommand": "vite build",
-  "outputDirectory": "dist"
+  "outputDirectory": "dist",
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "Content-Security-Policy", "value": "frame-ancestors 'self' https://*.vercel.app" }
+      ]
+    }
+  ]
 }

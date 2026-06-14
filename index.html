@@ -12,6 +12,8 @@
 <meta name="apple-mobile-web-app-title" content="SherrByte">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="apple-touch-icon" href="/tiger-logo.png">
+<!-- NewsGlobe embed URL (separately deployed). Change here to point at the live globe. -->
+<meta name="newsglobe-url" content="https://sherr-theta.vercel.app/">
 <script>if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('/sw.js').catch(function(){});});}</script>
 <!-- Firebase Cloud Messaging (push notifications only) -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -1284,6 +1286,40 @@ header {
 /* ═══════════════════════════════════
    SUB PAGES
 ═══════════════════════════════════ */
+/* ── News Globe: Explore card + fullscreen embed overlay ── */
+.globe-card { display: flex; align-items: center; gap: 13px; margin: 4px 16px 14px;
+  padding: 14px 16px; border-radius: var(--r-card, 18px); cursor: pointer;
+  background: linear-gradient(135deg, #02239E 0%, #0652B5 45%, #0EB7D6 100%);
+  box-shadow: 0 10px 26px rgba(14,183,214,0.28), inset 0 1px 0 rgba(255,255,255,0.18);
+  position: relative; overflow: hidden; transition: transform .12s ease; }
+.globe-card:active { transform: scale(0.98); }
+.globe-card::after { content: ""; position: absolute; right: -30px; top: -40px;
+  width: 130px; height: 130px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(255,255,255,0.22), transparent 70%); }
+.globe-card-emoji { font-size: 2rem; line-height: 1; flex-shrink: 0; filter: drop-shadow(0 2px 6px rgba(0,0,0,0.3)); }
+.globe-card-text { flex: 1; min-width: 0; z-index: 1; }
+.globe-card-title { font-family: var(--fd); font-weight: 700; font-size: 1.02rem; color: #fff; letter-spacing: -0.2px; }
+.globe-card-sub { font-size: 0.74rem; color: rgba(255,255,255,0.85); margin-top: 2px; }
+.globe-card-arr { color: rgba(255,255,255,0.9); font-size: 0.85rem; z-index: 1; flex-shrink: 0; }
+
+.globe-overlay { position: absolute; inset: 0; z-index: 6500; display: none; background: #000; }
+.globe-overlay.on { display: block; }
+.globe-frame-host, .globe-frame { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.globe-close { position: absolute; top: calc(env(safe-area-inset-top) + 14px); right: 16px; z-index: 2;
+  width: 40px; height: 40px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.2);
+  background: rgba(20,24,40,0.55); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  color: #fff; font-size: 1.05rem; cursor: pointer; display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.45); }
+.globe-close:active { transform: scale(0.92); }
+.globe-loader { position: absolute; inset: 0; z-index: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 14px; background: #0B1026;
+  transition: opacity .4s ease; }
+.globe-loader.gone { opacity: 0; pointer-events: none; }
+.globe-loader-logo { width: 72px; height: 72px; object-fit: contain; animation: globePulse 1.4s ease-in-out infinite; }
+.globe-loader-text { font-size: 0.8rem; color: rgba(241,245,255,0.6); letter-spacing: 0.4px; }
+@keyframes globePulse { 0%,100% { transform: scale(0.9); opacity: 0.55; } 50% { transform: scale(1.06); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .globe-loader-logo { animation: none; } }
+
 .media-viewer { position: absolute; inset: 0; z-index: 6000; display: none;
   align-items: center; justify-content: center; background: rgba(0,0,0,0.96);
   touch-action: none; overflow: hidden; }
@@ -2667,6 +2703,16 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
     </div>
   </div>
 
+  <!-- News Globe -->
+  <div class="globe-card tap" onclick="openGlobe()" role="button" tabindex="0" aria-label="Open News Globe">
+    <div class="globe-card-emoji">🌍</div>
+    <div class="globe-card-text">
+      <div class="globe-card-title">News Globe</div>
+      <div class="globe-card-sub">Explore news around the world &amp; back in time</div>
+    </div>
+    <i class="fa-solid fa-chevron-right globe-card-arr"></i>
+  </div>
+
   <!-- Top News Hero -->
   <div id="exp-hero-wrap"></div>
 
@@ -2895,6 +2941,16 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 <div id="media-viewer" class="media-viewer" onclick="if(event.target===this)closeMediaViewer()">
   <div class="mv-close tap" onclick="closeMediaViewer()"><i class="fa-solid fa-xmark"></i></div>
   <img id="mv-img" class="mv-img" alt="">
+</div>
+
+<!-- ════════ NEWS GLOBE EMBED OVERLAY (iframe injected lazily) ════════ -->
+<div id="globe-overlay" class="globe-overlay" aria-hidden="true">
+  <div class="globe-loader" id="globe-loader">
+    <img class="globe-loader-logo" src="/tiger-logo.png" alt="">
+    <div class="globe-loader-text">Loading News Globe…</div>
+  </div>
+  <div id="globe-frame-host" class="globe-frame-host"></div>
+  <button class="globe-close tap" onclick="closeGlobe()" aria-label="Close News Globe">✕</button>
 </div>
 
 <!-- ════════ FEED EDIT MODAL ════════ -->
@@ -4078,6 +4134,36 @@ function openMediaViewer(src){
   if (!_navReplay) { try { history.pushState({ layer: 'media' }, ''); } catch (e) {} }
 }
 function closeMediaViewer(){ document.getElementById('media-viewer')?.classList.remove('on'); }
+
+// ── News Globe embed: lazy iframe, loading state, memory-safe teardown ──
+const NEWSGLOBE_URL = (document.querySelector('meta[name="newsglobe-url"]')?.content || '').trim();
+function openGlobe(){
+  const ov = document.getElementById('globe-overlay');
+  if (!ov || ov.classList.contains('on')) return;
+  const host = document.getElementById('globe-frame-host');
+  const loader = document.getElementById('globe-loader');
+  loader.classList.remove('gone');                 // show loading state
+  // Lazily create the iframe only now (never preloaded).
+  const f = document.createElement('iframe');
+  f.className = 'globe-frame';
+  f.title = 'News Globe';
+  f.setAttribute('allow', 'accelerometer; gyroscope; fullscreen; geolocation');
+  f.setAttribute('referrerpolicy', 'no-referrer-when-downgrade');
+  f.addEventListener('load', () => loader.classList.add('gone'));
+  f.src = NEWSGLOBE_URL || 'about:blank';
+  host.appendChild(f);
+  ov.classList.add('on');
+  ov.setAttribute('aria-hidden', 'false');
+  if (!_navReplay) { try { history.pushState({ layer: 'globe' }, ''); } catch (e) {} }
+}
+function closeGlobe(){
+  const ov = document.getElementById('globe-overlay');
+  if (!ov || !ov.classList.contains('on')) return;
+  ov.classList.remove('on');
+  ov.setAttribute('aria-hidden', 'true');
+  document.getElementById('globe-frame-host').innerHTML = '';  // destroy iframe → free memory
+  document.getElementById('globe-loader').classList.remove('gone'); // reset for next open
+}
 function _mvDist(t){ return Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY); }
 (function initMediaViewer(){
   const v = document.getElementById('media-viewer');
@@ -5095,6 +5181,7 @@ function goBack() { history.back(); }
 window.addEventListener('popstate', (e) => {
   _navReplay = true;
   try {
+    const go  = document.getElementById('globe-overlay');
     const mv  = document.getElementById('media-viewer');
     const ao  = document.getElementById('article-overlay');
     const so  = document.getElementById('search-overlay');
@@ -5102,7 +5189,8 @@ window.addEventListener('popstate', (e) => {
     const sb  = document.getElementById('sidebar');
     const sub = document.querySelector('.sub.on');
     // Close the topmost open layer first; otherwise navigate to the routed view.
-    if (mv && mv.classList.contains('on'))        closeMediaViewer();
+    if (go && go.classList.contains('on'))        closeGlobe();
+    else if (mv && mv.classList.contains('on'))   closeMediaViewer();
     else if (ao && ao.classList.contains('open')) closeArticle();
     else if (so && so.classList.contains('open')) closeSearch();
     else if (mo && mo.classList.contains('open')) closeMarketDetail();
