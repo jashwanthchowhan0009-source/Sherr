@@ -1,52 +1,45 @@
 # NewsGlobe
 
-A cartoon **2.5D globe** that connects places to **real** news, weather, and market
-history — then lets you **travel back in time**. Spin the planet, tap a city for its
-headlines and weather, tap a market pin for index prices, and use the time dial to
-rewind day / month / year.
+A zoomable **3D world map** that surfaces **local + national news, weather, and markets**
+for any place you tap. Spin the globe, zoom into a region/city (3D terrain relief),
+tap **anywhere** to get news for that exact lat/lon, search any place, or jump to the
+featured home city (**Anantapur**). Travel back in time with the date dial.
 
-Ported from the original single-file prototype into a proper **Vite** app with the
-**exact same look and interactions**; the mock data generators are replaced with live
-APIs (proxied through Vercel serverless functions so there are no CORS issues and keys/
-egress stay server-side).
+Built with **MapLibre GL** (globe projection + 3D terrain) — keyless basemap + terrain.
 
 ## Data sources
-| Panel    | Source | Endpoint (proxied) | Notes |
-|----------|--------|--------------------|-------|
-| Weather  | [Open-Meteo](https://open-meteo.com) | `/api/weather` | Forecast API for ~last 90 days + today; ERA5 **Archive** API back to 1940. |
-| News     | [GDELT DOC 2.0](https://www.gdeltproject.org/) | `/api/news` | Full-text search by place + day. GDELT's DOC index is a rolling **~3-month** window; older dates show a note. |
-| Markets  | [Yahoo Finance](https://finance.yahoo.com) | `/api/stocks` | `chart` endpoint → ~30 trading-day closes up to the chosen date. |
+| Panel   | Source | Endpoint | Notes |
+|---------|--------|----------|-------|
+| Basemap | CARTO dark (raster) | — | Keyless, attribution shown |
+| Terrain | AWS Terrain Tiles (terrarium DEM) | — | Keyless 3D relief + hillshade |
+| Place   | BigDataCloud reverse-geocode | `/api/place` | Keyless; lat/lon → city/region/country |
+| Search  | Open-Meteo geocoding | `/api/geocode` | Keyless forward geocode |
+| Weather | Open-Meteo | `/api/weather` | Forecast ≤90d + today; ERA5 archive older |
+| News    | **NewsData.io** (India, recent) → **GDELT** (global/history) | `/api/news` | India local depth needs a key (below) |
+| Markets | Yahoo Finance chart | `/api/stocks` | Index history by symbol |
 
-Index symbols: BSE Sensex `^BSESN`, Nifty 50 `^NSEI`, NASDAQ `^IXIC`, Dow `^DJI`,
-FTSE 100 `^FTSE`, Nikkei 225 `^N225`.
+## Environment variables (Vercel project: NewsGlobe)
+| Var | Required? | What it enables |
+|-----|-----------|-----------------|
+| `INDIA_NEWS_KEY` | optional but recommended | NewsData.io key → real **local Indian news** (incl. Anantapur). Without it, news falls back to GDELT (global/national only; hyperlocal mostly empty). Get a free key at newsdata.io. |
 
-## Local development
+Set it in the Vercel dashboard → NewsGlobe project → Settings → Environment Variables,
+then redeploy. Everything else is keyless and works out of the box.
+
+## Develop / build
 ```bash
 npm install
-npm run dev      # http://localhost:5173
-```
-> `npm run dev` serves the frontend only. The `/api/*` functions run on Vercel — use
-> `vercel dev` (Vercel CLI) to exercise them locally, or just deploy a preview.
-
-## Build
-```bash
-npm run build    # → dist/
-npm run preview
+npm run dev      # http://localhost:5173 (frontend; /api/* run on Vercel — use `vercel dev`)
+npm run build
 ```
 
-## Deploy (Vercel)
-This lives in the `newsglobe/` subfolder of the repo, so create a **separate** Vercel
-project with **Root Directory = `newsglobe`**. The Vite preset builds `dist/` and the
-`api/*.js` files deploy as Node serverless functions automatically.
+## Deploy
+Separate Vercel project, **Root Directory = `newsglobe`** (Vite preset; `api/*.mjs`
+deploy as Node functions automatically).
 
-```bash
-cd newsglobe
-vercel            # first run links/creates the project (set root dir = newsglobe)
-vercel --prod
-```
-
-## Notes / future
-- **Exact prototype look preserved** (cartoon globe, glass UI, time dial, past-time tint).
-- Street-level / Google-Maps-style zoom is intentionally **out of scope** here — it needs
-  a real map-tile renderer (MapLibre/Mapbox) and is a separate phase.
-- All API calls are cached per `city + date` on the client and edge-cached on Vercel.
+## Notes
+- The clay-diorama / hand-modelled-landmark renders are offline AI/3D art and can't be
+  reproduced 1:1 in a live map; this targets the achievable **3D-terrain** look + a
+  premium dark UI.
+- News history depth varies: NewsData free tier is recent-only; GDELT full-text covers
+  ~3 months. Weather/markets go back years/decades.
