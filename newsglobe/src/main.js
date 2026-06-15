@@ -90,10 +90,13 @@ const map=new maplibregl.Map({
           'fill-extrusion-base':['coalesce',['get','render_min_height'],0],
           'fill-extrusion-opacity':0.9,'fill-extrusion-vertical-gradient':true}},
       // ─── illustrated "hero city" layers (Anantapur only; hidden by default) ───
+      {id:'il-landuse',type:'fill',source:'omt','source-layer':'landuse',layout:{visibility:'none'},
+        paint:{'fill-color':['match',['get','class'],'residential','#e7e9ee','suburb','#e7e9ee','neighbourhood','#e7e9ee','commercial','#edeeea','retail','#edeeea','industrial','#e4e6e8','railway','#e4e6e8','cemetery','#e3e9df','hospital','#f1eae9','school','#eee9e2','university','#eee9e2','college','#eee9e2','stadium','#dde6d8','pitch','#dde6d8','#eaecf0'],'fill-opacity':0.92}},
       {id:'il-water',type:'fill',source:'omt','source-layer':'water',layout:{visibility:'none'},paint:{'fill-color':'#b8def0'}},
       {id:'il-green',type:'fill',source:'omt','source-layer':'landcover',layout:{visibility:'none'},
         filter:['match',['get','class'],['grass','wood','scrub','farmland'],true,false],paint:{'fill-color':'#e3e9df','fill-opacity':0.92}},
       {id:'il-park',type:'fill',source:'omt','source-layer':'park',layout:{visibility:'none'},paint:{'fill-color':'#dde6d8','fill-opacity':0.85}},
+      {id:'il-waterway',type:'line',source:'omt','source-layer':'waterway',layout:{visibility:'none','line-cap':'round'},paint:{'line-color':'#b8def0','line-width':['interpolate',['linear'],['zoom'],12,1,18,5]}},
       {id:'il-road-cas',type:'line',source:'omt','source-layer':'transportation',layout:{visibility:'none','line-cap':'round','line-join':'round'},
         paint:{'line-color':'#dde2e9','line-width':['interpolate',['linear'],['zoom'],12,2.5,18,16]}},
       {id:'il-road',type:'line',source:'omt','source-layer':'transportation',layout:{visibility:'none','line-cap':'round','line-join':'round'},
@@ -176,7 +179,7 @@ function applyCityMode(){
   if(on===illustrated)return; illustrated=on;
   const setV=(id,v)=>{ if(map.getLayer(id)) map.setLayoutProperty(id,'visibility',v); };
   ['base','hills','buildings'].forEach(id=>setV(id,on?'none':'visible'));
-  ['il-water','il-green','il-park','il-road-cas','il-road','il-building'].forEach(id=>setV(id,on?'visible':'none'));
+  ['il-landuse','il-water','il-green','il-park','il-waterway','il-road-cas','il-road','il-building'].forEach(id=>setV(id,on?'visible':'none'));
 }
 map.on('moveend',applyCityMode);
 map.on('load',applyCityMode);
