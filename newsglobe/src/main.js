@@ -66,7 +66,7 @@ function sparkline(series){
 const map=new maplibregl.Map({
   container:'map',
   attributionControl:{compact:true},
-  maxPitch:80, minZoom:1.2, maxZoom:16, dragRotate:true,
+  maxPitch:85, minZoom:1.2, maxZoom:18.5, dragRotate:true,
   center:[78.0,18.0], zoom:1.5,
   style:{
     version:8,
