@@ -75,11 +75,18 @@ const map=new maplibregl.Map({
       base:{type:'raster',tileSize:256,maxzoom:19,attribution:'© Esri, Maxar, Earthstar Geographics',
         tiles:['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}']},
       dem:{type:'raster-dem',encoding:'terrarium',tileSize:256,maxzoom:13,
-        tiles:['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png']}
+        tiles:['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png']},
+      omt:{type:'vector',url:'https://tiles.openfreemap.org/planet'}
     },
     layers:[
       {id:'base',type:'raster',source:'base'},
-      {id:'hills',type:'hillshade',source:'dem',paint:{'hillshade-exaggeration':0.18,'hillshade-shadow-color':'#06101f','hillshade-highlight-color':'#dfeaff'}}
+      {id:'hills',type:'hillshade',source:'dem',paint:{'hillshade-exaggeration':0.18,'hillshade-shadow-color':'#06101f','hillshade-highlight-color':'#dfeaff'}},
+      {id:'buildings',type:'fill-extrusion',source:'omt','source-layer':'building',minzoom:13,
+        paint:{
+          'fill-extrusion-color':['interpolate',['linear'],['coalesce',['get','render_height'],10],0,'#39507e',40,'#5e86c4',150,'#86dcff'],
+          'fill-extrusion-height':['interpolate',['linear'],['zoom'],13,0,14.5,['coalesce',['get','render_height'],8]],
+          'fill-extrusion-base':['coalesce',['get','render_min_height'],0],
+          'fill-extrusion-opacity':0.9,'fill-extrusion-vertical-gradient':true}}
     ]
   }
 });
@@ -119,12 +126,17 @@ setTimeout(()=>document.getElementById('gl-load')?.classList.add('gone'),9000);
 map.on('mouseenter','beacon-core',()=>{map.getCanvas().style.cursor='pointer';});
 map.on('mouseleave','beacon-core',()=>{map.getCanvas().style.cursor='';});
 
-/* click: a beacon → that city; otherwise tap-anywhere → reverse-geocode → news */
+/* fly into a city: tilt + zoom to street level so 3D buildings + terrain show */
+function flyToCity(lat,lon){
+  map.flyTo({center:[lon,lat],zoom:14.5,pitch:62,bearing:-12,speed:0.9,curve:1.5,essential:true});
+}
+
+/* click: a beacon → fly into that city; otherwise tap-anywhere → news */
 map.on('click',async e=>{
   document.getElementById('hint')?.classList.add('gone');
   const box=[[e.point.x-9,e.point.y-9],[e.point.x+9,e.point.y+9]];
   const hits=map.queryRenderedFeatures(box,{layers:['beacon-glow','beacon-core']});
-  if(hits.length){const c=byId[hits[0].properties.id];if(c){openLocation(c);return;}}
+  if(hits.length){const c=byId[hits[0].properties.id];if(c){flyToCity(c.lat,c.lon);openLocation(c);return;}}
   const lat=e.lngLat.lat, lon=e.lngLat.lng;
   openLocation({name:'Locating…',country:'',lat,lon,_pending:true});
   try{
@@ -201,12 +213,12 @@ sResults.addEventListener('click',e=>{
   const el=e.target.closest('.sres');if(!el)return;
   const lat=+el.dataset.lat, lon=+el.dataset.lon;
   sResults.classList.remove('on');sInput.value=el.dataset.name;
-  map.flyTo({center:[lon,lat],zoom:Math.max(map.getZoom(),5.5),speed:1.2});
+  flyToCity(lat,lon);
   openLocation({name:el.dataset.name,region:el.dataset.region,country:el.dataset.country,lat,lon});
 });
 document.getElementById('homeBtn').onclick=()=>{
   const a=CITIES[0]; sResults.classList.remove('on');
-  map.flyTo({center:[a.lon,a.lat],zoom:6.5,speed:1.2,pitch:55});
+  flyToCity(a.lat,a.lon);
   openLocation(a);
 };
 
