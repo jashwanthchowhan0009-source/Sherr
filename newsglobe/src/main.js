@@ -222,6 +222,56 @@ document.getElementById('homeBtn').onclick=()=>{
   openLocation(a);
 };
 
+/* ============ sun & light (photographer mode) ============ */
+// compact solar position (from SunCalc, MIT): date+lat+lon -> {altitude, azimuth} rad
+const _rad=Math.PI/180, _dayMs=86400000, _J1970=2440588, _J2000=2451545, _e=_rad*23.4397;
+function _toDays(d){return d.valueOf()/_dayMs-0.5+_J1970-_J2000;}
+function _sunCoords(d){
+  const M=_rad*(357.5291+0.98560028*d);
+  const L=M+_rad*(1.9148*Math.sin(M)+0.02*Math.sin(2*M)+0.0003*Math.sin(3*M))+_rad*102.9372+Math.PI;
+  return {dec:Math.asin(Math.sin(_e)*Math.sin(L)), ra:Math.atan2(Math.sin(L)*Math.cos(_e),Math.cos(L))};
+}
+function sunPosition(date,lat,lon){
+  const lw=_rad*-lon, phi=_rad*lat, d=_toDays(date), c=_sunCoords(d), H=_rad*(280.16+360.9856235*d)-lw-c.ra;
+  return {
+    altitude:Math.asin(Math.sin(phi)*Math.sin(c.dec)+Math.cos(phi)*Math.cos(c.dec)*Math.cos(H)),
+    azimuth:Math.atan2(Math.sin(H),Math.cos(H)*Math.sin(phi)-Math.tan(c.dec)*Math.cos(phi))   // from south
+  };
+}
+const sunSlider=document.getElementById('sunslider');
+let selMin=new Date().getHours()*60+new Date().getMinutes();
+if(sunSlider)sunSlider.value=selMin;
+const sunColor=a=>a>12?'#fff6e8':a>0?'#ffc187':a>-6?'#c98a7a':'#3a4a7a';
+const sunIntensity=a=>a>0?0.35+0.25*Math.min(1,a/40):0.18;
+function sunTint(a){
+  if(a>12)return 'rgba(0,0,0,0)';
+  if(a>0)return 'rgba(255,150,70,'+(0.22*(12-a)/12).toFixed(2)+')';
+  if(a>-8)return 'rgba(150,90,120,0.30)';
+  return 'rgba(8,14,40,0.50)';
+}
+function applySun(azDeg,altDeg){
+  const polar=Math.max(2,90-altDeg), col=sunColor(altDeg), inten=sunIntensity(altDeg);
+  let ok=false;
+  try{ map.setLights([
+    {id:'amb',type:'ambient',properties:{color:'#ffffff',intensity:altDeg>0?0.55:0.3}},
+    {id:'sun',type:'directional',properties:{direction:[azDeg,polar],color:col,intensity:inten,'cast-shadows':true}}
+  ]); ok=true; }catch(e){}
+  if(!ok){ try{ map.setLight({anchor:'map',position:[1.5,azDeg,polar],color:col,intensity:inten}); }catch(e){} }
+}
+function updateSun(){
+  if(!sunSlider)return;
+  const c=map.getCenter(), lat=c.lat, lon=c.lng, tz=Math.round(lon/15);
+  const dt=new Date(Date.UTC(viewDate.getFullYear(),viewDate.getMonth(),viewDate.getDate(),Math.floor(selMin/60)-tz,selMin%60));
+  const sp=sunPosition(dt,lat,lon), altDeg=sp.altitude*180/Math.PI, azDeg=(sp.azimuth*180/Math.PI+540)%360;
+  applySun(azDeg,altDeg);
+  const tint=document.getElementById('suntint'); if(tint)tint.style.background=sunTint(altDeg);
+  const lab=document.getElementById('sunlabel'); if(lab)lab.textContent=String(Math.floor(selMin/60)).padStart(2,'0')+':'+String(selMin%60).padStart(2,'0');
+  const ph=document.getElementById('sunphase'); if(ph)ph.textContent=altDeg>0?(altDeg<6?'🌅':'☀️'):(altDeg>-8?'🌆':'🌙');
+}
+if(sunSlider)sunSlider.addEventListener('input',()=>{selMin=+sunSlider.value;updateSun();});
+map.on('moveend',updateSun);
+map.on('load',updateSun);
+
 /* ============ time dial ============ */
 const dateLabel=document.getElementById('dateLabel');
 function shift(unit,amt){const d=new Date(viewDate);if(unit==='d')d.setDate(d.getDate()+amt);if(unit==='m')d.setMonth(d.getMonth()+amt);if(unit==='y')d.setFullYear(d.getFullYear()+amt);if(d>TODAY)return;viewDate=d;syncTime();}
@@ -231,6 +281,7 @@ function syncTime(){
   ['bDayFwd','bMonthFwd'].forEach(id=>document.getElementById(id).disabled=back===0);
   document.getElementById('todayBtn').disabled=back===0;
   if(activeLoc&&!activeLoc._pending)renderPanel();
+  if(typeof updateSun==='function')updateSun();
 }
 document.getElementById('bDayBack').onclick=()=>shift('d',-1);
 document.getElementById('bMonthBack').onclick=()=>shift('m',-1);

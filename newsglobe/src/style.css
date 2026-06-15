@@ -19,6 +19,14 @@ html,body{height:100%;overflow:hidden;background:#02040a;
   radial-gradient(1px 1px at 33% 92%,#fff,transparent),radial-gradient(1px 1px at 58% 8%,#fff,transparent),
   radial-gradient(1px 1px at 83% 80%,#cfe0ff,transparent),radial-gradient(1px 1px at 96% 12%,#fff,transparent)}
 #map{position:fixed;inset:0;background:transparent}
+/* time-of-day light tint over the scene */
+#suntint{position:fixed;inset:0;z-index:2;pointer-events:none;background:rgba(0,0,0,0);transition:background .45s ease}
+#suntime{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(max(16px,env(safe-area-inset-bottom)) + 66px);
+  z-index:6;display:flex;align-items:center;gap:11px;padding:8px 15px;width:min(360px,calc(100vw - 28px))}
+#suntime input[type=range]{flex:1;height:4px;accent-color:#FBBF24;cursor:pointer}
+#sunphase{font-size:16px;line-height:1}
+#sunlabel{font-weight:700;font-size:12px;min-width:44px;text-align:right;font-variant-numeric:tabular-nums;color:var(--amber)}
+@media (max-width:640px){#suntime{bottom:calc(max(16px,env(safe-area-inset-bottom)) + 120px)}}
 /* lush color grade so the satellite pops (greens/blues) */
 .maplibregl-canvas{filter:saturate(1.25) contrast(1.05) brightness(1.04)}
 .maplibregl-ctrl-attrib{font-size:9px;opacity:.6}
