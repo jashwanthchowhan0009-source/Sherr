@@ -72,17 +72,15 @@ const map=new maplibregl.Map({
     version:8,
     glyphs:'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
     sources:{
-      base:{type:'raster',tileSize:256,attribution:'© OpenStreetMap © CARTO',
-        tiles:['https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-               'https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-               'https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png']},
+      base:{type:'raster',tileSize:256,maxzoom:19,attribution:'© Esri, Maxar, Earthstar Geographics',
+        tiles:['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}']},
       dem:{type:'raster-dem',encoding:'terrarium',tileSize:256,maxzoom:13,
         tiles:['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png']}
     },
     layers:[
       {id:'bg',type:'background',paint:{'background-color':'#05070f'}},
       {id:'base',type:'raster',source:'base'},
-      {id:'hills',type:'hillshade',source:'dem',paint:{'hillshade-exaggeration':0.45,'hillshade-shadow-color':'#000814','hillshade-highlight-color':'#a9c7ff'}}
+      {id:'hills',type:'hillshade',source:'dem',paint:{'hillshade-exaggeration':0.18,'hillshade-shadow-color':'#06101f','hillshade-highlight-color':'#dfeaff'}}
     ]
   }
 });
@@ -92,28 +90,42 @@ map.on('style.load',()=>{
   try{ map.setSky({'sky-color':'#0a1330','horizon-color':'#13203f','fog-color':'#0a1330','sky-horizon-blend':0.6,'horizon-fog-blend':0.6,'fog-ground-blend':0.4,'atmosphere-blend':['interpolate',['linear'],['zoom'],0,1,8,0.4,12,0]}); }catch(e){}
   try{ map.setTerrain({source:'dem',exaggeration:1.35}); }catch(e){}
 });
-map.on('load',()=>{ document.getElementById('gl-load')?.classList.add('gone'); });
-setTimeout(()=>document.getElementById('gl-load')?.classList.add('gone'),9000);
+/* ---- beacons as a native WebGL layer (properly occluded by the globe) ---- */
+const byId=Object.fromEntries(CITIES.map(c=>[c.id,c]));
+const beaconsGeo={type:'FeatureCollection',features:CITIES.map(c=>({
+  type:'Feature',geometry:{type:'Point',coordinates:[c.lon,c.lat]},properties:{id:c.id,name:c.name,type:c.type}}))};
+const colorExpr=['match',['get','type'],'mkt','#34D399','home','#6fd3ff','#FB923C'];
 
-/* ---- beacon markers ---- */
-function beaconEl(type){
-  const el=document.createElement('div');
-  el.className='beacon '+type;
-  el.innerHTML='<span class="b-core"></span><span class="b-ring"></span>';
-  return el;
-}
-CITIES.forEach(c=>{
-  const el=beaconEl(c.type);
-  el.title=c.name;
-  el.addEventListener('click',ev=>{ev.stopPropagation();openLocation(c);});
-  new maplibregl.Marker({element:el,anchor:'center'}).setLngLat([c.lon,c.lat]).addTo(map);
+map.on('load',()=>{
+  document.getElementById('gl-load')?.classList.add('gone');
+  if(!map.getSource('beacons')){
+    map.addSource('beacons',{type:'geojson',data:beaconsGeo});
+    map.addLayer({id:'beacon-glow',type:'circle',source:'beacons',paint:{
+      'circle-radius':['match',['get','type'],'home',18,13],'circle-color':colorExpr,'circle-blur':1,'circle-opacity':0.4}});
+    map.addLayer({id:'beacon-core',type:'circle',source:'beacons',paint:{
+      'circle-radius':['match',['get','type'],'home',5,3.5],'circle-color':'#ffffff',
+      'circle-stroke-color':colorExpr,'circle-stroke-width':1.6,'circle-opacity':0.96}});
+    map.addLayer({id:'beacon-label',type:'symbol',source:'beacons',layout:{
+      'text-field':['get','name'],'text-font':['Open Sans Regular'],'text-size':11,
+      'text-offset':[0,1.1],'text-anchor':'top','text-allow-overlap':false,
+      'symbol-sort-key':['match',['get','type'],'home',0,'mkt',1,2]},
+      paint:{'text-color':'#eef4ff','text-halo-color':'#04070f','text-halo-width':1.3}});
+  }
+  let pt=0;                                   // gentle beacon pulse (opacity)
+  (function pulse(){pt+=0.04;
+    if(map.getLayer('beacon-glow'))map.setPaintProperty('beacon-glow','circle-opacity',0.3+0.18*(0.5+0.5*Math.sin(pt)));
+    requestAnimationFrame(pulse);})();
 });
+setTimeout(()=>document.getElementById('gl-load')?.classList.add('gone'),9000);
+map.on('mouseenter','beacon-core',()=>{map.getCanvas().style.cursor='pointer';});
+map.on('mouseleave','beacon-core',()=>{map.getCanvas().style.cursor='';});
 
-/* ---- tap anywhere → reverse-geocode → news for that point ---- */
-let dragMoved=false;
-map.on('movestart',()=>{dragMoved=true;});
+/* click: a beacon → that city; otherwise tap-anywhere → reverse-geocode → news */
 map.on('click',async e=>{
   document.getElementById('hint')?.classList.add('gone');
+  const box=[[e.point.x-9,e.point.y-9],[e.point.x+9,e.point.y+9]];
+  const hits=map.queryRenderedFeatures(box,{layers:['beacon-glow','beacon-core']});
+  if(hits.length){const c=byId[hits[0].properties.id];if(c){openLocation(c);return;}}
   const lat=e.lngLat.lat, lon=e.lngLat.lng;
   openLocation({name:'Locating…',country:'',lat,lon,_pending:true});
   try{
