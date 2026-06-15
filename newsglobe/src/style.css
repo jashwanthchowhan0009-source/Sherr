@@ -5,9 +5,22 @@
   --up:#34D399; --down:#FB7185; --radius:22px;
 }
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{height:100%;overflow:hidden;background:var(--space);
+html,body{height:100%;overflow:hidden;background:#02040a;
   font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,Inter,sans-serif;color:var(--ink)}
-#map{position:fixed;inset:0}
+/* deep space + starfield behind the (transparent-outside-globe) map */
+#space{position:fixed;inset:0;z-index:-2;background:radial-gradient(circle at 50% 42%,#11295c 0%,#08152f 45%,#02040a 100%)}
+#stars{position:fixed;inset:0;z-index:-1;pointer-events:none;background-repeat:no-repeat;background-image:
+  radial-gradient(1px 1px at 8% 18%,#fff,transparent),radial-gradient(1px 1px at 23% 62%,#dfe9ff,transparent),
+  radial-gradient(1px 1px at 37% 12%,#fff,transparent),radial-gradient(1px 1px at 51% 78%,#cfe0ff,transparent),
+  radial-gradient(1.4px 1.4px at 64% 28%,#fff,transparent),radial-gradient(1px 1px at 78% 66%,#e8f0ff,transparent),
+  radial-gradient(1px 1px at 88% 22%,#fff,transparent),radial-gradient(1px 1px at 15% 84%,#cfe0ff,transparent),
+  radial-gradient(1px 1px at 45% 44%,#fff,transparent),radial-gradient(1px 1px at 70% 88%,#fff,transparent),
+  radial-gradient(1.3px 1.3px at 92% 50%,#fff,transparent),radial-gradient(1px 1px at 5% 50%,#dfe9ff,transparent),
+  radial-gradient(1px 1px at 33% 92%,#fff,transparent),radial-gradient(1px 1px at 58% 8%,#fff,transparent),
+  radial-gradient(1px 1px at 83% 80%,#cfe0ff,transparent),radial-gradient(1px 1px at 96% 12%,#fff,transparent)}
+#map{position:fixed;inset:0;background:transparent}
+/* lush color grade so the satellite pops (greens/blues) */
+.maplibregl-canvas{filter:saturate(1.25) contrast(1.05) brightness(1.04)}
 .maplibregl-ctrl-attrib{font-size:9px;opacity:.6}
 .maplibregl-ctrl-bottom-right{margin-bottom:84px}
 

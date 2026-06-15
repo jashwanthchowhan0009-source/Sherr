@@ -78,7 +78,6 @@ const map=new maplibregl.Map({
         tiles:['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png']}
     },
     layers:[
-      {id:'bg',type:'background',paint:{'background-color':'#05070f'}},
       {id:'base',type:'raster',source:'base'},
       {id:'hills',type:'hillshade',source:'dem',paint:{'hillshade-exaggeration':0.18,'hillshade-shadow-color':'#06101f','hillshade-highlight-color':'#dfeaff'}}
     ]
@@ -87,7 +86,7 @@ const map=new maplibregl.Map({
 map.addControl(new maplibregl.NavigationControl({visualizePitch:true}),'bottom-right');
 map.on('style.load',()=>{
   try{ map.setProjection({type:'globe'}); }catch(e){}
-  try{ map.setSky({'sky-color':'#0a1330','horizon-color':'#13203f','fog-color':'#0a1330','sky-horizon-blend':0.6,'horizon-fog-blend':0.6,'fog-ground-blend':0.4,'atmosphere-blend':['interpolate',['linear'],['zoom'],0,1,8,0.4,12,0]}); }catch(e){}
+  try{ map.setSky({'sky-color':'#0a1a40','horizon-color':'#3b74d6','fog-color':'#0a1330','sky-horizon-blend':0.5,'horizon-fog-blend':0.8,'fog-ground-blend':0.25,'atmosphere-blend':['interpolate',['linear'],['zoom'],0,1,5,0.6,9,0]}); }catch(e){}
   try{ map.setTerrain({source:'dem',exaggeration:1.35}); }catch(e){}
 });
 /* ---- beacons as a native WebGL layer (properly occluded by the globe) ---- */
