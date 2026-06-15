@@ -164,10 +164,10 @@ function weatherCard(wx){
 }
 function newsCard(res,d){
   const arts=(res&&res.articles)||[];
-  const src=res&&res.source?` · ${esc(res.source)}`:'';
-  if(!arts.length)return `<div class="card news"><div class="clabel">Headlines${src}</div><div class="muted">No headlines found for ${esc(fmt(d))} near here.<br>Try a nearby city, or a more recent date.</div></div>`;
+  const scope=res&&res.scope==='local'?' · Local':res&&res.scope==='national'?' · Around India':'';
+  if(!arts.length)return `<div class="card news"><div class="clabel">Headlines</div><div class="muted">No headlines found for ${esc(fmt(d))} near here.<br>Try a nearby city, or a more recent date.</div></div>`;
   const items=arts.map(n=>{const t=esc(n.h||''),s=esc(n.s||'');const inner=n.url?`<a href="${esc(n.url)}" target="_blank" rel="noopener">${t}</a>`:t;return `<li>${inner}<span class="src">${s}${s?' · ':''}${esc(fmt(d))}</span></li>`;}).join('');
-  return `<div class="card news"><div class="clabel">Headlines${src}</div><ul>${items}</ul></div>`;
+  return `<div class="card news"><div class="clabel">Headlines${scope}</div><ul>${items}</ul></div>`;
 }
 function footNote(){return `<div class="demo-note">Live · local/national news · Open-Meteo weather · Yahoo Finance markets.<br>Local depth & history vary by source.</div>`;}
 
