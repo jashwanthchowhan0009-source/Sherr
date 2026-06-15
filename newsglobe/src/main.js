@@ -80,7 +80,7 @@ const map=new maplibregl.Map({
     },
     layers:[
       // soft "paper" land base — transparent at globe zoom (space shows), opaque up close
-      {id:'land',type:'background',paint:{'background-color':'#f4efe3','background-opacity':['interpolate',['linear'],['zoom'],9,0,12,1]}},
+      {id:'land',type:'background',paint:{'background-color':'#eef1f5','background-opacity':['interpolate',['linear'],['zoom'],9,0,12,1]}},
       {id:'base',type:'raster',source:'base'},
       {id:'hills',type:'hillshade',source:'dem',paint:{'hillshade-exaggeration':0.18,'hillshade-shadow-color':'#06101f','hillshade-highlight-color':'#dfeaff'}},
       {id:'buildings',type:'fill-extrusion',source:'omt','source-layer':'building',minzoom:13,
@@ -90,17 +90,17 @@ const map=new maplibregl.Map({
           'fill-extrusion-base':['coalesce',['get','render_min_height'],0],
           'fill-extrusion-opacity':0.9,'fill-extrusion-vertical-gradient':true}},
       // ─── illustrated "hero city" layers (Anantapur only; hidden by default) ───
-      {id:'il-water',type:'fill',source:'omt','source-layer':'water',layout:{visibility:'none'},paint:{'fill-color':'#a7d8ef'}},
+      {id:'il-water',type:'fill',source:'omt','source-layer':'water',layout:{visibility:'none'},paint:{'fill-color':'#b8def0'}},
       {id:'il-green',type:'fill',source:'omt','source-layer':'landcover',layout:{visibility:'none'},
-        filter:['match',['get','class'],['grass','wood','scrub','farmland'],true,false],paint:{'fill-color':'#c4e3a3','fill-opacity':0.92}},
-      {id:'il-park',type:'fill',source:'omt','source-layer':'park',layout:{visibility:'none'},paint:{'fill-color':'#b6dd96','fill-opacity':0.85}},
+        filter:['match',['get','class'],['grass','wood','scrub','farmland'],true,false],paint:{'fill-color':'#e3e9df','fill-opacity':0.92}},
+      {id:'il-park',type:'fill',source:'omt','source-layer':'park',layout:{visibility:'none'},paint:{'fill-color':'#dde6d8','fill-opacity':0.85}},
       {id:'il-road-cas',type:'line',source:'omt','source-layer':'transportation',layout:{visibility:'none','line-cap':'round','line-join':'round'},
-        paint:{'line-color':'#e7ddc9','line-width':['interpolate',['linear'],['zoom'],12,2.5,18,16]}},
+        paint:{'line-color':'#dde2e9','line-width':['interpolate',['linear'],['zoom'],12,2.5,18,16]}},
       {id:'il-road',type:'line',source:'omt','source-layer':'transportation',layout:{visibility:'none','line-cap':'round','line-join':'round'},
         paint:{'line-color':'#ffffff','line-width':['interpolate',['linear'],['zoom'],12,1,18,10]}},
       {id:'il-building',type:'fill-extrusion',source:'omt','source-layer':'building',minzoom:13,layout:{visibility:'none'},
         paint:{
-          'fill-extrusion-color':['interpolate',['linear'],['coalesce',['get','render_height'],8],0,'#f0e0c8',24,'#eccfa9',80,'#dcae84'],
+          'fill-extrusion-color':['interpolate',['linear'],['coalesce',['get','render_height'],8],0,'#f7f8fa',24,'#e6eaf0',80,'#ccd3de'],
           'fill-extrusion-height':['interpolate',['linear'],['zoom'],13,0,14.5,['coalesce',['get','render_height'],7]],
           'fill-extrusion-base':['coalesce',['get','render_min_height'],0],
           'fill-extrusion-opacity':0.97,'fill-extrusion-vertical-gradient':true}}
