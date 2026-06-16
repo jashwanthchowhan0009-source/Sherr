@@ -3360,6 +3360,8 @@ let isDark       = true;
 let feedPage     = 1;
 let feedLoading  = false;
 let feedRetried  = false;   // one automatic cold-start retry per server-reach
+const FEED_MAX_RETRIES = 5; // free tier can take ~60s to wake; back off across attempts
+let feedRetryCount = 0;     // auto-retries used on the current cold-start window
 let feedTopId    = null;    // newest article id currently shown (for "new stories")
 let _newStoriesTimer = null;
 let homeArticles = [];
@@ -4122,7 +4124,7 @@ async function loadFeed(reset = false) {
     if (sc && feedPage === 1 && !(data.articles || []).length) {
       data = await api(url.replace(sc, ''), { timeout: 25000 });
     }
-    feedRetried = false;   // server reached — reset the cold-start retry budget
+    feedRetried = false; feedRetryCount = 0;   // server reached — reset cold-start retry budget
     const articles = (data.articles || []).map(normalizeArticle);
     if (feedPage === 1 && articles[0]) feedTopId = articles[0].id;
 
@@ -4201,7 +4203,31 @@ async function loadFeed(reset = false) {
 
   } catch(e) {
     console.warn('Feed load failed', e);
-    if (c.children.length === 0 || c.querySelector('.skel')) {
+    const stale = () => c.children.length === 0 || c.querySelector('.skel') || c.querySelector('.es-waking');
+    // Render's free tier spins down when idle; the first request wakes it and can
+    // take 30–60s. Auto-retry a few times with backoff, showing a calm "waking up"
+    // state, before falling back to a hard error with a manual Retry.
+    if (feedPage === 1 && feedRetryCount < FEED_MAX_RETRIES) {
+      feedRetryCount++;
+      if (stale()) {
+        c.innerHTML = '';
+        if (curChip === 'all') renderSectionTabs(c);
+        if (typeof FALLBACK_ARTICLES !== 'undefined' && FALLBACK_ARTICLES.length) {
+          FALLBACK_ARTICLES.forEach(a => renderStandardCard(a, c));
+        }
+        const wake = document.createElement('div');
+        wake.className = 'empty-state es-waking';
+        wake.innerHTML = `
+          <div class="empty-state-ico">⏳</div>
+          <div class="empty-state-msg">Waking the server…</div>
+          <div class="empty-state-sub">The free server is starting up — this can take up to a minute.</div>`;
+        c.appendChild(wake);
+      }
+      feedLoading = false;
+      setTimeout(() => loadFeed(true), 3000 + feedRetryCount * 3000);   // 6s,9s,12s,15s,18s
+      return;
+    }
+    if (stale()) {
       c.innerHTML = '';
       if (curChip === 'all') renderSectionTabs(c);
       if (typeof FALLBACK_ARTICLES !== 'undefined' && FALLBACK_ARTICLES.length) {
@@ -4213,16 +4239,8 @@ async function loadFeed(reset = false) {
         <div class="empty-state-ico">⚠️</div>
         <div class="empty-state-msg">Couldn't reach the server</div>
         <div class="empty-state-sub">The server may be waking up — this can take a moment.</div>
-        <button class="es-retry" onclick="loadFeed(true)">Retry</button>`;
+        <button class="es-retry" onclick="feedRetryCount=0;loadFeed(true)">Retry</button>`;
       c.appendChild(notice);
-    }
-    // Render free tier spins down when idle; the first request wakes it and
-    // may time out. Auto-retry once so the user doesn't have to tap Retry.
-    if (feedPage === 1 && !feedRetried) {
-      feedRetried = true;
-      feedLoading = false;
-      setTimeout(() => loadFeed(true), 3500);
-      return;
     }
   } finally {
     feedLoading = false;
