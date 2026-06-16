@@ -1,15 +1,21 @@
 name: keep-alive
 
-# Pings the live backend's /health every ~10 min so the free Render instance
-# doesn't sleep (free web services idle out after ~15 min). Doubles as an
-# uptime check: the job FAILS if the service is unreachable or reports
-# db:false, which sends the usual GitHub failed-workflow notification.
+# Backup keep-alive: pings the live backend's lightweight root (/) every ~5 min
+# so the free Render instance doesn't sleep (free web services idle out after
+# ~15 min). NOTE: GitHub's scheduled crons are throttled/de-prioritised on
+# low-traffic repos and can drift to hours between runs — so this is only a
+# BACKUP. The primary keep-alive is an external uptime pinger (e.g. UptimeRobot)
+# hitting the same URL every 5 min, which fires reliably.
+#
+# Pinging "/" (not "/health") keeps it cheap — no DB queries, just wakes the dyno.
+# The job FAILS if the service is unreachable or doesn't report status:ok, which
+# sends the usual GitHub failed-workflow notification (doubles as an uptime check).
 #
 # Override the target without editing this file: set a repo variable
 # BACKEND_URL (Settings → Secrets and variables → Actions → Variables).
 on:
   schedule:
-    - cron: "*/10 * * * *"
+    - cron: "*/5 * * * *"
   workflow_dispatch: {}
 
 concurrency:
@@ -21,25 +27,24 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Ping /health
+      - name: Ping /
         env:
           BACKEND_URL: ${{ vars.BACKEND_URL || 'https://sherrbyte-api.onrender.com' }}
         run: |
           set -euo pipefail
-          url="${BACKEND_URL%/}/health"
+          url="${BACKEND_URL%/}/"
           echo "Pinging $url"
           # Retry a few times: a slept free instance cold-starts (~30s+).
           for attempt in 1 2 3 4; do
             if body=$(curl -fsS --max-time 90 "$url"); then
               echo "Response: $body"
               status=$(echo "$body" | jq -r '.status // "missing"')
-              db=$(echo "$body" | jq -r '.db // "missing"')
-              echo "status=$status db=$db"
-              if [ "$status" = "ok" ] && [ "$db" = "true" ]; then
-                echo "✅ Backend healthy (db connected)."
+              echo "status=$status"
+              if [ "$status" = "ok" ]; then
+                echo "✅ Backend awake (status=ok)."
                 exit 0
               fi
-              echo "::error::Backend reachable but unhealthy (status=$status, db=$db)."
+              echo "::error::Backend reachable but status not ok (status=$status)."
               exit 1
             fi
             echo "Attempt $attempt failed (likely cold start); waiting ${attempt}0s…"
