@@ -15,6 +15,7 @@ from fastapi import APIRouter, HTTPException, Query
 from app.config import WRITE_MODES
 from app.db.supabase import db
 from app.sherr import core
+from app.sherr.router import complete_text
 
 log = logging.getLogger("sherbyte.api.sherr")
 router = APIRouter(prefix="/sherr", tags=["sherr"])
@@ -23,6 +24,26 @@ router = APIRouter(prefix="/sherr", tags=["sherr"])
 @router.get("/modes")
 async def modes():
     return {"modes": {k: v["desc"] for k, v in WRITE_MODES.items()}}
+
+
+@router.post("/tldr")
+async def tldr(payload: dict):
+    """Fast 3-line TL;DR of an article via the Gemini→Groq router. Stateless:
+    the client passes the title + already-summarized body, so it works for any
+    article (no DB lookup) and degrades gracefully if no LLM is configured."""
+    title = (payload.get("title") or "").strip()
+    text = (payload.get("text") or "").strip()
+    if not text and not title:
+        raise HTTPException(400, "title or text required")
+    system = ("You are a news summarizer. Output EXACTLY three short bullet lines, "
+              "each on its own line starting with '- ', max ~14 words each. "
+              "No headings, no preamble, no markdown bold — just the three lines.")
+    user = f"Headline: {title}\n\nArticle:\n{text[:4000]}\n\nWrite the 3-line TL;DR:"
+    out = await complete_text(system, user, temperature=0.3, max_tokens=180)
+    if not out:
+        return {"tldr": None, "error": "AI unavailable"}
+    lines = [l.strip().lstrip("-•*").strip() for l in out.splitlines() if l.strip()]
+    return {"tldr": lines[:3]}
 
 
 @router.get("/brief/{info_id}")

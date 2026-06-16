@@ -745,6 +745,13 @@ header {
   background: var(--bgcard); border: 1px solid var(--line2);
 }
 .ao-act-share { margin-left: auto; }
+.ao-tldr { margin: 0 0 14px; padding: 12px 14px; border-radius: 12px;
+  background: var(--as, rgba(79,107,212,0.10)); border: 1px solid rgba(79,107,212,0.28); }
+.ao-tldr-h { font-size: 0.7rem; font-weight: 800; letter-spacing: 0.6px; text-transform: uppercase;
+  color: var(--accent); margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+.ao-tldr ul { margin: 0; padding-left: 18px; }
+.ao-tldr li { font-size: 0.85rem; line-height: 1.5; color: var(--t1); margin-bottom: 5px; }
+.ao-tldr .tldr-msg { font-size: 0.82rem; color: var(--t3); }
 .ao-act:active { transform: scale(0.94); }
 .ao-act i { font-size: 0.92rem; }
 .ao-act.liked { color: var(--c-red); background: rgba(255,91,91,0.08); border-color: rgba(255,91,91,0.2); }
@@ -2627,11 +2634,13 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
         <span class="ao-src-time" id="ao-src-time"></span>
       </div>
       <div class="ao-main-title" id="ao-main-title"></div>
+      <div id="ao-tldr-box" class="ao-tldr" style="display:none"></div>
       <div class="ao-text" id="ao-text"></div>
       <div class="ao-keypoints" id="ao-keypoints"></div>
       <div class="ao-acts">
         <div class="ao-act tap" id="ao-like" onclick="aoLike()"><i class="fa-regular fa-heart"></i><span>Like</span></div>
         <div class="ao-act tap" id="ao-save" onclick="aoSave()"><i class="fa-regular fa-bookmark"></i><span>Save</span></div>
+        <div class="ao-act tap" id="ao-tldr-btn" onclick="aoSummarize()"><i class="fa-solid fa-wand-magic-sparkles"></i><span>Summarize</span></div>
         <div class="ao-act tap ao-act-share" onclick="shareArt(currentArticle?.title||'')"><i class="fa-solid fa-arrow-up-from-bracket"></i><span>Share</span></div>
       </div>
 
@@ -2686,20 +2695,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 <div id="v-explore" class="view">
   <div class="live-ticker">
     <div class="ticker-inner" id="ticker-inner">
-      <span class="tick-item"><span style="color:#43A047">NIFTY</span> 22,580 <span class="tick-up">▲ +1.1%</span></span>
-      <span class="tick-item"><span style="color:#FBC02D">GOLD</span> ₹72,450 <span class="tick-up">▲ +0.4%</span></span>
-      <span class="tick-item"><span style="color:#e0e0e0">SILVER</span> ₹88,200 <span class="tick-dn">▼ −0.2%</span></span>
-      <span class="tick-item"><span style="color:#1E88E5">BSE</span> 73,088 <span class="tick-up">▲ +0.6%</span></span>
-      <span class="tick-item"><span style="color:#8E24AA">NASDAQ</span> 16,274 <span class="tick-up">▲ +0.8%</span></span>
-      <span class="tick-item"><span style="color:#E53935">CRUDE</span> $82.4/bbl <span class="tick-dn">▼ −1.2%</span></span>
-      <span class="tick-item"><span style="color:#FB8C00">USD/INR</span> ₹83.42 <span class="tick-dn">▼ −0.1%</span></span>
-      <span class="tick-item"><span style="color:#43A047">NIFTY</span> 22,580 <span class="tick-up">▲ +1.1%</span></span>
-      <span class="tick-item"><span style="color:#FBC02D">GOLD</span> ₹72,450 <span class="tick-up">▲ +0.4%</span></span>
-      <span class="tick-item"><span style="color:#e0e0e0">SILVER</span> ₹88,200 <span class="tick-dn">▼ −0.2%</span></span>
-      <span class="tick-item"><span style="color:#1E88E5">BSE</span> 73,088 <span class="tick-up">▲ +0.6%</span></span>
-      <span class="tick-item"><span style="color:#8E24AA">NASDAQ</span> 16,274 <span class="tick-up">▲ +0.8%</span></span>
-      <span class="tick-item"><span style="color:#E53935">CRUDE</span> $82.4/bbl <span class="tick-dn">▼ −1.2%</span></span>
-      <span class="tick-item"><span style="color:#FB8C00">USD/INR</span> ₹83.42 <span class="tick-dn">▼ −0.1%</span></span>
+      <span class="tick-item" style="opacity:.55">● Live market data loading…</span>
     </div>
   </div>
 
@@ -2994,7 +2990,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 <!-- ════════ BYTES — short-form vertical feed (Phase 9 builds the feed) ════════ -->
 <div id="v-bytes" class="view" style="padding:0;overflow:hidden">
   <div id="bytes-feed" class="bytes-feed">
-    <div class="bytes-empty glass"><b>Bytes</b><br><span>Swipe-up short news will appear here.</span></div>
+    <div class="bytes-empty glass"><b>Bytes</b><br><span>Loading short news…</span></div>
   </div>
 </div>
 
@@ -4294,6 +4290,7 @@ function openArticle(rawA) {
   document.getElementById('ao-main-title').textContent = a.title;
   const body = a.body_ai || a.preview || a.summary || '';
   renderArticleBody(body);
+  const _tb = document.getElementById('ao-tldr-box'); if (_tb) { _tb.style.display = 'none'; _tb.innerHTML = ''; }
   document.getElementById('ao-keypoints').innerHTML = '';
   // Fetch the fuller article body + key points (who/what/where/when/why).
   aoLoadFullContext(a.id);
@@ -4376,6 +4373,28 @@ function aoLike() {
     el.querySelector('i').className='fa-regular fa-heart';
   }
   persist();
+}
+
+// AI TL;DR — 3-line summary via our Gemini/Groq pipeline (/sherr/tldr).
+let _tldrBusy = false;
+async function aoSummarize() {
+  if (!currentArticle || _tldrBusy) return;
+  const box = document.getElementById('ao-tldr-box');
+  if (!box) return;
+  const H = '<div class="ao-tldr-h"><i class="fa-solid fa-wand-magic-sparkles"></i> TL;DR</div>';
+  box.style.display = 'block';
+  box.innerHTML = H + '<div class="tldr-msg">Summarizing…</div>';
+  _tldrBusy = true;
+  try {
+    const text = currentArticle.body_ai || currentArticle.summary || currentArticle.preview || '';
+    const r = await api('/sherr/tldr', { method: 'POST', timeout: 25000,
+      body: JSON.stringify({ title: currentArticle.title || '', text }) });
+    const lines = (r && r.tldr) || [];
+    if (!lines.length) { box.innerHTML = H + '<div class="tldr-msg">Couldn\'t summarize right now.</div>'; return; }
+    box.innerHTML = H + '<ul>' + lines.map(l => `<li>${bEsc(l)}</li>`).join('') + '</ul>';
+  } catch (e) {
+    box.innerHTML = H + '<div class="tldr-msg">Summarize failed — try again.</div>';
+  } finally { _tldrBusy = false; }
 }
 
 function aoSave() {
@@ -4797,7 +4816,7 @@ async function loadFeedPulse() {
   const setTxt = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
   if (!ST.token) {
     _feedAnalytics = null;
-    setTxt('fp-time', '—'); setTxt('fp-read', '—'); setTxt('fp-growth', 'Sign in'); setTxt('fp-suggest', '—');
+    setTxt('fp-time', '0m'); setTxt('fp-read', '0 today'); setTxt('fp-growth', 'Sign in'); setTxt('fp-suggest', 'Pick topics');
     if (radar) radar.innerHTML = buildRadar(null);
     renderFeedCatCards();
     return;
@@ -6176,7 +6195,7 @@ async function doSearch(q){
 }
 
 // ── Bytes — vertical short-news feed (WWWW corner + infinite scroll) ──
-let bytesInit = false, bytesPage = 1, bytesLoading = false; const bytesIds = new Set();
+let bytesInit = false, bytesPage = 1, bytesLoading = false, _bytesRetried = false; const bytesIds = new Set();
 function bEsc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function bCap(s){ s=String(s||''); return s.charAt(0).toUpperCase()+s.slice(1); }
 async function initBytes(){
@@ -6196,12 +6215,19 @@ async function loadBytes(reset){
     const data = await api(`/feed?page=${bytesPage}&limit=10`);   // scope parked (see loadFeed)
     const arts = (data.articles||[]).map(normalizeArticle).filter(a => a.id && !bytesIds.has(a.id));
     arts.forEach(a => bytesIds.add(a.id));
+    _bytesRetried = false;                       // a successful load re-arms the cold-start retry
     if (reset) feed.innerHTML = '';
     if (reset && !arts.length) feed.innerHTML = '<div class="bytes-empty glass">No bytes yet — check back soon.</div>';
     else renderBytes(arts, feed);
     if (data.has_more) bytesPage++;
   } catch (e) {
-    if (reset && !feed.querySelector('.byte')) feed.innerHTML = '<div class="bytes-empty glass">⚡ Bytes will fill once the feed is live.</div>';
+    if (reset && !feed.querySelector('.byte')) {
+      // free-tier backend may be cold on first hit → wake it and retry once
+      if (!_bytesRetried) { _bytesRetried = true; bytesLoading = false;
+        feed.innerHTML = '<div class="bytes-empty glass">⚡ Waking the news engine…</div>';
+        setTimeout(() => loadBytes(true), 3500); return; }
+      feed.innerHTML = '<div class="bytes-empty glass"><b>Bytes</b><br><span>Couldn\'t load — pull down to retry.</span></div>';
+    }
   } finally { bytesLoading = false; }
 }
 function renderBytes(arts, feed){
@@ -6293,25 +6319,31 @@ async function loadWeather() {
     try { geo = JSON.parse(localStorage.getItem('sb-geo') || 'null'); } catch (e) {}
     if (geo && geo.lat) qs = `?lat=${geo.lat}&lon=${geo.lon}`;
     const w = await api('/live/weather' + qs);
-    if (!w) return;
+    if (!w || w.temp_c == null) throw new Error('no weather');
     const loc = document.getElementById('bw-loc');
     if (loc) loc.innerHTML = `<i class="fa-solid fa-location-dot" style="font-size:0.6rem"></i> ${w.city || '—'}`;
     if (w.temp_c != null) document.getElementById('bw-temp').textContent = w.temp_c + '°';
     document.getElementById('bw-desc').textContent =
       (w.condition || '') + (w.feels_c != null ? ` · Feels ${w.feels_c}°` : '');
     if (w.emoji) document.getElementById('bw-icon').textContent = w.emoji;
-  } catch (e) { /* endpoint live after backend merges to main */ }
+  } catch (e) {
+    const d = document.getElementById('bw-desc'); if (d) d.textContent = 'Weather unavailable';
+    const t = document.getElementById('bw-temp'); if (t && t.textContent === '—°') t.textContent = '—';
+    const l = document.getElementById('bw-loc'); if (l) l.innerHTML = '<i class="fa-solid fa-location-dot" style="font-size:0.6rem"></i> Tap to retry';
+  }
 }
 async function loadWordOfDay() {
   try {
     const d = await api('/live/word-of-day');
-    if (!d || !d.word) return;
+    if (!d || !d.word) throw new Error('no word');
     document.getElementById('ewc-word').textContent = d.word.charAt(0).toUpperCase() + d.word.slice(1);
     const m = (d.meanings && d.meanings[0]) || {};
     document.getElementById('ewc-phon').textContent = [d.phonetic, m.part_of_speech].filter(Boolean).join('  •  ');
     document.getElementById('ewc-def').textContent = m.definition || '';
     document.getElementById('ewc-ex').textContent = m.example ? `"${m.example}"` : '';
-  } catch (e) {}
+  } catch (e) {
+    const w = document.getElementById('ewc-word'); if (w && w.textContent === '—') w.textContent = 'Tap Dictionary ↑';
+  }
 }
 async function openDictionary() {
   const w = (prompt('Look up a word:') || '').trim().toLowerCase();
