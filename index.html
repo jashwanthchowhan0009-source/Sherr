@@ -6,7 +6,7 @@
 <title>SherrByte</title>
 <link rel="icon" type="image/png" href="/tiger-logo.png">
 <link rel="manifest" href="/manifest.json">
-<meta name="theme-color" content="#0A84FF">
+<meta name="theme-color" content="#000000">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="SherrByte">
@@ -1338,9 +1338,6 @@ header {
   backdrop-filter: blur(10px); display: flex; align-items: center; justify-content: center;
   color: #fff; font-size: 1.1rem; }
 .ao-hero img { cursor: zoom-in; }
-.ao-zoom-hint { position: absolute; right: 12px; bottom: 12px; z-index: 2; width: 30px; height: 30px;
-  border-radius: 50%; background: rgba(0,0,0,0.45); backdrop-filter: blur(8px); color: #fff;
-  display: flex; align-items: center; justify-content: center; font-size: 0.8rem; pointer-events: none; }
 .ao-video { width: 100%; height: 100%; object-fit: cover; background: #000; display: block; }
 
 .app-modal { position: absolute; inset: 0; z-index: 4000; display: none;
@@ -1497,24 +1494,24 @@ header {
    FLOATING BOTTOM NAV
 ═══════════════════════════════════ */
 nav {
-  position: absolute; bottom: 18px; left: 50%;
-  transform: translateX(-50%);
-  width: calc(100% - 32px); max-width: 360px;
-  height: 64px;
+  position: absolute; bottom: max(18px, env(safe-area-inset-bottom));
+  left: 50%; transform: translateX(-50%);
+  width: calc(100% - 28px); max-width: 380px;
+  height: 68px;
   display: flex; align-items: center; justify-content: space-around;
   z-index: 600;
 
-  /* True liquid glass — transparent, lets the content show through. */
-  background: rgba(255,255,255,0.08);
-  backdrop-filter: blur(36px) saturate(180%);
-  -webkit-backdrop-filter: blur(36px) saturate(180%);
-  border: 1px solid rgba(255,255,255,0.18);
-  border-radius: 32px;
+  /* frosted liquid-glass pill */
+  background: rgba(255,255,255,0.07);
+  backdrop-filter: blur(34px) saturate(180%);
+  -webkit-backdrop-filter: blur(34px) saturate(180%);
+  border: 1px solid rgba(255,255,255,0.16);
+  border-radius: 999px;
   box-shadow:
-    0 16px 44px rgba(0,0,0,0.32),
-    inset 0 1px 1px rgba(255,255,255,0.22),
-    inset 0 -1px 1px rgba(0,0,0,0.10);
-  padding: 0 8px;
+    0 18px 46px rgba(0,0,0,0.38),
+    inset 0 1px 1px rgba(255,255,255,0.24),
+    inset 0 -1px 1px rgba(0,0,0,0.12);
+  padding: 0 10px;
 }
 
 .nb {
@@ -1523,15 +1520,17 @@ nav {
   transition: all 0.25s var(--spring); position: relative;
 }
 .nb-icon {
-  width: 52px; height: 44px; border-radius: 16px;
+  min-width: 50px; height: 50px; padding: 0 14px; border-radius: 999px;
   display: flex; align-items: center; justify-content: center;
-  font-size: 1.06rem; color: rgba(255,255,255,0.62);
-  transition: background .28s var(--snap), color .28s var(--snap), box-shadow .28s var(--snap);
+  font-size: 1.34rem; color: rgba(255,255,255,0.6);
+  transition: background .28s var(--snap), color .28s var(--snap), box-shadow .28s var(--snap), padding .28s var(--snap);
 }
+.nb-icon i { font-size: 1.34rem; }
 .nb-lbl { display: none; }
-/* Active = a frosted darker pill (not a flat accent fill) — slick iOS glass. */
+/* Active = an elongated frosted pill behind the icon — slick iOS glass. */
 .nb.on .nb-icon {
-  background: rgba(255,255,255,0.16);
+  padding: 0 26px;
+  background: rgba(255,255,255,0.15);
   color: #fff;
   box-shadow: inset 0 0 0 0.5px rgba(255,255,255,0.30), 0 2px 10px rgba(0,0,0,0.18);
 }
@@ -2190,6 +2189,37 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   font-size: 0.74rem; font-weight: 700;
   color: #FFB260;
 }
+/* ── Streak history strip (horizontal scroll) ── */
+.streak-strip-wrap { margin: 14px 0 4px; }
+.streak-strip-hdr {
+  font-size: 0.78rem; font-weight: 700; color: var(--t2);
+  margin: 0 4px 8px; letter-spacing: 0.02em;
+}
+.streak-strip {
+  display: flex; gap: 8px; overflow-x: auto;
+  padding: 2px 2px 8px; scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
+}
+.streak-strip::-webkit-scrollbar { display: none; }
+.streak-cell {
+  flex: 0 0 auto; width: 60px; scroll-snap-align: start;
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 10px 6px; border-radius: 16px;
+  background: var(--bg2, rgba(255,255,255,0.05));
+  border: 1px solid rgba(255,255,255,0.07);
+}
+.streak-cell.on {
+  background: rgba(255,140,0,0.14);
+  border-color: rgba(255,140,0,0.32);
+}
+.streak-cell.today { border-color: rgba(255,140,0,0.7); }
+.streak-cell-dow { font-size: 0.62rem; font-weight: 700; color: var(--t3); text-transform: uppercase; }
+.streak-cell-fire { font-size: 1.05rem; line-height: 1.2; }
+.streak-cell.on .streak-cell-fire { filter: none; }
+.streak-cell:not(.on) .streak-cell-fire { color: var(--t3); opacity: 0.5; }
+.streak-cell-num { font-size: 1.18rem; font-weight: 800; color: var(--t1); }
+.streak-cell.on .streak-cell-num { color: #FFB260; }
+.streak-cell-date { font-size: 0.6rem; color: var(--t3); }
 .analytics-sparkline {
   position: relative; z-index: 1;
   width: 100%; height: 44px;
@@ -2619,7 +2649,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   <div class="ao-header">
     <div class="ao-back tap" onclick="goBack()"><i class="fa-solid fa-chevron-left"></i> Back</div>
     <div class="ao-title-hdr" id="ao-title-hdr"></div>
-    <div class="ao-share tap" onclick="shareArt(currentArticle?.title||'')"><i class="fa-solid fa-paper-plane"></i></div>
+    <div class="ao-share tap" onclick="shareArticleCard(currentArticle)"><i class="fa-solid fa-paper-plane"></i></div>
   </div>
   <div class="ao-scroll" id="ao-scroll">
     <div class="ao-hero">
@@ -2641,7 +2671,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
         <div class="ao-act tap" id="ao-like" onclick="aoLike()"><i class="fa-regular fa-heart"></i><span>Like</span></div>
         <div class="ao-act tap" id="ao-save" onclick="aoSave()"><i class="fa-regular fa-bookmark"></i><span>Save</span></div>
         <div class="ao-act tap" id="ao-tldr-btn" onclick="aoSummarize()"><i class="fa-solid fa-wand-magic-sparkles"></i><span>Summarize</span></div>
-        <div class="ao-act tap ao-act-share" onclick="shareArt(currentArticle?.title||'')"><i class="fa-solid fa-arrow-up-from-bracket"></i><span>Share</span></div>
+        <div class="ao-act tap ao-act-share" onclick="shareArticleCard(currentArticle)"><i class="fa-solid fa-arrow-up-from-bracket"></i><span>Share</span></div>
       </div>
 
       <div class="ao-cmt-sec">
@@ -3330,6 +3360,8 @@ let isDark       = true;
 let feedPage     = 1;
 let feedLoading  = false;
 let feedRetried  = false;   // one automatic cold-start retry per server-reach
+const FEED_MAX_RETRIES = 5; // free tier can take ~60s to wake; back off across attempts
+let feedRetryCount = 0;     // auto-retries used on the current cold-start window
 let feedTopId    = null;    // newest article id currently shown (for "new stories")
 let _newStoriesTimer = null;
 let homeArticles = [];
@@ -3533,9 +3565,169 @@ function openFAQ(){
 }
 
 // ── SHARE ──
+// Plain-text/url fallback (used when we only have a title string).
 function shareArt(title) {
   if (navigator.share) navigator.share({ title:'SherrByte: '+title, url:location.href }).catch(()=>{});
   else { navigator.clipboard?.writeText(title).catch(()=>{}); toast('📋 Copied to clipboard'); }
+}
+
+// Two-stop colors per category for the canvas card (mirrors CAT_GRADIENTS).
+const CARD_GRAD = {
+  society:['#0D2137','#1E88E5'], economy:['#1A1400','#FBC02D'], tech:['#0A0D2A','#3949AB'],
+  arts:['#2A0A0A','#E53935'], nature:['#0A1A0A','#43A047'], selfwell:['#1A0D00','#FB8C00'],
+  philo:['#150A1A','#8E24AA'], lifestyle:['#001A1A','#00ACC1'], sports:['#0A0F1A','#546E7A'],
+};
+
+function _loadImg(src, cross) {
+  return new Promise((resolve, reject) => {
+    const im = new Image();
+    if (cross) im.crossOrigin = 'anonymous';
+    im.onload = () => resolve(im);
+    im.onerror = reject;
+    im.src = src;
+  });
+}
+// Draw img onto ctx covering the box (object-fit: cover).
+function _coverDraw(ctx, img, x, y, w, h) {
+  const ir = img.width / img.height, br = w / h;
+  let sw, sh, sx, sy;
+  if (ir > br) { sh = img.height; sw = sh * br; sx = (img.width - sw) / 2; sy = 0; }
+  else { sw = img.width; sh = sw / br; sx = 0; sy = (img.height - sh) / 2; }
+  ctx.drawImage(img, sx, sy, sw, sh, x, y, w, h);
+}
+function _roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+// Word-wrap; returns array of lines, capped at maxLines (last gets an ellipsis).
+function _wrapText(ctx, text, maxW, maxLines) {
+  const words = (text || '').split(/\s+/);
+  const lines = []; let line = '';
+  for (const w of words) {
+    const test = line ? line + ' ' + w : w;
+    if (ctx.measureText(test).width > maxW && line) {
+      lines.push(line); line = w;
+      if (lines.length === maxLines - 1) {
+        // pack the rest into the final line, ellipsize if needed
+        let rest = words.slice(words.indexOf(w)).join(' ');
+        while (ctx.measureText(rest + '…').width > maxW && rest.length) rest = rest.slice(0, -1);
+        lines.push(rest + (ctx.measureText(rest).width >= maxW ? '…' : ''));
+        return lines;
+      }
+    } else { line = test; }
+  }
+  if (line) lines.push(line);
+  return lines.slice(0, maxLines);
+}
+
+// Build a shareable "Article Byte" PNG card and return a Blob.
+async function buildByteCard(a) {
+  const W = 1080, H = 1350, c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const ctx = c.getContext('2d');
+  const cat = a.category || 'tech';
+  const [g0, g1] = CARD_GRAD[cat] || CARD_GRAD.tech;
+
+  // background wash
+  let bg = ctx.createLinearGradient(0, 0, W, H);
+  bg.addColorStop(0, '#0B0B10'); bg.addColorStop(1, '#15151c');
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+
+  // hero image area (top ~62%)
+  const heroH = Math.round(H * 0.60);
+  let drew = false;
+  if (a.image_url) {
+    try { const im = await _loadImg(a.image_url, true); _coverDraw(ctx, im, 0, 0, W, heroH); drew = true; }
+    catch (_) { /* CORS / load fail → gradient */ }
+  }
+  if (!drew) {
+    const hg = ctx.createLinearGradient(0, 0, W, heroH);
+    hg.addColorStop(0, g0); hg.addColorStop(1, g1);
+    ctx.fillStyle = hg; ctx.fillRect(0, 0, W, heroH);
+  }
+  // dark gradient under the image so text/foot reads
+  const sh = ctx.createLinearGradient(0, heroH - 240, 0, heroH);
+  sh.addColorStop(0, 'rgba(11,11,16,0)'); sh.addColorStop(1, 'rgba(11,11,16,1)');
+  ctx.fillStyle = sh; ctx.fillRect(0, heroH - 240, W, 240);
+
+  // category chip
+  const chip = (cat.charAt(0).toUpperCase() + cat.slice(1)).toUpperCase();
+  ctx.font = '700 30px -apple-system, system-ui, sans-serif';
+  const chipW = ctx.measureText(chip).width + 56;
+  ctx.fillStyle = 'rgba(255,255,255,0.14)';
+  _roundRect(ctx, 64, 64, chipW, 58, 29); ctx.fill();
+  ctx.fillStyle = '#fff'; ctx.textBaseline = 'middle';
+  ctx.fillText(chip, 92, 64 + 30);
+
+  // headline
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillStyle = '#FFFFFF';
+  ctx.font = '800 60px -apple-system, system-ui, sans-serif';
+  const lines = _wrapText(ctx, a.title || '', W - 128, 4);
+  let ty = heroH + 96;
+  for (const ln of lines) { ctx.fillText(ln, 64, ty); ty += 76; }
+
+  // source / summary snippet
+  const sub = (a.summary || a.source_name || '').toString();
+  if (sub) {
+    ctx.fillStyle = 'rgba(255,255,255,0.62)';
+    ctx.font = '400 34px -apple-system, system-ui, sans-serif';
+    const sl = _wrapText(ctx, sub, W - 128, 3);
+    ty += 18;
+    for (const ln of sl) { ctx.fillText(ln, 64, ty); ty += 46; }
+  }
+
+  // footer: small SherrByte logo + wordmark in the corner
+  const footY = H - 96;
+  try {
+    const logo = await _loadImg('/tiger-logo.png', false);
+    const ls = 64;
+    _roundRect(ctx, 64, footY - ls / 2, ls, ls, 16); ctx.save(); ctx.clip();
+    ctx.drawImage(logo, 64, footY - ls / 2, ls, ls); ctx.restore();
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = '700 38px -apple-system, system-ui, sans-serif';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('SherrByte', 64 + ls + 20, footY);
+  } catch (_) {
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = '700 40px -apple-system, system-ui, sans-serif';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('SherrByte', 64, footY);
+  }
+  ctx.textBaseline = 'alphabetic';
+
+  return await new Promise(res => c.toBlob(res, 'image/png', 0.92));
+}
+
+// Share an article as an "Article Byte" image card (falls back to text/url).
+async function shareArticleCard(a) {
+  if (!a || !a.title) return shareArt((a && a.title) || '');
+  try {
+    toast('🎨 Creating your Article Byte…');
+    const blob = await buildByteCard(a);
+    if (!blob) throw new Error('no blob');
+    const file = new File([blob], 'sherrbyte-article.png', { type: 'image/png' });
+    const text = a.title + '\n\nvia SherrByte';
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], text });
+      return;
+    }
+    // No file-share support → offer a download so the user can post it manually.
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url; link.download = 'sherrbyte-article.png';
+    document.body.appendChild(link); link.click(); link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    toast('⬇️ Article Byte saved — share it anywhere');
+  } catch (e) {
+    if (e && e.name === 'AbortError') return; // user cancelled the share sheet
+    shareArt(a.title || '');
+  }
 }
 
 // ── LANGUAGE PICKER ──
@@ -3727,7 +3919,7 @@ function renderStandardCard(rawA, container) {
   `;
   d.querySelector('.nc-like').addEventListener('click', e => { e.stopPropagation(); feedLike(a, e.currentTarget); });
   d.querySelector('.nc-comment').addEventListener('click', e => { e.stopPropagation(); openArticle(a); });
-  d.querySelector('.nc-share').addEventListener('click', e => { e.stopPropagation(); shareArt(a.title||''); });
+  d.querySelector('.nc-share').addEventListener('click', e => { e.stopPropagation(); shareArticleCard(a); });
   container.appendChild(d);
 }
 
@@ -3932,7 +4124,7 @@ async function loadFeed(reset = false) {
     if (sc && feedPage === 1 && !(data.articles || []).length) {
       data = await api(url.replace(sc, ''), { timeout: 25000 });
     }
-    feedRetried = false;   // server reached — reset the cold-start retry budget
+    feedRetried = false; feedRetryCount = 0;   // server reached — reset cold-start retry budget
     const articles = (data.articles || []).map(normalizeArticle);
     if (feedPage === 1 && articles[0]) feedTopId = articles[0].id;
 
@@ -4011,7 +4203,31 @@ async function loadFeed(reset = false) {
 
   } catch(e) {
     console.warn('Feed load failed', e);
-    if (c.children.length === 0 || c.querySelector('.skel')) {
+    const stale = () => c.children.length === 0 || c.querySelector('.skel') || c.querySelector('.es-waking');
+    // Render's free tier spins down when idle; the first request wakes it and can
+    // take 30–60s. Auto-retry a few times with backoff, showing a calm "waking up"
+    // state, before falling back to a hard error with a manual Retry.
+    if (feedPage === 1 && feedRetryCount < FEED_MAX_RETRIES) {
+      feedRetryCount++;
+      if (stale()) {
+        c.innerHTML = '';
+        if (curChip === 'all') renderSectionTabs(c);
+        if (typeof FALLBACK_ARTICLES !== 'undefined' && FALLBACK_ARTICLES.length) {
+          FALLBACK_ARTICLES.forEach(a => renderStandardCard(a, c));
+        }
+        const wake = document.createElement('div');
+        wake.className = 'empty-state es-waking';
+        wake.innerHTML = `
+          <div class="empty-state-ico">⏳</div>
+          <div class="empty-state-msg">Waking the server…</div>
+          <div class="empty-state-sub">The free server is starting up — this can take up to a minute.</div>`;
+        c.appendChild(wake);
+      }
+      feedLoading = false;
+      setTimeout(() => loadFeed(true), 3000 + feedRetryCount * 3000);   // 6s,9s,12s,15s,18s
+      return;
+    }
+    if (stale()) {
       c.innerHTML = '';
       if (curChip === 'all') renderSectionTabs(c);
       if (typeof FALLBACK_ARTICLES !== 'undefined' && FALLBACK_ARTICLES.length) {
@@ -4023,16 +4239,8 @@ async function loadFeed(reset = false) {
         <div class="empty-state-ico">⚠️</div>
         <div class="empty-state-msg">Couldn't reach the server</div>
         <div class="empty-state-sub">The server may be waking up — this can take a moment.</div>
-        <button class="es-retry" onclick="loadFeed(true)">Retry</button>`;
+        <button class="es-retry" onclick="feedRetryCount=0;loadFeed(true)">Retry</button>`;
       c.appendChild(notice);
-    }
-    // Render free tier spins down when idle; the first request wakes it and
-    // may time out. Auto-retry once so the user doesn't have to tap Retry.
-    if (feedPage === 1 && !feedRetried) {
-      feedRetried = true;
-      feedLoading = false;
-      setTimeout(() => loadFeed(true), 3500);
-      return;
     }
   } finally {
     feedLoading = false;
@@ -4267,9 +4475,6 @@ function openArticle(rawA) {
       };
       img.onclick = () => openMediaViewer(a.image_url);
       aoHero.appendChild(img);
-      const hint = document.createElement('div'); hint.className = 'ao-zoom-hint';
-      hint.innerHTML = '<i class="fa-solid fa-magnifying-glass-plus"></i>';
-      aoHero.appendChild(hint);
     } else {
       aoHero.style.background = CAT_GRADIENTS[a.category] || CAT_GRADIENTS.tech;
       const ph = document.createElement('div');
@@ -5701,6 +5906,28 @@ function buildSparkline(days) {
   </svg>`;
 }
 
+// Horizontally-scrollable strip of previous days' streak numbers.
+function buildStreakStrip(history) {
+  if (!history || !history.length) return '';
+  const today = new Date().toISOString().slice(0, 10);
+  const DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const cells = history.map(d => {
+    const dt = new Date(d.date + 'T00:00:00');
+    const isToday = d.date === today;
+    const on = d.active;
+    return `<div class="streak-cell ${on ? 'on' : ''} ${isToday ? 'today' : ''}">
+      <div class="streak-cell-dow">${isToday ? 'Today' : DOW[dt.getDay()]}</div>
+      <div class="streak-cell-fire">${on ? '🔥' : '·'}</div>
+      <div class="streak-cell-num">${d.streak}</div>
+      <div class="streak-cell-date">${dt.getDate()}/${dt.getMonth() + 1}</div>
+    </div>`;
+  }).join('');
+  return `<div class="streak-strip-wrap">
+    <div class="streak-strip-hdr">Streak history</div>
+    <div class="streak-strip">${cells}</div>
+  </div>`;
+}
+
 function buildDonut(categories) {
   const active = categories.filter(c => c.count > 0);
   if (active.length === 0) {
@@ -5769,6 +5996,7 @@ async function loadProfileAnalytics() {
         <div class="analytics-sparkline">${buildSparkline(a.daily_sec)}</div>
         <div class="analytics-days">${dayLabels.map(l => `<span>${l}</span>`).join('')}</div>
       </div>
+      ${buildStreakStrip(a.streak_history)}
       <div class="analytics-grid">
         <div class="analytics-tile">
           <div class="analytics-tile-ico" style="background:rgba(82,193,122,0.15);color:#52C17A">📖</div>
@@ -6263,7 +6491,7 @@ function renderBytes(arts, feed){
       </div>`;
     el.querySelectorAll('.b-open').forEach(o => o.addEventListener('click', e => { e.stopPropagation(); markSeen(a.id); openArticle(a); }));
     el.querySelector('.b-save').addEventListener('click', e => { e.stopPropagation(); byteToggle('saves', a, e.currentTarget, 'fa-bookmark', '🔖 Saved', 'save'); });
-    el.querySelector('.b-share').addEventListener('click', e => { e.stopPropagation(); shareArt(a.title||''); });
+    el.querySelector('.b-share').addEventListener('click', e => { e.stopPropagation(); shareArticleCard(a); });
     feed.appendChild(el);
   });
   hydrateByteCounts(arts.map(a => a.id));   // real like/comment counts

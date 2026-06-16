@@ -228,6 +228,18 @@ async def my_analytics(user_id: str = Depends(require_user)):
         longest = max(longest, run)
         prev = d
 
+    # Per-day running streak for the last 14 days (for the scrollable strip on
+    # the profile): each entry is the streak length as of that day.
+    streak_history = []
+    for i in range(13, -1, -1):
+        d = today - timedelta(days=i)
+        cur, run_d = d, 0
+        while cur in active_set:
+            run_d += 1
+            cur -= timedelta(days=1)
+        streak_history.append({"date": d.isoformat(), "streak": run_d,
+                               "active": d in active_set})
+
     cat_rows = await db.fetch(
         """
         SELECT io.pillar_id, COUNT(*) AS c
@@ -295,6 +307,7 @@ async def my_analytics(user_id: str = Depends(require_user)):
         "time_today_sec": time_today, "time_today_formatted": _fmt_duration(time_today),
         "time_week_sec": time_week, "time_week_formatted": _fmt_duration(time_week),
         "current_streak": current_streak, "longest_streak": longest,
+        "streak_history": streak_history,
         "daily_sec": daily_sec, "categories": categories, "top_category": top_category,
         "articles_today": int(articles_today), "articles_week": int(articles_week),
         "fastest_growth": fastest_growth,
