@@ -696,7 +696,7 @@ header {
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 52%;
 }
 .ao-share { margin-left: auto; color: var(--t2); font-size: 1rem; padding: 6px; cursor: pointer; }
-.ao-scroll { flex: 1; overflow-y: auto; padding-bottom: calc(var(--nh)+24px); }
+.ao-scroll { flex: 1; overflow-y: auto; overflow-x: hidden; padding-bottom: calc(var(--nh)+24px); }
 .ao-hero {
   width: 100%; aspect-ratio: 16/9; background: var(--bg3);
   position: relative; overflow: hidden;
@@ -3587,6 +3587,14 @@ function _loadImg(src, cross) {
     im.src = src;
   });
 }
+// News CDNs rarely send CORS headers (which taints the canvas and blocks PNG
+// export). Route through the free wsrv.nl image proxy, which adds the headers,
+// then fall back to a direct load.
+function _imgCandidates(url) {
+  const proxied = 'https://wsrv.nl/?url=' + encodeURIComponent(url) +
+                  '&w=1080&h=648&fit=cover&output=jpg&q=82';
+  return [proxied, url];
+}
 // Draw img onto ctx covering the box (object-fit: cover).
 function _coverDraw(ctx, img, x, y, w, h) {
   const ir = img.width / img.height, br = w / h;
@@ -3638,12 +3646,14 @@ async function buildByteCard(a) {
   bg.addColorStop(0, '#0B0B10'); bg.addColorStop(1, '#15151c');
   ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
 
-  // hero image area (top ~62%)
-  const heroH = Math.round(H * 0.60);
+  // hero image area (top ~48% — leaves room for the full summary below)
+  const heroH = Math.round(H * 0.48);
   let drew = false;
   if (a.image_url) {
-    try { const im = await _loadImg(a.image_url, true); _coverDraw(ctx, im, 0, 0, W, heroH); drew = true; }
-    catch (_) { /* CORS / load fail → gradient */ }
+    for (const src of _imgCandidates(a.image_url)) {
+      try { const im = await _loadImg(src, true); _coverDraw(ctx, im, 0, 0, W, heroH); drew = true; break; }
+      catch (_) { /* try next candidate, then gradient */ }
+    }
   }
   if (!drew) {
     const hg = ctx.createLinearGradient(0, 0, W, heroH);
@@ -3667,19 +3677,19 @@ async function buildByteCard(a) {
   // headline
   ctx.textBaseline = 'alphabetic';
   ctx.fillStyle = '#FFFFFF';
-  ctx.font = '800 60px -apple-system, system-ui, sans-serif';
-  const lines = _wrapText(ctx, a.title || '', W - 128, 4);
-  let ty = heroH + 96;
-  for (const ln of lines) { ctx.fillText(ln, 64, ty); ty += 76; }
+  ctx.font = '800 56px -apple-system, system-ui, sans-serif';
+  const lines = _wrapText(ctx, a.title || '', W - 128, 3);
+  let ty = heroH + 92;
+  for (const ln of lines) { ctx.fillText(ln, 64, ty); ty += 70; }
 
-  // source / summary snippet
-  const sub = (a.summary || a.source_name || '').toString();
+  // full summary — the complete text, not a cut-off sentence
+  const sub = (a.summary || a.preview || a.source_name || '').toString().trim();
   if (sub) {
-    ctx.fillStyle = 'rgba(255,255,255,0.62)';
-    ctx.font = '400 34px -apple-system, system-ui, sans-serif';
-    const sl = _wrapText(ctx, sub, W - 128, 3);
-    ty += 18;
-    for (const ln of sl) { ctx.fillText(ln, 64, ty); ty += 46; }
+    ctx.fillStyle = 'rgba(255,255,255,0.66)';
+    ctx.font = '400 33px -apple-system, system-ui, sans-serif';
+    const sl = _wrapText(ctx, sub, W - 128, 6);
+    ty += 20;
+    for (const ln of sl) { ctx.fillText(ln, 64, ty); ty += 44; }
   }
 
   // footer: small SherrByte logo + wordmark in the corner
@@ -3712,7 +3722,8 @@ async function shareArticleCard(a) {
     const blob = await buildByteCard(a);
     if (!blob) throw new Error('no blob');
     const file = new File([blob], 'sherrbyte-article.png', { type: 'image/png' });
-    const text = a.title + '\n\nvia SherrByte';
+    const summary = (a.summary || a.preview || '').toString().trim();
+    const text = a.title + (summary ? '\n\n' + summary : '') + '\n\nvia SherrByte';
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
       await navigator.share({ files: [file], text });
       return;
@@ -6678,6 +6689,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('saved-ct').textContent = ST.saves.length;
   gateAppDownloadCTA();
   loadFeed(true);
+  ActivityTracker.start();   // begin screen-time heartbeats (no-ops until signed in)
   // Markets/weather/Explore data load lazily when Explore is opened (navTo),
   // so startup only hits /feed — important for the cold free-tier backend.
 });
