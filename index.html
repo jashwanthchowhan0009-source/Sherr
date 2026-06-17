@@ -4091,6 +4091,23 @@ function renderStructuredFeed(articles, container, reset=false) {
 }
 
 // ── LOAD FEED ──
+// Instant-feed cache: the last good page-1 of the default view is stored so a
+// returning user sees real headlines immediately — even while the free backend
+// cold-starts — instead of a skeleton or "Waking the server". Refreshed in the
+// background; if the refresh fails (cold start), the cached feed simply stays.
+const _FEED_CACHE_KEY = 'sb-feedcache-v1';
+function _isDefaultFeedView() { return curChip === 'all' && homeActiveTab === 'foryou'; }
+function _readFeedCache() {
+  try {
+    const c = JSON.parse(localStorage.getItem(_FEED_CACHE_KEY) || 'null');
+    if (c && Array.isArray(c.arts) && c.arts.length) return c.arts;
+  } catch (e) {}
+  return null;
+}
+function _writeFeedCache(arts) {
+  try { localStorage.setItem(_FEED_CACHE_KEY, JSON.stringify({ t: Date.now(), arts: arts.slice(0, 24) })); } catch (e) {}
+}
+
 async function loadFeed(reset = false) {
   if (feedLoading) return;
   if (reset) {
@@ -4100,10 +4117,18 @@ async function loadFeed(reset = false) {
   feedLoading = true;
   const c = document.getElementById('home-feed');
 
-  // Skeleton on first page
+  // First page: show cached headlines instantly if we have them (so a cold
+  // backend never shows a blank skeleton / "Waking" wall); else a skeleton.
   if (feedPage === 1) {
-    c.innerHTML = '<div class="skel skel-hero"></div>' +
-      Array(4).fill('<div class="skel skel-card"></div>').join('');
+    const cached = _isDefaultFeedView() ? _readFeedCache() : null;
+    if (cached) {
+      c.innerHTML = '';
+      if (curChip === 'all') renderSectionTabs(c);
+      cached.forEach(a => { try { renderStandardCard(normalizeArticle(a), c); } catch (e) {} });
+    } else {
+      c.innerHTML = '<div class="skel skel-hero"></div>' +
+        Array(4).fill('<div class="skel skel-card"></div>').join('');
+    }
   }
 
   try {
@@ -4128,6 +4153,7 @@ async function loadFeed(reset = false) {
     }
     feedRetried = false; feedRetryCount = 0;   // server reached — reset cold-start retry budget
     const articles = (data.articles || []).map(normalizeArticle);
+    if (feedPage === 1 && articles.length && _isDefaultFeedView()) _writeFeedCache(articles);
     if (feedPage === 1 && articles[0]) feedTopId = articles[0].id;
 
     // Fetch continue-reading article only on first page if logged in
