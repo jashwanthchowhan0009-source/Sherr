@@ -3265,6 +3265,7 @@ function applyAuth(data) {
   ST.userId   = uid || ST.userId;
   if (data.username) ST.username = data.username;
   persist();
+  try { maybeAutoEnablePush(); } catch (e) {}   // installed app → offer push on sign-in
 }
 
 // Exchange the long-lived refresh token for a fresh access token. Returns true
@@ -4915,6 +4916,37 @@ async function requestPushPermission() {
     renderNotifs();
   } catch (e) { console.warn('FCM enable failed', e); toast('Could not enable notifications'); }
 }
+// Is the app running as an installed PWA / TWA (i.e. the user "downloaded" it)?
+function isInstalledApp() {
+  const mm = (q) => { try { return window.matchMedia && matchMedia(q).matches; } catch (e) { return false; } };
+  return mm('(display-mode: standalone)') || mm('(display-mode: fullscreen)') ||
+         mm('(display-mode: minimal-ui)') || navigator.standalone === true ||
+         (document.referrer || '').startsWith('android-app://');
+}
+// For the installed app, proactively turn on notifications once the user is
+// signed in. (The platform still requires the permission prompt — we just
+// trigger it for people who downloaded the app instead of waiting for the
+// Settings toggle.) Runs at most once per launch.
+let _autoPushTried = false;
+function maybeAutoEnablePush() {
+  try {
+    if (_autoPushTried) return;
+    if (!isInstalledApp()) return;                 // only the downloaded app
+    if (!ST.token) return;                          // must be signed in
+    if (!('Notification' in window)) return;
+    if (Notification.permission === 'denied') return;
+    if (Notification.permission === 'granted' && ST.push) return;  // already on
+    _autoPushTried = true;
+    setTimeout(() => { try { requestPushPermission(); } catch (e) {} }, 2500);
+  } catch (e) {}
+}
+// A fresh install fires this (in the browser tab) — re-arm so the next launch
+// of the installed app prompts for notifications.
+window.addEventListener('appinstalled', () => {
+  _autoPushTried = false;
+  setTimeout(maybeAutoEnablePush, 2000);
+});
+
 // Settings → "Send Test Notification": pushes "SherrByte test 🐯" to this account's devices.
 async function sendTestPush() {
   if (!ST.token) { toast('Sign in first'); return; }
@@ -5465,12 +5497,21 @@ async function bootstrapSession() {
     document.getElementById('ob-screen')?.classList.add('gone');
     updateSidebarAuth();
     loadUserPrefs(me);                     // restore saved feed cats/topics
+    maybeAutoEnablePush();                 // installed app + signed in → offer push
   } catch (e) {
-    // Session is dead and couldn't be refreshed → sign out cleanly.
-    switchUser('anon');
-    ST.token = null; ST.refresh = null; ST.userId = null; persist();
-    document.getElementById('ob-screen')?.classList.remove('gone');
-    updateSidebarAuth();
+    // Only sign out on a REAL auth failure (refresh also failed → 401/403).
+    // A cold/asleep/offline backend (timeout, network, 5xx) must NOT wipe the
+    // session — otherwise the user is forced to log in again every cold start.
+    const msg = String((e && e.message) || '');
+    const authDead = /HTTP 40[13]\b|unauthor/i.test(msg);
+    if (authDead) {
+      switchUser('anon');
+      ST.token = null; ST.refresh = null; ST.userId = null; persist();
+      document.getElementById('ob-screen')?.classList.remove('gone');
+      updateSidebarAuth();
+    }
+    // else: keep the stored session and stay signed in; it'll work once the
+    // backend is reachable again (the next api() call refreshes if needed).
   }
 }
 
