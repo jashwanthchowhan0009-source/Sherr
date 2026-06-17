@@ -75,6 +75,32 @@ PILLAR_KEYWORDS: dict[int, list[str]] = {
         "tennis", "wimbledon", "nba", "esports", "gaming", "wicket"],
 }
 
+# Source-feed → pillar hints. Used as the default bucket when keyword matching
+# finds nothing, so topic-specific feeds (e.g. "BBC Sport", "NYT Business") land
+# in the right category instead of all defaulting to tech. Keys are matched as
+# case-insensitive substrings of the source name.
+_SOURCE_PILLAR_HINTS: list[tuple[str, int]] = [
+    ("sport", 9), ("espn", 9), ("ign", 9), ("gamespot", 9),
+    ("business", 2), ("moneycontrol", 2), ("economic times", 2), ("mint", 2),
+    ("forbes", 2), ("fortune", 2),
+    ("tech", 3), ("verge", 3), ("wired", 3), ("ars technica", 3), ("engadget", 3),
+    ("gadgets", 3), ("science daily", 3), ("nasa", 3),
+    ("health", 6), ("healthline", 6), ("medical", 6),
+    ("arts", 4), ("culture", 4), ("variety", 4), ("deadline", 4), ("rolling stone", 4),
+    ("science", 5), ("earthsky", 5), ("yale e360", 5),
+    ("life", 8),
+    ("world", 1), ("guardian", 1), ("jazeera", 1),
+]
+
+
+def _source_pillar(source_name: str) -> int:
+    s = (source_name or "").lower()
+    for needle, pid in _SOURCE_PILLAR_HINTS:
+        if needle in s:
+            return pid
+    return 1  # neutral general-news bucket (society) rather than tech
+
+
 _INDIA_WORDS = ["india", "delhi", "mumbai", "bangalore", "chennai", "hyderabad", "kolkata",
                 "indian", "modi", "bjp", "congress", "rupee", "nifty", "sensex", "kerala", "tamil"]
 _LOCAL_WORDS = ["city", "district", "local", "municipal", "village", "town", "ward", "panchayat"]
@@ -82,7 +108,7 @@ _GLOBAL_WORDS = ["world", "global", "international", "nato", "china", "russia", 
                  "america", "washington", "beijing", "moscow", "london"]
 
 
-def classify_pillar(title: str, body: str) -> tuple[int, list[str]]:
+def classify_pillar(title: str, body: str, source_name: str = "") -> tuple[int, list[str]]:
     text = f"{title} {body}".lower()
     scores = {pid: 0 for pid in PILLARS}
     tags: list[str] = []
@@ -93,7 +119,7 @@ def classify_pillar(title: str, body: str) -> tuple[int, list[str]]:
                 tags.append(kw.title())
     best = max(scores, key=scores.get)
     if scores[best] == 0:
-        best = 3  # default to tech/science bucket
+        best = _source_pillar(source_name)  # fall back to the feed's natural pillar
     return best, list(dict.fromkeys(tags))[:8]
 
 
@@ -186,7 +212,7 @@ async def understand(article: ArticleIn) -> Understanding:
     entities = extract_entities(f"{article.title}. {body}")
 
     # Deterministic baseline (always computed; used directly if the LLM is off).
-    rule_pillar, rule_tags = classify_pillar(article.title, body)
+    rule_pillar, rule_tags = classify_pillar(article.title, body, article.source_name)
     scope = classify_scope(article.title, body)
 
     llm = await complete_json(
