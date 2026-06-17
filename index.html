@@ -3076,7 +3076,7 @@ const ActivityTracker = (() => {
   let articleMaxScroll = 0;
 
   async function sendHeartbeat(durationSec, articleId, scrollPct) {
-    if (!window.ST || !ST.token) return;
+    if (!ST || !ST.token) return;   // ST is a module-scope `let`, not on window
     try {
       await fetch(API_URL + '/activity/heartbeat', {
         method: 'POST',
@@ -3107,7 +3107,7 @@ const ActivityTracker = (() => {
   });
 
   window.addEventListener('beforeunload', () => {
-    if (currentArticleId && window.ST && ST.token) {
+    if (currentArticleId && ST && ST.token) {
       const elapsed = Math.min(60, Math.floor((Date.now() - articleStartTime) / 1000));
       navigator.sendBeacon?.(
         API_URL + '/activity/heartbeat',
