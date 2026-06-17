@@ -34,7 +34,7 @@ async def _ingest_job():
     """Background ingest cycle (imported lazily to keep startup light)."""
     from app.pipeline import run_cycle
     try:
-        await run_cycle()
+        await run_cycle(understand_concurrency=settings.understand_concurrency)
     except Exception as e:
         log.error("ingest cycle failed: %s", e, exc_info=True)
 
