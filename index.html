@@ -6507,26 +6507,33 @@ async function initBytes(){
 async function loadBytes(reset){
   if (bytesLoading) return; bytesLoading = true;
   const feed = document.getElementById('bytes-feed');
+  // Instant: paint cached bytes immediately so a cold backend never shows the
+  // "Waking the server" wall (the network load below refreshes them).
+  if (reset && !feed.querySelector('.byte')) {
+    const cached = _readFeedCache();
+    if (cached && cached.length) { feed.innerHTML = ''; try { renderBytes(cached.map(normalizeArticle), feed); } catch (e) {} }
+  }
   try {
     if (reset){ bytesPage = 1; bytesIds.clear(); }
     const data = await api(`/feed?page=${bytesPage}&limit=10`, { timeout: 45000 });   // long enough to ride a cold start
     const arts = (data.articles||[]).map(normalizeArticle).filter(a => a.id && !bytesIds.has(a.id));
     arts.forEach(a => bytesIds.add(a.id));
     _bytesRetried = false; bytesRetryCount = 0;  // a successful load re-arms the cold-start budget
-    if (reset) feed.innerHTML = '';
+    if (reset) feed.innerHTML = '';              // clear cached placeholder, render fresh
     if (reset && !arts.length) feed.innerHTML = '<div class="bytes-empty glass">No bytes yet — check back soon.</div>';
     else renderBytes(arts, feed);
     if (data.has_more) bytesPage++;
   } catch (e) {
-    if (reset && !feed.querySelector('.byte')) {
-      // Render free tier cold-starts (~30–60s). Retry several times with backoff,
-      // showing a calm waking state, before giving up to manual pull-to-retry.
-      if (bytesRetryCount < BYTES_MAX_RETRIES) {
-        bytesRetryCount++; bytesLoading = false;
-        feed.innerHTML = '<div class="bytes-empty glass">⏳ Waking the server…<br><span>The free server is starting up — this can take up to a minute.</span></div>';
-        setTimeout(() => loadBytes(true), 3000 + bytesRetryCount * 3000);
-        return;
-      }
+    const hasContent = !!feed.querySelector('.byte');
+    // Render free tier cold-starts (~30–60s). Retry with backoff; only show the
+    // "waking" wall when we have nothing cached to display.
+    if (reset && bytesRetryCount < BYTES_MAX_RETRIES) {
+      bytesRetryCount++; bytesLoading = false;
+      if (!hasContent) feed.innerHTML = '<div class="bytes-empty glass">⏳ Waking the server…<br><span>The free server is starting up — this can take up to a minute.</span></div>';
+      setTimeout(() => loadBytes(true), 3000 + bytesRetryCount * 3000);
+      return;
+    }
+    if (reset && !hasContent) {
       feed.innerHTML = '<div class="bytes-empty glass"><b>Bytes</b><br><span>Couldn\'t load — pull down to retry.</span></div>';
     }
   } finally { bytesLoading = false; }
