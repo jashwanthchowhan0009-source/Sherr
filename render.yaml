@@ -26,7 +26,10 @@ services:
   - type: web
     name: sherrbyte-api
     runtime: docker
-    plan: free
+    # Starter ($7/mo) — always-on, never spins down (no cold starts). Requires a
+    # payment method on the Render account; change the instance type in the
+    # Render dashboard (Service → Settings → Instance Type) to apply billing.
+    plan: starter
     rootDir: sherrbyte
     dockerfilePath: ./Dockerfile
     dockerContext: .
