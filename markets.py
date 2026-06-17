@@ -114,9 +114,11 @@ async def _coingecko(client: httpx.AsyncClient, ids: list[str]) -> dict:
             return {}
         out = {}
         name_map = {
-            "bitcoin":  "BTC",  "ethereum": "ETH",  "solana":  "SOL",
-            "dogecoin": "DOGE", "cardano":  "ADA",  "ripple":  "XRP",
-            "binancecoin": "BNB", "polkadot": "DOT",
+            "bitcoin":      "BTC",  "ethereum":     "ETH",  "solana":       "SOL",
+            "dogecoin":     "DOGE", "cardano":       "ADA",  "ripple":       "XRP",
+            "binancecoin":  "BNB",  "polkadot":      "DOT",
+            "avalanche-2":  "AVAX", "chainlink":     "LINK", "matic-network":"POL",
+            "litecoin":     "LTC",
         }
         for coin, d in r.json().items():
             sym = name_map.get(coin, coin.upper())
@@ -194,11 +196,16 @@ async def fetch_stocks(with_sparkline: bool = False) -> dict:
     if cached:
         return cached
 
-    symbols = ["^NSEI", "^BSESN", "^IXIC", "^GSPC", "^DJI", "^FTSE", "^N225"]
+    symbols = [
+        "^NSEI", "^BSESN", "^IXIC", "^GSPC", "^DJI", "^FTSE", "^N225",
+        "^GDAXI", "^FCHI", "^HSI", "^AXJO", "^BVSP", "^STI", "^KS11", "000001.SS",
+    ]
     labels  = {
-        "^NSEI":  "NIFTY",   "^BSESN": "SENSEX",  "^IXIC": "NASDAQ",
-        "^GSPC":  "SP500",   "^DJI":   "DOW",     "^FTSE": "FTSE",
-        "^N225":  "NIKKEI",
+        "^NSEI":    "NIFTY",    "^BSESN":   "SENSEX",   "^IXIC":    "NASDAQ",
+        "^GSPC":    "SP500",    "^DJI":     "DOW",       "^FTSE":    "FTSE",
+        "^N225":    "NIKKEI",   "^GDAXI":   "DAX",       "^FCHI":    "CAC40",
+        "^HSI":     "HANGSENG", "^AXJO":    "ASX200",    "^BVSP":    "BOVESPA",
+        "^STI":     "STI",      "^KS11":    "KOSPI",     "000001.SS":"SHANGHAI",
     }
 
     async with httpx.AsyncClient() as client:
@@ -223,6 +230,7 @@ async def fetch_crypto() -> dict:
         data = await _coingecko(client, [
             "bitcoin", "ethereum", "solana", "dogecoin",
             "cardano", "ripple", "binancecoin",
+            "avalanche-2", "chainlink", "matic-network", "litecoin",
         ])
     _cset("crypto", data, 45)
     return data
@@ -279,18 +287,39 @@ async def fetch_forex() -> dict:
 
 
 async def fetch_commodities() -> dict:
-    """Oil + natural gas — non-metal commodities."""
+    """Energy + agricultural commodities."""
     cached = _cget("commodities")
     if cached:
         return cached
     async with httpx.AsyncClient() as client:
-        data = await _yahoo(client, ["CL=F", "BZ=F", "NG=F"])
+        data = await _yahoo(client, ["CL=F", "BZ=F", "NG=F", "HG=F", "ZW=F", "CC=F"])
     result = {
         "WTI_CRUDE": data.get("CL=F", {}),
         "BRENT":     data.get("BZ=F", {}),
         "NATGAS":    data.get("NG=F", {}),
+        "COPPER":    data.get("HG=F", {}),
+        "WHEAT":     data.get("ZW=F", {}),
+        "COCOA":     data.get("CC=F", {}),
     }
     _cset("commodities", result, 120)
+    return result
+
+
+async def fetch_energy_stocks() -> dict:
+    """Major international energy companies."""
+    cached = _cget("energy_stocks")
+    if cached:
+        return cached
+    symbols = ["XOM", "CVX", "BP", "SHEL", "TTE", "COP", "SLB"]
+    labels  = {
+        "XOM": "EXXONMOBIL", "CVX": "CHEVRON",      "BP":  "BP",
+        "SHEL":"SHELL",       "TTE": "TOTALENERGIES","COP": "CONOCOPHILLIPS",
+        "SLB": "SCHLUMBERGER",
+    }
+    async with httpx.AsyncClient() as client:
+        base = await _yahoo(client, symbols)
+    result = {labels[s]: base.get(s, {}) for s in symbols}
+    _cset("energy_stocks", result, 300)
     return result
 
 
@@ -298,18 +327,20 @@ async def fetch_commodities() -> dict:
 @router.get("/markets")
 async def markets_all(spark: bool = False):
     """All markets in one call. Fetches each asset class in parallel."""
-    stocks, crypto, metals, forex, comm = await asyncio.gather(
-        fetch_stocks(spark), fetch_crypto(), fetch_metals(), fetch_forex(), fetch_commodities(),
+    stocks, crypto, metals, forex, comm, energy = await asyncio.gather(
+        fetch_stocks(spark), fetch_crypto(), fetch_metals(), fetch_forex(),
+        fetch_commodities(), fetch_energy_stocks(),
         return_exceptions=True,
     )
     _safe = lambda v: v if isinstance(v, dict) else {}
     return {
-        "stocks":      _safe(stocks),
-        "crypto":      _safe(crypto),
-        "metals":      _safe(metals),
-        "forex":       _safe(forex),
-        "commodities": _safe(comm),
-        "timestamp":   int(time.time()),
+        "stocks":        _safe(stocks),
+        "crypto":        _safe(crypto),
+        "metals":        _safe(metals),
+        "forex":         _safe(forex),
+        "commodities":   _safe(comm),
+        "energy_stocks": _safe(energy),
+        "timestamp":     int(time.time()),
         "providers": {
             "stocks_primary": "finnhub" if FINNHUB_KEY else "yahoo",
             "metals_primary": "metals-api" if METALS_API_KEY else "yahoo-futures",
@@ -342,3 +373,8 @@ async def markets_forex():
 @router.get("/markets/commodities")
 async def markets_commodities():
     return await fetch_commodities()
+
+
+@router.get("/markets/energy")
+async def markets_energy():
+    return await fetch_energy_stocks()

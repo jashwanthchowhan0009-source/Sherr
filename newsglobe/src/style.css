@@ -2,7 +2,7 @@
   --space:#05070f; --glass:rgba(255,255,255,0.08); --glass-strong:rgba(13,18,34,0.78);
   --hairline:rgba(255,255,255,0.16); --ink:#F1F5FF; --ink-dim:rgba(241,245,255,0.62);
   --amber:#FBBF24; --pin-news:#FB923C; --pin-mkt:#34D399; --pin-home:#6fd3ff;
-  --up:#34D399; --down:#FB7185; --radius:22px;
+  --pin-hotspot:#FF4D4D; --up:#34D399; --down:#FB7185; --radius:22px;
 }
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;overflow:hidden;background:#02040a;
@@ -44,6 +44,11 @@ html,body{height:100%;overflow:hidden;background:#02040a;
 #title .legend{display:flex;gap:11px;margin-top:9px;font-size:10.5px;color:var(--ink-dim);flex-wrap:wrap}
 #title .legend span{display:flex;align-items:center;gap:5px}
 #title .legend i{width:8px;height:8px;border-radius:50%}
+.cii-toggle{margin-top:9px;appearance:none;border:1px solid var(--hairline);
+  background:rgba(255,255,255,0.06);color:var(--ink-dim);font:600 11px/1 inherit;
+  padding:6px 11px;border-radius:11px;cursor:pointer;transition:background .15s,color .15s}
+.cii-toggle:hover{background:rgba(255,255,255,0.12)}
+.cii-toggle.active{background:rgba(239,68,68,0.18);border-color:rgba(239,68,68,0.5);color:#fca5a5}
 
 /* search */
 #searchbar{position:fixed;top:max(14px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);

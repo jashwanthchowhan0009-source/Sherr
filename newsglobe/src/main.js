@@ -36,6 +36,13 @@ const CITIES=[
  {id:'lagos',name:'Lagos',country:'Nigeria',lat:6.524,lon:3.379,type:'news'},
  {id:'moscow',name:'Moscow',country:'Russia',lat:55.755,lon:37.617,type:'news'},
  {id:'la',name:'Los Angeles',country:'USA',lat:34.052,lon:-118.244,type:'news'},
+ // geopolitical flashpoints (worldmonitor-style hotspot beacons)
+ {id:'kyiv',name:'Kyiv',country:'Ukraine',lat:50.450,lon:30.523,type:'hotspot'},
+ {id:'gaza',name:'Gaza City',country:'Palestine',lat:31.500,lon:34.467,type:'hotspot'},
+ {id:'tehran',name:'Tehran',country:'Iran',lat:35.689,lon:51.389,type:'hotspot'},
+ {id:'taipei',name:'Taipei',country:'Taiwan',lat:25.047,lon:121.517,type:'hotspot'},
+ {id:'pyongyang',name:'Pyongyang',country:'N. Korea',lat:39.019,lon:125.738,type:'hotspot'},
+ {id:'khartoum',name:'Khartoum',country:'Sudan',lat:15.552,lon:32.532,type:'hotspot'},
 ];
 
 /* ============ data layer (real APIs via /api proxies) ============ */
@@ -100,14 +107,14 @@ map.on('style.load',()=>{
 const byId=Object.fromEntries(CITIES.map(c=>[c.id,c]));
 const beaconsGeo={type:'FeatureCollection',features:CITIES.map(c=>({
   type:'Feature',geometry:{type:'Point',coordinates:[c.lon,c.lat]},properties:{id:c.id,name:c.name,type:c.type}}))};
-const colorExpr=['match',['get','type'],'mkt','#34D399','home','#6fd3ff','#FB923C'];
+const colorExpr=['match',['get','type'],'mkt','#34D399','home','#6fd3ff','hotspot','#FF4D4D','#FB923C'];
 
 map.on('load',()=>{
   document.getElementById('gl-load')?.classList.add('gone');
   if(!map.getSource('beacons')){
     map.addSource('beacons',{type:'geojson',data:beaconsGeo});
     map.addLayer({id:'beacon-glow',type:'circle',source:'beacons',paint:{
-      'circle-radius':['match',['get','type'],'home',18,13],'circle-color':colorExpr,'circle-blur':1,'circle-opacity':0.4}});
+      'circle-radius':['match',['get','type'],'home',18,'hotspot',10,13],'circle-color':colorExpr,'circle-blur':1,'circle-opacity':0.4}});
     map.addLayer({id:'beacon-core',type:'circle',source:'beacons',paint:{
       'circle-radius':['match',['get','type'],'home',5,3.5],'circle-color':'#ffffff',
       'circle-stroke-color':colorExpr,'circle-stroke-width':1.6,'circle-opacity':0.96}});
@@ -169,7 +176,10 @@ function newsCard(res,d){
   const items=arts.map(n=>{const t=esc(n.h||''),s=esc(n.s||'');const inner=n.url?`<a href="${esc(n.url)}" target="_blank" rel="noopener">${t}</a>`:t;return `<li>${inner}<span class="src">${s}${s?' · ':''}${esc(fmt(d))}</span></li>`;}).join('');
   return `<div class="card news"><div class="clabel">Headlines${scope}</div><ul>${items}</ul></div>`;
 }
-function footNote(){return `<div class="demo-note">Live · local/national news · Open-Meteo weather · Yahoo Finance markets.<br>Local depth & history vary by source.</div>`;}
+function footNote(){
+  const ciiLegend=ciiActive?'<br>🌡️ Stability: <span style="color:#22c55e">■</span> Stable &nbsp;<span style="color:#fbbf24">■</span> Moderate &nbsp;<span style="color:#f97316">■</span> Elevated &nbsp;<span style="color:#ef4444">■</span> Critical':'';
+  return `<div class="demo-note">Live · news · weather · markets · GDELT signals.${ciiLegend}</div>`;
+}
 
 async function renderPanel(){
   if(!activeLoc)return;
@@ -271,6 +281,47 @@ function updateSun(){
 if(sunSlider)sunSlider.addEventListener('input',()=>{selMin=+sunSlider.value;updateSun();});
 map.on('moveend',updateSun);
 map.on('load',updateSun);
+
+/* ============ Country Instability Index (worldmonitor-style heatmap) ============ */
+const CII_GEO='https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_110m_admin_0_countries.geojson';
+let ciiLoaded=false, ciiActive=false;
+
+async function initCII(){
+  if(ciiLoaded)return;
+  try{
+    const[ciiData,geo]=await Promise.all([
+      jget('/api/cii'),
+      fetch(CII_GEO).then(r=>r.json()),
+    ]);
+    const scores=ciiData.countries||{};
+    const enriched={...geo,features:geo.features.map(f=>({
+      ...f,properties:{...f.properties,cii:scores[f.properties.ISO_A2]??-1}
+    }))};
+    if(!map.getSource('cii'))map.addSource('cii',{type:'geojson',data:enriched});
+    if(!map.getLayer('cii-fill')){
+      map.addLayer({
+        id:'cii-fill',type:'fill',source:'cii',
+        filter:['>=',['get','cii'],0],
+        layout:{visibility:'none'},
+        paint:{
+          'fill-color':['interpolate',['linear'],['get','cii'],
+            0,'#166534', 25,'#22c55e', 50,'#fbbf24',
+            70,'#f97316', 85,'#ef4444', 100,'#7f1d1d'],
+          'fill-opacity':0.50,
+        }
+      },'beacon-glow');
+    }
+    ciiLoaded=true;
+  }catch(e){console.warn('CII layer failed:',e);}
+}
+
+function toggleCII(){
+  ciiActive=!ciiActive;
+  document.getElementById('ciiBtn')?.classList.toggle('active',ciiActive);
+  const show=()=>{if(map.getLayer('cii-fill'))map.setLayoutProperty('cii-fill','visibility',ciiActive?'visible':'none');};
+  if(!ciiLoaded){initCII().then(show);}else{show();}
+}
+document.getElementById('ciiBtn')?.addEventListener('click',toggleCII);
 
 /* ============ time dial ============ */
 const dateLabel=document.getElementById('dateLabel');
