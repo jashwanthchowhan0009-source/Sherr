@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#05070f">
+<title>SherrByte · Globe</title>
+  <script type="module" crossorigin src="/globe/assets/index-DzOIdcKD.js"></script>
+  <link rel="stylesheet" crossorigin href="/globe/assets/index-272MtW7s.css">
+</head>
+<body>
+<div id="space"></div>
+<div id="stars"></div>
+<div id="map"></div>
+<div id="suntint"></div>
+
+<div id="gl-load"><div class="gl-orb"></div><div class="gl-txt">Loading the world…</div></div>
+
+<div id="title" class="glass">
+  <h1><span class="dot"></span>SherrByte</h1>
+  <p>Search or tap anywhere for its news &amp; weather. Tap a market for index prices — then travel back in time.</p>
+  <div class="legend">
+    <span><i style="background:var(--pin-news)"></i>News</span>
+    <span><i style="background:var(--pin-mkt)"></i>Markets</span>
+    <span><i style="background:var(--pin-home)"></i>Anantapur</span>
+    <span><i style="background:var(--pin-hotspot)"></i>Flashpoint</span>
+    <span><i style="background:#fb923c"></i>Quakes</span>
+  </div>
+  <div class="toggles">
+    <button id="ciiBtn" class="cii-toggle" title="Toggle Country Instability Index heatmap">🌡️ Stability</button>
+    <button id="quakeBtn" class="cii-toggle" title="Toggle live earthquakes (USGS, past 24h, M2.5+)">🌍 Quakes</button>
+  </div>
+</div>
+
+<div id="searchbar" class="glass">
+  <input id="searchInput" type="text" placeholder="Search a city or place…" autocomplete="off" spellcheck="false">
+  <button id="homeBtn" title="Go to Anantapur">🏠</button>
+</div>
+<div id="searchResults" class="glass"></div>
+
+<div id="dial" class="glass" role="group" aria-label="Time machine">
+  <button id="bYearBack" title="Back one year">« Yr</button>
+  <button id="bMonthBack" title="Back one month">‹ Mo</button>
+  <button id="bDayBack" title="Back one day">‹ Day</button>
+  <div id="dateLabel"></div>
+  <button id="bDayFwd" title="Forward one day">Day ›</button>
+  <button id="bMonthFwd" title="Forward one month">Mo ›</button>
+  <button id="todayBtn">Today</button>
+</div>
+
+<div id="suntime" class="glass" title="Sun & light — drag to change time of day">
+  <span id="sunphase">☀️</span>
+  <input id="sunslider" type="range" min="0" max="1439" step="5" aria-label="Time of day">
+  <span id="sunlabel">12:00</span>
+</div>
+<div id="hint" class="glass">drag to spin · scroll / pinch to zoom · tap anywhere for news</div>
+<div id="panel" class="glass" aria-live="polite"></div>
+
+</body>
+</html>
