@@ -1,5 +1,5 @@
 /* SherrByte service worker — installability, offline shell, push-ready. */
-const CACHE = 'sherrbyte-v2';
+const CACHE = 'sherrbyte-v3';
 self.addEventListener('install', (e) => { self.skipWaiting(); });
 self.addEventListener('activate', (e) => {
   e.waitUntil((async () => {
@@ -16,6 +16,11 @@ self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET') return;
   if (req.mode === 'navigate') {
+    // Only manage the app shell ('/'). Let the embedded globe (/globe/) and any
+    // other navigations go straight to the network so they never overwrite the
+    // cached app shell.
+    const url = new URL(req.url);
+    if (url.origin !== location.origin || (url.pathname !== '/' && url.pathname !== '/index.html')) return;
     e.respondWith(
       fetch(req, { cache: 'no-store' }).then((r) => { const c = r.clone(); caches.open(CACHE).then((ca) => ca.put('/', c)); return r; })
                 .catch(() => caches.match('/'))
