@@ -90,7 +90,7 @@ async def personalized(
             q += " AND scope = 'local'"
         # Fresh-on-top: newest first — uses idx_info_published (fast, no full
         # computed sort). The decayed-importance variant timed out /feed.
-        q += f" ORDER BY published_at DESC LIMIT ${len(args)+1} OFFSET ${len(args)+2}"
+        q += f" ORDER BY published_at DESC, id DESC LIMIT ${len(args)+1} OFFSET ${len(args)+2}"
         args += [limit + 1, offset]
         rows = await db.fetch(q, *args)
         has_more = len(rows) > limit
@@ -112,7 +112,7 @@ async def personalized(
                io.scope, io.importance, io.sentiment, io.is_trending, io.source_name,
                io.image_url, io.thread_id, io.published_at
         FROM info_objects io JOIN feeds f ON f.info_object_id = io.id
-        WHERE f.user_id=$1 ORDER BY f.score DESC LIMIT $2 OFFSET $3
+        WHERE f.user_id=$1 ORDER BY f.score DESC, io.id DESC LIMIT $2 OFFSET $3
         """,
         user_id, limit + 1, offset,
     ) if has_prefs else []
@@ -120,7 +120,7 @@ async def personalized(
     if len(rows) < 5:
         # Cold start — fall back to global importance feed.
         rows = await db.fetch(
-            _SELECT + " ORDER BY published_at DESC LIMIT $1 OFFSET $2",
+            _SELECT + " ORDER BY published_at DESC, id DESC LIMIT $1 OFFSET $2",
             limit + 1, offset,
         )
 
@@ -138,7 +138,7 @@ async def trending(limit: int = Query(15, le=40)):
     if cached:
         return {"articles": cached, "cached": True}
     rows = await db.fetch(
-        _SELECT + " WHERE is_trending=TRUE ORDER BY importance DESC, published_at DESC LIMIT $1",
+        _SELECT + " WHERE is_trending=TRUE ORDER BY importance DESC, published_at DESC, id DESC LIMIT $1",
         limit,
     )
     articles = [row_to_feed_dict(r) for r in rows]
@@ -166,7 +166,7 @@ async def explore(
         q += " AND scope IN ('national','local')"
     elif scope == "local":
         q += " AND scope = 'local'"
-    q += f" ORDER BY published_at DESC LIMIT ${len(args)+1} OFFSET ${len(args)+2}"
+    q += f" ORDER BY published_at DESC, id DESC LIMIT ${len(args)+1} OFFSET ${len(args)+2}"
     args += [limit + 1, offset]
 
     rows = await db.fetch(q, *args)
