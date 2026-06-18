@@ -71,6 +71,28 @@ class _GroqLimiter:
 _groq_limiter = _GroqLimiter(settings.groq_tpm_limit, settings.groq_max_concurrency)
 
 
+# ─── provider quota circuit-breaker ─────────────────────────────────────────
+# Free tiers exhaust their quota mid-cycle. Without a breaker every remaining
+# article drags through the full retry/backoff before failing over, so one
+# ingest cycle can take 30+ min and almost nothing persists — the feed then
+# looks frozen on yesterday's stories. The first quota hit trips a cooldown
+# during which that provider short-circuits to None, so the rest of the batch
+# degrades to rule-based extraction *immediately* and the cycle finishes in
+# minutes. The provider auto-resumes once a probe after the cooldown succeeds.
+_cooldown_until: dict[str, float] = {"gemini": 0.0, "groq": 0.0}
+_COOLDOWN_SEC: dict[str, float] = {"gemini": 600.0, "groq": 120.0}
+
+
+def _in_cooldown(provider: str) -> bool:
+    return time.monotonic() < _cooldown_until.get(provider, 0.0)
+
+
+def _trip(provider: str) -> None:
+    _cooldown_until[provider] = time.monotonic() + _COOLDOWN_SEC.get(provider, 120.0)
+    log.warning("%s quota tripped — cooling down %.0fs; degrading to rules",
+                provider, _COOLDOWN_SEC.get(provider, 120.0))
+
+
 def _estimate_tokens(*texts: str) -> int:
     """Rough token estimate (~4 chars/token) — good enough for budgeting."""
     return sum(len(t) for t in texts) // 4 + 8
@@ -93,7 +115,7 @@ def _retry_after_seconds(resp: httpx.Response, attempt: int) -> float:
 async def _gemini(system: str, user: str, schema: Optional[dict],
                   temperature: float, max_tokens: int,
                   client: httpx.AsyncClient) -> Optional[str]:
-    if not settings.gemini_api_key:
+    if not settings.gemini_api_key or _in_cooldown("gemini"):
         return None
     url = (
         f"https://generativelanguage.googleapis.com/v1beta/models/"
@@ -114,7 +136,7 @@ async def _gemini(system: str, user: str, schema: Optional[dict],
             # Quota/rate-limit (429 or RESOURCE_EXHAUSTED) is the expected
             # free-tier failure — fail over to Groq quietly rather than spamming.
             if r.status_code == 429 or "RESOURCE_EXHAUSTED" in r.text:
-                log.warning("Gemini quota exceeded — failing over to Groq")
+                _trip("gemini")  # skip Gemini for the rest of the cycle
             else:
                 log.warning("Gemini HTTP %d: %s", r.status_code, r.text[:200])
             return None
@@ -129,7 +151,7 @@ async def _gemini(system: str, user: str, schema: Optional[dict],
 async def _groq(system: str, user: str, json_mode: bool,
                 temperature: float, max_tokens: int,
                 client: httpx.AsyncClient, model: Optional[str] = None) -> Optional[str]:
-    if not settings.groq_api_key:
+    if not settings.groq_api_key or _in_cooldown("groq"):
         return None
     body = {
         "model": model or settings.groq_model,
@@ -163,14 +185,11 @@ async def _groq(system: str, user: str, json_mode: bool,
                 return None
 
             if r.status_code == 429:
-                if attempt >= settings.groq_max_retries:
-                    log.warning("Groq 429 — gave up after %d retries", attempt)
-                    return None
-                delay = _retry_after_seconds(r, attempt)
-                log.warning("Groq 429 — backing off %.1fs (retry %d/%d)",
-                            delay, attempt + 1, settings.groq_max_retries)
-                await asyncio.sleep(delay)
-                continue
+                # Don't grind through the full retry/backoff — one 429 means the
+                # window is spent. Trip the breaker so the rest of the batch skips
+                # Groq and degrades to rules immediately; we auto-resume later.
+                _trip("groq")
+                return None
             if r.status_code != 200:
                 log.warning("Groq HTTP %d: %s", r.status_code, r.text[:200])
                 return None
