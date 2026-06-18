@@ -14,7 +14,6 @@
 <link rel="apple-touch-icon" href="/app-icon.png">
 <!-- NewsGlobe embed URL (separately deployed). Change here to point at the live globe. -->
 <meta name="newsglobe-url" content="https://sherr-theta.vercel.app/">
-<meta name="worldmonitor-url" content="https://worldmonitor.app/">
 <script>if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('/sw.js').catch(function(){});});}</script>
 <!-- Firebase Cloud Messaging (push notifications only) -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -1294,7 +1293,7 @@ header {
 /* ═══════════════════════════════════
    SUB PAGES
 ═══════════════════════════════════ */
-/* ── Globe cards (World Monitor + News Globe): Explore cards + shared fullscreen embed overlay ── */
+/* ── Globe: Explore card + fullscreen embed overlay ── */
 .globe-card { display: flex; align-items: center; gap: 13px; margin: 4px 16px 14px;
   padding: 14px 16px; border-radius: var(--r-card, 18px); cursor: pointer;
   background: linear-gradient(135deg, #02239E 0%, #0652B5 45%, #0EB7D6 100%);
@@ -2743,12 +2742,12 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   <!-- Category icons: All Stories + Arts, Well-being, Business, … (filters the feed below) -->
   <div class="exp-cat-row" id="exp-cat-row"></div>
 
-  <!-- World Monitor: opens the live global-intelligence globe in the fullscreen iframe overlay -->
-  <div class="globe-card tap" onclick="openWorldMonitor()" role="button" aria-label="Open World Monitor globe">
-    <div class="globe-card-emoji">🌐</div>
+  <!-- Globe: opens SherrByte's own self-hosted live globe in the fullscreen iframe overlay -->
+  <div class="globe-card tap" onclick="openGlobeCard()" role="button" aria-label="Open the globe">
+    <div class="globe-card-emoji">🌍</div>
     <div class="globe-card-text">
-      <div class="globe-card-title">World Monitor</div>
-      <div class="globe-card-sub">Live global intelligence — spin the 3D globe</div>
+      <div class="globe-card-title">Globe</div>
+      <div class="globe-card-sub">Spin the world — live news, markets &amp; stability</div>
     </div>
     <div class="globe-card-arr"><i class="fa-solid fa-chevron-right"></i></div>
   </div>
@@ -2970,7 +2969,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   <img id="mv-img" class="mv-img" alt="">
 </div>
 
-<!-- ════════ GLOBE EMBED OVERLAY — shared by World Monitor + News Globe (iframe injected lazily) ════════ -->
+<!-- ════════ GLOBE EMBED OVERLAY (iframe injected lazily) ════════ -->
 <div id="globe-overlay" class="globe-overlay" aria-hidden="true">
   <div class="globe-loader" id="globe-loader">
     <img class="globe-loader-logo" src="/tiger-logo.png" alt="">
@@ -4378,17 +4377,16 @@ function openMediaViewer(src){
 }
 function closeMediaViewer(){ document.getElementById('media-viewer')?.classList.remove('on'); }
 
-// ── Globe embed (World Monitor + News Globe): lazy iframe, loading state, memory-safe teardown ──
-const NEWSGLOBE_URL    = (document.querySelector('meta[name="newsglobe-url"]')?.content || '').trim();
-const WORLDMONITOR_URL = (document.querySelector('meta[name="worldmonitor-url"]')?.content || '').trim();
+// ── Globe embed: lazy iframe, loading state, memory-safe teardown ──
+const NEWSGLOBE_URL = (document.querySelector('meta[name="newsglobe-url"]')?.content || '').trim();
 // Card entry point (named so inline onclick can reach it).
-function openWorldMonitor(){ openGlobe(WORLDMONITOR_URL, 'World Monitor'); }
+function openGlobeCard(){ openGlobe(NEWSGLOBE_URL, 'Globe'); }
 function openGlobe(url, title){
   const ov = document.getElementById('globe-overlay');
   if (!ov || ov.classList.contains('on')) return;
   const host = document.getElementById('globe-frame-host');
   const loader = document.getElementById('globe-loader');
-  const label = title || 'News Globe';
+  const label = title || 'Globe';
   const lt = loader.querySelector('.globe-loader-text');
   if (lt) lt.textContent = 'Loading ' + label + '…';
   loader.classList.remove('gone');                 // show loading state
