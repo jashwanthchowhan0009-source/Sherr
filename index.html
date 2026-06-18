@@ -14,6 +14,7 @@
 <link rel="apple-touch-icon" href="/app-icon.png">
 <!-- NewsGlobe embed URL (separately deployed). Change here to point at the live globe. -->
 <meta name="newsglobe-url" content="https://sherr-theta.vercel.app/">
+<meta name="worldmonitor-url" content="https://worldmonitor.app/">
 <script>if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('/sw.js').catch(function(){});});}</script>
 <!-- Firebase Cloud Messaging (push notifications only) -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -1293,7 +1294,7 @@ header {
 /* ═══════════════════════════════════
    SUB PAGES
 ═══════════════════════════════════ */
-/* ── News Globe: Explore card + fullscreen embed overlay ── */
+/* ── Globe cards (World Monitor + News Globe): Explore cards + shared fullscreen embed overlay ── */
 .globe-card { display: flex; align-items: center; gap: 13px; margin: 4px 16px 14px;
   padding: 14px 16px; border-radius: var(--r-card, 18px); cursor: pointer;
   background: linear-gradient(135deg, #02239E 0%, #0652B5 45%, #0EB7D6 100%);
@@ -2742,6 +2743,25 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   <!-- Category icons: All Stories + Arts, Well-being, Business, … (filters the feed below) -->
   <div class="exp-cat-row" id="exp-cat-row"></div>
 
+  <!-- Globe entry points: each opens a different globe in the fullscreen iframe overlay -->
+  <div class="globe-card tap" onclick="openWorldMonitor()" role="button" aria-label="Open World Monitor globe">
+    <div class="globe-card-emoji">🌐</div>
+    <div class="globe-card-text">
+      <div class="globe-card-title">World Monitor</div>
+      <div class="globe-card-sub">Live global intelligence — spin the 3D globe</div>
+    </div>
+    <div class="globe-card-arr"><i class="fa-solid fa-chevron-right"></i></div>
+  </div>
+  <div class="globe-card tap" onclick="openNewsGlobe()" role="button" aria-label="Open News Globe"
+       style="background:linear-gradient(135deg,#0B3D2E 0%,#0E7C5A 45%,#22C55E 100%);box-shadow:0 10px 26px rgba(34,197,94,0.28),inset 0 1px 0 rgba(255,255,255,0.18);">
+    <div class="globe-card-emoji">🌍</div>
+    <div class="globe-card-text">
+      <div class="globe-card-title">News Globe</div>
+      <div class="globe-card-sub">Instability index, flashpoints, local news &amp; markets</div>
+    </div>
+    <div class="globe-card-arr"><i class="fa-solid fa-chevron-right"></i></div>
+  </div>
+
   <!-- At a Glance: Weather + Live Markets -->
   <div class="exp-sec-hdr">
     <div class="exp-sec-hdr-title"><i class="fa-solid fa-chart-simple"></i> At a Glance</div>
@@ -2959,14 +2979,14 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   <img id="mv-img" class="mv-img" alt="">
 </div>
 
-<!-- ════════ NEWS GLOBE EMBED OVERLAY (iframe injected lazily) ════════ -->
+<!-- ════════ GLOBE EMBED OVERLAY — shared by World Monitor + News Globe (iframe injected lazily) ════════ -->
 <div id="globe-overlay" class="globe-overlay" aria-hidden="true">
   <div class="globe-loader" id="globe-loader">
     <img class="globe-loader-logo" src="/tiger-logo.png" alt="">
-    <div class="globe-loader-text">Loading News Globe…</div>
+    <div class="globe-loader-text">Loading…</div>
   </div>
   <div id="globe-frame-host" class="globe-frame-host"></div>
-  <button class="globe-close tap" onclick="closeGlobe()" aria-label="Close News Globe">✕</button>
+  <button class="globe-close tap" onclick="closeGlobe()" aria-label="Close globe">✕</button>
 </div>
 
 <!-- ════════ FEED EDIT MODAL ════════ -->
@@ -4367,22 +4387,29 @@ function openMediaViewer(src){
 }
 function closeMediaViewer(){ document.getElementById('media-viewer')?.classList.remove('on'); }
 
-// ── News Globe embed: lazy iframe, loading state, memory-safe teardown ──
-const NEWSGLOBE_URL = (document.querySelector('meta[name="newsglobe-url"]')?.content || '').trim();
-function openGlobe(){
+// ── Globe embed (World Monitor + News Globe): lazy iframe, loading state, memory-safe teardown ──
+const NEWSGLOBE_URL    = (document.querySelector('meta[name="newsglobe-url"]')?.content || '').trim();
+const WORLDMONITOR_URL = (document.querySelector('meta[name="worldmonitor-url"]')?.content || '').trim();
+// Card entry points (named so inline onclick can reach them).
+function openWorldMonitor(){ openGlobe(WORLDMONITOR_URL, 'World Monitor'); }
+function openNewsGlobe(){    openGlobe(NEWSGLOBE_URL,    'News Globe');    }
+function openGlobe(url, title){
   const ov = document.getElementById('globe-overlay');
   if (!ov || ov.classList.contains('on')) return;
   const host = document.getElementById('globe-frame-host');
   const loader = document.getElementById('globe-loader');
+  const label = title || 'News Globe';
+  const lt = loader.querySelector('.globe-loader-text');
+  if (lt) lt.textContent = 'Loading ' + label + '…';
   loader.classList.remove('gone');                 // show loading state
   // Lazily create the iframe only now (never preloaded).
   const f = document.createElement('iframe');
   f.className = 'globe-frame';
-  f.title = 'News Globe';
+  f.title = label;
   f.setAttribute('allow', 'accelerometer; gyroscope; fullscreen; geolocation');
   f.setAttribute('referrerpolicy', 'no-referrer-when-downgrade');
   f.addEventListener('load', () => loader.classList.add('gone'));
-  f.src = NEWSGLOBE_URL || 'about:blank';
+  f.src = url || NEWSGLOBE_URL || 'about:blank';
   host.appendChild(f);
   ov.classList.add('on');
   ov.setAttribute('aria-hidden', 'false');
