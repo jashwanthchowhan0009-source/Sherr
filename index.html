@@ -2743,21 +2743,12 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   <!-- Category icons: All Stories + Arts, Well-being, Business, … (filters the feed below) -->
   <div class="exp-cat-row" id="exp-cat-row"></div>
 
-  <!-- Globe entry points: each opens a different globe in the fullscreen iframe overlay -->
+  <!-- World Monitor: opens the live global-intelligence globe in the fullscreen iframe overlay -->
   <div class="globe-card tap" onclick="openWorldMonitor()" role="button" aria-label="Open World Monitor globe">
     <div class="globe-card-emoji">🌐</div>
     <div class="globe-card-text">
       <div class="globe-card-title">World Monitor</div>
       <div class="globe-card-sub">Live global intelligence — spin the 3D globe</div>
-    </div>
-    <div class="globe-card-arr"><i class="fa-solid fa-chevron-right"></i></div>
-  </div>
-  <div class="globe-card tap" onclick="openNewsGlobe()" role="button" aria-label="Open News Globe"
-       style="background:linear-gradient(135deg,#0B3D2E 0%,#0E7C5A 45%,#22C55E 100%);box-shadow:0 10px 26px rgba(34,197,94,0.28),inset 0 1px 0 rgba(255,255,255,0.18);">
-    <div class="globe-card-emoji">🌍</div>
-    <div class="globe-card-text">
-      <div class="globe-card-title">News Globe</div>
-      <div class="globe-card-sub">Instability index, flashpoints, local news &amp; markets</div>
     </div>
     <div class="globe-card-arr"><i class="fa-solid fa-chevron-right"></i></div>
   </div>
@@ -4390,9 +4381,8 @@ function closeMediaViewer(){ document.getElementById('media-viewer')?.classList.
 // ── Globe embed (World Monitor + News Globe): lazy iframe, loading state, memory-safe teardown ──
 const NEWSGLOBE_URL    = (document.querySelector('meta[name="newsglobe-url"]')?.content || '').trim();
 const WORLDMONITOR_URL = (document.querySelector('meta[name="worldmonitor-url"]')?.content || '').trim();
-// Card entry points (named so inline onclick can reach them).
+// Card entry point (named so inline onclick can reach it).
 function openWorldMonitor(){ openGlobe(WORLDMONITOR_URL, 'World Monitor'); }
-function openNewsGlobe(){    openGlobe(NEWSGLOBE_URL,    'News Globe');    }
 function openGlobe(url, title){
   const ov = document.getElementById('globe-overlay');
   if (!ov || ov.classList.contains('on')) return;
