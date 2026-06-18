@@ -10,6 +10,7 @@ const dayIndex=d=>Math.floor(d.getTime()/86400000);
 const fmt=d=>d.toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'});
 const isoKey=d=>d.toISOString().slice(0,10);
 const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function timeAgo(ms){const s=Math.max(0,(Date.now()-ms)/1000);if(s<60)return Math.floor(s)+'s ago';const m=s/60;if(m<60)return Math.floor(m)+'m ago';const h=m/60;if(h<24)return Math.floor(h)+'h ago';return Math.floor(h/24)+'d ago';}
 
 /* ============ featured locations (beacons + market data) ============ */
 const CITIES=[
@@ -124,9 +125,10 @@ map.on('load',()=>{
       'symbol-sort-key':['match',['get','type'],'home',0,'mkt',1,2]},
       paint:{'text-color':'#eef4ff','text-halo-color':'#04070f','text-halo-width':1.3}});
   }
-  let pt=0;                                   // gentle beacon pulse (opacity)
+  let pt=0;                                   // gentle beacon + quake pulse (opacity)
   (function pulse(){pt+=0.04;
     if(map.getLayer('beacon-glow'))map.setPaintProperty('beacon-glow','circle-opacity',0.3+0.18*(0.5+0.5*Math.sin(pt)));
+    if(quakesActive&&map.getLayer('quake-glow'))map.setPaintProperty('quake-glow','circle-opacity',0.22+0.22*(0.5+0.5*Math.sin(pt*1.4)));
     requestAnimationFrame(pulse);})();
 });
 setTimeout(()=>document.getElementById('gl-load')?.classList.add('gone'),9000);
@@ -142,6 +144,10 @@ function flyToCity(lat,lon){
 map.on('click',async e=>{
   document.getElementById('hint')?.classList.add('gone');
   const box=[[e.point.x-9,e.point.y-9],[e.point.x+9,e.point.y+9]];
+  if(quakesActive&&map.getLayer('quake-core')){
+    const qh=map.queryRenderedFeatures(box,{layers:['quake-core','quake-glow']});
+    if(qh.length){openQuake(qh[0].properties,qh[0].geometry.coordinates);return;}
+  }
   const hits=map.queryRenderedFeatures(box,{layers:['beacon-glow','beacon-core']});
   if(hits.length){const c=byId[hits[0].properties.id];if(c){flyToCity(c.lat,c.lon);openLocation(c);return;}}
   const lat=e.lngLat.lat, lon=e.lngLat.lng;
@@ -176,15 +182,29 @@ function newsCard(res,d){
   const items=arts.map(n=>{const t=esc(n.h||''),s=esc(n.s||'');const inner=n.url?`<a href="${esc(n.url)}" target="_blank" rel="noopener">${t}</a>`:t;return `<li>${inner}<span class="src">${s}${s?' · ':''}${esc(fmt(d))}</span></li>`;}).join('');
   return `<div class="card news"><div class="clabel">Headlines${scope}</div><ul>${items}</ul></div>`;
 }
+function quakeCard(q){
+  const mag=q.mag!=null?(+q.mag).toFixed(1):'—';
+  const sev=q.mag>=6?'down':q.mag>=4.5?'':'up';
+  const depth=q.depth!=null?Math.round(q.depth)+' km deep':'';
+  const when=q.time?timeAgo(q.time):'';
+  const meta=[depth,when].filter(Boolean).join(' · ');
+  return `<div class="card stock"><div class="clabel">Earthquake · USGS</div>`+
+    `<div class="srow"><span class="sname">${esc(q.place||'Seismic event')}</span><span class="sval">M ${mag}</span></div>`+
+    `<div class="schg ${sev}">${q.mag>=6?'⚠️ Major':q.mag>=4.5?'Moderate':'Minor'} quake${meta?' · '+esc(meta):''}</div>`+
+    (q.url?`<div style="margin-top:8px;font-size:12px"><a href="${esc(q.url)}" target="_blank" rel="noopener">USGS event details ↗</a></div>`:'')+
+    `</div>`;
+}
 function footNote(){
   const ciiLegend=ciiActive?'<br>🌡️ Stability: <span style="color:#22c55e">■</span> Stable &nbsp;<span style="color:#fbbf24">■</span> Moderate &nbsp;<span style="color:#f97316">■</span> Elevated &nbsp;<span style="color:#ef4444">■</span> Critical':'';
-  return `<div class="demo-note">Live · news · weather · markets · GDELT signals.${ciiLegend}</div>`;
+  const quakeLegend=quakesActive?'<br>🌍 Quakes (USGS · 24h): <span style="color:#fde047">●</span> M2.5 &nbsp;<span style="color:#fb923c">●</span> M4.5 &nbsp;<span style="color:#ef4444">●</span> M6+':'';
+  return `<div class="demo-note">Live · news · weather · markets · GDELT signals.${ciiLegend}${quakeLegend}</div>`;
 }
 
 async function renderPanel(){
   if(!activeLoc)return;
   const c=activeLoc, d=viewDate, iso=isoKey(d), token=++panelToken;
   let shell=head(c,d);
+  if(c._quake)shell+=quakeCard(c._quake);
   if(c.indices)shell+=c.indices.map(()=>loadingCard('Index',2)).join('');
   shell+=loadingCard('Weather',1)+loadingCard('Headlines',3)+footNote();
   panel.innerHTML=shell;bindClose();
@@ -198,6 +218,7 @@ async function renderPanel(){
   const wx=val(settled[0]), news=val(settled[1]);
   const stocks=c.indices?c.indices.map((ix,i)=>val(settled[2+i])):[];
   let html=head(c,d);
+  if(c._quake)html+=quakeCard(c._quake);
   if(c.indices)html+=c.indices.map((ix,i)=>stockCard(ix,stocks[i])).join('');
   html+=weatherCard(wx)+newsCard(news,d)+footNote();
   panel.innerHTML=html;bindClose();
@@ -322,6 +343,45 @@ function toggleCII(){
   if(!ciiLoaded){initCII().then(show);}else{show();}
 }
 document.getElementById('ciiBtn')?.addEventListener('click',toggleCII);
+
+/* ============ live earthquakes (USGS feed — keyless, CORS, past 24h M2.5+) ============ */
+const QUAKE_FEED='https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_day.geojson';
+let quakesLoaded=false, quakesActive=false;
+
+async function initQuakes(){
+  if(quakesLoaded)return;
+  try{
+    const data=await jget(QUAKE_FEED);
+    if(!map.getSource('quakes'))map.addSource('quakes',{type:'geojson',data});
+    const before=map.getLayer('beacon-glow')?'beacon-glow':undefined;
+    if(!map.getLayer('quake-glow')){
+      map.addLayer({id:'quake-glow',type:'circle',source:'quakes',layout:{visibility:'none'},paint:{
+        'circle-radius':['interpolate',['linear'],['get','mag'],2.5,7,5,18,7,38],
+        'circle-color':['interpolate',['linear'],['get','mag'],2.5,'#fde047',4.5,'#fb923c',6,'#ef4444',8,'#7f1d1d'],
+        'circle-blur':1,'circle-opacity':0.0}},before);
+    }
+    if(!map.getLayer('quake-core')){
+      map.addLayer({id:'quake-core',type:'circle',source:'quakes',layout:{visibility:'none'},paint:{
+        'circle-radius':['interpolate',['linear'],['get','mag'],2.5,2.5,5,6,7,12],
+        'circle-color':['interpolate',['linear'],['get','mag'],2.5,'#fef08a',4.5,'#fb923c',6,'#ef4444',8,'#fca5a5'],
+        'circle-stroke-color':'#1a0a0a','circle-stroke-width':0.8,'circle-opacity':0.95}},before);
+    }
+    quakesLoaded=true;
+  }catch(e){console.warn('Quakes layer failed:',e);}
+}
+function toggleQuakes(){
+  quakesActive=!quakesActive;
+  document.getElementById('quakeBtn')?.classList.toggle('active',quakesActive);
+  const show=()=>['quake-glow','quake-core'].forEach(id=>{if(map.getLayer(id))map.setLayoutProperty(id,'visibility',quakesActive?'visible':'none');});
+  if(!quakesLoaded){initQuakes().then(show);}else{show();}
+}
+document.getElementById('quakeBtn')?.addEventListener('click',toggleQuakes);
+function openQuake(p,coords){
+  openLocation({name:'M '+(p.mag!=null?(+p.mag).toFixed(1):'?')+' earthquake',country:p.place||'',
+    lat:coords[1],lon:coords[0],_quake:{mag:p.mag,place:p.place,time:+p.time,depth:coords[2],url:p.url}});
+}
+map.on('mouseenter','quake-core',()=>{map.getCanvas().style.cursor='pointer';});
+map.on('mouseleave','quake-core',()=>{map.getCanvas().style.cursor='';});
 
 /* ============ time dial ============ */
 const dateLabel=document.getElementById('dateLabel');
