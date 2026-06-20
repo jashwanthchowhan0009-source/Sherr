@@ -3,46 +3,47 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-<meta name="theme-color" content="#05070f">
+<meta name="theme-color" content="#070D18">
 <title>WorldMonitor</title>
-  <script type="module" crossorigin src="/globe/assets/index-DKVK5yKv.js"></script>
-  <link rel="stylesheet" crossorigin href="/globe/assets/index-1vY_g4bn.css">
+  <script type="module" crossorigin src="/globe/assets/index-B11JRPMy.js"></script>
+  <link rel="stylesheet" crossorigin href="/globe/assets/index-Bvbtte1E.css">
 </head>
 <body>
-<div id="space"></div>
-<div id="stars"></div>
 <div id="map"></div>
 <div id="suntint"></div>
 
-<div id="gl-load"><div class="gl-orb"></div><div class="gl-txt">Loading the world…</div></div>
-
-<div id="title" class="glass">
-  <div class="brand-row">
-    <div class="brand-icon">🌐</div>
-    <h1>World<span>Monitor</span></h1>
-  </div>
-  <p>Search or tap anywhere for news &amp; weather. Tap a market for index prices — then travel back in time.</p>
-  <div class="legend">
-    <span><i style="background:var(--pin-news)"></i>News</span>
-    <span><i style="background:var(--pin-mkt)"></i>Markets</span>
-    <span><i style="background:var(--pin-home)"></i>Home</span>
-    <span><i style="background:var(--pin-hotspot)"></i>Flashpoint</span>
-    <span><i style="background:#fb923c"></i>Quakes</span>
-  </div>
-  <div class="toggles">
-    <button id="ciiBtn" class="cii-toggle" title="Toggle Country Instability Index heatmap">🌡️ Stability</button>
-    <button id="quakeBtn" class="cii-toggle" title="Toggle live earthquakes (USGS, past 24h, M2.5+)">🌍 Quakes</button>
-  </div>
+<div id="gl-load">
+  <div class="gl-orb"></div>
+  <div class="gl-txt">Loading the world…</div>
 </div>
 
-<div id="searchbar" class="glass">
-  <input id="searchInput" type="text" placeholder="Search a city or place…" autocomplete="off" spellcheck="false">
-  <button id="homeBtn" title="Go to Anantapur">🏠</button>
-</div>
-<div id="searchResults" class="glass"></div>
+<!-- Top navigation bar -->
+<nav id="topnav">
+  <div class="nav-brand">
+    <div class="nav-icon">🌐</div>
+    <span class="nav-title">WorldMonitor</span>
+  </div>
 
-<div id="dial" class="glass" role="group" aria-label="Time machine">
-  <button id="bYearBack" title="Back one year">« Yr</button>
+  <div id="searchbar">
+    <svg class="srch-ico" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <circle cx="8.5" cy="8.5" r="5.5" stroke="currentColor" stroke-width="1.6"/>
+      <path d="M14 14l3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+    </svg>
+    <input id="searchInput" type="text" placeholder="Search a city…" autocomplete="off" spellcheck="false">
+    <button id="homeBtn" title="Go to Anantapur">🏠</button>
+  </div>
+
+  <div class="nav-actions">
+    <button id="ciiBtn" class="nav-toggle" title="Country Instability Index heatmap">🌡️ <span>Stability</span></button>
+    <button id="quakeBtn" class="nav-toggle" title="Live earthquakes (USGS · 24h · M2.5+)">🌍 <span>Quakes</span></button>
+  </div>
+</nav>
+
+<div id="searchResults"></div>
+
+<!-- Time machine — bottom centre -->
+<div id="dial" role="group" aria-label="Time machine">
+  <button id="bYearBack" title="Back one year">«</button>
   <button id="bMonthBack" title="Back one month">‹ Mo</button>
   <button id="bDayBack" title="Back one day">‹ Day</button>
   <div id="dateLabel"></div>
@@ -51,13 +52,21 @@
   <button id="todayBtn">Today</button>
 </div>
 
-<div id="suntime" class="glass" title="Sun & light — drag to change time of day">
+<!-- Sun slider — desktop only -->
+<div id="suntime" title="Drag to change time of day">
   <span id="sunphase">☀️</span>
   <input id="sunslider" type="range" min="0" max="1439" step="5" aria-label="Time of day">
   <span id="sunlabel">12:00</span>
 </div>
-<div id="hint" class="glass">drag to spin · scroll / pinch to zoom · tap anywhere for news</div>
-<div id="panel" class="glass" aria-live="polite"></div>
+
+<!-- City / data panel -->
+<div id="panel" aria-live="polite"></div>
+
+<!-- Bottom footer -->
+<footer id="footer">
+  <span class="footer-brand">🌐 WORLDMONITOR</span>
+  <span class="footer-sub">Live news · Markets · Flashpoints · Stability</span>
+</footer>
 
 </body>
 </html>
