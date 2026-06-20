@@ -195,7 +195,7 @@ function quakeCard(q){
     `</div>`;
 }
 function footNote(){
-  const ciiLegend=ciiActive?'<br>🌡️ Stability: <span style="color:#22c55e">■</span> Stable &nbsp;<span style="color:#fbbf24">■</span> Moderate &nbsp;<span style="color:#f97316">■</span> Elevated &nbsp;<span style="color:#ef4444">■</span> Critical':'';
+  const ciiLegend=ciiActive?'<br>🌡️ Stability: <span style="color:#30D158">■</span> Stable &nbsp;<span style="color:#FF9F0A">■</span> Moderate &nbsp;<span style="color:#f97316">■</span> Elevated &nbsp;<span style="color:#FF453A">■</span> Critical':'';
   const quakeLegend=quakesActive?'<br>🌍 Quakes (USGS · 24h): <span style="color:#fde047">●</span> M2.5 &nbsp;<span style="color:#fb923c">●</span> M4.5 &nbsp;<span style="color:#ef4444">●</span> M6+':'';
   return `<div class="demo-note">Live · news · weather · markets · GDELT signals.${ciiLegend}${quakeLegend}</div>`;
 }
@@ -326,8 +326,8 @@ async function initCII(){
         layout:{visibility:'none'},
         paint:{
           'fill-color':['interpolate',['linear'],['get','cii'],
-            0,'#166534', 25,'#22c55e', 50,'#fbbf24',
-            70,'#f97316', 85,'#ef4444', 100,'#7f1d1d'],
+            0,'#166534', 25,'#30D158', 50,'#FF9F0A',
+            70,'#f97316', 85,'#FF453A', 100,'#7f1d1d'],
           'fill-opacity':0.50,
         }
       },'beacon-glow');

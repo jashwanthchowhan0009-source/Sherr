@@ -2742,6 +2742,16 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   <!-- Category icons: All Stories + Arts, Well-being, Business, … (filters the feed below) -->
   <div class="exp-cat-row" id="exp-cat-row"></div>
 
+  <!-- WorldMonitor: opens the geopolitical monitoring globe in a fullscreen iframe overlay -->
+  <div class="globe-card tap" onclick="openGlobeCard()" role="button" aria-label="Open WorldMonitor">
+    <div class="globe-card-emoji">🌐</div>
+    <div class="globe-card-text">
+      <div class="globe-card-title">WorldMonitor</div>
+      <div class="globe-card-sub">Live news, markets, flashpoints &amp; stability</div>
+    </div>
+    <div class="globe-card-arr"><i class="fa-solid fa-chevron-right"></i></div>
+  </div>
+
   <!-- At a Glance: Weather + Live Markets -->
   <div class="exp-sec-hdr">
     <div class="exp-sec-hdr-title"><i class="fa-solid fa-chart-simple"></i> At a Glance</div>
@@ -2963,7 +2973,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 <div id="globe-overlay" class="globe-overlay" aria-hidden="true">
   <div class="globe-loader" id="globe-loader">
     <img class="globe-loader-logo" src="/tiger-logo.png" alt="">
-    <div class="globe-loader-text">Loading…</div>
+    <div class="globe-loader-text">WorldMonitor loading…</div>
   </div>
   <div id="globe-frame-host" class="globe-frame-host"></div>
   <button class="globe-close tap" onclick="closeGlobe()" aria-label="Close globe">✕</button>
