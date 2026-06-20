@@ -84,17 +84,10 @@ const map=new maplibregl.Map({
         tiles:['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}']},
       dem:{type:'raster-dem',encoding:'terrarium',tileSize:256,maxzoom:13,
         tiles:['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png']},
-      omt:{type:'vector',url:'https://tiles.openfreemap.org/planet'}
     },
     layers:[
       {id:'base',type:'raster',source:'base'},
-      {id:'hills',type:'hillshade',source:'dem',paint:{'hillshade-exaggeration':0.18,'hillshade-shadow-color':'#06101f','hillshade-highlight-color':'#dfeaff'}},
-      {id:'buildings',type:'fill-extrusion',source:'omt','source-layer':'building',minzoom:13,
-        paint:{
-          'fill-extrusion-color':['interpolate',['linear'],['coalesce',['get','render_height'],10],0,'#39507e',40,'#5e86c4',150,'#86dcff'],
-          'fill-extrusion-height':['interpolate',['linear'],['zoom'],13,0,14.5,['coalesce',['get','render_height'],8]],
-          'fill-extrusion-base':['coalesce',['get','render_min_height'],0],
-          'fill-extrusion-opacity':0.9,'fill-extrusion-vertical-gradient':true}}
+      {id:'hills',type:'hillshade',source:'dem',paint:{'hillshade-exaggeration':0.18,'hillshade-shadow-color':'#06101f','hillshade-highlight-color':'#dfeaff'}}
     ]
   }
 });
@@ -112,6 +105,18 @@ const colorExpr=['match',['get','type'],'mkt','#34D399','home','#6fd3ff','hotspo
 
 map.on('load',()=>{
   document.getElementById('gl-load')?.classList.add('gone');
+  /* lazy-load 3D buildings after map is ready so they don't block initial load */
+  try{
+    if(!map.getSource('omt')){
+      map.addSource('omt',{type:'vector',url:'https://tiles.openfreemap.org/planet'});
+      map.addLayer({id:'buildings',type:'fill-extrusion',source:'omt','source-layer':'building',minzoom:13,
+        paint:{
+          'fill-extrusion-color':['interpolate',['linear'],['coalesce',['get','render_height'],10],0,'#39507e',40,'#5e86c4',150,'#86dcff'],
+          'fill-extrusion-height':['interpolate',['linear'],['zoom'],13,0,14.5,['coalesce',['get','render_height'],8]],
+          'fill-extrusion-base':['coalesce',['get','render_min_height'],0],
+          'fill-extrusion-opacity':0.9,'fill-extrusion-vertical-gradient':true}});
+    }
+  }catch(e){}
   if(!map.getSource('beacons')){
     map.addSource('beacons',{type:'geojson',data:beaconsGeo});
     map.addLayer({id:'beacon-glow',type:'circle',source:'beacons',paint:{
@@ -131,7 +136,8 @@ map.on('load',()=>{
     if(quakesActive&&map.getLayer('quake-glow'))map.setPaintProperty('quake-glow','circle-opacity',0.22+0.22*(0.5+0.5*Math.sin(pt*1.4)));
     requestAnimationFrame(pulse);})();
 });
-setTimeout(()=>document.getElementById('gl-load')?.classList.add('gone'),9000);
+setTimeout(()=>document.getElementById('gl-load')?.classList.add('gone'),4000);
+map.on('error',()=>document.getElementById('gl-load')?.classList.add('gone'));
 map.on('mouseenter','beacon-core',()=>{map.getCanvas().style.cursor='pointer';});
 map.on('mouseleave','beacon-core',()=>{map.getCanvas().style.cursor='';});
 
