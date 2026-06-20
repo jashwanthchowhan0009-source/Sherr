@@ -1049,17 +1049,17 @@ async def get_feed(
             q += " AND a.scope=?"; p.append(scope)
         if pillar:
             q += " AND a.pillar_id=?"; p.append(pillar)
-        q += " ORDER BY f.score DESC, a.published_at DESC LIMIT ? OFFSET ?"
+        q += " ORDER BY f.score DESC, a.published_at DESC, a.id DESC LIMIT ? OFFSET ?"
         p += [limit + 1, offset]
         rows = conn.execute(q, p).fetchall()
         if len(rows) < 5:
             rows = conn.execute(
-                "SELECT *, 1.0 as score FROM articles ORDER BY published_at DESC LIMIT ? OFFSET ?",
+                "SELECT *, 1.0 as score FROM articles ORDER BY published_at DESC, id DESC LIMIT ? OFFSET ?",
                 (limit + 1, offset)
             ).fetchall()
     else:
         rows = conn.execute(
-            "SELECT *, 1.0 as score FROM articles ORDER BY published_at DESC LIMIT ? OFFSET ?",
+            "SELECT *, 1.0 as score FROM articles ORDER BY published_at DESC, id DESC LIMIT ? OFFSET ?",
             (limit + 1, offset)
         ).fetchall()
 
@@ -1091,7 +1091,7 @@ async def explore_feed(
         q += " AND pillar_id=?"; p.append(pillar)
     if scope:
         q += " AND scope=?"; p.append(scope)
-    q += " ORDER BY published_at DESC LIMIT ? OFFSET ?"
+    q += " ORDER BY published_at DESC, id DESC LIMIT ? OFFSET ?"
     p += [limit + 1, offset]
     rows = conn.execute(q, p).fetchall()
     conn.close()

@@ -14,6 +14,7 @@ same Bearer access token that compat login now returns.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import secrets
@@ -34,6 +35,37 @@ from app.security import decode_token
 
 log = logging.getLogger("sherbyte.compat")
 router = APIRouter(tags=["compat"])
+
+
+# ─── Traffic-driven auto-refresh ──────────────────────────────────────────────
+# On the free tier the in-process scheduler only runs while the instance is
+# awake. To keep the feed fresh with zero manual steps, opening the app (a home
+# feed load) kicks a background ingest cycle — debounced so it fires at most once
+# every few minutes and never blocks the response. With the quota breaker a cycle
+# finishes in minutes, so simply using the app keeps new stories flowing.
+_last_auto_ingest = 0.0
+_AUTO_INGEST_MIN_GAP = 300.0  # at most one auto-kick per 5 minutes
+
+
+def _maybe_kick_ingest() -> None:
+    global _last_auto_ingest
+    now = _time.monotonic()
+    if now - _last_auto_ingest < _AUTO_INGEST_MIN_GAP:
+        return
+    _last_auto_ingest = now                       # set before awaiting → no double-fire
+
+    async def _run() -> None:
+        try:
+            from app.config import settings
+            from app.pipeline import run_cycle
+            await run_cycle(understand_concurrency=settings.understand_concurrency)
+        except Exception as e:
+            log.warning("auto-ingest kick failed: %s", e)
+
+    try:
+        asyncio.create_task(_run())               # fire-and-forget; never blocks the feed
+    except RuntimeError:
+        pass                                      # no running loop (shouldn't happen under ASGI)
 
 
 def _uid(authorization: str) -> Optional[str]:
@@ -92,6 +124,8 @@ async def get_feed(
     pillar: int = Query(0),
     authorization: str = Header(""),
 ):
+    if page == 1:
+        _maybe_kick_ingest()                      # opening the app keeps the feed fresh
     res = await feed.personalized(
         page=page, limit=limit, pillar=pillar, scope=scope, user_id=_uid(authorization)
     )

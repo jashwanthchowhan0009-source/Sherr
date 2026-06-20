@@ -3360,6 +3360,8 @@ let curChip      = 'all';
 let isDark       = true;
 let feedPage     = 1;
 let feedLoading  = false;
+let shownFeedIds = new Set();   // article ids already on screen — cross-page dedup
+let feedExhausted = false;      // backend has no genuinely-new articles left to page in
 let feedRetried  = false;   // one automatic cold-start retry per server-reach
 const FEED_MAX_RETRIES = 5; // free tier can take ~60s to wake; back off across attempts
 let feedRetryCount = 0;     // auto-retries used on the current cold-start window
@@ -4120,8 +4122,10 @@ function _writeFeedCache(arts) {
 
 async function loadFeed(reset = false) {
   if (feedLoading) return;
+  if (!reset && feedExhausted) return;          // no more genuinely-new pages → stop infinite scroll
   if (reset) {
     feedPage = 1; homeArticles = []; structuredFeedData = []; structuredFeedOffset = 0;
+    shownFeedIds = new Set(); feedExhausted = false;
     document.getElementById('home-feed').innerHTML = '';
   }
   feedLoading = true;
@@ -4162,7 +4166,16 @@ async function loadFeed(reset = false) {
       data = await api(url.replace(sc, ''), { timeout: 45000 });
     }
     feedRetried = false; feedRetryCount = 0;   // server reached — reset cold-start retry budget
-    const articles = (data.articles || []).map(normalizeArticle);
+    let articles = (data.articles || []).map(normalizeArticle);
+    // Cross-page dedup: never render a story that's already on screen. The backend
+    // can return overlapping pages, which is what made articles "come again".
+    articles = articles.filter(a => {
+      const id = a && a.id != null ? String(a.id) : null;
+      if (!id) return true;
+      if (shownFeedIds.has(id)) return false;
+      shownFeedIds.add(id);
+      return true;
+    });
     if (feedPage === 1 && articles.length && _isDefaultFeedView()) _writeFeedCache(articles);
     if (feedPage === 1 && articles[0]) feedTopId = articles[0].id;
 
@@ -4225,11 +4238,12 @@ async function loadFeed(reset = false) {
 
     } else {
       // Pagination — append as standard cards (round-robin categories in "All")
+      if (articles.length === 0) feedExhausted = true;   // page was all duplicates → stop paging
       const more = (curChip === 'all') ? roundRobinByCat(articles) : articles;
       more.forEach(a => renderStandardCard(a, c));
     }
 
-    if (data.has_more) feedPage++;
+    if (data.has_more) feedPage++; else feedExhausted = true;
 
     hydrateFeedCounts();   // fill the pills with real like/comment counts
 

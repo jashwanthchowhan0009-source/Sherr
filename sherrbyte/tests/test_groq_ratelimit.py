@@ -29,23 +29,16 @@ def test_retry_after_full_jitter_within_cap():
             assert 0.0 <= d <= cap               # full jitter: random in [0, cap]
 
 
-# ─── _groq retry behaviour ───────────────────────────────────────────────────
-def test_groq_backs_off_then_succeeds(monkeypatch):
+# ─── _groq quota-breaker behaviour ───────────────────────────────────────────
+def test_groq_trips_breaker_on_429(monkeypatch):
+    """One 429 trips the cooldown and returns immediately — no slow retry loop
+    (that loop made an exhausted-quota ingest cycle take tens of minutes)."""
     monkeypatch.setattr(router.settings, "groq_api_key", "x")
-    monkeypatch.setattr(router.settings, "groq_max_retries", 3)
-    sleeps: list[float] = []
-
-    async def fake_sleep(s):                     # don't actually wait in tests
-        sleeps.append(s)
-    monkeypatch.setattr(router.asyncio, "sleep", fake_sleep)
-
     calls = {"n": 0}
 
     def handler(request):
         calls["n"] += 1
-        if calls["n"] < 3:                       # two 429s, then succeed
-            return httpx.Response(429, headers={"Retry-After": "2"}, text="slow down")
-        return httpx.Response(200, json={"choices": [{"message": {"content": " hi "}}]})
+        return httpx.Response(429, text="rate limited")
 
     async def go():
         client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
@@ -55,26 +48,20 @@ def test_groq_backs_off_then_succeeds(monkeypatch):
             await client.aclose()
 
     out = asyncio.run(go())
-    assert out == "hi"
-    assert calls["n"] == 3                        # retried rather than failing instantly
-    assert len(sleeps) == 2                       # one backoff per 429
-    assert all(s >= 2.0 for s in sleeps)          # honored Retry-After
+    assert out is None                            # degrades to rules at once
+    assert calls["n"] == 1                         # one hit, then trip — no retries
+    assert router._in_cooldown("groq")             # provider now cooling down
 
 
-def test_groq_gives_up_after_max_retries(monkeypatch):
+def test_groq_short_circuits_while_cooling_down(monkeypatch):
+    """While the breaker is tripped, calls never reach the wire."""
     monkeypatch.setattr(router.settings, "groq_api_key", "x")
-    monkeypatch.setattr(router.settings, "groq_max_retries", 2)
-    sleeps: list[float] = []
-
-    async def fake_sleep(s):
-        sleeps.append(s)
-    monkeypatch.setattr(router.asyncio, "sleep", fake_sleep)
-
+    router._trip("groq")                           # already cooling down
     calls = {"n": 0}
 
     def handler(request):
         calls["n"] += 1
-        return httpx.Response(429, text="rate limited")   # always throttled
+        return httpx.Response(200, json={"choices": [{"message": {"content": "x"}}]})
 
     async def go():
         client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
@@ -84,9 +71,8 @@ def test_groq_gives_up_after_max_retries(monkeypatch):
             await client.aclose()
 
     out = asyncio.run(go())
-    assert out is None
-    assert calls["n"] == 3                        # initial try + 2 retries
-    assert len(sleeps) == 2                       # bounded number of backoffs
+    assert out is None                            # short-circuited
+    assert calls["n"] == 0                          # never hit the network
 
 
 # ─── TPM throttle ────────────────────────────────────────────────────────────
