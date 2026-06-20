@@ -3,41 +3,46 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-<meta name="theme-color" content="#000000">
+<meta name="theme-color" content="#070D18">
 <title>WorldMonitor</title>
-  <script type="module" crossorigin src="/globe/assets/index-h6Bw3w3y.js"></script>
-  <link rel="stylesheet" crossorigin href="/globe/assets/index-hbL6wYqX.css">
+  <script type="module" crossorigin src="/globe/assets/index-B11JRPMy.js"></script>
+  <link rel="stylesheet" crossorigin href="/globe/assets/index-Bvbtte1E.css">
 </head>
 <body>
-<div id="space"></div>
-<div id="stars"></div>
 <div id="map"></div>
 <div id="suntint"></div>
 
-<div id="gl-load"><div class="gl-orb"></div><div class="gl-txt">Loading the world…</div></div>
-
-<!-- brand chip — top left, minimal -->
-<div id="title">
-  <div class="brand-icon">🌐</div>
-  <span class="brand-name">World<b>Monitor</b></span>
+<div id="gl-load">
+  <div class="gl-orb"></div>
+  <div class="gl-txt">Loading the world…</div>
 </div>
 
-<!-- search — top centre -->
-<div id="searchbar" class="glass">
-  <svg class="srch-ico" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5" stroke="currentColor" stroke-width="1.6"/><path d="M14 14l3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
-  <input id="searchInput" type="text" placeholder="Search a city or place…" autocomplete="off" spellcheck="false">
-  <button id="homeBtn" title="Go to Anantapur">🏠</button>
-</div>
-<div id="searchResults" class="glass"></div>
+<!-- Top navigation bar -->
+<nav id="topnav">
+  <div class="nav-brand">
+    <div class="nav-icon">🌐</div>
+    <span class="nav-title">WorldMonitor</span>
+  </div>
 
-<!-- layer toggles — left side floating -->
-<div id="layers">
-  <button id="ciiBtn" class="layer-btn" title="Country Stability Index heatmap">🌡️ <span>Stability</span></button>
-  <button id="quakeBtn" class="layer-btn" title="Live earthquakes (USGS, past 24h, M2.5+)">🌍 <span>Quakes</span></button>
-</div>
+  <div id="searchbar">
+    <svg class="srch-ico" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <circle cx="8.5" cy="8.5" r="5.5" stroke="currentColor" stroke-width="1.6"/>
+      <path d="M14 14l3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+    </svg>
+    <input id="searchInput" type="text" placeholder="Search a city…" autocomplete="off" spellcheck="false">
+    <button id="homeBtn" title="Go to Anantapur">🏠</button>
+  </div>
 
-<!-- time machine — bottom centre -->
-<div id="dial" class="glass" role="group" aria-label="Time machine">
+  <div class="nav-actions">
+    <button id="ciiBtn" class="nav-toggle" title="Country Instability Index heatmap">🌡️ <span>Stability</span></button>
+    <button id="quakeBtn" class="nav-toggle" title="Live earthquakes (USGS · 24h · M2.5+)">🌍 <span>Quakes</span></button>
+  </div>
+</nav>
+
+<div id="searchResults"></div>
+
+<!-- Time machine — bottom centre -->
+<div id="dial" role="group" aria-label="Time machine">
   <button id="bYearBack" title="Back one year">«</button>
   <button id="bMonthBack" title="Back one month">‹ Mo</button>
   <button id="bDayBack" title="Back one day">‹ Day</button>
@@ -47,13 +52,21 @@
   <button id="todayBtn">Today</button>
 </div>
 
-<div id="suntime" class="glass" title="Time of day">
+<!-- Sun slider — desktop only -->
+<div id="suntime" title="Drag to change time of day">
   <span id="sunphase">☀️</span>
   <input id="sunslider" type="range" min="0" max="1439" step="5" aria-label="Time of day">
   <span id="sunlabel">12:00</span>
 </div>
 
-<div id="panel" class="glass" aria-live="polite"></div>
+<!-- City / data panel -->
+<div id="panel" aria-live="polite"></div>
+
+<!-- Bottom footer -->
+<footer id="footer">
+  <span class="footer-brand">🌐 WORLDMONITOR</span>
+  <span class="footer-sub">Live news · Markets · Flashpoints · Stability</span>
+</footer>
 
 </body>
 </html>
