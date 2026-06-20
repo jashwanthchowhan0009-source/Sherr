@@ -26,6 +26,9 @@ services:
   - type: web
     name: sherrbyte-api
     runtime: docker
+    # Free tier: spins down after ~15 min idle (30-60s cold start). Kept awake by
+    # an external uptime pinger (UptimeRobot) hitting "/" every 5 min, plus the
+    # in-app cold-start retry as a safety net. Upgrade to `starter` for always-on.
     plan: free
     rootDir: sherrbyte
     dockerfilePath: ./Dockerfile

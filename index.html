@@ -4,14 +4,16 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>SherrByte</title>
-<link rel="icon" type="image/png" href="/tiger-logo.png">
+<link rel="icon" type="image/png" href="/app-icon.png">
 <link rel="manifest" href="/manifest.json">
-<meta name="theme-color" content="#0A84FF">
+<meta name="theme-color" content="#000000">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="SherrByte">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="apple-touch-icon" href="/tiger-logo.png">
+<link rel="apple-touch-icon" href="/app-icon.png">
+<!-- NewsGlobe embed URL (separately deployed). Change here to point at the live globe. -->
+<meta name="newsglobe-url" content="/globe/">
 <script>if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('/sw.js').catch(function(){});});}</script>
 <!-- Firebase Cloud Messaging (push notifications only) -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -694,7 +696,7 @@ header {
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 52%;
 }
 .ao-share { margin-left: auto; color: var(--t2); font-size: 1rem; padding: 6px; cursor: pointer; }
-.ao-scroll { flex: 1; overflow-y: auto; padding-bottom: calc(var(--nh)+24px); }
+.ao-scroll { flex: 1; overflow-y: auto; overflow-x: hidden; padding-bottom: calc(var(--nh)+24px); }
 .ao-hero {
   width: 100%; aspect-ratio: 16/9; background: var(--bg3);
   position: relative; overflow: hidden;
@@ -743,6 +745,13 @@ header {
   background: var(--bgcard); border: 1px solid var(--line2);
 }
 .ao-act-share { margin-left: auto; }
+.ao-tldr { margin: 0 0 14px; padding: 12px 14px; border-radius: 12px;
+  background: var(--as, rgba(79,107,212,0.10)); border: 1px solid rgba(79,107,212,0.28); }
+.ao-tldr-h { font-size: 0.7rem; font-weight: 800; letter-spacing: 0.6px; text-transform: uppercase;
+  color: var(--accent); margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+.ao-tldr ul { margin: 0; padding-left: 18px; }
+.ao-tldr li { font-size: 0.85rem; line-height: 1.5; color: var(--t1); margin-bottom: 5px; }
+.ao-tldr .tldr-msg { font-size: 0.82rem; color: var(--t3); }
 .ao-act:active { transform: scale(0.94); }
 .ao-act i { font-size: 0.92rem; }
 .ao-act.liked { color: var(--c-red); background: rgba(255,91,91,0.08); border-color: rgba(255,91,91,0.2); }
@@ -1284,6 +1293,40 @@ header {
 /* ═══════════════════════════════════
    SUB PAGES
 ═══════════════════════════════════ */
+/* ── Globe: Explore card + fullscreen embed overlay ── */
+.globe-card { display: flex; align-items: center; gap: 13px; margin: 4px 16px 14px;
+  padding: 14px 16px; border-radius: var(--r-card, 18px); cursor: pointer;
+  background: linear-gradient(135deg, #02239E 0%, #0652B5 45%, #0EB7D6 100%);
+  box-shadow: 0 10px 26px rgba(14,183,214,0.28), inset 0 1px 0 rgba(255,255,255,0.18);
+  position: relative; overflow: hidden; transition: transform .12s ease; }
+.globe-card:active { transform: scale(0.98); }
+.globe-card::after { content: ""; position: absolute; right: -30px; top: -40px;
+  width: 130px; height: 130px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(255,255,255,0.22), transparent 70%); }
+.globe-card-emoji { font-size: 2rem; line-height: 1; flex-shrink: 0; filter: drop-shadow(0 2px 6px rgba(0,0,0,0.3)); }
+.globe-card-text { flex: 1; min-width: 0; z-index: 1; }
+.globe-card-title { font-family: var(--fd); font-weight: 700; font-size: 1.02rem; color: #fff; letter-spacing: -0.2px; }
+.globe-card-sub { font-size: 0.74rem; color: rgba(255,255,255,0.85); margin-top: 2px; }
+.globe-card-arr { color: rgba(255,255,255,0.9); font-size: 0.85rem; z-index: 1; flex-shrink: 0; }
+
+.globe-overlay { position: absolute; inset: 0; z-index: 6500; display: none; background: #000; }
+.globe-overlay.on { display: block; }
+.globe-frame-host, .globe-frame { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.globe-close { position: absolute; top: calc(env(safe-area-inset-top) + 14px); right: 16px; z-index: 2;
+  width: 40px; height: 40px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.2);
+  background: rgba(20,24,40,0.55); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  color: #fff; font-size: 1.05rem; cursor: pointer; display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.45); }
+.globe-close:active { transform: scale(0.92); }
+.globe-loader { position: absolute; inset: 0; z-index: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 14px; background: #0B1026;
+  transition: opacity .4s ease; }
+.globe-loader.gone { opacity: 0; pointer-events: none; }
+.globe-loader-logo { width: 72px; height: 72px; object-fit: contain; animation: globePulse 1.4s ease-in-out infinite; }
+.globe-loader-text { font-size: 0.8rem; color: rgba(241,245,255,0.6); letter-spacing: 0.4px; }
+@keyframes globePulse { 0%,100% { transform: scale(0.9); opacity: 0.55; } 50% { transform: scale(1.06); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .globe-loader-logo { animation: none; } }
+
 .media-viewer { position: absolute; inset: 0; z-index: 6000; display: none;
   align-items: center; justify-content: center; background: rgba(0,0,0,0.96);
   touch-action: none; overflow: hidden; }
@@ -1295,9 +1338,6 @@ header {
   backdrop-filter: blur(10px); display: flex; align-items: center; justify-content: center;
   color: #fff; font-size: 1.1rem; }
 .ao-hero img { cursor: zoom-in; }
-.ao-zoom-hint { position: absolute; right: 12px; bottom: 12px; z-index: 2; width: 30px; height: 30px;
-  border-radius: 50%; background: rgba(0,0,0,0.45); backdrop-filter: blur(8px); color: #fff;
-  display: flex; align-items: center; justify-content: center; font-size: 0.8rem; pointer-events: none; }
 .ao-video { width: 100%; height: 100%; object-fit: cover; background: #000; display: block; }
 
 .app-modal { position: absolute; inset: 0; z-index: 4000; display: none;
@@ -1454,24 +1494,24 @@ header {
    FLOATING BOTTOM NAV
 ═══════════════════════════════════ */
 nav {
-  position: absolute; bottom: 18px; left: 50%;
-  transform: translateX(-50%);
-  width: calc(100% - 32px); max-width: 360px;
-  height: 64px;
+  position: absolute; bottom: max(18px, env(safe-area-inset-bottom));
+  left: 50%; transform: translateX(-50%);
+  width: calc(100% - 28px); max-width: 380px;
+  height: 68px;
   display: flex; align-items: center; justify-content: space-around;
   z-index: 600;
 
-  /* True liquid glass — transparent, lets the content show through. */
-  background: rgba(255,255,255,0.08);
-  backdrop-filter: blur(36px) saturate(180%);
-  -webkit-backdrop-filter: blur(36px) saturate(180%);
-  border: 1px solid rgba(255,255,255,0.18);
-  border-radius: 32px;
+  /* frosted liquid-glass pill */
+  background: rgba(255,255,255,0.07);
+  backdrop-filter: blur(34px) saturate(180%);
+  -webkit-backdrop-filter: blur(34px) saturate(180%);
+  border: 1px solid rgba(255,255,255,0.16);
+  border-radius: 999px;
   box-shadow:
-    0 16px 44px rgba(0,0,0,0.32),
-    inset 0 1px 1px rgba(255,255,255,0.22),
-    inset 0 -1px 1px rgba(0,0,0,0.10);
-  padding: 0 8px;
+    0 18px 46px rgba(0,0,0,0.38),
+    inset 0 1px 1px rgba(255,255,255,0.24),
+    inset 0 -1px 1px rgba(0,0,0,0.12);
+  padding: 0 10px;
 }
 
 .nb {
@@ -1480,15 +1520,17 @@ nav {
   transition: all 0.25s var(--spring); position: relative;
 }
 .nb-icon {
-  width: 52px; height: 44px; border-radius: 16px;
+  min-width: 50px; height: 50px; padding: 0 14px; border-radius: 999px;
   display: flex; align-items: center; justify-content: center;
-  font-size: 1.06rem; color: rgba(255,255,255,0.62);
-  transition: background .28s var(--snap), color .28s var(--snap), box-shadow .28s var(--snap);
+  font-size: 1.34rem; color: rgba(255,255,255,0.6);
+  transition: background .28s var(--snap), color .28s var(--snap), box-shadow .28s var(--snap), padding .28s var(--snap);
 }
+.nb-icon i { font-size: 1.34rem; }
 .nb-lbl { display: none; }
-/* Active = a frosted darker pill (not a flat accent fill) — slick iOS glass. */
+/* Active = an elongated frosted pill behind the icon — slick iOS glass. */
 .nb.on .nb-icon {
-  background: rgba(255,255,255,0.16);
+  padding: 0 26px;
+  background: rgba(255,255,255,0.15);
   color: #fff;
   box-shadow: inset 0 0 0 0.5px rgba(255,255,255,0.30), 0 2px 10px rgba(0,0,0,0.18);
 }
@@ -1501,7 +1543,7 @@ nav {
   text-align: center; color: var(--t1); font-size: 1.05rem; line-height: 1.7; padding: 28px; }
 .bytes-empty span { font-size: 0.82rem; color: var(--t2); font-weight: 500; }
 /* inshorts-style: full-bleed card, image on top, body, "tap to know more" foot */
-.byte { position: relative; height: 100%; scroll-snap-align: start;
+.byte { position: relative; height: 100%; scroll-snap-align: start; scroll-snap-stop: always; scroll-snap-stop: always;
   display: flex; flex-direction: column;
   padding: var(--hh) 0 calc(var(--nh) + 22px);
   animation: byteIn 0.45s var(--ease); }
@@ -2147,6 +2189,37 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   font-size: 0.74rem; font-weight: 700;
   color: #FFB260;
 }
+/* ── Streak history strip (horizontal scroll) ── */
+.streak-strip-wrap { margin: 14px 0 4px; }
+.streak-strip-hdr {
+  font-size: 0.78rem; font-weight: 700; color: var(--t2);
+  margin: 0 4px 8px; letter-spacing: 0.02em;
+}
+.streak-strip {
+  display: flex; gap: 8px; overflow-x: auto;
+  padding: 2px 2px 8px; scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
+}
+.streak-strip::-webkit-scrollbar { display: none; }
+.streak-cell {
+  flex: 0 0 auto; width: 60px; scroll-snap-align: start;
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 10px 6px; border-radius: 16px;
+  background: var(--bg2, rgba(255,255,255,0.05));
+  border: 1px solid rgba(255,255,255,0.07);
+}
+.streak-cell.on {
+  background: rgba(255,140,0,0.14);
+  border-color: rgba(255,140,0,0.32);
+}
+.streak-cell.today { border-color: rgba(255,140,0,0.7); }
+.streak-cell-dow { font-size: 0.62rem; font-weight: 700; color: var(--t3); text-transform: uppercase; }
+.streak-cell-fire { font-size: 1.05rem; line-height: 1.2; }
+.streak-cell.on .streak-cell-fire { filter: none; }
+.streak-cell:not(.on) .streak-cell-fire { color: var(--t3); opacity: 0.5; }
+.streak-cell-num { font-size: 1.18rem; font-weight: 800; color: var(--t1); }
+.streak-cell.on .streak-cell-num { color: #FFB260; }
+.streak-cell-date { font-size: 0.6rem; color: var(--t3); }
 .analytics-sparkline {
   position: relative; z-index: 1;
   width: 100%; height: 44px;
@@ -2525,7 +2598,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
     <div class="sb-item tap" onclick="navTo('feed');sbClose()"><i class="fa-solid fa-wave-square"></i> FEED Pulse</div>
     <div class="sb-item tap" onclick="openSub('settings');sbClose()"><i class="fa-solid fa-gear"></i> Settings</div>
     <div class="sb-item tap" onclick="openSub('help');sbClose()"><i class="fa-regular fa-circle-question"></i> Help & Support</div>
-    <div class="sb-item tap" onclick="location.href='/download'"><i class="fa-solid fa-download"></i> Get the Android app</div>
+    <div class="sb-item tap" id="sb-getapp" onclick="location.href='/download'"><i class="fa-solid fa-download"></i> Get the Android app</div>
   </div>
   <div class="sb-foot">
     <div class="sb-logout tap"><i class="fa-solid fa-right-from-bracket"></i> Log Out</div>
@@ -2576,7 +2649,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   <div class="ao-header">
     <div class="ao-back tap" onclick="goBack()"><i class="fa-solid fa-chevron-left"></i> Back</div>
     <div class="ao-title-hdr" id="ao-title-hdr"></div>
-    <div class="ao-share tap" onclick="shareArt(currentArticle?.title||'')"><i class="fa-solid fa-paper-plane"></i></div>
+    <div class="ao-share tap" onclick="shareArticleCard(currentArticle)"><i class="fa-solid fa-paper-plane"></i></div>
   </div>
   <div class="ao-scroll" id="ao-scroll">
     <div class="ao-hero">
@@ -2591,12 +2664,14 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
         <span class="ao-src-time" id="ao-src-time"></span>
       </div>
       <div class="ao-main-title" id="ao-main-title"></div>
+      <div id="ao-tldr-box" class="ao-tldr" style="display:none"></div>
       <div class="ao-text" id="ao-text"></div>
       <div class="ao-keypoints" id="ao-keypoints"></div>
       <div class="ao-acts">
         <div class="ao-act tap" id="ao-like" onclick="aoLike()"><i class="fa-regular fa-heart"></i><span>Like</span></div>
         <div class="ao-act tap" id="ao-save" onclick="aoSave()"><i class="fa-regular fa-bookmark"></i><span>Save</span></div>
-        <div class="ao-act tap ao-act-share" onclick="shareArt(currentArticle?.title||'')"><i class="fa-solid fa-arrow-up-from-bracket"></i><span>Share</span></div>
+        <div class="ao-act tap" id="ao-tldr-btn" onclick="aoSummarize()"><i class="fa-solid fa-wand-magic-sparkles"></i><span>Summarize</span></div>
+        <div class="ao-act tap ao-act-share" onclick="shareArticleCard(currentArticle)"><i class="fa-solid fa-arrow-up-from-bracket"></i><span>Share</span></div>
       </div>
 
       <div class="ao-cmt-sec">
@@ -2650,20 +2725,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 <div id="v-explore" class="view">
   <div class="live-ticker">
     <div class="ticker-inner" id="ticker-inner">
-      <span class="tick-item"><span style="color:#43A047">NIFTY</span> 22,580 <span class="tick-up">▲ +1.1%</span></span>
-      <span class="tick-item"><span style="color:#FBC02D">GOLD</span> ₹72,450 <span class="tick-up">▲ +0.4%</span></span>
-      <span class="tick-item"><span style="color:#e0e0e0">SILVER</span> ₹88,200 <span class="tick-dn">▼ −0.2%</span></span>
-      <span class="tick-item"><span style="color:#1E88E5">BSE</span> 73,088 <span class="tick-up">▲ +0.6%</span></span>
-      <span class="tick-item"><span style="color:#8E24AA">NASDAQ</span> 16,274 <span class="tick-up">▲ +0.8%</span></span>
-      <span class="tick-item"><span style="color:#E53935">CRUDE</span> $82.4/bbl <span class="tick-dn">▼ −1.2%</span></span>
-      <span class="tick-item"><span style="color:#FB8C00">USD/INR</span> ₹83.42 <span class="tick-dn">▼ −0.1%</span></span>
-      <span class="tick-item"><span style="color:#43A047">NIFTY</span> 22,580 <span class="tick-up">▲ +1.1%</span></span>
-      <span class="tick-item"><span style="color:#FBC02D">GOLD</span> ₹72,450 <span class="tick-up">▲ +0.4%</span></span>
-      <span class="tick-item"><span style="color:#e0e0e0">SILVER</span> ₹88,200 <span class="tick-dn">▼ −0.2%</span></span>
-      <span class="tick-item"><span style="color:#1E88E5">BSE</span> 73,088 <span class="tick-up">▲ +0.6%</span></span>
-      <span class="tick-item"><span style="color:#8E24AA">NASDAQ</span> 16,274 <span class="tick-up">▲ +0.8%</span></span>
-      <span class="tick-item"><span style="color:#E53935">CRUDE</span> $82.4/bbl <span class="tick-dn">▼ −1.2%</span></span>
-      <span class="tick-item"><span style="color:#FB8C00">USD/INR</span> ₹83.42 <span class="tick-dn">▼ −0.1%</span></span>
+      <span class="tick-item" style="opacity:.55">● Live market data loading…</span>
     </div>
   </div>
 
@@ -2679,6 +2741,16 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 
   <!-- Category icons: All Stories + Arts, Well-being, Business, … (filters the feed below) -->
   <div class="exp-cat-row" id="exp-cat-row"></div>
+
+  <!-- WorldMonitor: opens the geopolitical monitoring globe in a fullscreen iframe overlay -->
+  <div class="globe-card tap" onclick="openGlobeCard()" role="button" aria-label="Open WorldMonitor">
+    <div class="globe-card-emoji">🌐</div>
+    <div class="globe-card-text">
+      <div class="globe-card-title">WorldMonitor</div>
+      <div class="globe-card-sub">Live news, markets, flashpoints &amp; stability</div>
+    </div>
+    <div class="globe-card-arr"><i class="fa-solid fa-chevron-right"></i></div>
+  </div>
 
   <!-- At a Glance: Weather + Live Markets -->
   <div class="exp-sec-hdr">
@@ -2897,6 +2969,16 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   <img id="mv-img" class="mv-img" alt="">
 </div>
 
+<!-- ════════ GLOBE EMBED OVERLAY (iframe injected lazily) ════════ -->
+<div id="globe-overlay" class="globe-overlay" aria-hidden="true">
+  <div class="globe-loader" id="globe-loader">
+    <img class="globe-loader-logo" src="/tiger-logo.png" alt="">
+    <div class="globe-loader-text">WorldMonitor loading…</div>
+  </div>
+  <div id="globe-frame-host" class="globe-frame-host"></div>
+  <button class="globe-close tap" onclick="closeGlobe()" aria-label="Close globe">✕</button>
+</div>
+
 <!-- ════════ FEED EDIT MODAL ════════ -->
 <div class="feed-edit-modal" id="feed-edit-modal" onclick="closeFeedEditModal(event)">
   <div class="fem-sheet" onclick="event.stopPropagation()">
@@ -2938,7 +3020,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 <!-- ════════ BYTES — short-form vertical feed (Phase 9 builds the feed) ════════ -->
 <div id="v-bytes" class="view" style="padding:0;overflow:hidden">
   <div id="bytes-feed" class="bytes-feed">
-    <div class="bytes-empty glass"><b>Bytes</b><br><span>Swipe-up short news will appear here.</span></div>
+    <div class="bytes-empty glass"><b>Bytes</b><br><span>Loading short news…</span></div>
   </div>
 </div>
 
@@ -3004,7 +3086,7 @@ const ActivityTracker = (() => {
   let articleMaxScroll = 0;
 
   async function sendHeartbeat(durationSec, articleId, scrollPct) {
-    if (!window.ST || !ST.token) return;
+    if (!ST || !ST.token) return;   // ST is a module-scope `let`, not on window
     try {
       await fetch(API_URL + '/activity/heartbeat', {
         method: 'POST',
@@ -3035,7 +3117,7 @@ const ActivityTracker = (() => {
   });
 
   window.addEventListener('beforeunload', () => {
-    if (currentArticleId && window.ST && ST.token) {
+    if (currentArticleId && ST && ST.token) {
       const elapsed = Math.min(60, Math.floor((Date.now() - articleStartTime) / 1000));
       navigator.sendBeacon?.(
         API_URL + '/activity/heartbeat',
@@ -3193,6 +3275,7 @@ function applyAuth(data) {
   ST.userId   = uid || ST.userId;
   if (data.username) ST.username = data.username;
   persist();
+  try { maybeAutoEnablePush(); } catch (e) {}   // installed app → offer push on sign-in
 }
 
 // Exchange the long-lived refresh token for a fresh access token. Returns true
@@ -3277,7 +3360,11 @@ let curChip      = 'all';
 let isDark       = true;
 let feedPage     = 1;
 let feedLoading  = false;
+let shownFeedIds = new Set();   // article ids already on screen — cross-page dedup
+let feedExhausted = false;      // backend has no genuinely-new articles left to page in
 let feedRetried  = false;   // one automatic cold-start retry per server-reach
+const FEED_MAX_RETRIES = 5; // free tier can take ~60s to wake; back off across attempts
+let feedRetryCount = 0;     // auto-retries used on the current cold-start window
 let feedTopId    = null;    // newest article id currently shown (for "new stories")
 let _newStoriesTimer = null;
 let homeArticles = [];
@@ -3481,9 +3568,180 @@ function openFAQ(){
 }
 
 // ── SHARE ──
+// Plain-text/url fallback (used when we only have a title string).
 function shareArt(title) {
   if (navigator.share) navigator.share({ title:'SherrByte: '+title, url:location.href }).catch(()=>{});
   else { navigator.clipboard?.writeText(title).catch(()=>{}); toast('📋 Copied to clipboard'); }
+}
+
+// Two-stop colors per category for the canvas card (mirrors CAT_GRADIENTS).
+const CARD_GRAD = {
+  society:['#0D2137','#1E88E5'], economy:['#1A1400','#FBC02D'], tech:['#0A0D2A','#3949AB'],
+  arts:['#2A0A0A','#E53935'], nature:['#0A1A0A','#43A047'], selfwell:['#1A0D00','#FB8C00'],
+  philo:['#150A1A','#8E24AA'], lifestyle:['#001A1A','#00ACC1'], sports:['#0A0F1A','#546E7A'],
+};
+
+function _loadImg(src, cross) {
+  return new Promise((resolve, reject) => {
+    const im = new Image();
+    if (cross) im.crossOrigin = 'anonymous';
+    im.onload = () => resolve(im);
+    im.onerror = reject;
+    im.src = src;
+  });
+}
+// News CDNs rarely send CORS headers (which taints the canvas and blocks PNG
+// export). Route through the free wsrv.nl image proxy, which adds the headers,
+// then fall back to a direct load.
+function _imgCandidates(url) {
+  const proxied = 'https://wsrv.nl/?url=' + encodeURIComponent(url) +
+                  '&w=1080&h=648&fit=cover&output=jpg&q=82';
+  return [proxied, url];
+}
+// Draw img onto ctx covering the box (object-fit: cover).
+function _coverDraw(ctx, img, x, y, w, h) {
+  const ir = img.width / img.height, br = w / h;
+  let sw, sh, sx, sy;
+  if (ir > br) { sh = img.height; sw = sh * br; sx = (img.width - sw) / 2; sy = 0; }
+  else { sw = img.width; sh = sw / br; sx = 0; sy = (img.height - sh) / 2; }
+  ctx.drawImage(img, sx, sy, sw, sh, x, y, w, h);
+}
+function _roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+// Word-wrap; returns array of lines, capped at maxLines (last gets an ellipsis).
+function _wrapText(ctx, text, maxW, maxLines) {
+  const words = (text || '').split(/\s+/);
+  const lines = []; let line = '';
+  for (const w of words) {
+    const test = line ? line + ' ' + w : w;
+    if (ctx.measureText(test).width > maxW && line) {
+      lines.push(line); line = w;
+      if (lines.length === maxLines - 1) {
+        // pack the rest into the final line, ellipsize if needed
+        let rest = words.slice(words.indexOf(w)).join(' ');
+        while (ctx.measureText(rest + '…').width > maxW && rest.length) rest = rest.slice(0, -1);
+        lines.push(rest + (ctx.measureText(rest).width >= maxW ? '…' : ''));
+        return lines;
+      }
+    } else { line = test; }
+  }
+  if (line) lines.push(line);
+  return lines.slice(0, maxLines);
+}
+
+// Build a shareable "Article Byte" PNG card and return a Blob.
+async function buildByteCard(a) {
+  const W = 1080, H = 1350, c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const ctx = c.getContext('2d');
+  const cat = a.category || 'tech';
+  const [g0, g1] = CARD_GRAD[cat] || CARD_GRAD.tech;
+
+  // background wash
+  let bg = ctx.createLinearGradient(0, 0, W, H);
+  bg.addColorStop(0, '#0B0B10'); bg.addColorStop(1, '#15151c');
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+
+  // hero image area (top ~48% — leaves room for the full summary below)
+  const heroH = Math.round(H * 0.48);
+  let drew = false;
+  if (a.image_url) {
+    for (const src of _imgCandidates(a.image_url)) {
+      try { const im = await _loadImg(src, true); _coverDraw(ctx, im, 0, 0, W, heroH); drew = true; break; }
+      catch (_) { /* try next candidate, then gradient */ }
+    }
+  }
+  if (!drew) {
+    const hg = ctx.createLinearGradient(0, 0, W, heroH);
+    hg.addColorStop(0, g0); hg.addColorStop(1, g1);
+    ctx.fillStyle = hg; ctx.fillRect(0, 0, W, heroH);
+  }
+  // dark gradient under the image so text/foot reads
+  const sh = ctx.createLinearGradient(0, heroH - 240, 0, heroH);
+  sh.addColorStop(0, 'rgba(11,11,16,0)'); sh.addColorStop(1, 'rgba(11,11,16,1)');
+  ctx.fillStyle = sh; ctx.fillRect(0, heroH - 240, W, 240);
+
+  // category chip
+  const chip = (cat.charAt(0).toUpperCase() + cat.slice(1)).toUpperCase();
+  ctx.font = '700 30px -apple-system, system-ui, sans-serif';
+  const chipW = ctx.measureText(chip).width + 56;
+  ctx.fillStyle = 'rgba(255,255,255,0.14)';
+  _roundRect(ctx, 64, 64, chipW, 58, 29); ctx.fill();
+  ctx.fillStyle = '#fff'; ctx.textBaseline = 'middle';
+  ctx.fillText(chip, 92, 64 + 30);
+
+  // headline
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillStyle = '#FFFFFF';
+  ctx.font = '800 56px -apple-system, system-ui, sans-serif';
+  const lines = _wrapText(ctx, a.title || '', W - 128, 3);
+  let ty = heroH + 92;
+  for (const ln of lines) { ctx.fillText(ln, 64, ty); ty += 70; }
+
+  // full summary — the complete text, not a cut-off sentence
+  const sub = (a.summary || a.preview || a.source_name || '').toString().trim();
+  if (sub) {
+    ctx.fillStyle = 'rgba(255,255,255,0.66)';
+    ctx.font = '400 33px -apple-system, system-ui, sans-serif';
+    const sl = _wrapText(ctx, sub, W - 128, 6);
+    ty += 20;
+    for (const ln of sl) { ctx.fillText(ln, 64, ty); ty += 44; }
+  }
+
+  // footer: small SherrByte logo + wordmark in the corner
+  const footY = H - 96;
+  try {
+    const logo = await _loadImg('/tiger-logo.png', false);
+    const ls = 64;
+    _roundRect(ctx, 64, footY - ls / 2, ls, ls, 16); ctx.save(); ctx.clip();
+    ctx.drawImage(logo, 64, footY - ls / 2, ls, ls); ctx.restore();
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = '700 38px -apple-system, system-ui, sans-serif';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('SherrByte', 64 + ls + 20, footY);
+  } catch (_) {
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = '700 40px -apple-system, system-ui, sans-serif';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('SherrByte', 64, footY);
+  }
+  ctx.textBaseline = 'alphabetic';
+
+  return await new Promise(res => c.toBlob(res, 'image/png', 0.92));
+}
+
+// Share an article as an "Article Byte" image card (falls back to text/url).
+async function shareArticleCard(a) {
+  if (!a || !a.title) return shareArt((a && a.title) || '');
+  try {
+    toast('🎨 Creating your Article Byte…');
+    const blob = await buildByteCard(a);
+    if (!blob) throw new Error('no blob');
+    const file = new File([blob], 'sherrbyte-article.png', { type: 'image/png' });
+    const summary = (a.summary || a.preview || '').toString().trim();
+    const text = a.title + (summary ? '\n\n' + summary : '') + '\n\nvia SherrByte';
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], text });
+      return;
+    }
+    // No file-share support → offer a download so the user can post it manually.
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url; link.download = 'sherrbyte-article.png';
+    document.body.appendChild(link); link.click(); link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    toast('⬇️ Article Byte saved — share it anywhere');
+  } catch (e) {
+    if (e && e.name === 'AbortError') return; // user cancelled the share sheet
+    shareArt(a.title || '');
+  }
 }
 
 // ── LANGUAGE PICKER ──
@@ -3675,7 +3933,7 @@ function renderStandardCard(rawA, container) {
   `;
   d.querySelector('.nc-like').addEventListener('click', e => { e.stopPropagation(); feedLike(a, e.currentTarget); });
   d.querySelector('.nc-comment').addEventListener('click', e => { e.stopPropagation(); openArticle(a); });
-  d.querySelector('.nc-share').addEventListener('click', e => { e.stopPropagation(); shareArt(a.title||''); });
+  d.querySelector('.nc-share').addEventListener('click', e => { e.stopPropagation(); shareArticleCard(a); });
   container.appendChild(d);
 }
 
@@ -3845,19 +4103,46 @@ function renderStructuredFeed(articles, container, reset=false) {
 }
 
 // ── LOAD FEED ──
+// Instant-feed cache: the last good page-1 of the default view is stored so a
+// returning user sees real headlines immediately — even while the free backend
+// cold-starts — instead of a skeleton or "Waking the server". Refreshed in the
+// background; if the refresh fails (cold start), the cached feed simply stays.
+const _FEED_CACHE_KEY = 'sb-feedcache-v1';
+function _isDefaultFeedView() { return curChip === 'all' && homeActiveTab === 'foryou'; }
+function _readFeedCache() {
+  try {
+    const c = JSON.parse(localStorage.getItem(_FEED_CACHE_KEY) || 'null');
+    if (c && Array.isArray(c.arts) && c.arts.length) return c.arts;
+  } catch (e) {}
+  return null;
+}
+function _writeFeedCache(arts) {
+  try { localStorage.setItem(_FEED_CACHE_KEY, JSON.stringify({ t: Date.now(), arts: arts.slice(0, 24) })); } catch (e) {}
+}
+
 async function loadFeed(reset = false) {
   if (feedLoading) return;
+  if (!reset && feedExhausted) return;          // no more genuinely-new pages → stop infinite scroll
   if (reset) {
     feedPage = 1; homeArticles = []; structuredFeedData = []; structuredFeedOffset = 0;
+    shownFeedIds = new Set(); feedExhausted = false;
     document.getElementById('home-feed').innerHTML = '';
   }
   feedLoading = true;
   const c = document.getElementById('home-feed');
 
-  // Skeleton on first page
+  // First page: show cached headlines instantly if we have them (so a cold
+  // backend never shows a blank skeleton / "Waking" wall); else a skeleton.
   if (feedPage === 1) {
-    c.innerHTML = '<div class="skel skel-hero"></div>' +
-      Array(4).fill('<div class="skel skel-card"></div>').join('');
+    const cached = _isDefaultFeedView() ? _readFeedCache() : null;
+    if (cached) {
+      c.innerHTML = '';
+      if (curChip === 'all') renderSectionTabs(c);
+      cached.forEach(a => { try { renderStandardCard(normalizeArticle(a), c); } catch (e) {} });
+    } else {
+      c.innerHTML = '<div class="skel skel-hero"></div>' +
+        Array(4).fill('<div class="skel skel-card"></div>').join('');
+    }
   }
 
   try {
@@ -3874,14 +4159,24 @@ async function loadFeed(reset = false) {
     } else {
       url = `/feed?page=${feedPage}&limit=30${sc}`;
     }
-    let data = await api(url, { timeout: 25000 });   // allow for free-tier cold starts
+    let data = await api(url, { timeout: 45000 });   // long enough to ride a free-tier cold start
     // Region soft-fallback: if a scoped fetch is empty on page 1, broaden so the
     // feed never starves (e.g. few 'local' stories right now).
     if (sc && feedPage === 1 && !(data.articles || []).length) {
-      data = await api(url.replace(sc, ''), { timeout: 25000 });
+      data = await api(url.replace(sc, ''), { timeout: 45000 });
     }
-    feedRetried = false;   // server reached — reset the cold-start retry budget
-    const articles = (data.articles || []).map(normalizeArticle);
+    feedRetried = false; feedRetryCount = 0;   // server reached — reset cold-start retry budget
+    let articles = (data.articles || []).map(normalizeArticle);
+    // Cross-page dedup: never render a story that's already on screen. The backend
+    // can return overlapping pages, which is what made articles "come again".
+    articles = articles.filter(a => {
+      const id = a && a.id != null ? String(a.id) : null;
+      if (!id) return true;
+      if (shownFeedIds.has(id)) return false;
+      shownFeedIds.add(id);
+      return true;
+    });
+    if (feedPage === 1 && articles.length && _isDefaultFeedView()) _writeFeedCache(articles);
     if (feedPage === 1 && articles[0]) feedTopId = articles[0].id;
 
     // Fetch continue-reading article only on first page if logged in
@@ -3943,11 +4238,12 @@ async function loadFeed(reset = false) {
 
     } else {
       // Pagination — append as standard cards (round-robin categories in "All")
+      if (articles.length === 0) feedExhausted = true;   // page was all duplicates → stop paging
       const more = (curChip === 'all') ? roundRobinByCat(articles) : articles;
       more.forEach(a => renderStandardCard(a, c));
     }
 
-    if (data.has_more) feedPage++;
+    if (data.has_more) feedPage++; else feedExhausted = true;
 
     hydrateFeedCounts();   // fill the pills with real like/comment counts
 
@@ -3959,7 +4255,31 @@ async function loadFeed(reset = false) {
 
   } catch(e) {
     console.warn('Feed load failed', e);
-    if (c.children.length === 0 || c.querySelector('.skel')) {
+    const stale = () => c.children.length === 0 || c.querySelector('.skel') || c.querySelector('.es-waking');
+    // Render's free tier spins down when idle; the first request wakes it and can
+    // take 30–60s. Auto-retry a few times with backoff, showing a calm "waking up"
+    // state, before falling back to a hard error with a manual Retry.
+    if (feedPage === 1 && feedRetryCount < FEED_MAX_RETRIES) {
+      feedRetryCount++;
+      if (stale()) {
+        c.innerHTML = '';
+        if (curChip === 'all') renderSectionTabs(c);
+        if (typeof FALLBACK_ARTICLES !== 'undefined' && FALLBACK_ARTICLES.length) {
+          FALLBACK_ARTICLES.forEach(a => renderStandardCard(a, c));
+        }
+        const wake = document.createElement('div');
+        wake.className = 'empty-state es-waking';
+        wake.innerHTML = `
+          <div class="empty-state-ico">⏳</div>
+          <div class="empty-state-msg">Waking the server…</div>
+          <div class="empty-state-sub">The free server is starting up — this can take up to a minute.</div>`;
+        c.appendChild(wake);
+      }
+      feedLoading = false;
+      setTimeout(() => loadFeed(true), 3000 + feedRetryCount * 3000);   // 6s,9s,12s,15s,18s
+      return;
+    }
+    if (stale()) {
       c.innerHTML = '';
       if (curChip === 'all') renderSectionTabs(c);
       if (typeof FALLBACK_ARTICLES !== 'undefined' && FALLBACK_ARTICLES.length) {
@@ -3971,16 +4291,8 @@ async function loadFeed(reset = false) {
         <div class="empty-state-ico">⚠️</div>
         <div class="empty-state-msg">Couldn't reach the server</div>
         <div class="empty-state-sub">The server may be waking up — this can take a moment.</div>
-        <button class="es-retry" onclick="loadFeed(true)">Retry</button>`;
+        <button class="es-retry" onclick="feedRetryCount=0;loadFeed(true)">Retry</button>`;
       c.appendChild(notice);
-    }
-    // Render free tier spins down when idle; the first request wakes it and
-    // may time out. Auto-retry once so the user doesn't have to tap Retry.
-    if (feedPage === 1 && !feedRetried) {
-      feedRetried = true;
-      feedLoading = false;
-      setTimeout(() => loadFeed(true), 3500);
-      return;
     }
   } finally {
     feedLoading = false;
@@ -4078,6 +4390,41 @@ function openMediaViewer(src){
   if (!_navReplay) { try { history.pushState({ layer: 'media' }, ''); } catch (e) {} }
 }
 function closeMediaViewer(){ document.getElementById('media-viewer')?.classList.remove('on'); }
+
+// ── Globe embed: lazy iframe, loading state, memory-safe teardown ──
+const NEWSGLOBE_URL = (document.querySelector('meta[name="newsglobe-url"]')?.content || '').trim();
+// Card entry point (named so inline onclick can reach it).
+function openGlobeCard(){ openGlobe(NEWSGLOBE_URL, 'Globe'); }
+function openGlobe(url, title){
+  const ov = document.getElementById('globe-overlay');
+  if (!ov || ov.classList.contains('on')) return;
+  const host = document.getElementById('globe-frame-host');
+  const loader = document.getElementById('globe-loader');
+  const label = title || 'Globe';
+  const lt = loader.querySelector('.globe-loader-text');
+  if (lt) lt.textContent = 'Loading ' + label + '…';
+  loader.classList.remove('gone');                 // show loading state
+  // Lazily create the iframe only now (never preloaded).
+  const f = document.createElement('iframe');
+  f.className = 'globe-frame';
+  f.title = label;
+  f.setAttribute('allow', 'accelerometer; gyroscope; fullscreen; geolocation');
+  f.setAttribute('referrerpolicy', 'no-referrer-when-downgrade');
+  f.addEventListener('load', () => loader.classList.add('gone'));
+  f.src = url || NEWSGLOBE_URL || 'about:blank';
+  host.appendChild(f);
+  ov.classList.add('on');
+  ov.setAttribute('aria-hidden', 'false');
+  if (!_navReplay) { try { history.pushState({ layer: 'globe' }, ''); } catch (e) {} }
+}
+function closeGlobe(){
+  const ov = document.getElementById('globe-overlay');
+  if (!ov || !ov.classList.contains('on')) return;
+  ov.classList.remove('on');
+  ov.setAttribute('aria-hidden', 'true');
+  document.getElementById('globe-frame-host').innerHTML = '';  // destroy iframe → free memory
+  document.getElementById('globe-loader').classList.remove('gone'); // reset for next open
+}
 function _mvDist(t){ return Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY); }
 (function initMediaViewer(){
   const v = document.getElementById('media-viewer');
@@ -4185,9 +4532,6 @@ function openArticle(rawA) {
       };
       img.onclick = () => openMediaViewer(a.image_url);
       aoHero.appendChild(img);
-      const hint = document.createElement('div'); hint.className = 'ao-zoom-hint';
-      hint.innerHTML = '<i class="fa-solid fa-magnifying-glass-plus"></i>';
-      aoHero.appendChild(hint);
     } else {
       aoHero.style.background = CAT_GRADIENTS[a.category] || CAT_GRADIENTS.tech;
       const ph = document.createElement('div');
@@ -4208,6 +4552,7 @@ function openArticle(rawA) {
   document.getElementById('ao-main-title').textContent = a.title;
   const body = a.body_ai || a.preview || a.summary || '';
   renderArticleBody(body);
+  const _tb = document.getElementById('ao-tldr-box'); if (_tb) { _tb.style.display = 'none'; _tb.innerHTML = ''; }
   document.getElementById('ao-keypoints').innerHTML = '';
   // Fetch the fuller article body + key points (who/what/where/when/why).
   aoLoadFullContext(a.id);
@@ -4290,6 +4635,28 @@ function aoLike() {
     el.querySelector('i').className='fa-regular fa-heart';
   }
   persist();
+}
+
+// AI TL;DR — 3-line summary via our Gemini/Groq pipeline (/sherr/tldr).
+let _tldrBusy = false;
+async function aoSummarize() {
+  if (!currentArticle || _tldrBusy) return;
+  const box = document.getElementById('ao-tldr-box');
+  if (!box) return;
+  const H = '<div class="ao-tldr-h"><i class="fa-solid fa-wand-magic-sparkles"></i> TL;DR</div>';
+  box.style.display = 'block';
+  box.innerHTML = H + '<div class="tldr-msg">Summarizing…</div>';
+  _tldrBusy = true;
+  try {
+    const text = currentArticle.body_ai || currentArticle.summary || currentArticle.preview || '';
+    const r = await api('/sherr/tldr', { method: 'POST', timeout: 25000,
+      body: JSON.stringify({ title: currentArticle.title || '', text }) });
+    const lines = (r && r.tldr) || [];
+    if (!lines.length) { box.innerHTML = H + '<div class="tldr-msg">Couldn\'t summarize right now.</div>'; return; }
+    box.innerHTML = H + '<ul>' + lines.map(l => `<li>${bEsc(l)}</li>`).join('') + '</ul>';
+  } catch (e) {
+    box.innerHTML = H + '<div class="tldr-msg">Summarize failed — try again.</div>';
+  } finally { _tldrBusy = false; }
 }
 
 function aoSave() {
@@ -4604,6 +4971,37 @@ async function requestPushPermission() {
     renderNotifs();
   } catch (e) { console.warn('FCM enable failed', e); toast('Could not enable notifications'); }
 }
+// Is the app running as an installed PWA / TWA (i.e. the user "downloaded" it)?
+function isInstalledApp() {
+  const mm = (q) => { try { return window.matchMedia && matchMedia(q).matches; } catch (e) { return false; } };
+  return mm('(display-mode: standalone)') || mm('(display-mode: fullscreen)') ||
+         mm('(display-mode: minimal-ui)') || navigator.standalone === true ||
+         (document.referrer || '').startsWith('android-app://');
+}
+// For the installed app, proactively turn on notifications once the user is
+// signed in. (The platform still requires the permission prompt — we just
+// trigger it for people who downloaded the app instead of waiting for the
+// Settings toggle.) Runs at most once per launch.
+let _autoPushTried = false;
+function maybeAutoEnablePush() {
+  try {
+    if (_autoPushTried) return;
+    if (!isInstalledApp()) return;                 // only the downloaded app
+    if (!ST.token) return;                          // must be signed in
+    if (!('Notification' in window)) return;
+    if (Notification.permission === 'denied') return;
+    if (Notification.permission === 'granted' && ST.push) return;  // already on
+    _autoPushTried = true;
+    setTimeout(() => { try { requestPushPermission(); } catch (e) {} }, 2500);
+  } catch (e) {}
+}
+// A fresh install fires this (in the browser tab) — re-arm so the next launch
+// of the installed app prompts for notifications.
+window.addEventListener('appinstalled', () => {
+  _autoPushTried = false;
+  setTimeout(maybeAutoEnablePush, 2000);
+});
+
 // Settings → "Send Test Notification": pushes "SherrByte test 🐯" to this account's devices.
 async function sendTestPush() {
   if (!ST.token) { toast('Sign in first'); return; }
@@ -4711,7 +5109,7 @@ async function loadFeedPulse() {
   const setTxt = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
   if (!ST.token) {
     _feedAnalytics = null;
-    setTxt('fp-time', '—'); setTxt('fp-read', '—'); setTxt('fp-growth', 'Sign in'); setTxt('fp-suggest', '—');
+    setTxt('fp-time', '0m'); setTxt('fp-read', '0 today'); setTxt('fp-growth', 'Sign in'); setTxt('fp-suggest', 'Pick topics');
     if (radar) radar.innerHTML = buildRadar(null);
     renderFeedCatCards();
     return;
@@ -5095,6 +5493,7 @@ function goBack() { history.back(); }
 window.addEventListener('popstate', (e) => {
   _navReplay = true;
   try {
+    const go  = document.getElementById('globe-overlay');
     const mv  = document.getElementById('media-viewer');
     const ao  = document.getElementById('article-overlay');
     const so  = document.getElementById('search-overlay');
@@ -5102,7 +5501,8 @@ window.addEventListener('popstate', (e) => {
     const sb  = document.getElementById('sidebar');
     const sub = document.querySelector('.sub.on');
     // Close the topmost open layer first; otherwise navigate to the routed view.
-    if (mv && mv.classList.contains('on'))        closeMediaViewer();
+    if (go && go.classList.contains('on'))        closeGlobe();
+    else if (mv && mv.classList.contains('on'))   closeMediaViewer();
     else if (ao && ao.classList.contains('open')) closeArticle();
     else if (so && so.classList.contains('open')) closeSearch();
     else if (mo && mo.classList.contains('open')) closeMarketDetail();
@@ -5152,12 +5552,21 @@ async function bootstrapSession() {
     document.getElementById('ob-screen')?.classList.add('gone');
     updateSidebarAuth();
     loadUserPrefs(me);                     // restore saved feed cats/topics
+    maybeAutoEnablePush();                 // installed app + signed in → offer push
   } catch (e) {
-    // Session is dead and couldn't be refreshed → sign out cleanly.
-    switchUser('anon');
-    ST.token = null; ST.refresh = null; ST.userId = null; persist();
-    document.getElementById('ob-screen')?.classList.remove('gone');
-    updateSidebarAuth();
+    // Only sign out on a REAL auth failure (refresh also failed → 401/403).
+    // A cold/asleep/offline backend (timeout, network, 5xx) must NOT wipe the
+    // session — otherwise the user is forced to log in again every cold start.
+    const msg = String((e && e.message) || '');
+    const authDead = /HTTP 40[13]\b|unauthor/i.test(msg);
+    if (authDead) {
+      switchUser('anon');
+      ST.token = null; ST.refresh = null; ST.userId = null; persist();
+      document.getElementById('ob-screen')?.classList.remove('gone');
+      updateSidebarAuth();
+    }
+    // else: keep the stored session and stay signed in; it'll work once the
+    // backend is reachable again (the next api() call refreshes if needed).
   }
 }
 
@@ -5594,6 +6003,28 @@ function buildSparkline(days) {
   </svg>`;
 }
 
+// Horizontally-scrollable strip of previous days' streak numbers.
+function buildStreakStrip(history) {
+  if (!history || !history.length) return '';
+  const today = new Date().toISOString().slice(0, 10);
+  const DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const cells = history.map(d => {
+    const dt = new Date(d.date + 'T00:00:00');
+    const isToday = d.date === today;
+    const on = d.active;
+    return `<div class="streak-cell ${on ? 'on' : ''} ${isToday ? 'today' : ''}">
+      <div class="streak-cell-dow">${isToday ? 'Today' : DOW[dt.getDay()]}</div>
+      <div class="streak-cell-fire">${on ? '🔥' : '·'}</div>
+      <div class="streak-cell-num">${d.streak}</div>
+      <div class="streak-cell-date">${dt.getDate()}/${dt.getMonth() + 1}</div>
+    </div>`;
+  }).join('');
+  return `<div class="streak-strip-wrap">
+    <div class="streak-strip-hdr">Streak history</div>
+    <div class="streak-strip">${cells}</div>
+  </div>`;
+}
+
 function buildDonut(categories) {
   const active = categories.filter(c => c.count > 0);
   if (active.length === 0) {
@@ -5662,6 +6093,7 @@ async function loadProfileAnalytics() {
         <div class="analytics-sparkline">${buildSparkline(a.daily_sec)}</div>
         <div class="analytics-days">${dayLabels.map(l => `<span>${l}</span>`).join('')}</div>
       </div>
+      ${buildStreakStrip(a.streak_history)}
       <div class="analytics-grid">
         <div class="analytics-tile">
           <div class="analytics-tile-ico" style="background:rgba(82,193,122,0.15);color:#52C17A">📖</div>
@@ -6088,7 +6520,8 @@ async function doSearch(q){
 }
 
 // ── Bytes — vertical short-news feed (WWWW corner + infinite scroll) ──
-let bytesInit = false, bytesPage = 1, bytesLoading = false; const bytesIds = new Set();
+let bytesInit = false, bytesPage = 1, bytesLoading = false, _bytesRetried = false; const bytesIds = new Set();
+const BYTES_MAX_RETRIES = 5; let bytesRetryCount = 0;
 function bEsc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function bCap(s){ s=String(s||''); return s.charAt(0).toUpperCase()+s.slice(1); }
 async function initBytes(){
@@ -6098,22 +6531,40 @@ async function initBytes(){
   feed.addEventListener('scroll', () => {
     if (feed.scrollTop + feed.clientHeight >= feed.scrollHeight - feed.clientHeight * 1.5) loadBytes(false);
   }, { passive: true });
-  attachPullToRefresh(feed, () => loadBytes(true));   // pull at the first byte → fresh batch
+  attachPullToRefresh(feed, () => { bytesRetryCount = 0; loadBytes(true); });   // pull → fresh batch
 }
 async function loadBytes(reset){
   if (bytesLoading) return; bytesLoading = true;
   const feed = document.getElementById('bytes-feed');
+  // Instant: paint cached bytes immediately so a cold backend never shows the
+  // "Waking the server" wall (the network load below refreshes them).
+  if (reset && !feed.querySelector('.byte')) {
+    const cached = _readFeedCache();
+    if (cached && cached.length) { feed.innerHTML = ''; try { renderBytes(cached.map(normalizeArticle), feed); } catch (e) {} }
+  }
   try {
     if (reset){ bytesPage = 1; bytesIds.clear(); }
-    const data = await api(`/feed?page=${bytesPage}&limit=10`);   // scope parked (see loadFeed)
+    const data = await api(`/feed?page=${bytesPage}&limit=10`, { timeout: 45000 });   // long enough to ride a cold start
     const arts = (data.articles||[]).map(normalizeArticle).filter(a => a.id && !bytesIds.has(a.id));
     arts.forEach(a => bytesIds.add(a.id));
-    if (reset) feed.innerHTML = '';
+    _bytesRetried = false; bytesRetryCount = 0;  // a successful load re-arms the cold-start budget
+    if (reset) feed.innerHTML = '';              // clear cached placeholder, render fresh
     if (reset && !arts.length) feed.innerHTML = '<div class="bytes-empty glass">No bytes yet — check back soon.</div>';
     else renderBytes(arts, feed);
     if (data.has_more) bytesPage++;
   } catch (e) {
-    if (reset && !feed.querySelector('.byte')) feed.innerHTML = '<div class="bytes-empty glass">⚡ Bytes will fill once the feed is live.</div>';
+    const hasContent = !!feed.querySelector('.byte');
+    // Render free tier cold-starts (~30–60s). Retry with backoff; only show the
+    // "waking" wall when we have nothing cached to display.
+    if (reset && bytesRetryCount < BYTES_MAX_RETRIES) {
+      bytesRetryCount++; bytesLoading = false;
+      if (!hasContent) feed.innerHTML = '<div class="bytes-empty glass">⏳ Waking the server…<br><span>The free server is starting up — this can take up to a minute.</span></div>';
+      setTimeout(() => loadBytes(true), 3000 + bytesRetryCount * 3000);
+      return;
+    }
+    if (reset && !hasContent) {
+      feed.innerHTML = '<div class="bytes-empty glass"><b>Bytes</b><br><span>Couldn\'t load — pull down to retry.</span></div>';
+    }
   } finally { bytesLoading = false; }
 }
 function renderBytes(arts, feed){
@@ -6149,7 +6600,7 @@ function renderBytes(arts, feed){
       </div>`;
     el.querySelectorAll('.b-open').forEach(o => o.addEventListener('click', e => { e.stopPropagation(); markSeen(a.id); openArticle(a); }));
     el.querySelector('.b-save').addEventListener('click', e => { e.stopPropagation(); byteToggle('saves', a, e.currentTarget, 'fa-bookmark', '🔖 Saved', 'save'); });
-    el.querySelector('.b-share').addEventListener('click', e => { e.stopPropagation(); shareArt(a.title||''); });
+    el.querySelector('.b-share').addEventListener('click', e => { e.stopPropagation(); shareArticleCard(a); });
     feed.appendChild(el);
   });
   hydrateByteCounts(arts.map(a => a.id));   // real like/comment counts
@@ -6205,25 +6656,31 @@ async function loadWeather() {
     try { geo = JSON.parse(localStorage.getItem('sb-geo') || 'null'); } catch (e) {}
     if (geo && geo.lat) qs = `?lat=${geo.lat}&lon=${geo.lon}`;
     const w = await api('/live/weather' + qs);
-    if (!w) return;
+    if (!w || w.temp_c == null) throw new Error('no weather');
     const loc = document.getElementById('bw-loc');
     if (loc) loc.innerHTML = `<i class="fa-solid fa-location-dot" style="font-size:0.6rem"></i> ${w.city || '—'}`;
     if (w.temp_c != null) document.getElementById('bw-temp').textContent = w.temp_c + '°';
     document.getElementById('bw-desc').textContent =
       (w.condition || '') + (w.feels_c != null ? ` · Feels ${w.feels_c}°` : '');
     if (w.emoji) document.getElementById('bw-icon').textContent = w.emoji;
-  } catch (e) { /* endpoint live after backend merges to main */ }
+  } catch (e) {
+    const d = document.getElementById('bw-desc'); if (d) d.textContent = 'Weather unavailable';
+    const t = document.getElementById('bw-temp'); if (t && t.textContent === '—°') t.textContent = '—';
+    const l = document.getElementById('bw-loc'); if (l) l.innerHTML = '<i class="fa-solid fa-location-dot" style="font-size:0.6rem"></i> Tap to retry';
+  }
 }
 async function loadWordOfDay() {
   try {
     const d = await api('/live/word-of-day');
-    if (!d || !d.word) return;
+    if (!d || !d.word) throw new Error('no word');
     document.getElementById('ewc-word').textContent = d.word.charAt(0).toUpperCase() + d.word.slice(1);
     const m = (d.meanings && d.meanings[0]) || {};
     document.getElementById('ewc-phon').textContent = [d.phonetic, m.part_of_speech].filter(Boolean).join('  •  ');
     document.getElementById('ewc-def').textContent = m.definition || '';
     document.getElementById('ewc-ex').textContent = m.example ? `"${m.example}"` : '';
-  } catch (e) {}
+  } catch (e) {
+    const w = document.getElementById('ewc-word'); if (w && w.textContent === '—') w.textContent = 'Tap Dictionary ↑';
+  }
 }
 async function openDictionary() {
   const w = (prompt('Look up a word:') || '').trim().toLowerCase();
@@ -6294,6 +6751,24 @@ window.addEventListener('load', () => {
   runIntro();
 });
 
+// Show the "Get the app" link only on Android *browsers* — hide it on iOS (the
+// APK is useless there) and whenever we're already running as an installed app
+// (standalone / TWA / fullscreen), where a download prompt makes no sense.
+function gateAppDownloadCTA() {
+  const el = document.getElementById('sb-getapp');
+  if (!el) return;
+  const ua = navigator.userAgent || '';
+  const isAndroid = /Android/i.test(ua);
+  const mm = (q) => { try { return window.matchMedia && matchMedia(q).matches; } catch (e) { return false; } };
+  const installed =
+    mm('(display-mode: standalone)') ||
+    mm('(display-mode: fullscreen)') ||
+    mm('(display-mode: minimal-ui)') ||
+    navigator.standalone === true ||                       // iOS standalone
+    (document.referrer || '').startsWith('android-app://'); // launched from the TWA
+  el.style.display = (isAndroid && !installed) ? '' : 'none';
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   renderExpCats();
   renderExpInteractions();
@@ -6310,7 +6785,9 @@ document.addEventListener('DOMContentLoaded', () => {
   rehydrateScope();                                            // restore Local/National/Global choice
   restoreSettings();                                           // restore toggles / privacy / text size
   document.getElementById('saved-ct').textContent = ST.saves.length;
+  gateAppDownloadCTA();
   loadFeed(true);
+  ActivityTracker.start();   // begin screen-time heartbeats (no-ops until signed in)
   // Markets/weather/Explore data load lazily when Explore is opened (navTo),
   // so startup only hits /feed — important for the cold free-tier backend.
 });

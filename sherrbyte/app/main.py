@@ -34,7 +34,7 @@ async def _ingest_job():
     """Background ingest cycle (imported lazily to keep startup light)."""
     from app.pipeline import run_cycle
     try:
-        await run_cycle()
+        await run_cycle(understand_concurrency=settings.understand_concurrency)
     except Exception as e:
         log.error("ingest cycle failed: %s", e, exc_info=True)
 
@@ -97,9 +97,17 @@ def _pillars_payload() -> dict:
     return {"pillars": [{**v, "id": k} for k, v in PILLARS.items()]}
 
 
-@app.get("/")
+@app.api_route("/", methods=["GET", "HEAD"])
 async def root():
     return {"service": settings.app_name, "version": settings.app_version, "status": "ok"}
+
+
+@app.api_route("/ping", methods=["GET", "HEAD"])
+async def ping():
+    """Ultra-light keep-alive endpoint. Accepts GET and HEAD, no DB, always 200 —
+    so uptime pingers (e.g. UptimeRobot) keep the free instance awake and report
+    it as 'Up' regardless of the HTTP method they use."""
+    return {"ok": True}
 
 
 @app.get("/pillars")

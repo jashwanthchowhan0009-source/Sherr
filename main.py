@@ -114,6 +114,24 @@ MICRO_TOPICS: dict[str, int] = {
     "Cricket": 9, "IPL": 9, "Football": 9, "Premier League": 9, "F1": 9, "Formula 1": 9,
     "Olympics": 9, "NBA": 9, "Tennis": 9, "Wimbledon": 9, "FIFA": 9, "Esports": 9,
     "Gaming": 9, "Sports": 9, "Virat Kohli": 9, "Messi": 9, "Ronaldo": 9,
+    # Cybersecurity extensions (Pillar 3)
+    "Data Breach": 3, "Ransomware": 3, "Phishing": 3, "Malware": 3,
+    "Zero-Day": 3, "Vulnerability": 3, "DDoS": 3, "APT": 3,
+    "Cyber Attack": 3, "Encryption": 3, "Patch Tuesday": 3,
+    "Aviation Safety": 3, "Aircraft": 3, "Airline": 3, "SpaceX Launch": 3,
+    # Military / geopolitics extensions (Pillar 1)
+    "Drone Strike": 1, "Nuclear Weapons": 1, "Missile Test": 1,
+    "Ukraine War": 1, "Gaza War": 1, "Taiwan Strait": 1,
+    "NATO Summit": 1, "Defense Budget": 1, "Ceasefire": 1,
+    "War Crimes": 1, "Refugee Crisis": 1, "Arms Deal": 1,
+    "Military Alliance": 1, "Coup": 1, "Peacekeeping": 1,
+    # Energy / climate extensions (Pillar 5)
+    "Oil Prices": 5, "OPEC": 5, "LNG": 5, "Energy Crisis": 5,
+    "Nuclear Energy": 5, "Solar Farm": 5, "Wind Farm": 5,
+    "Energy Security": 5, "Carbon Capture": 5, "Electric Grid": 5,
+    "Coal": 5, "Uranium": 5, "Paris Agreement": 5,
+    "Carbon Budget": 5, "Sea Level Rise": 5, "Heat Wave": 5,
+    "Arctic Ice": 5, "COP30": 5, "Fossil Fuels": 5,
 }
 
 # ─── FAST RULE-BASED CLASSIFIER (fallback before AI runs) ────────────────────
@@ -122,7 +140,10 @@ PILLAR_EXCLUSIVE_KEYWORDS = {
         "constitution","treaty","diplomat","legislation","judiciary","supreme court",
         "president","prime minister","cabinet","political party","bjp","congress party",
         "lok sabha","rajya sabha","united nations","nato","geopolitics","sanctions",
-        "military","army","defence","protest","coup","chief minister","governor"],
+        "military","army","defence","protest","coup","chief minister","governor",
+        "drone strike","missile strike","ceasefire","war crimes","refugee","nato summit",
+        "defense budget","arms deal","peacekeeping","military alliance","nuclear test",
+        "ukraine war","taiwan strait","iran deal","un security council"],
     2: ["stock market","share price","nifty","sensex","nasdaq","bitcoin","cryptocurrency",
         "crypto","ethereum","blockchain","startup","venture capital","funding round",
         "ipo","merger","acquisition","quarterly earnings","inflation","interest rate",
@@ -132,7 +153,9 @@ PILLAR_EXCLUSIVE_KEYWORDS = {
         "llm","neural network","quantum computing","crispr","gene editing","robotics",
         "spacex","isro","nasa","rocket launch","satellite","cybersecurity","data breach",
         "ransomware","smartphone launch","5g","6g","semiconductor","electric vehicle",
-        "nuclear fusion","github","app update","nvidia","tpu"],
+        "nuclear fusion","github","app update","nvidia","tpu",
+        "zero-day","malware","phishing","cyber attack","ddos","apt group","hacking",
+        "vulnerability","patch","exploit","darkweb","aviation accident","aircraft crash"],
     4: ["box office","oscar","grammy","emmy","bafta","music album","concert tour",
         "netflix series","amazon prime","disney+","streaming platform","art exhibition",
         "museum","gallery","fashion week","book launch","bestseller","broadway",
@@ -140,7 +163,11 @@ PILLAR_EXCLUSIVE_KEYWORDS = {
     5: ["climate change","global warming","carbon emissions","greenhouse gas",
         "wildlife conservation","endangered species","national park","earthquake",
         "tsunami","hurricane","cyclone","tornado","flood","drought","wildfire",
-        "deforestation","renewable energy","coral reef","biodiversity"],
+        "deforestation","renewable energy","coral reef","biodiversity",
+        "oil price","opec","lng","natural gas","energy crisis","nuclear plant",
+        "solar energy","wind energy","carbon capture","electric grid","heat wave",
+        "sea level rise","arctic ice","paris agreement","carbon budget","coal",
+        "uranium","fossil fuel","energy security","petrochemical"],
     6: ["mental health","depression","anxiety disorder","therapy","yoga class",
         "meditation","mindfulness","weight loss","obesity","diet plan","hospital",
         "doctor","treatment","vaccine","covid","pandemic","cancer","diabetes",
@@ -299,6 +326,50 @@ RSS_FEEDS = [
     ("https://feeds.feedburner.com/ign/games-all", "IGN"),
     ("https://www.gamespot.com/feeds/mashup/", "GameSpot"),
     ("https://e360.yale.edu/feed", "Yale E360"),
+    # --- CYBERSECURITY (Pillar 3) ---
+    ("https://feeds.feedburner.com/TheHackersNews", "The Hacker News"),
+    ("https://krebsonsecurity.com/feed/", "Krebs on Security"),
+    ("https://www.bleepingcomputer.com/feed/", "Bleeping Computer"),
+    ("https://www.darkreading.com/rss.xml", "Dark Reading"),
+    ("https://www.securityweek.com/feed/", "SecurityWeek"),
+    ("https://isc.sans.edu/rssfeed_full.xml", "SANS ISC"),
+    ("https://nakedsecurity.sophos.com/feed/", "Sophos Naked Security"),
+    # --- MILITARY & GEOPOLITICS (Pillar 1) ---
+    ("https://breakingdefense.com/feed/", "Breaking Defense"),
+    ("https://warontherocks.com/feed/", "War on the Rocks"),
+    ("https://foreignpolicy.com/feed/", "Foreign Policy"),
+    ("https://thewarzone.com/feed/", "The War Zone"),
+    ("https://www.defensenews.com/rss/", "Defense News"),
+    # --- ENERGY (Pillar 5) ---
+    ("https://oilprice.com/rss/main", "OilPrice.com"),
+    ("https://cleantechnica.com/feed/", "CleanTechnica"),
+    ("https://www.renewableenergyworld.com/feed/", "Renewable Energy World"),
+    ("https://electrek.co/feed/", "Electrek"),
+    ("https://www.energymonitor.ai/feed/", "Energy Monitor"),
+    # --- CLIMATE (Pillar 5) ---
+    ("https://www.carbonbrief.org/feed/", "Carbon Brief"),
+    ("https://insideclimatenews.org/feed/", "Inside Climate News"),
+    ("https://www.climatechangenews.com/feed/", "Climate Home News"),
+    ("https://grist.org/feed/", "Grist"),
+    ("https://www.theguardian.com/environment/climate-change/rss", "Guardian Climate"),
+    # --- AVIATION / AEROSPACE (Pillar 3) ---
+    ("https://simpleflying.com/feed/", "Simple Flying"),
+    ("https://theaviationgeek.com/feed/", "The Aviation Geek"),
+    ("https://theaircurrent.com/feed/", "The Air Current"),
+    # --- GLOBAL NEWS (Pillar 1) ---
+    ("https://rss.dw.com/rdf/rss-en-all", "Deutsche Welle"),
+    ("https://rss.cnn.com/rss/edition.rss", "CNN World"),
+    ("https://feeds.apnews.com/rss/topnews", "AP News"),
+    ("https://www.france24.com/en/rss", "France 24"),
+    ("https://feeds.npr.org/1001/rss.xml", "NPR News"),
+    ("https://abcnews.go.com/abcnews/internationalheadlines", "ABC International"),
+    # --- EMERGING TECH (Pillar 3) ---
+    ("https://www.technologyreview.com/topnews.rss", "MIT Technology Review"),
+    ("https://spectrum.ieee.org/feeds/feed.rss", "IEEE Spectrum"),
+    ("https://venturebeat.com/feed/", "VentureBeat"),
+    # --- SCIENCE & HEALTH (Pillars 5 & 6) ---
+    ("https://www.statnews.com/feed/", "STAT News"),
+    ("https://www.newscientist.com/feed/home/", "New Scientist"),
 ]
 
 # ─── DATABASE ────────────────────────────────────────────────────────────────
@@ -978,17 +1049,17 @@ async def get_feed(
             q += " AND a.scope=?"; p.append(scope)
         if pillar:
             q += " AND a.pillar_id=?"; p.append(pillar)
-        q += " ORDER BY f.score DESC, a.published_at DESC LIMIT ? OFFSET ?"
+        q += " ORDER BY f.score DESC, a.published_at DESC, a.id DESC LIMIT ? OFFSET ?"
         p += [limit + 1, offset]
         rows = conn.execute(q, p).fetchall()
         if len(rows) < 5:
             rows = conn.execute(
-                "SELECT *, 1.0 as score FROM articles ORDER BY published_at DESC LIMIT ? OFFSET ?",
+                "SELECT *, 1.0 as score FROM articles ORDER BY published_at DESC, id DESC LIMIT ? OFFSET ?",
                 (limit + 1, offset)
             ).fetchall()
     else:
         rows = conn.execute(
-            "SELECT *, 1.0 as score FROM articles ORDER BY published_at DESC LIMIT ? OFFSET ?",
+            "SELECT *, 1.0 as score FROM articles ORDER BY published_at DESC, id DESC LIMIT ? OFFSET ?",
             (limit + 1, offset)
         ).fetchall()
 
@@ -1020,7 +1091,7 @@ async def explore_feed(
         q += " AND pillar_id=?"; p.append(pillar)
     if scope:
         q += " AND scope=?"; p.append(scope)
-    q += " ORDER BY published_at DESC LIMIT ? OFFSET ?"
+    q += " ORDER BY published_at DESC, id DESC LIMIT ? OFFSET ?"
     p += [limit + 1, offset]
     rows = conn.execute(q, p).fetchall()
     conn.close()
