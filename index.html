@@ -3035,6 +3035,18 @@ const ActivityTracker = (() => {
   let currentArticleId = null;
   let articleStartTime = 0;
   let articleMaxScroll = 0;
+  let articleReadSec = 0;        // estimated read time of the open article
+
+  // Reading progress = whichever is further along: how far you scrolled, or how
+  // long you've dwelled vs the estimated read time. Without the time component a
+  // short article (nothing to scroll) stays stuck at "not read" even after you've
+  // read the whole thing.
+  function _effectivePct() {
+    if (!currentArticleId) return 0;
+    const dwellSec = (Date.now() - articleStartTime) / 1000;
+    const timePct = articleReadSec > 0 ? Math.min(100, (dwellSec / articleReadSec) * 100) : 0;
+    return Math.round(Math.max(articleMaxScroll, timePct));
+  }
 
   async function sendHeartbeat(durationSec, articleId, scrollPct) {
     if (!ST || !ST.token) return;   // ST is a module-scope `let`, not on window
@@ -3055,7 +3067,7 @@ const ActivityTracker = (() => {
     stop();
     interval = setInterval(() => {
       if (!isVisible) return;
-      sendHeartbeat(30, currentArticleId, currentArticleId ? articleMaxScroll : null);
+      sendHeartbeat(30, currentArticleId, currentArticleId ? _effectivePct() : null);
     }, HEARTBEAT_MS);
   }
 
@@ -3075,7 +3087,7 @@ const ActivityTracker = (() => {
         new Blob([JSON.stringify({
           duration_sec: elapsed,
           article_id:   currentArticleId,
-          scroll_pct:   articleMaxScroll,
+          scroll_pct:   _effectivePct(),
         })], { type: 'application/json' })
       );
     }
@@ -3083,16 +3095,17 @@ const ActivityTracker = (() => {
 
   return {
     start, stop,
-    openArticle(id) {
+    openArticle(id, readSec) {
       currentArticleId = id;
       articleStartTime = Date.now();
       articleMaxScroll = 0;
+      articleReadSec = readSec || 0;
       sendHeartbeat(1, id, 5);
     },
     closeArticle() {
       if (!currentArticleId) return;
       const elapsed = Math.min(60, Math.floor((Date.now() - articleStartTime) / 1000));
-      sendHeartbeat(elapsed, currentArticleId, articleMaxScroll);
+      sendHeartbeat(elapsed, currentArticleId, _effectivePct());
       currentArticleId = null;
       articleMaxScroll = 0;
     },
@@ -4418,7 +4431,9 @@ function openArticle(rawA) {
   markSeen(rawA && (rawA.id || rawA.info_object_id || rawA.info_id));   // persist "already seen"
   const a = normalizeArticle(rawA);
   if (!a || !a.id) return;
-  ActivityTracker.openArticle(a.id);
+  const _txt = a.body_ai || a.preview || a.summary || '';
+  const _readSec = Math.max(8, Math.round(_txt.split(/\s+/).filter(Boolean).length / 200 * 60));
+  ActivityTracker.openArticle(a.id, _readSec);
   currentArticle = a;
   const cc = CATS[a.category] || CATS.tech;
 
