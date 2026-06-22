@@ -4388,7 +4388,7 @@ function renderArticleBody(text){
   if (!el) return;
   const paras = _toParagraphs(text);
   if (!paras.length){ el.innerHTML = '<p class="ao-p">Full context for this story is being generated. Tap the source below to read the original report.</p>'; return; }
-  const VISIBLE = 2;
+  const VISIBLE = 4;
   const head = paras.slice(0, VISIBLE).map(p => `<p class="ao-p">${bEsc(p)}</p>`).join('');
   if (paras.length <= VISIBLE){ el.innerHTML = head; return; }
   const rest = paras.slice(VISIBLE).map(p => `<p class="ao-p">${bEsc(p)}</p>`).join('');
@@ -4403,7 +4403,7 @@ function aoToggleMore(){
   b.innerHTML = open ? 'Read more <i class="fa-solid fa-chevron-down"></i>' : 'Show less <i class="fa-solid fa-chevron-up"></i>';
 }
 
-// Pull the full body + who/what/where/when/why for richer article context.
+// Pull the fuller article body for richer reading context.
 async function aoLoadFullContext(id) {
   if (!id) return;
   try {
@@ -4412,14 +4412,6 @@ async function aoLoadFullContext(id) {
     if (d.body && d.body.trim().length > 60) {
       renderArticleBody(d.body.trim());
     }
-    const kp = document.getElementById('ao-keypoints');
-    const w = d.wwww || {};
-    const rows = [['Who', w.who], ['What', w.what], ['Where', w.where], ['When', w.when], ['Why', w.why]]
-      .filter(([, v]) => v && String(v).trim() && String(v).trim() !== '—');
-    if (kp) kp.innerHTML = rows.length
-      ? `<div class="ao-kp-hdr">Key points</div>` +
-        rows.map(([k, v]) => `<div class="ao-kp"><span class="ao-kp-k">${k}</span><span class="ao-kp-v">${bEsc(v)}</span></div>`).join('')
-      : '';
   } catch (e) { /* full endpoint not reachable */ }
 }
 function openArticle(rawA) {
