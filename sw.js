@@ -16,9 +16,8 @@ self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET') return;
   if (req.mode === 'navigate') {
-    // Only manage the app shell ('/'). Let the embedded globe (/globe/) and any
-    // other navigations go straight to the network so they never overwrite the
-    // cached app shell.
+    // Only manage the app shell ('/'). Any other navigation goes straight to the
+    // network so it never overwrites the cached app shell.
     const url = new URL(req.url);
     if (url.origin !== location.origin || (url.pathname !== '/' && url.pathname !== '/index.html')) return;
     e.respondWith(

@@ -1,3 +1,0 @@
-# Globe is pre-built into /globe and served from this one deployment.
-# The newsglobe source stays in git for rebuilds but isn't shipped as static.
-newsglobe
