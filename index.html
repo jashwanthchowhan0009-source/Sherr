@@ -1786,6 +1786,11 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   background: radial-gradient(ellipse at 40% 30%, #011A7D 0%, #02153F 60%, #020b1a 100%);
   display: flex; flex-direction: column;
   overflow-y: auto; overscroll-behavior: contain;
+  /* This hero is always a dark background, so pin the text tokens light —
+     otherwise light mode turns the brand/title/labels dark and unreadable. */
+  --t1: #ffffff;
+  --t2: rgba(255,255,255,0.62);
+  --t3: rgba(255,255,255,0.45);
 }
 #ob-screen.gone { display: none; }
 .ob-top {
