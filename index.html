@@ -4416,7 +4416,8 @@ function aoToggleMore(){
   b.innerHTML = open ? 'Read more <i class="fa-solid fa-chevron-down"></i>' : 'Show less <i class="fa-solid fa-chevron-up"></i>';
 }
 
-// Pull the fuller article body for richer reading context.
+// Pull the fuller article body for richer reading context, and stash the
+// who/what/where/when/why so the Summarize panel can show it on demand.
 async function aoLoadFullContext(id) {
   if (!id) return;
   try {
@@ -4425,6 +4426,7 @@ async function aoLoadFullContext(id) {
     if (d.body && d.body.trim().length > 60) {
       renderArticleBody(d.body.trim());
     }
+    currentArticle._wwww = d.wwww || {};   // shown on demand via aoSummarize()
   } catch (e) { /* full endpoint not reachable */ }
 }
 function openArticle(rawA) {
@@ -4567,19 +4569,37 @@ async function aoSummarize() {
   if (!currentArticle || _tldrBusy) return;
   const box = document.getElementById('ao-tldr-box');
   if (!box) return;
-  const H = '<div class="ao-tldr-h"><i class="fa-solid fa-wand-magic-sparkles"></i> TL;DR</div>';
-  box.style.display = 'block';
-  box.innerHTML = H + '<div class="tldr-msg">Summarizing…</div>';
   _tldrBusy = true;
+  box.style.display = 'block';
+
+  // Make sure we have the who/what/where/when/why (lazily fetched from /full).
+  if (!currentArticle._wwww) {
+    try {
+      const d = await api('/article/' + encodeURIComponent(currentArticle.id) + '/full');
+      if (currentArticle) currentArticle._wwww = (d && d.wwww) || {};
+    } catch (e) { if (currentArticle) currentArticle._wwww = {}; }
+  }
+  const w = currentArticle._wwww || {};
+  const rows = [['Who', w.who], ['What', w.what], ['Where', w.where], ['When', w.when], ['Why', w.why]]
+    .filter(([, v]) => v && String(v).trim() && String(v).trim() !== '—');
+  const kpHtml = rows.length
+    ? '<div class="ao-tldr-h"><i class="fa-solid fa-list-check"></i> Key points</div>' +
+      rows.map(([k, v]) => `<div class="ao-kp"><span class="ao-kp-k">${k}</span><span class="ao-kp-v">${bEsc(v)}</span></div>`).join('')
+    : '';
+
+  const H = '<div class="ao-tldr-h"' + (kpHtml ? ' style="margin-top:14px"' : '') +
+            '><i class="fa-solid fa-wand-magic-sparkles"></i> TL;DR</div>';
+  box.innerHTML = kpHtml + H + '<div class="tldr-msg">Summarizing…</div>';
   try {
     const text = currentArticle.body_ai || currentArticle.summary || currentArticle.preview || '';
     const r = await api('/sherr/tldr', { method: 'POST', timeout: 25000,
       body: JSON.stringify({ title: currentArticle.title || '', text }) });
     const lines = (r && r.tldr) || [];
-    if (!lines.length) { box.innerHTML = H + '<div class="tldr-msg">Couldn\'t summarize right now.</div>'; return; }
-    box.innerHTML = H + '<ul>' + lines.map(l => `<li>${bEsc(l)}</li>`).join('') + '</ul>';
+    box.innerHTML = kpHtml + H + (lines.length
+      ? '<ul>' + lines.map(l => `<li>${bEsc(l)}</li>`).join('') + '</ul>'
+      : '<div class="tldr-msg">Couldn\'t summarize right now.</div>');
   } catch (e) {
-    box.innerHTML = H + '<div class="tldr-msg">Summarize failed — try again.</div>';
+    box.innerHTML = kpHtml + H + '<div class="tldr-msg">Summarize failed — try again.</div>';
   } finally { _tldrBusy = false; }
 }
 
