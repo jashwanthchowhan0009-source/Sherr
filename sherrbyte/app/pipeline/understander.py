@@ -72,7 +72,9 @@ PILLAR_KEYWORDS: dict[int, list[str]] = {
         "religion", "spirituality", "astrology", "temple", "church", "mosque",
         "mythology", "stoic", "ethics"],
     8: ["travel", "tourism", "hotel", "restaurant", "cuisine", "chef", "fashion trend",
-        "celebrity", "dating app", "home decor", "remote work", "influencer", "content creator"],
+        "celebrity", "dating app", "home decor", "remote work", "influencer", "content creator",
+        "reality show", "reality tv", "reality star", "relationship", "gossip",
+        "viral video", "social media star", "lifestyle", "fashion"],
     9: ["cricket", "ipl", "test match", "odi", "t20", "football", "fifa", "premier league",
         "champions league", "formula 1", "f1", "grand prix", "olympic", "world cup",
         "tennis", "wimbledon", "nba", "esports", "gaming", "wicket"],
@@ -205,12 +207,17 @@ Extract a clean, structured understanding of the article. Rules:
 - who/what/where/when/why: short factual phrases ("" if genuinely absent).
 - category: pick exactly one slug. Guide — society = governance, politics, crime,
   law, conflict, police, policy, public affairs; economy = business, markets,
-  finance, trade; tech = science & technology; arts = entertainment, film, music,
-  books, culture; nature = environment, climate, wildlife, space; selfwell =
+  finance, trade; tech = science & technology; arts = films, TV & streaming
+  shows, music, books, theatre, visual art and the creative industry (the works
+  and their makers); nature = environment, climate, wildlife, space; selfwell =
   health, fitness, mental well-being; philo = philosophy, religion, spirituality,
   ethics (ideas only — NEVER news about crime, terror, politics or events);
-  lifestyle = travel, food, fashion, trends; sports = sports & gaming.
+  lifestyle = celebrity gossip & personal lives, relationships, reality-TV
+  off-screen, fashion, food, travel, influencers, social-media trends; sports =
+  sports & gaming.
   Crime / terror / political / legal / conflict stories are always 'society'.
+  Celebrity gossip, relationships and reality-TV personal life are 'lifestyle',
+  not 'arts' — 'arts' is for the creative works themselves.
 - topic_tags: 2-5 specific proper nouns/concepts.
 - is_trending: true only for major/record-breaking/national-or-global-impact events.
 Output JSON only."""
