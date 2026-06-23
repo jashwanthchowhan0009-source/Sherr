@@ -5380,6 +5380,8 @@ const NB_MAP   = { home:'nb-home', explore:'nb-explore', bytes:'nb-bytes', profi
 let _navReplay = false;   // true while applying a popstate (suppresses re-push)
 
 function navTo(name) {
+  // True when this tab is already the active view (i.e. a re-tap on its nav icon).
+  const _reTap = !!document.getElementById(VIEW_MAP[name])?.classList.contains('active');
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.querySelectorAll('.nb').forEach(b => b.classList.remove('on'));
   document.getElementById(VIEW_MAP[name])?.classList.add('active');
@@ -5426,7 +5428,11 @@ function navTo(name) {
     if (!_expCurCat) showExpCat('all');   // load category rows only when Explore opens
   }
   if (name==='feed') { loadFeedPulse(); renderFeedFilterChips(); renderFeedTopics(); renderFeedArticles(); }
-  if (name==='bytes' && typeof initBytes === 'function') initBytes();
+  if (name==='bytes') {
+    // Tapping the Bytes icon again while already on Bytes pulls a fresh batch.
+    if (_reTap) { bytesRetryCount = 0; loadBytes(true); }
+    else if (typeof initBytes === 'function') initBytes();
+  }
 
   // Push a history entry so the device/hardware back button returns here.
   if (!_navReplay) { try { history.pushState({ view: name }, ''); } catch (e) {} }
