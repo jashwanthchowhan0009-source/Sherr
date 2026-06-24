@@ -5419,6 +5419,10 @@ function navTo(name) {
     if (curChip !== 'all' || homeActiveTab !== 'foryou') {
       const allChip = document.querySelector('#chip-row .chip[onclick*="\'all\'"]');
       if (allChip) selectChip(allChip, 'all'); else { curChip='all'; homeActiveTab='foryou'; loadFeed(true); }
+    } else if (_reTap) {
+      // Re-tapping Home while already on the All feed pulls fresh articles (like Bytes).
+      document.getElementById('v-home')?.scrollTo({ top: 0, behavior: 'smooth' });
+      loadFeed(true);
     } else {
       document.getElementById('v-home')?.scrollTo({ top: 0, behavior: 'smooth' });
     }
