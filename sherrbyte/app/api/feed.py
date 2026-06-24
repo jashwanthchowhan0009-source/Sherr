@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
@@ -61,6 +62,24 @@ _SELECT = """
 """
 
 
+def _feed_is_stale(rows, max_age_hours: float = 18.0) -> bool:
+    """True when the newest article in the personalized cache is too old — a sign
+    the cache froze (or scoring failed), so Home should fall back to fresh and not
+    stay stuck on days-old stories while Explore already shows today's."""
+    newest = None
+    for r in rows:
+        pa = r["published_at"]
+        if pa is None:
+            continue
+        if pa.tzinfo is None:
+            pa = pa.replace(tzinfo=timezone.utc)
+        if newest is None or pa > newest:
+            newest = pa
+    if newest is None:
+        return True
+    return (datetime.now(timezone.utc) - newest).total_seconds() > max_age_hours * 3600
+
+
 @router.get("/personalized")
 async def personalized(
     page: int = Query(1, ge=1),
@@ -104,7 +123,12 @@ async def personalized(
         "SELECT 1 FROM user_preferences WHERE user_id=$1 LIMIT 1", user_id
     )
     if has_prefs and page == 1:
-        await score_feed(user_id, limit=200, pillar=pillar_arg, scope=scope_arg)
+        # Never let a scorer error 500 the feed — that leaves the client stuck on
+        # its stale cached articles. Degrade to the existing cached/fresh rows.
+        try:
+            await score_feed(user_id, limit=200, pillar=pillar_arg, scope=scope_arg)
+        except Exception as e:
+            log.warning("score_feed failed for %s: %s", user_id, e)
 
     rows = await db.fetch(
         """
@@ -117,8 +141,10 @@ async def personalized(
         user_id, limit + 1, offset,
     ) if has_prefs else []
 
-    if len(rows) < 5:
-        # Cold start — fall back to global importance feed.
+    # Fall back to the global fresh feed when the personalized cache is empty/short
+    # (cold start) OR has gone stale (page 1 newest is days old) — otherwise Home
+    # freezes on old stories even though fresh ones exist (Explore shows them).
+    if len(rows) < 5 or (page == 1 and _feed_is_stale(rows)):
         rows = await db.fetch(
             _SELECT + " ORDER BY published_at DESC, id DESC LIMIT $1 OFFSET $2",
             limit + 1, offset,
