@@ -47,7 +47,10 @@ PILLAR_KEYWORDS: dict[int, list[str]] = {
     1: ["election", "parliament", "government", "minister", "senate", "vote", "democracy",
         "constitution", "treaty", "diplomat", "judiciary", "supreme court", "president",
         "prime minister", "cabinet", "lok sabha", "united nations", "nato", "sanctions",
-        "military", "army", "defence", "protest", "coup", "policy"],
+        "military", "army", "defence", "protest", "coup", "policy",
+        "terror", "terrorism", "uapa", "arrest", "arrested", "police", "crime",
+        "murder", "attack", "killed", "court", "custody", "militant", "extremist",
+        "smuggling", "raid", "riot", "border", "war", "espionage", "sedition"],
     2: ["stock market", "share price", "nifty", "sensex", "nasdaq", "bitcoin", "crypto",
         "ethereum", "blockchain", "startup", "venture capital", "ipo", "merger",
         "acquisition", "earnings", "inflation", "interest rate", "gdp", "recession",
@@ -69,7 +72,9 @@ PILLAR_KEYWORDS: dict[int, list[str]] = {
         "religion", "spirituality", "astrology", "temple", "church", "mosque",
         "mythology", "stoic", "ethics"],
     8: ["travel", "tourism", "hotel", "restaurant", "cuisine", "chef", "fashion trend",
-        "celebrity", "dating app", "home decor", "remote work", "influencer", "content creator"],
+        "celebrity", "dating app", "home decor", "remote work", "influencer", "content creator",
+        "reality show", "reality tv", "reality star", "relationship", "gossip",
+        "viral video", "social media star", "lifestyle", "fashion"],
     9: ["cricket", "ipl", "test match", "odi", "t20", "football", "fifa", "premier league",
         "champions league", "formula 1", "f1", "grand prix", "olympic", "world cup",
         "tennis", "wimbledon", "nba", "esports", "gaming", "wicket"],
@@ -200,10 +205,37 @@ Extract a clean, structured understanding of the article. Rules:
 - refined_title: <= 12 words, active voice, no "Breaking:"/"Watch:" prefixes.
 - summary: exactly 2 factual sentences, 40-55 words, must NOT restate the title.
 - who/what/where/when/why: short factual phrases ("" if genuinely absent).
-- category: exactly one of the allowed slugs.
+- category: pick exactly one slug. Guide — society = governance, politics, crime,
+  law, conflict, police, policy, public affairs; economy = business, markets,
+  finance, trade; tech = science & technology; arts = films, TV & streaming
+  shows, music, books, theatre, visual art and the creative industry (the works
+  and their makers); nature = environment, climate, wildlife, space; selfwell =
+  health, fitness, mental well-being; philo = philosophy, religion, spirituality,
+  ethics (ideas only — NEVER news about crime, terror, politics or events);
+  lifestyle = celebrity gossip & personal lives, relationships, reality-TV
+  off-screen, fashion, food, travel, influencers, social-media trends; sports =
+  sports & gaming.
+  Crime / terror / political / legal / conflict stories are always 'society'.
+  Celebrity gossip, relationships and reality-TV personal life are 'lifestyle',
+  not 'arts' — 'arts' is for the creative works themselves.
 - topic_tags: 2-5 specific proper nouns/concepts.
 - is_trending: true only for major/record-breaking/national-or-global-impact events.
 Output JSON only."""
+
+
+# Hard-news markers that never appear in genuine philosophy/belief content — used
+# to catch the LLM occasionally filing a crime/terror/political story under philo.
+_HARD_NEWS_WORDS = (
+    "terror", "terrorist", "uapa", "arrest", "police", "murder", "killed",
+    "attack", "blast", "court", "custody", "militant", "extremist", "smuggl",
+    "raid", "election", "parliament", "minister", "war", "troops", "border",
+    "sanction", "riot", "crime", "sedition", "espionage",
+)
+
+
+def _looks_hard_news(text: str) -> bool:
+    t = text.lower()
+    return any(w in t for w in _HARD_NEWS_WORDS)
 
 
 async def understand(article: ArticleIn) -> Understanding:
@@ -225,6 +257,11 @@ async def understand(article: ArticleIn) -> Understanding:
     if llm:
         slug = str(llm.get("category", "")).lower()
         pillar = SLUG_TO_PILLAR.get(slug) or PILLAR_ALIASES.get(slug, rule_pillar)
+        # The LLM occasionally files a crime/terror/political story under
+        # "Philosophy & Belief"; those markers never appear in real philosophy,
+        # so anchor such stories back to Society & Governance.
+        if pillar == 7 and _looks_hard_news(f"{article.title} {body[:500]}"):
+            pillar = 1
         tags = [str(t).strip() for t in (llm.get("topic_tags") or []) if str(t).strip()]
         tags = list(dict.fromkeys(tags + rule_tags))[:8]
         return Understanding(

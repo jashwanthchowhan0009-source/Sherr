@@ -129,6 +129,20 @@ def _extract_video(entry) -> str:
     return ""
 
 
+def _best_body(entry) -> str:
+    """Prefer the feed's full article HTML (content:encoded) over the short
+    summary teaser, so the reader view has real depth instead of two lines.
+    Falls back to the summary when no full content is present; capped to keep
+    DB rows and LLM prompts bounded."""
+    best = getattr(entry, "summary", "") or ""
+    for c in (getattr(entry, "content", None) or []):
+        if isinstance(c, dict):
+            val = c.get("value") or ""
+            if len(val) > len(best):
+                best = val
+    return best[:12000]
+
+
 def _build_article(title: str, body: str, link: str, source: str,
                    image: str, published: datetime, video: str = "") -> ArticleIn:
     clean = clean_html_fragments(body)
@@ -179,7 +193,7 @@ async def _fetch_feed(url: str, source: str, client: httpx.AsyncClient) -> list[
                     pass
             out.append(_build_article(
                 title=title,
-                body=getattr(entry, "summary", "") or "",
+                body=_best_body(entry),
                 link=link,
                 source=source,
                 image=_extract_image(entry),

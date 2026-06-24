@@ -10,3 +10,6 @@ Thumbs.db
 *.log
 node_modules/
 .firebase/
+
+# Local backup bundles (pending-work archives) — not source
+*.bundle
