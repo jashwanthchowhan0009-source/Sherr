@@ -267,6 +267,54 @@ async def collect_newsapi() -> list[ArticleIn]:
     return out
 
 
+async def _fetch_og_image(url: str, client: httpx.AsyncClient) -> str:
+    """Best-effort: pull og:image / twitter:image from an article page so cards
+    show a real photo instead of a gradient placeholder."""
+    try:
+        r = await asyncio.wait_for(
+            client.get(url, headers={"User-Agent": f"SherByte/{settings.app_version} (+https://sherbyte.in)"}),
+            timeout=settings.feed_fetch_timeout_sec,
+        )
+        if r.status_code != 200:
+            return ""
+        head = r.text[:120000]   # the og tags live in <head>
+        for pat in (
+            r'<meta[^>]+(?:property|name)=["\'](?:og:image(?::url)?|twitter:image)["\'][^>]+content=["\']([^"\']+)["\']',
+            r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+(?:property|name)=["\'](?:og:image(?::url)?|twitter:image)["\']',
+        ):
+            m = re.search(pat, head, re.I)
+            if m and m.group(1).strip().startswith("http"):
+                return m.group(1).strip()
+    except Exception:
+        pass
+    return ""
+
+
+async def _enrich_images(articles: list[ArticleIn], max_fetch: int = 80) -> None:
+    """Fill missing images by scraping og:image — bounded so it never dominates a
+    cycle (capped count, small concurrency, short timeout, best-effort)."""
+    targets = [a for a in articles if not a.image_url][:max_fetch]
+    if not targets:
+        return
+    sem = asyncio.Semaphore(8)
+    async with httpx.AsyncClient(
+        follow_redirects=True, timeout=httpx.Timeout(settings.feed_fetch_timeout_sec)
+    ) as client:
+        async def _one(a: ArticleIn):
+            async with sem:
+                img = await _fetch_og_image(a.url, client)
+                if img:
+                    a.image_url = img
+        await asyncio.gather(*[_one(a) for a in targets], return_exceptions=True)
+    log.info("[COLLECT] og:image filled %d/%d missing images",
+             sum(1 for a in targets if a.image_url), len(targets))
+
+
 async def collect_all() -> list[ArticleIn]:
     rss, newsapi = await asyncio.gather(collect_rss(), collect_newsapi())
-    return rss + newsapi
+    articles = rss + newsapi
+    try:
+        await _enrich_images(articles)
+    except Exception as e:
+        log.warning("image enrichment skipped: %s", e)
+    return articles
