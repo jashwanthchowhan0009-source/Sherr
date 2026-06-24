@@ -134,3 +134,76 @@ async def test(authorization: str = Header("")):
     if n == 0:
         raise HTTPException(404, "No registered devices for this account")
     return {"ok": True, "sent": n}
+
+
+def _personalize(s: str, name: str) -> str:
+    """Replace name placeholders with the user's first name."""
+    first = (name or "there").split()[0] if (name or "").strip() else "there"
+    for tok in ("{{name}}", "{name}", "[User Name]", "[user name]",
+                "[Add users name]", "[Name]", "[name]"):
+        s = s.replace(tok, first)
+    return s
+
+
+# Default reminder used by the one-tap GET trigger. [User Name] is personalized.
+DAILY_REMINDER_TITLE = "📌 SherrByte Daily Reminder"
+DAILY_REMINDER_BODY = (
+    "Good Morning [User Name], quick daily reminder for the SherrByte app. "
+    "Please take 1 minute to open the app today and scroll a bit so Google "
+    "registers our daily active status."
+)
+
+
+async def _do_broadcast(title_tmpl: str, body_tmpl: str, url: str) -> dict:
+    """Send one personalized push to every user that has a registered device."""
+    if not _ensure_fcm():
+        raise HTTPException(503, "Push not configured (firebase-admin / FIREBASE_SERVICE_ACCOUNT missing)")
+    if not body_tmpl.strip():
+        raise HTTPException(400, "Missing body")
+    rows = await db.fetch(
+        """
+        SELECT DISTINCT u.id,
+               COALESCE(NULLIF(TRIM(u.name), ''), NULLIF(u.username, ''), 'there') AS name
+        FROM users u JOIN push_tokens p ON p.user_id = u.id
+        """
+    )
+    users, delivered = 0, 0
+    for r in rows:
+        name = r["name"]
+        n = await send_push(str(r["id"]), _personalize(title_tmpl, name),
+                            _personalize(body_tmpl, name), url)
+        users += 1
+        delivered += n
+    log.info("Broadcast: %d users, %d devices delivered", users, delivered)
+    return {"ok": True, "users": users, "delivered": delivered}
+
+
+def _check_admin(secret: str) -> None:
+    admin = os.getenv("ADMIN_SECRET", "")
+    if not admin or secret != admin:
+        raise HTTPException(403, "Forbidden")
+
+
+@router.post("/broadcast")
+async def broadcast(payload: dict, authorization: str = Header("")):
+    """Admin-only: send ONE personalized push to every user with a registered
+    device. {{name}} / [User Name] in the title/body becomes the user's first
+    name. Auth: ADMIN_SECRET as Bearer token or a "secret" field. Disabled until
+    ADMIN_SECRET is set, so a normal user can never trigger it."""
+    provided = authorization[7:] if authorization.startswith("Bearer ") else ""
+    _check_admin(provided or str(payload.get("secret") or ""))
+    return await _do_broadcast(
+        str(payload.get("title") or "SherrByte"),
+        str(payload.get("body") or ""),
+        str(payload.get("url") or "/"),
+    )
+
+
+@router.get("/broadcast")
+async def broadcast_daily(secret: str = ""):
+    """One-tap trigger for the daily reminder — open
+    /api/notifications/broadcast?secret=YOUR_ADMIN_SECRET in a browser, or point
+    a free cron (e.g. cron-job.org) at it to send it automatically every morning.
+    Sends the baked-in DAILY_REMINDER to every opted-in user."""
+    _check_admin(secret)
+    return await _do_broadcast(DAILY_REMINDER_TITLE, DAILY_REMINDER_BODY, "/")
