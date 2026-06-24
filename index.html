@@ -5302,6 +5302,9 @@ function renderFemTopics() {
   });
 }
 function saveFeedEdit() {
+  // Persist locally FIRST so the selection survives reload even if the network
+  // save is slow or fails — this was the "saved but reverts" bug.
+  ST.feedCats = [...activeFeedCats]; ST.feedTopics = [...activeFeedTopics]; persist();
   renderFeedFilterChips(); renderFeedCatCards(); renderFeedTopics(); renderFeedArticles();
   document.getElementById('feed-edit-modal').classList.remove('open');
   toast('✦ Feed preferences saved!');
