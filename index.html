@@ -2899,7 +2899,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
       <div class="sg-row tap" onclick="openTextSize()"><div class="sg-ico" style="background:#8E8E93"><i class="fa-solid fa-text-size"></i></div><span class="sg-lbl2">Text Size</span><span class="sg-val" id="set-textsize-val">Medium</span><i class="fa-solid fa-chevron-right sg-arr"></i></div>
     </div></div>
     <div class="sg"><div class="sg-lbl">Notifications</div><div class="sg-grp">
-      <div class="sg-row"><div class="sg-ico" style="background:#FF5B5B"><i class="fa-solid fa-bell"></i></div><span class="sg-lbl2">Push Notifications</span><div class="tog on" data-k="push" onclick="togRow(this); if(this.classList.contains('on')) requestPushPermission();"></div></div>
+      <div class="sg-row"><div class="sg-ico" style="background:#FF5B5B"><i class="fa-solid fa-bell"></i></div><span class="sg-lbl2">Push Notifications</span><div class="tog" data-k="push" onclick="togRow(this); if(this.classList.contains('on')) requestPushPermission();"></div></div>
       <div class="sg-row tap" onclick="sendTestPush()"><div class="sg-ico" style="background:#FF9F0A"><i class="fa-solid fa-paper-plane"></i></div><span class="sg-lbl2">Send Test Notification</span><i class="fa-solid fa-chevron-right sg-arr"></i></div>
       <div class="sg-row"><div class="sg-ico" style="background:#52C17A"><i class="fa-solid fa-envelope"></i></div><span class="sg-lbl2">Email Digest</span><div class="tog" data-k="emaildigest" onclick="togRow(this)"></div></div>
     </div></div>
@@ -3424,6 +3424,14 @@ function selPriv(el){
 // Restore saved toggles / privacy / text size on load.
 function restoreSettings(){
   (document.querySelectorAll('.tog[data-k]')||[]).forEach(t=>{
+    if (t.dataset.k === 'push') {
+      // Push reflects the REAL state — browser permission granted AND a device
+      // token registered — not a saved flag. Otherwise it shows "on" while no
+      // device is actually subscribed, so the test/broadcast reaches nobody.
+      const on = ('Notification' in window) && Notification.permission === 'granted' && !!ST.push;
+      t.classList.toggle('on', on);
+      return;
+    }
     const v = (ST.settings||{})[t.dataset.k];
     if (v !== undefined) t.classList.toggle('on', !!v);
   });
