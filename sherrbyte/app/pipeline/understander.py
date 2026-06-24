@@ -54,7 +54,8 @@ PILLAR_KEYWORDS: dict[int, list[str]] = {
     2: ["stock market", "share price", "nifty", "sensex", "nasdaq", "bitcoin", "crypto",
         "ethereum", "blockchain", "startup", "venture capital", "ipo", "merger",
         "acquisition", "earnings", "inflation", "interest rate", "gdp", "recession",
-        "rbi", "federal reserve", "budget", "gst", "bank", "fintech", "real estate"],
+        "rbi", "federal reserve", "budget", "gst", "bank", "fintech", "real estate",
+        "net worth", "trillionaire", "billionaire", "market cap", "shares"],
     3: ["artificial intelligence", "machine learning", "chatgpt", "openai", "llm",
         "quantum computing", "robotics", "spacex", "isro", "nasa", "satellite",
         "cybersecurity", "data breach", "semiconductor", "electric vehicle", "nvidia",
@@ -77,7 +78,8 @@ PILLAR_KEYWORDS: dict[int, list[str]] = {
         "viral video", "social media star", "lifestyle", "fashion"],
     9: ["cricket", "ipl", "test match", "odi", "t20", "football", "fifa", "premier league",
         "champions league", "formula 1", "f1", "grand prix", "olympic", "world cup",
-        "tennis", "wimbledon", "nba", "esports", "gaming", "wicket"],
+        "tennis", "wimbledon", "nba", "esports", "gaming", "wicket",
+        "gta", "playstation", "xbox", "nintendo", "video game", "gameplay", "rockstar games"],
 }
 
 # Source-feed → pillar hints. Used as the default bucket when keyword matching
@@ -207,7 +209,8 @@ Extract a clean, structured understanding of the article. Rules:
 - who/what/where/when/why: short factual phrases ("" if genuinely absent).
 - category: pick exactly one slug. Guide — society = governance, politics, crime,
   law, conflict, police, policy, public affairs; economy = business, markets,
-  finance, trade; tech = science & technology; arts = films, TV & streaming
+  finance, trade; tech = the technology / science itself — gadgets, software,
+  AI, apps, space science, research (NOT a tech company's finances); arts = films, TV & streaming
   shows, music, books, theatre, visual art and the creative industry (the works
   and their makers); nature = environment, climate, wildlife, space; selfwell =
   health, fitness, mental well-being; philo = philosophy, religion, spirituality,
@@ -218,6 +221,9 @@ Extract a clean, structured understanding of the article. Rules:
   Crime / terror / political / legal / conflict stories are always 'society'.
   Celebrity gossip, relationships and reality-TV personal life are 'lifestyle',
   not 'arts' — 'arts' is for the creative works themselves.
+  A tech company's wealth / stock / valuation / net-worth / markets story is
+  'economy', not 'tech'. Video games & gaming (GTA, PlayStation, Xbox, Steam,
+  esports) are 'sports', not 'tech'. Films, TV and celebrities are 'arts', not 'tech'.
 - topic_tags: 2-5 specific proper nouns/concepts.
 - is_trending: true only for major/record-breaking/national-or-global-impact events.
 Output JSON only."""
@@ -236,6 +242,29 @@ _HARD_NEWS_WORDS = (
 def _looks_hard_news(text: str) -> bool:
     t = text.lower()
     return any(w in t for w in _HARD_NEWS_WORDS)
+
+
+# "tech" is the most over-assigned bucket — the LLM drops a tech-company's
+# wealth story, a video game, or an entertainment piece into it. These markers
+# reroute those obvious cases. Gaming/wealth terms rarely occur in real
+# science/technology coverage, so the override is safe.
+_GAMING_WORDS = (
+    "gta", "playstation", " xbox", "nintendo", "rockstar games", "video game",
+    "gameplay", "esports", "steam deck", "game pass", "call of duty",
+)
+_WEALTH_WORDS = (
+    "net worth", "trillionaire", "billionaire", "market cap", "valuation",
+    "shares plunge", "shares fell", "stock rout", "wipeout", "richest",
+)
+_FILM_WORDS = (
+    "box office", "movie", "actor", "actress", "casting", "james bond", "007",
+    "hollywood", "bollywood", "trailer", "sequel", "film festival",
+)
+
+
+def _has(text: str, words: tuple) -> bool:
+    t = text.lower()
+    return any(w in t for w in words)
 
 
 async def understand(article: ArticleIn) -> Understanding:
@@ -257,11 +286,21 @@ async def understand(article: ArticleIn) -> Understanding:
     if llm:
         slug = str(llm.get("category", "")).lower()
         pillar = SLUG_TO_PILLAR.get(slug) or PILLAR_ALIASES.get(slug, rule_pillar)
+        blob = f"{article.title} {body[:500]}"
         # The LLM occasionally files a crime/terror/political story under
         # "Philosophy & Belief"; those markers never appear in real philosophy,
         # so anchor such stories back to Society & Governance.
-        if pillar == 7 and _looks_hard_news(f"{article.title} {body[:500]}"):
+        if pillar == 7 and _looks_hard_news(blob):
             pillar = 1
+        # "tech" is over-assigned: reroute a video game to Sports & Gaming and a
+        # tech-company wealth/markets story to Business & Economy.
+        elif pillar == 3:
+            if _has(blob, _GAMING_WORDS):
+                pillar = 9
+            elif _has(blob, _WEALTH_WORDS):
+                pillar = 2
+            elif _has(blob, _FILM_WORDS):
+                pillar = 4
         tags = [str(t).strip() for t in (llm.get("topic_tags") or []) if str(t).strip()]
         tags = list(dict.fromkeys(tags + rule_tags))[:8]
         return Understanding(
