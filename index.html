@@ -2527,16 +2527,12 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   </div>
 </div>
 <script>
-/* Show the intro only on a fresh session; on reopen/refresh within the same
-   session, hide it synchronously (before paint) so it never plays twice. */
+/* Logo intro removed — hide the splash synchronously (before paint) so it never
+   shows; the app's own loading states cover bootstrap. */
 (function(){
   try {
-    if (sessionStorage.getItem('sb-introed')) {
-      var s = document.getElementById('splash');
-      if (s) { s.classList.remove('go'); s.style.display = 'none'; }
-    } else {
-      sessionStorage.setItem('sb-introed', '1');
-    }
+    var s = document.getElementById('splash');
+    if (s) { s.classList.remove('go'); s.style.display = 'none'; }
   } catch(e){}
 })();
 </script>
