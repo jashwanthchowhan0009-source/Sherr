@@ -148,7 +148,7 @@ def _personalize(s: str, name: str) -> str:
 # Default reminder used by the one-tap GET trigger. [User Name] is personalized.
 DAILY_REMINDER_TITLE = "📌 SherrByte Daily Reminder"
 DAILY_REMINDER_BODY = (
-    "Good Morning [User Name], quick daily reminder for the SherrByte app. "
+    "Hey, quick daily reminder for the SherrByte app. "
     "Please take 1 minute to open the app today and scroll a bit so Google "
     "registers our daily active status."
 )
