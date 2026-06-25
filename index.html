@@ -2492,6 +2492,10 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
           <button class="ob-btn-primary" id="ob-rbtn" onclick="obStep1()">Continue →</button>
         </div>
       </div>
+      <div class="ob-guest-link tap" onclick="obGuest()"
+           style="text-align:center;margin-top:16px;font-size:0.84rem;color:var(--t2);cursor:pointer">
+        Maybe later — just browse →
+      </div>
     </div>
 
     <!-- Step 2: Topics -->
@@ -5750,14 +5754,32 @@ const OB_PILLARS = [
 
 let obAllT = [], obSelT = new Set(), obPF = 0, obSD = null;
 
+let _guestNudgeTimer = null;
+const GUEST_NUDGE_MS = 5 * 60 * 1000;   // re-prompt sign-in after 5 min as a guest
+
 function obInit() {
   const screen = document.getElementById('ob-screen');
   if (!screen) return;
-  // Optimistically hide onboarding if we hold a token, then verify the session
-  // (auto-refresh on expiry; drop to sign-in only if it's truly dead).
-  if (ST.token || ST.refresh) { screen.classList.add('gone'); bootstrapSession(); }
+  if (ST.token || ST.refresh) {
+    // Already signed in — skip straight to the app and verify the session.
+    screen.classList.add('gone'); bootstrapSession();
+  } else {
+    // Login isn't mandatory: open into the feed as a guest, nudge to sign in later.
+    obGuest();
+  }
   // The splash (and its claw-tear reveal) is dismissed by a timer in the load
   // handler, so the animation plays for both logged-in and logged-out users.
+}
+
+// Browse without an account: hide the auth screen, load the anonymous feed, and
+// gently re-prompt sign-in after a few minutes (dismissible — never forced).
+function obGuest() {
+  document.getElementById('ob-screen')?.classList.add('gone');
+  try { if (typeof loadFeed === 'function') loadFeed(true); } catch (e) {}
+  clearTimeout(_guestNudgeTimer);
+  _guestNudgeTimer = setTimeout(() => {
+    if (!ST.token) document.getElementById('ob-screen')?.classList.remove('gone');
+  }, GUEST_NUDGE_MS);
 }
 
 function obSwitchTab(t) {
