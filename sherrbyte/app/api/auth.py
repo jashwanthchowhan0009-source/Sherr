@@ -12,6 +12,7 @@ import logging
 from fastapi import APIRouter, HTTPException
 
 from app.config import PILLAR_ALIASES, SLUG_TO_PILLAR
+from app.db.redis import cache_delete, cache_get, cache_set
 from app.db.supabase import db
 from app.identity import normalize_username, username_from_email, valid_username
 from app.models.user import LoginReq, RefreshReq, RegisterReq, TokenPair
@@ -27,6 +28,10 @@ def _norm_email(email: str) -> str:
 
 log = logging.getLogger("sherbyte.auth")
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+# Brute-force guard for /auth/login.
+_LOGIN_MAX_FAILS = 6        # consecutive failures before a temporary lockout
+_LOGIN_LOCKOUT_SEC = 900    # 15-minute window (also how long the counter lives)
 
 
 def _pillar_for_topic(topic: str) -> int:
@@ -108,11 +113,23 @@ async def check_username(u: str):
 
 @router.post("/login", response_model=TokenPair)
 async def login(req: LoginReq) -> TokenPair:
+    email = _norm_email(req.email)
+    # Brute-force guard: after too many failures, lock out for a window. Redis-
+    # backed (no-ops gracefully if Redis is down). Checked before the password
+    # verify and applied identically for unknown emails, so it leaks nothing.
+    fail_key = f"login:fail:{email}"
+    raw_fails = await cache_get(fail_key)
+    fails = int(raw_fails) if isinstance(raw_fails, (int, float)) else 0
+    if fails >= _LOGIN_MAX_FAILS:
+        raise HTTPException(429, "Too many login attempts — please wait a few minutes and try again.")
+
     user = await db.fetchrow(
-        "SELECT id, password_hash, name, username FROM users WHERE email=$1", _norm_email(req.email)
+        "SELECT id, password_hash, name, username FROM users WHERE email=$1", email
     )
     if not user or not verify_password(req.password, user["password_hash"]):
+        await cache_set(fail_key, fails + 1, ttl=_LOGIN_LOCKOUT_SEC)
         raise HTTPException(401, "Invalid credentials")
+    await cache_delete(fail_key)   # success clears the counter
     # Transparently upgrade legacy static-pepper hashes to per-user salt on login.
     if needs_rehash(user["password_hash"]):
         await db.execute(

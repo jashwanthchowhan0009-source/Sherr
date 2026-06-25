@@ -32,15 +32,15 @@ class User(BaseModel):
 # ─── Auth requests ────────────────────────────────────────────────────────────
 class RegisterReq(BaseModel):
     email: EmailStr
-    password: str = Field(min_length=6)
-    name: str = ""
+    password: str = Field(min_length=6, max_length=128)
+    name: str = Field(default="", max_length=80)
     username: str = ""          # optional @handle; derived from email when blank
     topics: list[str] = Field(default_factory=list)
 
 
 class LoginReq(BaseModel):
     email: EmailStr
-    password: str
+    password: str = Field(max_length=128)
 
 
 class RefreshReq(BaseModel):
