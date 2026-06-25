@@ -5012,11 +5012,15 @@ const ALL_TOPIC_NAMES = new Set();   // filled by renderFeedTopics; used to spli
 // Restore the user's saved category + topic selections. Prefers a fresh /me
 // payload; falls back to the locally cached copy so refresh feels instant.
 async function loadUserPrefs(me) {
-  // 1) Instant: hydrate from localStorage if present.
+  // The user's on-device selection wins once they've picked — the backend is
+  // only used to SEED a fresh device. Otherwise a stale /me payload reverts a
+  // just-saved selection on reload (the "preferences don't stick" bug).
+  const haveLocal = (Array.isArray(ST.feedTopics) && ST.feedTopics.length)
+                 || (Array.isArray(ST.feedCats) && ST.feedCats.length);
   if (Array.isArray(ST.feedCats))   activeFeedCats   = new Set(ST.feedCats);
   if (Array.isArray(ST.feedTopics)) activeFeedTopics = new Set(ST.feedTopics);
-  // 2) Authoritative: pull from the backend when signed in.
-  if (ST.token) {
+  // Pull from the backend only to seed a device that has no local choice yet.
+  if (ST.token && !haveLocal) {
     try {
       if (!me) me = await api('/me');
       const prefs = me.preferences || [];
