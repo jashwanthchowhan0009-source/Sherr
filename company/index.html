@@ -1,0 +1,1070 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>TheWhiteTiger — The Information Sovereignty Engine</title>
+<meta name="description" content="TheWhiteTiger is an information & data intelligence company. We collect, process, structure, verify and deliver clean, objective, real-time information at scale. Flagship product: SherrByte.">
+<meta name="theme-color" content="#05070d">
+<meta name="author" content="TheWhiteTiger">
+<link rel="icon" type="image/png" href="/tiger-logo.png">
+<link rel="apple-touch-icon" href="/tiger-logo.png">
+
+<!-- Open Graph -->
+<meta property="og:type" content="website">
+<meta property="og:title" content="TheWhiteTiger — The Information Sovereignty Engine">
+<meta property="og:description" content="A data-intelligence powerhouse turning the world's noise into clean, verified, objective truth. Flagship product: SherrByte.">
+<meta property="og:image" content="/tiger-logo.png">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+<style>
+/* ════════════════════════════════════════════════════════════════
+   THEWHITETIGER · CORPORATE SITE
+   Dark · Glassmorphic · VIBGYOR accents · Tiger brand
+   Self-contained single file. No build step.
+═══════════════════════════════════════════════════════════════ */
+
+:root{
+  --bg:        #05070d;
+  --bg-2:      #080b14;
+  --ink:       #eaf0ff;
+  --ink-soft:  #9fb0d0;
+  --ink-dim:   #6b7a99;
+  --line:      rgba(150,180,255,.10);
+  --line-2:    rgba(150,180,255,.18);
+
+  --glass:     rgba(255,255,255,.045);
+  --glass-2:   rgba(255,255,255,.07);
+  --glass-br:  rgba(255,255,255,.10);
+
+  --gold:      #f0a73c;   /* tiger eye amber */
+  --gold-2:    #ffce7a;
+  --ice:       #7fd4ff;
+  --ice-2:     #b9e8ff;
+
+  /* VIBGYOR knowledge pillars */
+  --v-violet:  #9a6bff;
+  --v-indigo:  #5a6bff;
+  --v-blue:    #3a8dff;
+  --v-cyan:    #22d3ee;
+  --v-green:   #34d399;
+  --v-yellow:  #f5d142;
+  --v-orange:  #ff9e44;
+  --v-red:     #ff5d6c;
+  --v-slate:   #8aa0c2;
+
+  --r:    22px;
+  --r-sm: 14px;
+  --maxw: 1240px;
+  --ease: cubic-bezier(.22,1,.36,1);
+  --spring: cubic-bezier(.34,1.56,.64,1);
+
+  --f:  "Inter", -apple-system, system-ui, sans-serif;
+  --fd: "Sora", "Space Grotesk", var(--f);
+  --fm: "Space Grotesk", var(--f);
+}
+
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+body{
+  font-family:var(--f);
+  background:var(--bg);
+  color:var(--ink);
+  line-height:1.6;
+  overflow-x:hidden;
+  font-feature-settings:"ss01","cv05";
+  -webkit-font-smoothing:antialiased;
+}
+::selection{background:rgba(240,167,60,.32);color:#fff}
+a{color:inherit;text-decoration:none}
+img{display:block;max-width:100%}
+button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+section{position:relative}
+
+/* ── Scroll progress ── */
+#progress{
+  position:fixed;top:0;left:0;height:3px;width:0;z-index:2000;
+  background:linear-gradient(90deg,var(--gold),var(--ice),var(--v-violet));
+  box-shadow:0 0 16px rgba(240,167,60,.5);transition:width .12s linear;
+}
+
+/* ── Animated cosmic background ── */
+.bg-fx{position:fixed;inset:0;z-index:-2;overflow:hidden;background:
+  radial-gradient(120% 90% at 50% -10%, #0c1124 0%, var(--bg) 55%);}
+.bg-grid{position:absolute;inset:-2px;
+  background-image:linear-gradient(var(--line) 1px,transparent 1px),
+                   linear-gradient(90deg,var(--line) 1px,transparent 1px);
+  background-size:64px 64px;
+  mask-image:radial-gradient(120% 80% at 50% 0%,#000 30%,transparent 80%);
+  -webkit-mask-image:radial-gradient(120% 80% at 50% 0%,#000 30%,transparent 80%);
+  animation:gridDrift 40s linear infinite;}
+@keyframes gridDrift{to{background-position:64px 64px}}
+.orb{position:absolute;border-radius:50%;filter:blur(90px);opacity:.5;
+  animation:float 22s ease-in-out infinite;will-change:transform}
+.orb.a{width:520px;height:520px;left:-120px;top:-80px;
+  background:radial-gradient(circle,rgba(240,167,60,.5),transparent 70%)}
+.orb.b{width:560px;height:560px;right:-160px;top:18%;
+  background:radial-gradient(circle,rgba(90,107,255,.45),transparent 70%);animation-delay:-7s}
+.orb.c{width:600px;height:600px;left:20%;bottom:-10%;
+  background:radial-gradient(circle,rgba(34,211,238,.32),transparent 70%);animation-delay:-13s}
+@keyframes float{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(40px,-30px) scale(1.08)}66%{transform:translate(-30px,40px) scale(.95)}}
+.noise{position:fixed;inset:0;z-index:-1;opacity:.04;pointer-events:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");}
+
+/* ── Cursor glow ── */
+#glow{position:fixed;width:460px;height:460px;border-radius:50%;pointer-events:none;z-index:0;
+  background:radial-gradient(circle,rgba(240,167,60,.10),transparent 60%);
+  transform:translate(-50%,-50%);transition:opacity .3s;mix-blend-mode:screen;}
+
+/* ════ Layout helpers ════ */
+.wrap{max-width:var(--maxw);margin:0 auto;padding:0 26px;position:relative;z-index:2}
+.eyebrow{display:inline-flex;align-items:center;gap:9px;font-family:var(--fm);
+  font-size:.72rem;font-weight:600;letter-spacing:.22em;text-transform:uppercase;
+  color:var(--gold-2);padding:7px 15px;border:1px solid var(--line-2);border-radius:999px;
+  background:var(--glass);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);}
+.eyebrow i{color:var(--gold)}
+h1,h2,h3{font-family:var(--fd);font-weight:700;letter-spacing:-.02em;line-height:1.05}
+.sec-head{max-width:760px;margin-bottom:54px}
+.sec-head h2{font-size:clamp(2rem,5vw,3.3rem);margin:18px 0 16px}
+.sec-head p{color:var(--ink-soft);font-size:clamp(1rem,2vw,1.16rem)}
+.grad{background:linear-gradient(110deg,var(--gold) 0%,var(--gold-2) 30%,var(--ice) 70%,var(--v-violet) 100%);
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;}
+.pad{padding:clamp(80px,11vw,150px) 0}
+
+/* ── Glass card base ── */
+.glass{
+  background:var(--glass);
+  border:1px solid var(--glass-br);
+  border-radius:var(--r);
+  backdrop-filter:blur(20px) saturate(140%);
+  -webkit-backdrop-filter:blur(20px) saturate(140%);
+  position:relative;overflow:hidden;
+}
+.glass::before{content:"";position:absolute;inset:0;border-radius:inherit;padding:1px;
+  background:linear-gradient(140deg,rgba(255,255,255,.25),transparent 40%);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none;opacity:.7}
+
+/* ════ Buttons ════ */
+.btn{display:inline-flex;align-items:center;gap:10px;font-family:var(--fm);font-weight:600;
+  font-size:.95rem;padding:14px 26px;border-radius:999px;transition:.35s var(--ease);
+  position:relative;overflow:hidden;letter-spacing:.01em;white-space:nowrap}
+.btn-primary{background:linear-gradient(120deg,var(--gold),var(--gold-2));color:#1a1206;
+  box-shadow:0 12px 34px rgba(240,167,60,.32)}
+.btn-primary:hover{transform:translateY(-3px);box-shadow:0 20px 48px rgba(240,167,60,.46)}
+.btn-ghost{border:1px solid var(--line-2);background:var(--glass);color:var(--ink);
+  backdrop-filter:blur(10px)}
+.btn-ghost:hover{border-color:var(--gold);background:var(--glass-2);transform:translateY(-3px)}
+
+/* ════ NAV ════ */
+header{position:fixed;top:0;left:0;right:0;z-index:1000;padding:16px 0;transition:.4s var(--ease)}
+header.scrolled{padding:10px 0}
+.nav{display:flex;align-items:center;justify-content:space-between;gap:20px;
+  padding:11px 16px 11px 20px;border-radius:999px;transition:.4s var(--ease);
+  border:1px solid transparent}
+header.scrolled .nav{background:rgba(8,11,20,.72);border-color:var(--line-2);
+  backdrop-filter:blur(22px) saturate(150%);-webkit-backdrop-filter:blur(22px) saturate(150%);
+  box-shadow:0 18px 50px rgba(0,0,0,.4)}
+.brand{display:flex;align-items:center;gap:12px;font-family:var(--fd);font-weight:700;
+  font-size:1.06rem;letter-spacing:-.01em}
+.brand img{width:38px;height:38px;object-fit:contain;
+  filter:drop-shadow(0 0 14px rgba(240,167,60,.45))}
+.brand b{color:#fff}.brand span{color:var(--gold)}
+.nav-links{display:flex;gap:4px;align-items:center}
+.nav-links a{font-size:.9rem;color:var(--ink-soft);padding:9px 14px;border-radius:999px;
+  font-weight:500;transition:.25s;position:relative}
+.nav-links a:hover{color:#fff;background:var(--glass)}
+.nav-cta{display:flex;align-items:center;gap:10px}
+.burger{display:none;font-size:1.3rem;color:#fff;padding:8px}
+@media(max-width:980px){
+  .nav-links{position:fixed;inset:0 0 0 auto;width:min(82vw,340px);flex-direction:column;
+    align-items:flex-start;gap:6px;padding:96px 26px 26px;background:rgba(8,11,20,.96);
+    backdrop-filter:blur(26px);border-left:1px solid var(--line-2);
+    transform:translateX(100%);transition:.45s var(--ease);z-index:1100}
+  .nav-links.open{transform:translateX(0)}
+  .nav-links a{width:100%;font-size:1.05rem;padding:13px 16px}
+  .burger{display:block;z-index:1200}
+  .nav-cta .btn-ghost{display:none}
+}
+
+/* ════ HERO ════ */
+.hero{min-height:100svh;display:flex;align-items:center;padding:130px 0 70px;overflow:hidden}
+.hero-grid{display:grid;grid-template-columns:1.15fr .85fr;gap:50px;align-items:center;width:100%}
+.hero-copy{max-width:640px}
+.hero h1{font-size:clamp(2.6rem,7vw,5.1rem);margin:24px 0;line-height:.98}
+.hero h1 .line{display:block;overflow:hidden}
+.hero h1 .line span{display:block;transform:translateY(110%);
+  animation:riseUp .9s var(--ease) forwards}
+.hero h1 .line:nth-child(2) span{animation-delay:.12s}
+.hero h1 .line:nth-child(3) span{animation-delay:.24s}
+@keyframes riseUp{to{transform:translateY(0)}}
+.hero-sub{font-size:clamp(1.02rem,2vw,1.22rem);color:var(--ink-soft);max-width:540px;margin-bottom:34px;
+  opacity:0;animation:fadeUp .8s .5s var(--ease) forwards}
+.hero-actions{display:flex;gap:14px;flex-wrap:wrap;opacity:0;animation:fadeUp .8s .68s var(--ease) forwards}
+.hero-meta{display:flex;gap:28px;margin-top:42px;flex-wrap:wrap;opacity:0;animation:fadeUp .8s .85s var(--ease) forwards}
+.hero-meta .m b{font-family:var(--fd);font-size:1.5rem;color:#fff;display:block}
+.hero-meta .m span{font-size:.78rem;color:var(--ink-dim);letter-spacing:.04em}
+@keyframes fadeUp{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:translateY(0)}}
+
+/* tiger eye visual */
+.hero-visual{position:relative;display:flex;justify-content:center;align-items:center;
+  opacity:0;animation:fadeIn 1.2s .4s ease forwards}
+@keyframes fadeIn{to{opacity:1}}
+.eye-wrap{position:relative;width:min(420px,80vw);aspect-ratio:1/1;display:grid;place-items:center}
+.eye-ring{position:absolute;inset:0;border-radius:50%;border:1px solid var(--line-2)}
+.eye-ring.r2{inset:9%;border-color:rgba(240,167,60,.18);animation:spin 26s linear infinite}
+.eye-ring.r3{inset:20%;border-style:dashed;border-color:rgba(127,212,255,.16);animation:spin 40s linear infinite reverse}
+@keyframes spin{to{transform:rotate(360deg)}}
+.eye-core{position:relative;width:72%;height:72%;border-radius:30% 70% 70% 30%/40% 40% 60% 60%;
+  overflow:hidden;border:1px solid var(--glass-br);box-shadow:0 30px 80px rgba(0,0,0,.6),
+  0 0 60px rgba(240,167,60,.2) inset;transition:transform .2s ease}
+.eye-core img{width:100%;height:100%;object-fit:cover;transform:scale(1.18)}
+.eye-glowdot{position:absolute;width:14px;height:14px;border-radius:50%;background:var(--gold);
+  box-shadow:0 0 24px 6px var(--gold);top:50%;left:50%;transform:translate(-50%,-50%);
+  animation:pulse 2.6s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:.5;transform:translate(-50%,-50%) scale(1)}50%{opacity:1;transform:translate(-50%,-50%) scale(1.4)}}
+.eye-tag{position:absolute;padding:8px 13px;font-family:var(--fm);font-size:.72rem;font-weight:600;
+  border-radius:999px;background:rgba(8,11,20,.8);border:1px solid var(--line-2);backdrop-filter:blur(10px);
+  white-space:nowrap;animation:floatTag 5s ease-in-out infinite}
+.eye-tag i{margin-right:6px}
+.eye-tag.t1{top:6%;left:-6%;color:var(--ice-2)}
+.eye-tag.t2{bottom:14%;right:-10%;color:var(--v-green);animation-delay:-1.6s}
+.eye-tag.t3{bottom:-2%;left:8%;color:var(--gold-2);animation-delay:-3.2s}
+@keyframes floatTag{0%,100%{transform:translateY(0)}50%{transform:translateY(-12px)}}
+@media(max-width:900px){
+  .hero-grid{grid-template-columns:1fr;gap:30px}
+  .hero-visual{order:-1}
+  .eye-wrap{width:min(300px,72vw)}
+}
+
+/* ════ Marquee ════ */
+.marquee{border-top:1px solid var(--line);border-bottom:1px solid var(--line);
+  padding:18px 0;overflow:hidden;background:rgba(255,255,255,.015);
+  -webkit-mask-image:linear-gradient(90deg,transparent,#000 12%,#000 88%,transparent);
+  mask-image:linear-gradient(90deg,transparent,#000 12%,#000 88%,transparent)}
+.marquee-track{display:flex;gap:46px;width:max-content;animation:scrollX 32s linear infinite}
+.marquee-track span{font-family:var(--fd);font-size:1.05rem;font-weight:600;color:var(--ink-dim);
+  display:inline-flex;align-items:center;gap:46px;white-space:nowrap}
+.marquee-track span::after{content:"✦";color:var(--gold);font-size:.7rem}
+@keyframes scrollX{to{transform:translateX(-50%)}}
+
+/* ════ Stats band ════ */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:20px}
+.stat{padding:30px 24px;text-align:center}
+.stat .num{font-family:var(--fd);font-size:clamp(2.1rem,4.6vw,3.1rem);font-weight:800;
+  line-height:1;background:linear-gradient(160deg,#fff,var(--gold-2));
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.stat .lbl{margin-top:12px;color:var(--ink-soft);font-size:.92rem}
+@media(max-width:760px){.stats{grid-template-columns:repeat(2,1fr)}}
+
+/* ════ Vision / Mission ════ */
+.vm-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+.vm-card{padding:40px 36px}
+.vm-card .ic{width:58px;height:58px;border-radius:16px;display:grid;place-items:center;
+  font-size:1.5rem;margin-bottom:22px;border:1px solid var(--line-2)}
+.vm-card.vision .ic{background:rgba(240,167,60,.12);color:var(--gold)}
+.vm-card.mission .ic{background:rgba(127,212,255,.12);color:var(--ice)}
+.vm-card h3{font-size:1.6rem;margin-bottom:14px}
+.vm-card p{color:var(--ink-soft);font-size:1.04rem}
+.vm-card .kw{color:#fff;font-weight:600}
+@media(max-width:820px){.vm-grid{grid-template-columns:1fr}}
+
+/* ════ Problem vs Solution ════ */
+.compare{display:grid;grid-template-columns:1fr auto 1fr;gap:0;align-items:stretch}
+.compare-col{padding:38px 32px}
+.compare .vs{display:grid;place-items:center;padding:0 8px;position:relative}
+.compare .vs span{font-family:var(--fd);font-weight:800;font-size:1.1rem;
+  width:60px;height:60px;border-radius:50%;display:grid;place-items:center;
+  background:var(--bg-2);border:1px solid var(--line-2);color:var(--gold);z-index:2}
+.compare .vs::before{content:"";position:absolute;top:0;bottom:0;width:1px;background:var(--line)}
+.compare-col h3{font-size:1.3rem;margin-bottom:6px;display:flex;align-items:center;gap:10px}
+.compare-col .tagline{font-size:.85rem;color:var(--ink-dim);margin-bottom:22px;font-family:var(--fm)}
+.compare.asis h3{color:#ff8a96}.compare.tobe{}
+.clist{list-style:none;display:flex;flex-direction:column;gap:14px}
+.clist li{display:flex;gap:12px;font-size:.96rem;color:var(--ink-soft);line-height:1.45}
+.clist li i{margin-top:3px;font-size:.95rem}
+.asis-col i{color:#ff6b78}.tobe-col i{color:var(--v-green)}
+.tobe-col li{color:var(--ink)}
+@media(max-width:820px){
+  .compare{grid-template-columns:1fr}
+  .compare .vs{padding:12px}.compare .vs::before{display:none}
+}
+
+/* ════ Two-layer product ════ */
+.layers{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+.layer{padding:36px 32px}
+.layer .tag{font-family:var(--fm);font-size:.72rem;letter-spacing:.16em;text-transform:uppercase;
+  padding:5px 12px;border-radius:999px;display:inline-block;margin-bottom:18px}
+.layer.b2c .tag{background:rgba(240,167,60,.14);color:var(--gold-2);border:1px solid rgba(240,167,60,.25)}
+.layer.b2b .tag{background:rgba(90,107,255,.16);color:#a8b4ff;border:1px solid rgba(90,107,255,.3)}
+.layer h3{font-size:1.55rem;margin-bottom:8px}
+.layer .lead{color:var(--ink-soft);margin-bottom:22px}
+.layer ul{list-style:none;display:flex;flex-direction:column;gap:11px}
+.layer ul li{display:flex;gap:11px;font-size:.94rem;color:var(--ink-soft)}
+.layer ul li i{color:var(--gold);margin-top:4px;font-size:.8rem}
+.layer.b2b ul li i{color:var(--ice)}
+@media(max-width:820px){.layers{grid-template-columns:1fr}}
+
+/* ════ VIBGYOR pillars ════ */
+.pillars{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.pillar{padding:26px 24px;cursor:default;transition:.4s var(--ease);position:relative;overflow:hidden}
+.pillar::after{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--pc);
+  transition:.4s}
+.pillar:hover{transform:translateY(-6px);border-color:color-mix(in srgb,var(--pc) 50%,transparent)}
+.pillar:hover::after{width:7px;box-shadow:0 0 22px var(--pc)}
+.pillar .dot{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;
+  font-size:1.1rem;margin-bottom:16px;color:var(--pc);
+  background:color-mix(in srgb,var(--pc) 16%,transparent);
+  border:1px solid color-mix(in srgb,var(--pc) 30%,transparent)}
+.pillar h4{font-family:var(--fd);font-size:1.12rem;margin-bottom:6px}
+.pillar p{font-size:.85rem;color:var(--ink-dim)}
+.pillar .pc-name{font-family:var(--fm);font-size:.68rem;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--pc);margin-bottom:4px;font-weight:600}
+@media(max-width:900px){.pillars{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:560px){.pillars{grid-template-columns:1fr}}
+
+/* ════ Pipeline ════ */
+.pipe{display:grid;grid-template-columns:repeat(6,1fr);gap:0;position:relative}
+.pipe::before{content:"";position:absolute;top:46px;left:8%;right:8%;height:2px;
+  background:linear-gradient(90deg,var(--gold),var(--ice),var(--v-violet));opacity:.4}
+.pstep{text-align:center;padding:0 12px;position:relative}
+.pstep .pn{width:62px;height:62px;border-radius:50%;margin:0 auto 18px;display:grid;place-items:center;
+  font-family:var(--fd);font-weight:700;font-size:1.2rem;color:#fff;position:relative;z-index:2;
+  background:var(--bg-2);border:1px solid var(--line-2);transition:.4s var(--ease)}
+.pstep:hover .pn{border-color:var(--gold);box-shadow:0 0 30px rgba(240,167,60,.4);transform:scale(1.08)}
+.pstep h4{font-family:var(--fd);font-size:1rem;margin-bottom:6px}
+.pstep p{font-size:.8rem;color:var(--ink-dim);line-height:1.4}
+@media(max-width:900px){
+  .pipe{grid-template-columns:1fr 1fr;gap:30px 12px}
+  .pipe::before{display:none}
+}
+@media(max-width:480px){.pipe{grid-template-columns:1fr}}
+
+/* ════ Feature / capability cards ════ */
+.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+.fcard{padding:30px 26px;transition:.4s var(--ease)}
+.fcard:hover{transform:translateY(-6px);border-color:var(--line-2);background:var(--glass-2)}
+.fcard .ic{width:52px;height:52px;border-radius:14px;display:grid;place-items:center;font-size:1.25rem;
+  margin-bottom:18px;color:var(--gold);background:rgba(240,167,60,.1);border:1px solid rgba(240,167,60,.2)}
+.fcard h4{font-family:var(--fd);font-size:1.14rem;margin-bottom:9px}
+.fcard p{font-size:.9rem;color:var(--ink-soft)}
+@media(max-width:900px){.cards{grid-template-columns:1fr 1fr}}
+@media(max-width:600px){.cards{grid-template-columns:1fr}}
+
+/* ════ Tech stack ════ */
+.stack{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px}
+.tech{padding:20px 18px;display:flex;flex-direction:column;gap:6px;transition:.35s var(--ease)}
+.tech:hover{transform:translateY(-4px);background:var(--glass-2)}
+.tech i{font-size:1.4rem;color:var(--ice)}
+.tech b{font-family:var(--fd);font-size:.98rem}
+.tech span{font-size:.76rem;color:var(--ink-dim)}
+
+/* ════ Phases timeline ════ */
+.timeline{position:relative;padding-left:30px}
+.timeline::before{content:"";position:absolute;left:7px;top:6px;bottom:6px;width:2px;
+  background:linear-gradient(var(--gold),var(--ice),var(--v-violet))}
+.tl-item{position:relative;padding:0 0 34px 28px}
+.tl-item:last-child{padding-bottom:0}
+.tl-item::before{content:"";position:absolute;left:-27px;top:5px;width:16px;height:16px;border-radius:50%;
+  background:var(--bg);border:3px solid var(--gold);box-shadow:0 0 14px rgba(240,167,60,.5)}
+.tl-item.done::before{background:var(--gold)}
+.tl-item .ph{font-family:var(--fm);font-size:.74rem;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--gold-2);font-weight:600}
+.tl-item h4{font-family:var(--fd);font-size:1.18rem;margin:4px 0 7px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.tl-item .badge{font-size:.66rem;font-weight:600;padding:3px 9px;border-radius:999px;font-family:var(--fm);
+  letter-spacing:.05em;text-transform:uppercase}
+.badge.green{background:rgba(52,211,153,.16);color:var(--v-green);border:1px solid rgba(52,211,153,.3)}
+.badge.amber{background:rgba(240,167,60,.16);color:var(--gold-2);border:1px solid rgba(240,167,60,.3)}
+.badge.blue{background:rgba(90,107,255,.16);color:#a8b4ff;border:1px solid rgba(90,107,255,.3)}
+.tl-item p{color:var(--ink-soft);font-size:.94rem;max-width:680px}
+
+/* ════ Business / revenue ════ */
+.biz{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+.biz-card{padding:34px 30px}
+.biz-card h3{font-size:1.4rem;margin-bottom:8px}
+.biz-card .sub{color:var(--ink-dim);font-family:var(--fm);font-size:.82rem;margin-bottom:20px;letter-spacing:.04em}
+.biz-card p{color:var(--ink-soft);font-size:.95rem;margin-bottom:8px}
+.fund{margin-top:30px;display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+.fund .f{padding:26px 22px;text-align:center}
+.fund .f .v{font-family:var(--fd);font-size:1.9rem;font-weight:800;
+  background:linear-gradient(160deg,#fff,var(--gold-2));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.fund .f .l{font-size:.84rem;color:var(--ink-soft);margin-top:8px}
+@media(max-width:820px){.biz{grid-template-columns:1fr}.fund{grid-template-columns:1fr}}
+
+/* ════ Compliance strip ════ */
+.comp{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.comp .c{padding:26px 22px;text-align:center}
+.comp .c i{font-size:1.7rem;color:var(--ice);margin-bottom:12px;display:block}
+.comp .c b{font-family:var(--fd);display:block;margin-bottom:5px;font-size:1rem}
+.comp .c span{font-size:.82rem;color:var(--ink-dim)}
+@media(max-width:820px){.comp{grid-template-columns:1fr 1fr}}
+
+/* ════ Team ════ */
+.team{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+.member{padding:34px 28px;text-align:center;transition:.4s var(--ease)}
+.member:hover{transform:translateY(-6px);background:var(--glass-2)}
+.member .av{width:88px;height:88px;border-radius:50%;margin:0 auto 18px;display:grid;place-items:center;
+  font-family:var(--fd);font-weight:700;font-size:1.8rem;color:#1a1206;
+  background:linear-gradient(140deg,var(--gold),var(--gold-2));
+  box-shadow:0 14px 34px rgba(240,167,60,.3)}
+.member.alt .av{background:linear-gradient(140deg,var(--ice),#a8b4ff);color:#08101e;box-shadow:0 14px 34px rgba(127,212,255,.28)}
+.member.alt2 .av{background:linear-gradient(140deg,var(--v-violet),#c4a8ff);color:#140a26;box-shadow:0 14px 34px rgba(154,107,255,.28)}
+.member h4{font-family:var(--fd);font-size:1.18rem}
+.member .role{color:var(--gold-2);font-size:.86rem;font-family:var(--fm);margin:4px 0 12px}
+.member p{font-size:.86rem;color:var(--ink-dim)}
+@media(max-width:820px){.team{grid-template-columns:1fr}}
+
+/* ════ CTA ════ */
+.cta-wrap{padding:64px 40px;text-align:center;
+  background:radial-gradient(120% 140% at 50% 0%,rgba(240,167,60,.14),transparent 60%),var(--glass)}
+.cta-wrap h2{font-size:clamp(2rem,5vw,3.2rem);margin-bottom:16px}
+.cta-wrap p{color:var(--ink-soft);max-width:560px;margin:0 auto 30px;font-size:1.06rem}
+.cta-actions{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
+
+/* ════ Footer ════ */
+footer{border-top:1px solid var(--line);padding:64px 0 36px;margin-top:40px}
+.foot-grid{display:grid;grid-template-columns:1.6fr 1fr 1fr 1fr;gap:40px;margin-bottom:46px}
+.foot-brand .brand{margin-bottom:16px}
+.foot-brand p{color:var(--ink-dim);font-size:.9rem;max-width:300px}
+.foot-col h5{font-family:var(--fd);font-size:.96rem;margin-bottom:16px}
+.foot-col a,.foot-col p{display:block;color:var(--ink-dim);font-size:.88rem;margin-bottom:10px;transition:.25s}
+.foot-col a:hover{color:var(--gold-2)}
+.foot-bottom{display:flex;justify-content:space-between;align-items:center;gap:18px;flex-wrap:wrap;
+  padding-top:26px;border-top:1px solid var(--line);color:var(--ink-dim);font-size:.82rem}
+.foot-social{display:flex;gap:12px}
+.foot-social a{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;
+  border:1px solid var(--line-2);color:var(--ink-soft);transition:.3s}
+.foot-social a:hover{color:var(--gold);border-color:var(--gold);transform:translateY(-3px)}
+@media(max-width:820px){.foot-grid{grid-template-columns:1fr 1fr;gap:30px}}
+@media(max-width:520px){.foot-grid{grid-template-columns:1fr}}
+
+/* ── reveal on scroll ── */
+.reveal{opacity:0;transform:translateY(34px);transition:.9s var(--ease)}
+.reveal.in{opacity:1;transform:none}
+.reveal.d1{transition-delay:.08s}.reveal.d2{transition-delay:.16s}
+.reveal.d3{transition-delay:.24s}.reveal.d4{transition-delay:.32s}
+
+@media (prefers-reduced-motion: reduce){
+  *{animation:none!important;transition:none!important}
+  .reveal{opacity:1;transform:none}
+  .hero h1 .line span{transform:none}
+}
+</style>
+</head>
+<body>
+
+<div id="progress"></div>
+<div class="bg-fx" aria-hidden="true">
+  <div class="bg-grid"></div>
+  <div class="orb a"></div><div class="orb b"></div><div class="orb c"></div>
+</div>
+<div class="noise" aria-hidden="true"></div>
+<div id="glow" aria-hidden="true"></div>
+
+<!-- ══════════ NAV ══════════ -->
+<header id="hdr">
+  <div class="wrap">
+    <nav class="nav">
+      <a href="#top" class="brand" aria-label="TheWhiteTiger home">
+        <img src="/tiger-logo.png" alt="TheWhiteTiger logo">
+        <span>The<b>White</b><span>Tiger</span></span>
+      </a>
+      <div class="nav-links" id="navlinks">
+        <a href="#vision">Vision</a>
+        <a href="#engine">The Engine</a>
+        <a href="#vibgyor">VIBGYOR</a>
+        <a href="#pipeline">Pipeline</a>
+        <a href="#product">Product</a>
+        <a href="#business">Business</a>
+        <a href="#team">Team</a>
+      </div>
+      <div class="nav-cta">
+        <a href="/download/" class="btn btn-ghost"><i class="fa-solid fa-mobile-screen"></i> Get SherrByte</a>
+        <a href="#contact" class="btn btn-primary">Partner with us</a>
+        <button class="burger" id="burger" aria-label="Menu"><i class="fa-solid fa-bars"></i></button>
+      </div>
+    </nav>
+  </div>
+</header>
+
+<!-- ══════════ HERO ══════════ -->
+<section class="hero" id="top">
+  <div class="wrap">
+    <div class="hero-grid">
+      <div class="hero-copy">
+        <span class="eyebrow"><i class="fa-solid fa-shield-halved"></i> Information &amp; Data Intelligence · India</span>
+        <h1>
+          <span class="line"><span>The Information</span></span>
+          <span class="line"><span class="grad">Sovereignty</span></span>
+          <span class="line"><span>Engine.</span></span>
+        </h1>
+        <p class="hero-sub">
+          TheWhiteTiger collects, processes, structures, verifies and delivers the world's
+          real-time information — stripping out noise, bias and clickbait to hand every user
+          clean, objective, verifiable truth. Our flagship product, <b style="color:#fff">SherrByte</b>,
+          puts that engine in your pocket.
+        </p>
+        <div class="hero-actions">
+          <a href="/download/" class="btn btn-primary"><i class="fa-solid fa-download"></i> Download SherrByte</a>
+          <a href="#engine" class="btn btn-ghost">Explore the engine <i class="fa-solid fa-arrow-down"></i></a>
+        </div>
+        <div class="hero-meta">
+          <div class="m"><b data-count="24" data-suffix="+">0</b><span>Verified sources</span></div>
+          <div class="m"><b data-count="9">0</b><span>Knowledge pillars</span></div>
+          <div class="m"><b data-count="6">0</b><span>AI pipeline stages</span></div>
+          <div class="m"><b data-count="95" data-suffix="%">0</b><span>Lower compute cost</span></div>
+        </div>
+      </div>
+      <div class="hero-visual">
+        <div class="eye-wrap" id="eyeWrap">
+          <div class="eye-ring"></div>
+          <div class="eye-ring r2"></div>
+          <div class="eye-ring r3"></div>
+          <div class="eye-core" id="eyeCore">
+            <img src="/tiger-logo.png" alt="The White Tiger — watchful eye of verified truth">
+          </div>
+          <div class="eye-glowdot"></div>
+          <div class="eye-tag t1"><i class="fa-solid fa-bolt"></i>Real-time ingestion</div>
+          <div class="eye-tag t2"><i class="fa-solid fa-check-double"></i>Bias stripped</div>
+          <div class="eye-tag t3"><i class="fa-solid fa-fingerprint"></i>Source-verified</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ MARQUEE ══════════ -->
+<div class="marquee" aria-hidden="true">
+  <div class="marquee-track">
+    <span>Information Sovereignty</span><span>Zero Editorial Bias</span><span>Real-Time Truth Engine</span>
+    <span>9-Pillar VIBGYOR Taxonomy</span><span>Built for India</span><span>Hyper-Personalised</span>
+    <span>Information Sovereignty</span><span>Zero Editorial Bias</span><span>Real-Time Truth Engine</span>
+    <span>9-Pillar VIBGYOR Taxonomy</span><span>Built for India</span><span>Hyper-Personalised</span>
+  </div>
+</div>
+
+<!-- ══════════ STATS ══════════ -->
+<section class="pad" style="padding-top:clamp(60px,8vw,90px)">
+  <div class="wrap">
+    <div class="stats">
+      <div class="stat glass reveal"><div class="num" data-count="800" data-suffix="M+">0</div><div class="lbl">Indian internet users we serve</div></div>
+      <div class="stat glass reveal d1"><div class="num" data-count="40" data-suffix="+">0</div><div class="lbl">Backend API endpoints live</div></div>
+      <div class="stat glass reveal d2"><div class="num">₹<span data-count="56250">0</span></div><div class="lbl">Worth of time saved / user / year</div></div>
+      <div class="stat glass reveal d3"><div class="num" data-count="187" data-suffix=" hrs">0</div><div class="lbl">Research hours returned annually</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ VISION / MISSION ══════════ -->
+<section class="pad" id="vision">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow"><i class="fa-solid fa-compass"></i> Why we exist</span>
+      <h2>Vision &amp; <span class="grad">Mission</span></h2>
+      <p>The modern professional hunts through a dozen biased sources just to find one reliable fact.
+         We were founded to end that — by building the information infrastructure India deserves.</p>
+    </div>
+    <div class="vm-grid">
+      <div class="vm-card vision glass reveal">
+        <div class="ic"><i class="fa-solid fa-eye"></i></div>
+        <h3>Our Vision</h3>
+        <p>To build <span class="kw">India's premier data infrastructure</span> — processing global, real-time
+          information streams to strip out bias and noise, and delivering absolute
+          <span class="kw">Information Sovereignty</span> and unfiltered, objective truth directly to every
+          user's personalised feed.</p>
+      </div>
+      <div class="vm-card mission glass reveal d1">
+        <div class="ic"><i class="fa-solid fa-bullseye"></i></div>
+        <h3>Our Mission</h3>
+        <p>To architect and scale <span class="kw">SherrByte</span> into India's most trusted,
+          professional-grade information platform — leveraging high-fidelity data engineering to
+          replace clickbait and editorial bias with <span class="kw">verifiable, real-time intelligence</span>
+          tailored for every professional.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ WHAT WE ARE (positioning) ══════════ -->
+<section class="pad" style="padding-top:0" id="about">
+  <div class="wrap">
+    <div class="glass reveal" style="padding:clamp(34px,5vw,56px);text-align:center">
+      <span class="eyebrow" style="margin-bottom:22px"><i class="fa-solid fa-database"></i> What TheWhiteTiger is</span>
+      <p style="font-family:var(--fd);font-weight:600;font-size:clamp(1.3rem,3.2vw,2.1rem);line-height:1.35;max-width:980px;margin:0 auto;color:#fff">
+        “The White Tiger is a <span class="grad">data-intelligence powerhouse</span> that processes global
+        internet data and media streams into high-fidelity, actionable insights — eliminating noise and
+        editorial bias to ensure <span class="grad">verifiable, real-time data delivery</span> and absolute
+        Information Sovereignty for every user.”
+      </p>
+      <p style="color:var(--ink-dim);margin-top:26px;max-width:760px;margin-left:auto;margin-right:auto;font-size:.96rem">
+        We are an <b style="color:var(--ink-soft)">information &amp; data services</b> company. Artificial
+        intelligence is a tool we use <i>inside</i> the platform — for deduplication, summarisation, semantic
+        embedding, classification and verification — not the business itself. The business is clean, structured,
+        trustworthy information, delivered to people and to enterprises.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ PROBLEM vs SOLUTION ══════════ -->
+<section class="pad" style="padding-top:0">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow"><i class="fa-solid fa-scale-balanced"></i> The shift</span>
+      <h2>From a broken feed to a <span class="grad">single source of truth</span></h2>
+      <p>India has 800M+ internet users, yet news is delivered by engagement-optimised algorithms that
+         reward sensationalism over fact. Here's what we replace.</p>
+    </div>
+    <div class="compare glass reveal">
+      <div class="compare-col asis-col asis">
+        <h3><i class="fa-solid fa-triangle-exclamation"></i> Today (AS-IS)</h3>
+        <div class="tagline">The fragmented Indian news ecosystem</div>
+        <ul class="clist">
+          <li class="asis-col"><i class="fa-solid fa-xmark"></i> Users manually check 8–12 fragmented, biased sources daily</li>
+          <li class="asis-col"><i class="fa-solid fa-xmark"></i> Algorithms reward outrage, clickbait &amp; sensationalism</li>
+          <li class="asis-col"><i class="fa-solid fa-xmark"></i> No systematic bias control — bias is embedded by design</li>
+          <li class="asis-col"><i class="fa-solid fa-xmark"></i> AI summaries (where they exist) hallucinate, unchecked</li>
+          <li class="asis-col"><i class="fa-solid fa-xmark"></i> Keyword-only search; no semantic discovery</li>
+          <li class="asis-col"><i class="fa-solid fa-xmark"></i> Surveillance-based; user data monetised without consent</li>
+        </ul>
+      </div>
+      <div class="vs"><span>VS</span></div>
+      <div class="compare-col tobe-col tobe">
+        <h3 style="color:var(--v-green)"><i class="fa-solid fa-circle-check"></i> With SherrByte (TO-BE)</h3>
+        <div class="tagline">One verified, personalised feed</div>
+        <ul class="clist">
+          <li class="tobe-col"><i class="fa-solid fa-check"></i> A single, hyper-personalised, AI-verified feed across all 9 pillars</li>
+          <li class="tobe-col"><i class="fa-solid fa-check"></i> Abstractive summaries that strip framing while keeping facts</li>
+          <li class="tobe-col"><i class="fa-solid fa-check"></i> MMR re-ranking mathematically enforces source diversity</li>
+          <li class="tobe-col"><i class="fa-solid fa-check"></i> RAG-consensus hallucination control on every summary</li>
+          <li class="tobe-col"><i class="fa-solid fa-check"></i> pgvector semantic search — discovery by meaning, not keywords</li>
+          <li class="tobe-col"><i class="fa-solid fa-check"></i> Privacy by design — your data is never sold to third parties</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ THE ENGINE / PRODUCT LAYERS ══════════ -->
+<section class="pad" id="engine" style="padding-top:0">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow"><i class="fa-solid fa-microchip"></i> One engine, two layers</span>
+      <h2>The <span class="grad">TheWhiteTiger Core</span> powers everything</h2>
+      <p>A high-throughput pipeline for real-time ingestion, AI processing, structuring and serving of
+         data at scale — exposed both as a consumer product and as an enterprise data service.</p>
+    </div>
+    <div class="layers">
+      <div class="layer b2c glass reveal">
+        <span class="tag">B2C · Consumer</span>
+        <h3>SherrByte</h3>
+        <p class="lead">A hyper-personalised information feed delivered as a Progressive Web App &amp; mobile app.</p>
+        <ul>
+          <li><i class="fa-solid fa-circle-dot"></i> A single, personalised feed that aggregates the internet's real-time knowledge</li>
+          <li><i class="fa-solid fa-circle-dot"></i> Eliminates noise, strips editorial / sensationalist bias</li>
+          <li><i class="fa-solid fa-circle-dot"></i> Verified, objective, professionally-relevant updates in one place</li>
+          <li><i class="fa-solid fa-circle-dot"></i> A personal Knowledge Library, auto-sorted by VIBGYOR pillar</li>
+        </ul>
+      </div>
+      <div class="layer b2b glass reveal d1">
+        <span class="tag">B2B · Enterprise</span>
+        <h3>Core Data Streams</h3>
+        <p class="lead">The same infrastructure, productised as a clean, structured, real-time data &amp; API service.</p>
+        <ul>
+          <li><i class="fa-solid fa-circle-dot"></i> Real-time classified article streams via webhook delivery</li>
+          <li><i class="fa-solid fa-circle-dot"></i> Semantic Search API over the pgvector HNSW index</li>
+          <li><i class="fa-solid fa-circle-dot"></i> Trend Signal API — topic velocity across the 9 pillars</li>
+          <li><i class="fa-solid fa-circle-dot"></i> Custom feed API for publishers, research &amp; finance firms</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ VIBGYOR TAXONOMY ══════════ -->
+<section class="pad" id="vibgyor" style="padding-top:0">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow"><i class="fa-solid fa-palette"></i> The knowledge architecture</span>
+      <h2>The <span class="grad">9-Pillar VIBGYOR</span> taxonomy</h2>
+      <p>Every piece of information is classified into a colour-coded knowledge pillar spanning ~50+ micro-topics —
+         a standardised structure no other Indian platform offers.</p>
+    </div>
+    <div class="pillars">
+      <div class="pillar glass reveal" style="--pc:var(--v-blue)">
+        <div class="dot"><i class="fa-solid fa-landmark"></i></div>
+        <div class="pc-name">Blue</div><h4>Society &amp; Governance</h4>
+        <p>Policy, civics, institutions &amp; public life</p>
+      </div>
+      <div class="pillar glass reveal d1" style="--pc:var(--v-yellow)">
+        <div class="dot"><i class="fa-solid fa-chart-line"></i></div>
+        <div class="pc-name">Yellow</div><h4>Business &amp; Economy</h4>
+        <p>Markets, startups, finance &amp; trade</p>
+      </div>
+      <div class="pillar glass reveal d2" style="--pc:var(--v-indigo)">
+        <div class="dot"><i class="fa-solid fa-flask"></i></div>
+        <div class="pc-name">Indigo</div><h4>Science &amp; Technology</h4>
+        <p>Research, computing, AI &amp; discovery</p>
+      </div>
+      <div class="pillar glass reveal" style="--pc:var(--v-red)">
+        <div class="dot"><i class="fa-solid fa-masks-theater"></i></div>
+        <div class="pc-name">Red</div><h4>Arts &amp; Culture</h4>
+        <p>Film, music, heritage &amp; creativity</p>
+      </div>
+      <div class="pillar glass reveal d1" style="--pc:var(--v-green)">
+        <div class="dot"><i class="fa-solid fa-leaf"></i></div>
+        <div class="pc-name">Green</div><h4>Natural World</h4>
+        <p>Climate, environment &amp; ecology</p>
+      </div>
+      <div class="pillar glass reveal d2" style="--pc:var(--v-orange)">
+        <div class="dot"><i class="fa-solid fa-heart-pulse"></i></div>
+        <div class="pc-name">Orange</div><h4>The Self &amp; Wellbeing</h4>
+        <p>Health, mind, growth &amp; habits</p>
+      </div>
+      <div class="pillar glass reveal" style="--pc:var(--v-violet)">
+        <div class="dot"><i class="fa-solid fa-brain"></i></div>
+        <div class="pc-name">Violet</div><h4>Philosophy &amp; Belief</h4>
+        <p>Ideas, ethics, faith &amp; meaning</p>
+      </div>
+      <div class="pillar glass reveal d1" style="--pc:var(--v-cyan)">
+        <div class="dot"><i class="fa-solid fa-mug-hot"></i></div>
+        <div class="pc-name">Cyan</div><h4>Society &amp; Lifestyle</h4>
+        <p>Living, food, travel &amp; trends</p>
+      </div>
+      <div class="pillar glass reveal d2" style="--pc:var(--v-slate)">
+        <div class="dot"><i class="fa-solid fa-gamepad"></i></div>
+        <div class="pc-name">Slate</div><h4>Sports &amp; Gaming</h4>
+        <p>Play, competition &amp; esports</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ PIPELINE ══════════ -->
+<section class="pad" id="pipeline" style="padding-top:0">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow"><i class="fa-solid fa-diagram-project"></i> How it works</span>
+      <h2>From raw noise to <span class="grad">verified truth</span> — in 6 stages</h2>
+      <p>A rigorous, multi-stage AI pipeline runs over 24+ verified global and Indian sources, every minute.</p>
+    </div>
+    <div class="pipe reveal glass" style="padding:46px 30px">
+      <div class="pstep"><div class="pn">1</div><h4>Ingest</h4><p>Real-time crawl of 24+ verified RSS sources</p></div>
+      <div class="pstep"><div class="pn">2</div><h4>Deduplicate</h4><p>Custom engine removes duplicates &amp; noise</p></div>
+      <div class="pstep"><div class="pn">3</div><h4>Summarise</h4><p>Gemini→Groq cascade · WWWW abstractive synthesis</p></div>
+      <div class="pstep"><div class="pn">4</div><h4>Embed</h4><p>Local MiniLM 384-dim vectors at near-zero cost</p></div>
+      <div class="pstep"><div class="pn">5</div><h4>Classify</h4><p>9-pillar VIBGYOR taxonomy &amp; ~50 micro-topics</p></div>
+      <div class="pstep"><div class="pn">6</div><h4>Rank &amp; Serve</h4><p>EMA profiles + MMR re-ranker for a diverse feed</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ CAPABILITIES ══════════ -->
+<section class="pad" id="product" style="padding-top:0">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow"><i class="fa-solid fa-layer-group"></i> What's inside</span>
+      <h2>Engineered for <span class="grad">information integrity</span></h2>
+      <p>Every architectural decision is optimised for factual accuracy and bias elimination — not engagement maximisation.</p>
+    </div>
+    <div class="cards">
+      <div class="fcard glass reveal"><div class="ic"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
+        <h4>Abstractive Synthesis</h4><p>AI-generated WWWW (Who · What · Where · Why) summaries that capture the facts of a story without reproducing sensationalist framing.</p></div>
+      <div class="fcard glass reveal d1"><div class="ic"><i class="fa-solid fa-shield-virus"></i></div>
+        <h4>Hallucination Control</h4><p>RAG-consensus cross-verification checks every AI summary against its source material to prevent factual drift.</p></div>
+      <div class="fcard glass reveal d2"><div class="ic"><i class="fa-solid fa-shuffle"></i></div>
+        <h4>Source Diversity</h4><p>The MMR re-ranker ensures no single publisher dominates your feed — protecting against filter bubbles by design.</p></div>
+      <div class="fcard glass reveal"><div class="ic"><i class="fa-solid fa-user-gear"></i></div>
+        <h4>Real-Time Personalisation</h4><p>EMA profile vectors + Redis Streams update your interests within minutes of every click, read, save or share.</p></div>
+      <div class="fcard glass reveal d1"><div class="ic"><i class="fa-solid fa-magnifying-glass-chart"></i></div>
+        <h4>Semantic Discovery</h4><p>A pgvector HNSW index enables sub-millisecond similarity search — finding thematically related stories across sources.</p></div>
+      <div class="fcard glass reveal d2"><div class="ic"><i class="fa-solid fa-stamp"></i></div>
+        <h4>SGI Watermarking</h4><p>Every AI-generated summary is transparently marked, in full compliance with India's IT Rules 2026.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ TECH STACK ══════════ -->
+<section class="pad" style="padding-top:0">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow"><i class="fa-solid fa-server"></i> Cloud-native by design</span>
+      <h2>The <span class="grad">infrastructure</span> behind the engine</h2>
+      <p>A multi-provider, resilient, cost-efficient stack — engineered for sub-500ms feed serving and zero-downtime failover.</p>
+    </div>
+    <div class="stack reveal">
+      <div class="tech glass"><i class="fa-solid fa-bolt"></i><b>FastAPI</b><span>Backend API · Python</span></div>
+      <div class="tech glass"><i class="fa-solid fa-database"></i><b>Supabase</b><span>PostgreSQL + pgvector</span></div>
+      <div class="tech glass"><i class="fa-solid fa-bolt-lightning"></i><b>Upstash</b><span>Redis Streams &amp; cache</span></div>
+      <div class="tech glass"><i class="fa-solid fa-robot"></i><b>Gemini Pro</b><span>Primary LLM cascade</span></div>
+      <div class="tech glass"><i class="fa-solid fa-gauge-high"></i><b>Groq</b><span>High-speed LLM fallback</span></div>
+      <div class="tech glass"><i class="fa-solid fa-vector-square"></i><b>MiniLM</b><span>Local 384-dim embeddings</span></div>
+      <div class="tech glass"><i class="fa-solid fa-cloud"></i><b>Fly.io / Render</b><span>Compute + failover</span></div>
+      <div class="tech glass"><i class="fa-solid fa-fire"></i><b>Firebase</b><span>PWA hosting / CDN</span></div>
+      <div class="tech glass"><i class="fa-brands fa-github"></i><b>GitHub Actions</b><span>CI/CD pipeline</span></div>
+      <div class="tech glass"><i class="fa-solid fa-mobile-screen-button"></i><b>PWA</b><span>Web + mobile delivery</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ PHASES TIMELINE ══════════ -->
+<section class="pad" style="padding-top:0">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow"><i class="fa-solid fa-road"></i> The build</span>
+      <h2>Engineered across <span class="grad">six structured phases</span></h2>
+      <p>From a FastAPI foundation to a production-ready, compliant platform — and a clear roadmap beyond.</p>
+    </div>
+    <div class="timeline reveal">
+      <div class="tl-item done"><div class="ph">Phase A–B</div>
+        <h4>Foundation &amp; Security <span class="badge green">Complete</span></h4>
+        <p>FastAPI scaffolding, Dockerfile, CI/CD, health endpoints, Argon2id hashing, JWT rotation, rate limiting and secure sessions.</p></div>
+      <div class="tl-item done"><div class="ph">Phase C</div>
+        <h4>Data Ingestion Pipeline <span class="badge green">Complete</span></h4>
+        <p>Real-time RSS ingestion from 24+ verified global &amp; Indian publishers, custom deduplication, full-text extraction and copyright-compliant parsing.</p></div>
+      <div class="tl-item done"><div class="ph">Phase D</div>
+        <h4>AI Intelligence Layer <span class="badge green">Complete</span></h4>
+        <p>Gemini→Groq summarisation cascade, MiniLM embeddings, pgvector HNSW index, WWWW abstractive summarisation and the 9-pillar taxonomy.</p></div>
+      <div class="tl-item done"><div class="ph">Phase E</div>
+        <h4>Personalisation Engine <span class="badge green">Complete</span></h4>
+        <p>User interaction tables, Redis Streams event buffer, EMA profile vectors, hybrid content + collaborative scorer and an MMR re-ranker.</p></div>
+      <div class="tl-item done"><div class="ph">Phase F</div>
+        <h4>PWA Frontend <span class="badge green">Complete</span></h4>
+        <p>A dark, editorial, glassmorphic Progressive Web App — mobile-responsive and production-deployable.</p></div>
+      <div class="tl-item"><div class="ph">Phase G</div>
+        <h4>Production Deployment <span class="badge amber">In progress</span></h4>
+        <p>Mumbai-region targeting for low latency, Render hot-standby failover and full platform monitoring.</p></div>
+      <div class="tl-item"><div class="ph">Phase 2 · Post-funding</div>
+        <h4>Bytes · Circles · B2B API · Multilingual <span class="badge blue">Next</span></h4>
+        <p>Short-form Bytes, VIBGYOR community Circles, the productised B2B Core Data API, and Telugu / Hindi multilingual support.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ BUSINESS MODEL ══════════ -->
+<section class="pad" id="business" style="padding-top:0">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow"><i class="fa-solid fa-coins"></i> How we grow</span>
+      <h2>A dual-engine <span class="grad">revenue model</span></h2>
+      <p>One infrastructure investment, two independent revenue streams — a defensible moat that compounds.</p>
+    </div>
+    <div class="biz">
+      <div class="biz-card glass reveal">
+        <h3>B2C — SherrByte</h3>
+        <div class="sub">Consumer application · Freemium</div>
+        <p>The app delivers information in a clean feed format, generating initial revenue through advertisements and aggregated insights.</p>
+        <p>Premium content subscriptions and value-added features launch as the active user base grows toward a <b style="color:#fff">~1 lakh Year-1 user base</b>.</p>
+      </div>
+      <div class="biz-card glass reveal d1">
+        <h3>B2B — Core Data</h3>
+        <div class="sub">Data-as-a-Service · Subscription &amp; usage</div>
+        <p>Licensing of structured, real-time data feeds and API access to enterprises, digital publishers, research institutions and developers.</p>
+        <p>Targeting <b style="color:#fff">15–20 active enterprise API integrations</b> by Year 2, on subscription and usage-based pricing.</p>
+      </div>
+    </div>
+    <div class="fund">
+      <div class="f glass reveal"><div class="v">₹43,00,000</div><div class="l">Pre-seed funding requirement · 18-month runway</div></div>
+      <div class="f glass reveal d1"><div class="v">~1 Lakh</div><div class="l">Target B2C user base by end of Year 1</div></div>
+      <div class="f glass reveal d2"><div class="v">15–20</div><div class="l">Target enterprise API integrations by Year 2</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ COMPLIANCE ══════════ -->
+<section class="pad" style="padding-top:0">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow"><i class="fa-solid fa-scroll"></i> Trust &amp; compliance</span>
+      <h2>Built for <span class="grad">India</span>, compliant by design</h2>
+      <p>Aligned with Digital India &amp; Atma Nirbhar Bharat — promoting domestic AI capability, data sovereignty and high-integrity information infrastructure.</p>
+    </div>
+    <div class="comp">
+      <div class="c glass reveal"><i class="fa-solid fa-stamp"></i><b>SGI Watermarking</b><span>AI content marked per IT Rules 2026</span></div>
+      <div class="c glass reveal d1"><i class="fa-solid fa-lock"></i><b>Argon2id + JWT</b><span>Hardened auth &amp; session security</span></div>
+      <div class="c glass reveal d2"><i class="fa-solid fa-user-shield"></i><b>Privacy by Design</b><span>Your data is never sold to third parties</span></div>
+      <div class="c glass reveal d3"><i class="fa-solid fa-flag"></i><b>Made in India</b><span>Domestic data &amp; AI infrastructure</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ TEAM ══════════ -->
+<section class="pad" id="team" style="padding-top:0">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow"><i class="fa-solid fa-users"></i> The founders</span>
+      <h2>Led by builders, <span class="grad">guided by mentors</span></h2>
+      <p>A lean founding team, incubated at RTIH Anantapur, building India's information sovereignty engine.</p>
+    </div>
+    <div class="team">
+      <div class="member glass reveal">
+        <div class="av">JC</div>
+        <h4>P. Jashwanth Chowhan</h4>
+        <div class="role">Founder &amp; Lead Developer</div>
+        <p>Product vision, engineering architecture, AI pipeline &amp; finance. Drives the full-stack build of TheWhiteTiger Core.</p>
+      </div>
+      <div class="member alt glass reveal d1">
+        <div class="av">NC</div>
+        <h4>P. Neethu Chowhan</h4>
+        <div class="role">Co-Founder · Operations &amp; Marketing</div>
+        <p>Business development, investor relations, content partnerships and the go-to-market for both B2C and B2B.</p>
+      </div>
+      <div class="member alt2 glass reveal d2">
+        <div class="av">DP</div>
+        <h4>Dr. Prashant</h4>
+        <div class="role">Technical Mentor · RTIH Anantapur</div>
+        <p>Architectural oversight and IP guidance, supporting the founders through pre-seed and beyond.</p>
+      </div>
+    </div>
+    <div class="glass reveal" style="margin-top:24px;padding:24px 30px;display:flex;gap:18px;align-items:center;justify-content:center;flex-wrap:wrap;text-align:center">
+      <span style="color:var(--ink-dim);font-size:.9rem"><i class="fa-solid fa-building-columns" style="color:var(--gold);margin-right:8px"></i>
+      Incubation &amp; mentorship from <b style="color:var(--ink-soft)">RTIH Anantapur</b> &amp; <b style="color:var(--ink-soft)">AIC-IIIT Kottayam</b> · RTIH Future Founders 2.0 Participant</span>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ CTA ══════════ -->
+<section class="pad" id="contact" style="padding-top:0">
+  <div class="wrap">
+    <div class="cta-wrap glass reveal">
+      <span class="eyebrow" style="margin-bottom:22px"><i class="fa-solid fa-paper-plane"></i> Join the engine</span>
+      <h2>Reclaim your time. <span class="grad">Own your truth.</span></h2>
+      <p>SherrByte saves a professional <b style="color:#fff">187.5 hours</b> of searching for news every year —
+         giving back <b style="color:#fff">₹56,250</b> worth of their own time. Download the app, or partner with us on Core Data.</p>
+      <div class="cta-actions">
+        <a href="/download/" class="btn btn-primary"><i class="fa-solid fa-download"></i> Download SherrByte</a>
+        <a href="mailto:thewhitetigerdotin@gmail.com" class="btn btn-ghost"><i class="fa-solid fa-envelope"></i> thewhitetigerdotin@gmail.com</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ FOOTER ══════════ -->
+<footer>
+  <div class="wrap">
+    <div class="foot-grid">
+      <div class="foot-brand">
+        <div class="brand"><img src="/tiger-logo.png" alt="TheWhiteTiger"><span>The<b>White</b><span>Tiger</span></span></div>
+        <p>An information &amp; data intelligence company. We turn the world's noise into clean, verified, objective truth. Flagship product: SherrByte.</p>
+      </div>
+      <div class="foot-col">
+        <h5>Platform</h5>
+        <a href="#vision">Vision &amp; Mission</a>
+        <a href="#engine">The Engine</a>
+        <a href="#vibgyor">VIBGYOR Taxonomy</a>
+        <a href="#pipeline">AI Pipeline</a>
+      </div>
+      <div class="foot-col">
+        <h5>Company</h5>
+        <a href="#business">Business Model</a>
+        <a href="#team">Team</a>
+        <a href="/download/">Download App</a>
+        <a href="#contact">Contact</a>
+      </div>
+      <div class="foot-col">
+        <h5>Get in touch</h5>
+        <a href="mailto:thewhitetigerdotin@gmail.com">thewhitetigerdotin@gmail.com</a>
+        <p>Anantapur, Andhra Pradesh, India</p>
+        <p>Incubated at RTIH Anantapur</p>
+      </div>
+    </div>
+    <div class="foot-bottom">
+      <span>© <span id="year">2026</span> TheWhiteTiger · SherrByte. Information Sovereignty for India.</span>
+      <div class="foot-social">
+        <a href="/download/" aria-label="Download app"><i class="fa-solid fa-mobile-screen"></i></a>
+        <a href="mailto:thewhitetigerdotin@gmail.com" aria-label="Email"><i class="fa-solid fa-envelope"></i></a>
+        <a href="#top" aria-label="Back to top"><i class="fa-solid fa-arrow-up"></i></a>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<script>
+(function(){
+  "use strict";
+  var rm = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* Scroll progress + header */
+  var hdr = document.getElementById('hdr'), prog = document.getElementById('progress');
+  function onScroll(){
+    var st = window.scrollY || document.documentElement.scrollTop;
+    var h = document.documentElement.scrollHeight - window.innerHeight;
+    prog.style.width = (h>0 ? (st/h*100) : 0) + '%';
+    hdr.classList.toggle('scrolled', st > 30);
+  }
+  window.addEventListener('scroll', onScroll, {passive:true}); onScroll();
+
+  /* Mobile nav */
+  var burger = document.getElementById('burger'), links = document.getElementById('navlinks');
+  burger.addEventListener('click', function(){
+    links.classList.toggle('open');
+    burger.innerHTML = links.classList.contains('open')
+      ? '<i class="fa-solid fa-xmark"></i>' : '<i class="fa-solid fa-bars"></i>';
+  });
+  links.querySelectorAll('a').forEach(function(a){
+    a.addEventListener('click', function(){
+      links.classList.remove('open');
+      burger.innerHTML = '<i class="fa-solid fa-bars"></i>';
+    });
+  });
+
+  /* Reveal on scroll */
+  var io = new IntersectionObserver(function(entries){
+    entries.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target);} });
+  }, {threshold:.14, rootMargin:'0px 0px -8% 0px'});
+  document.querySelectorAll('.reveal').forEach(function(el){ io.observe(el); });
+
+  /* Animated counters */
+  function animateCount(el){
+    var target = parseFloat(el.getAttribute('data-count'));
+    var suffix = el.getAttribute('data-suffix') || '';
+    var dur = 1600, start = null;
+    function step(ts){
+      if(!start) start = ts;
+      var p = Math.min((ts-start)/dur, 1);
+      var eased = 1 - Math.pow(1-p, 3);
+      var val = target * eased;
+      var out = target >= 1000 ? Math.floor(val).toLocaleString('en-IN')
+                               : (Number.isInteger(target) ? Math.floor(val) : val.toFixed(0));
+      el.textContent = out + suffix;
+      if(p < 1) requestAnimationFrame(step);
+      else el.textContent = (target>=1000?target.toLocaleString('en-IN'):target) + suffix;
+    }
+    requestAnimationFrame(step);
+  }
+  var cio = new IntersectionObserver(function(entries){
+    entries.forEach(function(e){
+      if(e.isIntersecting){ if(rm){ e.target.textContent=(parseFloat(e.target.getAttribute('data-count'))).toLocaleString('en-IN')+(e.target.getAttribute('data-suffix')||''); }
+        else animateCount(e.target); cio.unobserve(e.target);} });
+  }, {threshold:.6});
+  document.querySelectorAll('[data-count]').forEach(function(el){ cio.observe(el); });
+
+  /* Cursor glow + tiger eye parallax (desktop only) */
+  var glow = document.getElementById('glow'),
+      eyeCore = document.getElementById('eyeCore'),
+      eyeWrap = document.getElementById('eyeWrap');
+  var gx=window.innerWidth/2, gy=window.innerHeight/2, cx=gx, cy=gy;
+  if(window.matchMedia('(pointer:fine)').matches && !rm){
+    window.addEventListener('mousemove', function(e){
+      gx = e.clientX; gy = e.clientY;
+      if(eyeCore && eyeWrap){
+        var r = eyeWrap.getBoundingClientRect();
+        var dx = (e.clientX - (r.left+r.width/2)) / r.width;
+        var dy = (e.clientY - (r.top+r.height/2)) / r.height;
+        eyeCore.style.transform = 'translate('+(dx*16)+'px,'+(dy*16)+'px) rotateX('+(-dy*8)+'deg) rotateY('+(dx*8)+'deg)';
+      }
+    });
+    (function loop(){ cx+=(gx-cx)*.12; cy+=(gy-cy)*.12;
+      glow.style.left=cx+'px'; glow.style.top=cy+'px'; requestAnimationFrame(loop); })();
+  } else { glow.style.display='none'; }
+
+  /* Year */
+  document.getElementById('year').textContent = new Date().getFullYear();
+})();
+</script>
+</body>
+</html>
