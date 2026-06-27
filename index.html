@@ -2645,6 +2645,158 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   <div style="height:16px"></div>
 </div>
 
+<!-- ════════ ATLAS IMMERSIVE OVERLAY — full-screen global intelligence ════════ -->
+<style>
+  #atlas-overlay{position:absolute;inset:0;z-index:2100;transform:translateY(100%);
+    transition:transform .5s var(--snap,cubic-bezier(.32,.72,0,1));display:flex;flex-direction:column;
+    overflow:hidden;color:#eafbff;
+    background:
+      radial-gradient(120% 70% at 50% 0%,rgba(14,183,214,.16) 0%,rgba(14,183,214,0) 55%),
+      linear-gradient(180deg,#06101c 0%,#03070e 60%,#01040a 100%);}
+  #atlas-overlay.open{transform:translateY(0);}
+  #atlas-overlay::before{content:"";position:absolute;inset:0;pointer-events:none;
+    background:linear-gradient(rgba(14,183,214,.04) 1px,transparent 1px) 0 0/100% 36px,
+      linear-gradient(90deg,rgba(14,183,214,.04) 1px,transparent 1px) 0 0/36px 100%;
+    -webkit-mask-image:radial-gradient(110% 70% at 50% 8%,#000,transparent 75%);
+            mask-image:radial-gradient(110% 70% at 50% 8%,#000,transparent 75%);}
+  .ax-head{position:relative;z-index:2;display:flex;align-items:center;gap:12px;
+    padding:calc(env(safe-area-inset-top,0px) + 14px) 16px 10px;}
+  .ax-back{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    background:rgba(14,183,214,.12);border:1px solid rgba(14,183,214,.3);color:#bdf3ff;cursor:pointer;
+    font-size:1rem;transition:transform .18s ease;flex-shrink:0;}
+  .ax-back:active{transform:scale(.9);}
+  .ax-head-t{font:800 .62rem/1.3 var(--fd,sans-serif);letter-spacing:.24em;text-transform:uppercase;color:#0EB7D6;}
+  .ax-head-s{font:500 .72rem/1.2 var(--f,sans-serif);color:rgba(220,235,245,.55);}
+  .ax-scroll{position:relative;z-index:2;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:40px;}
+  .ax-stage{position:relative;display:flex;flex-direction:column;align-items:center;padding:10px 16px 6px;}
+  .ax-globe{position:relative;width:min(74vw,300px);height:min(74vw,300px);}
+  .ax-globe svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible;}
+  .ax-stat-row{display:flex;gap:10px;margin:14px 0 6px;flex-wrap:wrap;justify-content:center;}
+  .ax-chip{display:inline-flex;align-items:center;gap:6px;font:700 .6rem/1 var(--fd,sans-serif);
+    letter-spacing:.08em;color:#bdf3ff;padding:7px 12px;border-radius:999px;
+    background:rgba(14,183,214,.1);border:1px solid rgba(14,183,214,.26);}
+  .ax-chip b{color:#fff;}
+  .ax-sec{padding:6px 16px 0;}
+  .ax-sec-h{display:flex;align-items:center;gap:8px;margin:18px 0 12px;
+    font:800 .66rem/1 var(--fd,sans-serif);letter-spacing:.2em;text-transform:uppercase;color:rgba(220,235,245,.6);}
+  .ax-sec-h::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,rgba(14,183,214,.4),transparent);}
+  .ax-card{display:flex;gap:12px;align-items:center;padding:11px;margin-bottom:10px;border-radius:16px;
+    background:linear-gradient(160deg,rgba(255,255,255,.05),rgba(255,255,255,.02));
+    border:1px solid rgba(14,183,214,.14);cursor:pointer;transition:transform .18s ease,border-color .2s;}
+  .ax-card:active{transform:scale(.985);border-color:rgba(14,183,214,.4);}
+  .ax-card-img{width:74px;height:74px;border-radius:12px;flex-shrink:0;object-fit:cover;
+    background:rgba(14,183,214,.12);box-shadow:inset 0 0 0 1px rgba(14,183,214,.18);}
+  .ax-card-b{min-width:0;flex:1;}
+  .ax-card-meta{font:700 .56rem/1 var(--fd,sans-serif);letter-spacing:.1em;text-transform:uppercase;
+    color:#0EB7D6;margin-bottom:5px;}
+  .ax-card-t{font:600 .9rem/1.32 var(--f,sans-serif);color:#eafbff;
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+  .ax-empty{text-align:center;color:rgba(220,235,245,.5);font-size:.85rem;padding:30px 20px;}
+  @media (prefers-reduced-motion:reduce){.atlas-enter i{animation:none;}}
+</style>
+<div id="atlas-overlay">
+  <div class="ax-head">
+    <div class="ax-back" onclick="closeAtlas()"><i class="fa-solid fa-chevron-left"></i></div>
+    <div>
+      <div class="ax-head-t">Atlas · Global Intelligence</div>
+      <div class="ax-head-s">Live worldwide signal, mapped</div>
+    </div>
+  </div>
+  <div class="ax-scroll">
+    <div class="ax-stage">
+      <div class="ax-globe" aria-hidden="true">
+        <svg viewBox="0 0 200 200">
+          <defs>
+            <radialGradient id="axOcean" cx="42%" cy="36%" r="70%">
+              <stop offset="0%" stop-color="#1aa6c4"/><stop offset="45%" stop-color="#0c5e78"/>
+              <stop offset="100%" stop-color="#04222e"/>
+            </radialGradient>
+            <linearGradient id="axMer" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stop-color="#bdf3ff" stop-opacity="0"/>
+              <stop offset="50%" stop-color="#bdf3ff" stop-opacity=".85"/>
+              <stop offset="100%" stop-color="#bdf3ff" stop-opacity="0"/>
+            </linearGradient>
+            <radialGradient id="axGloss" cx="38%" cy="30%" r="50%">
+              <stop offset="0%" stop-color="#fff" stop-opacity=".4"/>
+              <stop offset="40%" stop-color="#fff" stop-opacity=".06"/><stop offset="100%" stop-color="#fff" stop-opacity="0"/>
+            </radialGradient>
+            <clipPath id="axClip"><circle cx="100" cy="100" r="64"/></clipPath>
+          </defs>
+          <circle cx="100" cy="100" r="96" fill="none" stroke="rgba(14,183,214,.14)" stroke-width="1"/>
+          <g class="atlas-spin-slow">
+            <circle cx="100" cy="100" r="88" fill="none" stroke="rgba(14,183,214,.3)" stroke-width="7" stroke-dasharray="1.5 6"/>
+          </g>
+          <g class="atlas-spin-rev">
+            <circle cx="100" cy="100" r="76" fill="none" stroke="rgba(14,183,214,.5)" stroke-width="1.5" stroke-dasharray="34 14 6 14"/>
+          </g>
+          <circle cx="100" cy="100" r="64" fill="url(#axOcean)"/>
+          <g clip-path="url(#axClip)">
+            <g class="atlas-spin-earth" fill="#2f7d52" fill-opacity=".9">
+              <path d="M68 60 q16 -12 30 -4 q12 7 4 18 q-9 14 -25 11 q-18 -5 -9 -25 z"/>
+              <path d="M122 76 q14 2 16 16 q1 14 -14 16 q-16 1 -16 -14 q0 -16 14 -18 z"/>
+              <path d="M60 116 q18 -7 25 7 q5 14 -11 20 q-18 5 -23 -11 q-3 -12 9 -16 z"/>
+              <path d="M106 134 q16 -5 20 9 q3 14 -13 16 q-14 1 -16 -11 q-1 -10 9 -14 z"/>
+              <path d="M138 110 q11 0 11 11 q-1 10 -12 9 q-10 -2 -8 -12 q1 -8 9 -8 z"/>
+            </g>
+            <g stroke="rgba(190,243,255,.26)" stroke-width=".7" fill="none">
+              <ellipse cx="100" cy="100" rx="64" ry="22"/><ellipse cx="100" cy="100" rx="64" ry="44"/>
+              <ellipse cx="100" cy="100" rx="22" ry="64"/><ellipse cx="100" cy="100" rx="44" ry="64"/>
+              <line x1="36" y1="100" x2="164" y2="100"/><line x1="100" y1="36" x2="100" y2="164"/>
+            </g>
+            <g class="atlas-spin-fast"><ellipse cx="100" cy="100" rx="14" ry="64" stroke="url(#axMer)" stroke-width="2.2" fill="none"/></g>
+            <circle cx="100" cy="100" r="64" fill="url(#axGloss)"/>
+          </g>
+          <circle cx="100" cy="100" r="64" fill="none" stroke="rgba(14,183,214,.6)" stroke-width="1.3"/>
+          <g fill="#bdf3ff" class="atlas-pulse">
+            <circle cx="132" cy="76" r="2.6"/><circle cx="74" cy="124" r="2.2"/><circle cx="122" cy="134" r="2"/>
+          </g>
+        </svg>
+      </div>
+      <div class="ax-stat-row">
+        <span class="ax-chip"><i class="fa-solid fa-satellite-dish" style="color:#0EB7D6"></i> <b id="ax-count">—</b> Stories</span>
+        <span class="ax-chip"><i class="fa-solid fa-globe" style="color:#0EB7D6"></i> Global</span>
+        <span class="ax-chip"><i class="fa-solid fa-bolt" style="color:#0EB7D6"></i> <b id="ax-clock">00:00:00</b></span>
+      </div>
+    </div>
+    <div class="ax-sec">
+      <div class="ax-sec-h">Top Global Headlines</div>
+      <div id="ax-list"><div class="ax-empty">Tuning in to the global feed…</div></div>
+    </div>
+  </div>
+</div>
+<script>
+  // ── Atlas immersive overlay ──
+  function openAtlas(){
+    var ov=document.getElementById('atlas-overlay'); if(!ov) return;
+    var list=document.getElementById('ax-list');
+    var arts=(typeof atlasArts!=='undefined'&&atlasArts&&atlasArts.length)?atlasArts:(expHeroArts||[]);
+    var cnt=document.getElementById('ax-count'); if(cnt) cnt.textContent=arts.length?String(arts.length):'—';
+    if(list){
+      if(!arts.length){
+        list.innerHTML='<div class="ax-empty">No global stories loaded yet — open Explore for a moment, then tap Atlas again.</div>';
+      } else {
+        list.innerHTML=arts.slice(0,24).map(function(a,i){
+          var img=a.image_url?('<img class="ax-card-img" loading="lazy" src="'+a.image_url+'" alt="" onerror="this.style.visibility=\'hidden\'">')
+                              :('<div class="ax-card-img"></div>');
+          var meta=((a.source||'Global'))+' · '+(typeof timeAgo==='function'?(timeAgo(a.published_at)||'now'):'now');
+          return '<div class="ax-card" onclick="closeAtlas();openArticle('+JSON.stringify(a).replace(/'/g,"&#39;").replace(/"/g,'&quot;')+')">'
+               + img
+               + '<div class="ax-card-b"><div class="ax-card-meta">'+meta+'</div><div class="ax-card-t">'+(a.title||'')+'</div></div></div>';
+        }).join('');
+      }
+    }
+    ov.classList.add('open');
+    var ck=document.getElementById('ax-clock');
+    function pad(n){return n<10?'0'+n:''+n;}
+    function tick(){var d=new Date();if(ck)ck.textContent=pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());}
+    tick(); if(window._axClk)clearInterval(window._axClk); window._axClk=setInterval(tick,1000);
+  }
+  function closeAtlas(){
+    var ov=document.getElementById('atlas-overlay'); if(ov)ov.classList.remove('open');
+    if(window._axClk){clearInterval(window._axClk);window._axClk=null;}
+  }
+</script>
+
 <!-- ARTICLE OVERLAY -->
 <div id="article-overlay">
   <div class="ao-header">
@@ -2779,6 +2931,15 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
     .atlas-coord{position:absolute;left:50%;bottom:-3px;transform:translateX(-50%);
       font:700 .5rem/1 var(--fd,sans-serif);letter-spacing:.12em;color:rgba(14,183,214,.85);
       white-space:nowrap;text-shadow:0 0 10px rgba(14,183,214,.6);}
+    /* tappable affordance */
+    .atlas-wrap.tap{cursor:pointer;transition:transform .2s var(--ease,ease),box-shadow .25s ease;}
+    .atlas-wrap.tap:active{transform:scale(.985);}
+    .atlas-enter{position:absolute;top:13px;right:14px;z-index:3;display:inline-flex;align-items:center;gap:6px;
+      font:800 .54rem/1 var(--fd,sans-serif);letter-spacing:.18em;text-transform:uppercase;color:#04141b;
+      padding:6px 11px;border-radius:999px;background:linear-gradient(90deg,#0EB7D6,#7be8ff);
+      box-shadow:0 4px 16px rgba(14,183,214,.5);}
+    .atlas-enter i{font-size:.56rem;animation:atlas-nudge 1.6s ease-in-out infinite;}
+    @keyframes atlas-nudge{0%,100%{transform:translateX(0)}50%{transform:translateX(3px)}}
     @media (prefers-reduced-motion:reduce){
       .atlas-spin-slow,.atlas-spin-rev,.atlas-spin-fast,.atlas-spin-earth,.atlas-pulse,
       .atlas-badge i,.atlas-timer .dot{animation:none;}
@@ -2788,7 +2949,9 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
       .atlas-ring{width:138px;height:138px;}
     }
   </style>
-  <div class="atlas-wrap">
+  <div class="atlas-wrap tap" onclick="openAtlas()" role="button" tabindex="0"
+       onkeydown="if(event.key==='Enter'||event.key===' ')openAtlas()">
+    <div class="atlas-enter">Enter <i class="fa-solid fa-arrow-right"></i></div>
     <div class="atlas-grid">
       <div class="atlas-info">
         <span class="atlas-badge"><i class="fa-solid fa-circle"></i> 01 · Atlas</span>
@@ -3531,6 +3694,7 @@ let currentArticle = null;
 let expHeroTimer = null;
 let expHeroIdx   = 0;
 let expHeroArts  = [];
+let atlasArts    = [];   // articles shown inside the Atlas immersive overlay
 let activeFeedCats   = new Set(['arts','selfwell','economy','nature','society','tech','philo','lifestyle','sports']);
 let activeFeedTopics = new Set(['AI','Climate','Politics','Finance','Sports']);
 let quizAnswered = false;
@@ -4828,6 +4992,7 @@ function aoSave() {
 // ── EXPLORE ──
 function renderExpHeroWithArticles(rawArts) {
   expHeroArts = rawArts.map(normalizeArticle).filter(a => a.image_url);
+  atlasArts = rawArts.map(normalizeArticle).filter(a => a.title);   // feed for the Atlas immersive view
   // Atlas HUD "Live Feeds" counter reflects the real story count in view.
   const _al = document.getElementById('atlas-live');
   if (_al && rawArts.length) _al.textContent = rawArts.length >= 99 ? '99+' : String(rawArts.length);
