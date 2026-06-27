@@ -179,6 +179,37 @@ html, body {
   background-attachment: fixed;
 }
 
+/* ════════ Futuristic dark theme — deep gradient + faint grid + cyan glow ════════
+   Scoped to the active dark theme so navy/light are untouched. Purely cosmetic
+   chrome (background depth + accent glows); does not change layout. */
+[data-theme="dark"] .phone {
+  background:
+    linear-gradient(rgba(14,183,214,0.028) 1px, transparent 1px) 0 0/100% 34px,
+    linear-gradient(90deg, rgba(14,183,214,0.028) 1px, transparent 1px) 0 0/34px 100%,
+    radial-gradient(120% 90% at 50% -8%, rgba(14,183,214,0.10) 0%, rgba(14,183,214,0) 46%),
+    radial-gradient(120% 120% at 88% 8%, rgba(40,80,180,0.10) 0%, rgba(40,80,180,0) 50%),
+    linear-gradient(180deg, #05080f 0%, #03050b 60%, #020308 100%);
+  background-attachment: fixed;
+}
+/* Active nav pill picks up the cyan signature glow */
+[data-theme="dark"] nav {
+  border-color: rgba(14,183,214,0.18);
+  box-shadow:
+    0 18px 46px rgba(0,0,0,0.5),
+    0 0 0 1px rgba(14,183,214,0.05),
+    inset 0 1px 1px rgba(255,255,255,0.18);
+}
+[data-theme="dark"] .nb.on .nb-icon {
+  background: rgba(14,183,214,0.18);
+  color: #eafbff;
+  box-shadow: inset 0 0 0 0.5px rgba(14,183,214,0.45), 0 2px 16px rgba(14,183,214,0.35);
+}
+/* Hero / explore imagery gets a subtle cyan rim so cards read as lit panels */
+[data-theme="dark"] .exp-hero, [data-theme="dark"] .nc-hero-image,
+[data-theme="dark"] .exp-rcard img, [data-theme="dark"] .exp-rcard-ph {
+  box-shadow: 0 8px 26px rgba(0,0,0,0.4), inset 0 0 0 1px rgba(14,183,214,0.12);
+}
+
 /* ── White-mode (Light) fixes for the dark-built components ── */
 [data-theme="light"] nav {
   background: rgba(255,255,255,0.72);
@@ -2701,46 +2732,60 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 
   <!-- ════════ ATLAS — futuristic global HUD ════════ -->
   <style>
-    .atlas-wrap{position:relative;margin:14px 0 18px;padding:18px 16px 16px;border-radius:20px;
-      background:radial-gradient(120% 140% at 50% 0%,rgba(14,183,214,.10) 0%,rgba(8,12,22,.0) 55%),
-        linear-gradient(160deg,rgba(10,16,28,.92),rgba(6,9,16,.96));
+    .atlas-wrap{position:relative;margin:14px 0 18px;padding:18px 16px 16px;border-radius:22px;
+      background:radial-gradient(130% 150% at 50% -10%,rgba(14,183,214,.12) 0%,rgba(8,12,22,0) 52%),
+        linear-gradient(165deg,rgba(11,17,30,.96),rgba(5,8,14,.98));
       border:1px solid rgba(14,183,214,.22);overflow:hidden;
-      box-shadow:0 18px 50px -22px rgba(14,183,214,.45),inset 0 1px 0 rgba(255,255,255,.04);}
+      box-shadow:0 22px 60px -26px rgba(14,183,214,.5),inset 0 1px 0 rgba(255,255,255,.05);}
     .atlas-wrap::before{content:"";position:absolute;inset:0;pointer-events:none;
-      background:linear-gradient(rgba(14,183,214,.05) 1px,transparent 1px) 0 0/100% 26px;opacity:.5;}
-    .atlas-grid{position:relative;display:grid;grid-template-columns:1fr 168px;gap:12px;align-items:center;z-index:2;}
+      background:linear-gradient(rgba(14,183,214,.05) 1px,transparent 1px) 0 0/100% 26px;opacity:.45;}
+    .atlas-wrap::after{content:"";position:absolute;top:0;left:0;right:0;height:1px;pointer-events:none;
+      background:linear-gradient(90deg,transparent,rgba(14,183,214,.8),transparent);}
+    .atlas-grid{position:relative;display:grid;grid-template-columns:1fr 176px;gap:14px;align-items:center;z-index:2;}
     .atlas-badge{display:inline-flex;align-items:center;gap:7px;font:700 .58rem/1 var(--fd,sans-serif);
       letter-spacing:.22em;text-transform:uppercase;color:#0EB7D6;
-      padding:5px 10px;border:1px solid rgba(14,183,214,.35);border-radius:999px;
+      padding:5px 11px;border:1px solid rgba(14,183,214,.38);border-radius:999px;
       background:rgba(14,183,214,.08);}
-    .atlas-badge i{font-size:.62rem;animation:atlas-blink 2.4s ease-in-out infinite;}
-    @keyframes atlas-blink{0%,100%{opacity:1}50%{opacity:.25}}
-    .atlas-title{margin:11px 0 3px;font:800 1.42rem/1.04 var(--fd,sans-serif);letter-spacing:-.01em;
-      color:#fff;text-shadow:0 0 24px rgba(14,183,214,.35);}
+    .atlas-badge i{font-size:.6rem;animation:atlas-blink 2.2s ease-in-out infinite;}
+    @keyframes atlas-blink{0%,100%{opacity:1}50%{opacity:.2}}
+    .atlas-title{margin:11px 0 3px;font:800 1.5rem/1.02 var(--fd,sans-serif);letter-spacing:-.015em;
+      color:#fff;text-shadow:0 0 26px rgba(14,183,214,.4);}
     .atlas-title b{color:#0EB7D6;font-weight:800;}
-    .atlas-sub{font:500 .72rem/1.35 var(--f,sans-serif);color:rgba(220,235,245,.62);max-width:210px;}
-    .atlas-stats{margin-top:13px;display:flex;gap:18px;}
-    .atlas-stat .k{font:800 .98rem/1 var(--fd,sans-serif);color:#fff;}
-    .atlas-stat .l{margin-top:3px;font:700 .5rem/1 var(--fd,sans-serif);letter-spacing:.16em;
-      text-transform:uppercase;color:rgba(14,183,214,.7);}
+    .atlas-sub{font:500 .72rem/1.35 var(--f,sans-serif);color:rgba(220,235,245,.6);max-width:215px;}
+    /* reference-style stat bars: CLASS / HYDROGEN / HELIUM */
+    .atlas-bars{margin-top:14px;display:flex;flex-direction:column;gap:8px;max-width:215px;}
+    .atlas-bar{display:grid;grid-template-columns:62px 1fr 30px;align-items:center;gap:8px;}
+    .atlas-bar .bl{font:700 .5rem/1 var(--fd,sans-serif);letter-spacing:.13em;text-transform:uppercase;
+      color:rgba(14,183,214,.78);}
+    .atlas-bar .bt{height:4px;border-radius:99px;background:rgba(14,183,214,.14);overflow:hidden;}
+    .atlas-bar .bf{height:100%;border-radius:99px;
+      background:linear-gradient(90deg,#0a6f86,#0EB7D6);box-shadow:0 0 8px rgba(14,183,214,.7);}
+    .atlas-bar .bv{font:700 .56rem/1 var(--fd,sans-serif);color:#fff;text-align:right;}
+    .atlas-timer{margin-top:12px;display:inline-flex;align-items:center;gap:8px;
+      font:700 .62rem/1 var(--fd,sans-serif);letter-spacing:.16em;color:rgba(220,235,245,.7);}
+    .atlas-timer .dot{width:5px;height:5px;border-radius:50%;background:#0EB7D6;
+      box-shadow:0 0 8px #0EB7D6;animation:atlas-blink 1.4s ease-in-out infinite;}
+    .atlas-timer b{color:#0EB7D6;font-variant-numeric:tabular-nums;}
     /* circular frame */
-    .atlas-ring{position:relative;width:168px;height:168px;margin:0 auto;}
+    .atlas-ring{position:relative;width:176px;height:176px;margin:0 auto;}
     .atlas-ring svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible;}
     .atlas-spin-slow{transform-origin:50% 50%;animation:atlas-spin 60s linear infinite;}
     .atlas-spin-rev{transform-origin:50% 50%;animation:atlas-spin 42s linear infinite reverse;}
     .atlas-spin-fast{transform-origin:50% 50%;animation:atlas-spin 22s linear infinite;}
+    .atlas-spin-earth{transform-origin:50% 50%;animation:atlas-spin 90s linear infinite;}
     @keyframes atlas-spin{to{transform:rotate(360deg);}}
     .atlas-pulse{animation:atlas-pulse 3.2s ease-in-out infinite;transform-origin:50% 50%;}
-    @keyframes atlas-pulse{0%,100%{opacity:.35}50%{opacity:.9}}
-    .atlas-coord{position:absolute;left:50%;bottom:-2px;transform:translateX(-50%);
+    @keyframes atlas-pulse{0%,100%{opacity:.35}50%{opacity:.95}}
+    .atlas-coord{position:absolute;left:50%;bottom:-3px;transform:translateX(-50%);
       font:700 .5rem/1 var(--fd,sans-serif);letter-spacing:.12em;color:rgba(14,183,214,.85);
       white-space:nowrap;text-shadow:0 0 10px rgba(14,183,214,.6);}
     @media (prefers-reduced-motion:reduce){
-      .atlas-spin-slow,.atlas-spin-rev,.atlas-spin-fast,.atlas-pulse,.atlas-badge i{animation:none;}
+      .atlas-spin-slow,.atlas-spin-rev,.atlas-spin-fast,.atlas-spin-earth,.atlas-pulse,
+      .atlas-badge i,.atlas-timer .dot{animation:none;}
     }
     @media(max-width:380px){
-      .atlas-grid{grid-template-columns:1fr 132px;}
-      .atlas-ring{width:132px;height:132px;}
+      .atlas-grid{grid-template-columns:1fr 138px;}
+      .atlas-ring{width:138px;height:138px;}
     }
   </style>
   <div class="atlas-wrap">
@@ -2749,57 +2794,82 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
         <span class="atlas-badge"><i class="fa-solid fa-circle"></i> 01 · Atlas</span>
         <div class="atlas-title">Going <b>Global</b></div>
         <div class="atlas-sub">Worldwide intelligence, mapped live across every signal you follow.</div>
-        <div class="atlas-stats">
-          <div class="atlas-stat"><div class="k" id="atlas-live">—</div><div class="l">Live Feeds</div></div>
-          <div class="atlas-stat"><div class="k">GLOBAL</div><div class="l">Class</div></div>
-          <div class="atlas-stat"><div class="k" id="atlas-sig">98%</div><div class="l">Signal</div></div>
+        <div class="atlas-bars">
+          <div class="atlas-bar"><span class="bl">Live Feeds</span>
+            <span class="bt"><span class="bf" style="width:82%"></span></span>
+            <span class="bv" id="atlas-live">—</span></div>
+          <div class="atlas-bar"><span class="bl">Coverage</span>
+            <span class="bt"><span class="bf" style="width:65%"></span></span>
+            <span class="bv">65%</span></div>
+          <div class="atlas-bar"><span class="bl">Signal</span>
+            <span class="bt"><span class="bf" style="width:98%"></span></span>
+            <span class="bv">98%</span></div>
         </div>
+        <div class="atlas-timer"><span class="dot"></span> SYNC <b id="atlas-clock">00:00:00</b> · GLOBAL</div>
       </div>
       <div class="atlas-ring" aria-hidden="true">
-        <!-- outer rotating tick ring -->
         <svg viewBox="0 0 200 200">
           <defs>
-            <radialGradient id="atlasCore" cx="50%" cy="42%" r="62%">
-              <stop offset="0%" stop-color="#0EB7D6" stop-opacity=".55"/>
-              <stop offset="55%" stop-color="#0a3b49" stop-opacity=".35"/>
-              <stop offset="100%" stop-color="#05080f" stop-opacity=".9"/>
+            <radialGradient id="atlasOcean" cx="42%" cy="36%" r="70%">
+              <stop offset="0%" stop-color="#1aa6c4"/>
+              <stop offset="45%" stop-color="#0c5e78"/>
+              <stop offset="100%" stop-color="#04222e"/>
             </radialGradient>
             <linearGradient id="atlasMer" x1="0" y1="0" x2="1" y2="0">
-              <stop offset="0%" stop-color="#0EB7D6" stop-opacity="0"/>
-              <stop offset="50%" stop-color="#0EB7D6" stop-opacity=".7"/>
-              <stop offset="100%" stop-color="#0EB7D6" stop-opacity="0"/>
+              <stop offset="0%" stop-color="#bdf3ff" stop-opacity="0"/>
+              <stop offset="50%" stop-color="#bdf3ff" stop-opacity=".8"/>
+              <stop offset="100%" stop-color="#bdf3ff" stop-opacity="0"/>
             </linearGradient>
+            <radialGradient id="atlasGloss" cx="38%" cy="30%" r="50%">
+              <stop offset="0%" stop-color="#ffffff" stop-opacity=".4"/>
+              <stop offset="40%" stop-color="#ffffff" stop-opacity=".06"/>
+              <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+            </radialGradient>
+            <clipPath id="atlasClip"><circle cx="100" cy="100" r="58"/></clipPath>
           </defs>
           <!-- faint outer ring -->
-          <circle cx="100" cy="100" r="96" fill="none" stroke="rgba(14,183,214,.18)" stroke-width="1"/>
-          <!-- rotating tick ring -->
+          <circle cx="100" cy="100" r="96" fill="none" stroke="rgba(14,183,214,.16)" stroke-width="1"/>
+          <!-- rugged bezel: rotating tick ring -->
           <g class="atlas-spin-slow">
-            <circle cx="100" cy="100" r="88" fill="none" stroke="rgba(14,183,214,.30)" stroke-width="1"
-              stroke-dasharray="2 6"/>
+            <circle cx="100" cy="100" r="88" fill="none" stroke="rgba(14,183,214,.32)" stroke-width="6"
+              stroke-dasharray="1.5 5.5"/>
           </g>
           <!-- rotating dashed mid ring (reverse) -->
           <g class="atlas-spin-rev">
-            <circle cx="100" cy="100" r="78" fill="none" stroke="rgba(14,183,214,.45)" stroke-width="1.5"
+            <circle cx="100" cy="100" r="76" fill="none" stroke="rgba(14,183,214,.5)" stroke-width="1.5"
               stroke-dasharray="34 14 6 14"/>
           </g>
-          <!-- core globe -->
-          <circle cx="100" cy="100" r="58" fill="url(#atlasCore)" stroke="rgba(14,183,214,.55)" stroke-width="1"/>
-          <!-- lat/long grid -->
-          <g stroke="rgba(14,183,214,.40)" stroke-width=".8" fill="none">
-            <circle cx="100" cy="100" r="58"/>
-            <ellipse cx="100" cy="100" rx="58" ry="20"/>
-            <ellipse cx="100" cy="100" rx="58" ry="40"/>
-            <ellipse cx="100" cy="100" rx="20" ry="58"/>
-            <ellipse cx="100" cy="100" rx="40" ry="58"/>
-            <line x1="42" y1="100" x2="158" y2="100"/>
-            <line x1="100" y1="42" x2="100" y2="158"/>
+          <!-- ── satellite Earth core ── -->
+          <circle cx="100" cy="100" r="58" fill="url(#atlasOcean)"/>
+          <g clip-path="url(#atlasClip)">
+            <!-- slowly drifting land masses (stylised) -->
+            <g class="atlas-spin-earth" fill="#2f7d52" fill-opacity=".9">
+              <path d="M70 64 q14 -10 26 -4 q10 6 4 16 q-8 12 -22 10 q-16 -4 -8 -22 z"/>
+              <path d="M118 78 q12 2 14 14 q1 12 -12 14 q-14 1 -14 -12 q0 -14 12 -16 z"/>
+              <path d="M64 112 q16 -6 22 6 q4 12 -10 18 q-16 4 -20 -10 q-3 -10 8 -14 z"/>
+              <path d="M104 128 q14 -4 18 8 q2 12 -12 14 q-12 1 -14 -10 q-1 -9 8 -12 z"/>
+              <path d="M132 108 q10 0 10 10 q-1 9 -11 8 q-9 -2 -7 -11 q1 -7 8 -7 z"/>
+            </g>
+            <!-- lat/long grid -->
+            <g stroke="rgba(190,243,255,.28)" stroke-width=".7" fill="none">
+              <ellipse cx="100" cy="100" rx="58" ry="20"/>
+              <ellipse cx="100" cy="100" rx="58" ry="40"/>
+              <ellipse cx="100" cy="100" rx="20" ry="58"/>
+              <ellipse cx="100" cy="100" rx="40" ry="58"/>
+              <line x1="42" y1="100" x2="158" y2="100"/>
+              <line x1="100" y1="42" x2="100" y2="158"/>
+            </g>
+            <!-- sweeping scan meridian -->
+            <g class="atlas-spin-fast">
+              <ellipse cx="100" cy="100" rx="13" ry="58" stroke="url(#atlasMer)" stroke-width="2" fill="none"/>
+            </g>
+            <!-- glossy highlight -->
+            <circle cx="100" cy="100" r="58" fill="url(#atlasGloss)"/>
           </g>
-          <!-- sweeping meridian -->
-          <g class="atlas-spin-fast">
-            <ellipse cx="100" cy="100" rx="14" ry="58" stroke="url(#atlasMer)" stroke-width="2" fill="none"/>
-          </g>
+          <!-- core rim -->
+          <circle cx="100" cy="100" r="58" fill="none" stroke="rgba(14,183,214,.6)" stroke-width="1.2"/>
           <!-- pulsing signal dots -->
-          <g fill="#0EB7D6" class="atlas-pulse">
+          <g fill="#bdf3ff" class="atlas-pulse">
             <circle cx="128" cy="74" r="2.4"/>
             <circle cx="74" cy="118" r="2"/>
             <circle cx="118" cy="128" r="1.8"/>
@@ -2814,6 +2884,15 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
       </div>
     </div>
   </div>
+  <script>
+    // Atlas live SYNC clock (HH:MM:SS, local time) — purely cosmetic HUD detail.
+    (function(){
+      var el=document.getElementById('atlas-clock'); if(!el) return;
+      function pad(n){return n<10?'0'+n:''+n;}
+      function tick(){var d=new Date();el.textContent=pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());}
+      tick(); setInterval(tick,1000);
+    })();
+  </script>
 
   <!-- Top News Hero -->
   <div id="exp-hero-wrap"></div>
