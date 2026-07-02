@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The White Tiger — An Exhibition</title>
+<meta name="description" content="A cinematic, scroll-driven 3D exhibition of The White Tiger. Museum-grade interaction built with Three.js and GSAP.">
+<meta name="theme-color" content="#000000">
+<link rel="icon" type="image/png" href="/tiger-logo.png">
+
+<!-- ── Fonts: sophisticated serif for display, clean sans for body ── -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+
+<!-- ── GSAP + ScrollTrigger (vendored locally — no CDN dependency) ── -->
+<script src="vendor/gsap.min.js"></script>
+<script src="vendor/ScrollTrigger.min.js"></script>
+
+<!-- ── Three.js as an ES module + its addon path (vendored locally) ── -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three.module.js",
+    "three/addons/": "./vendor/jsm/"
+  }
+}
+</script>
+
+<style>
+  :root{
+    --bg:#000000;
+    --bone:#f5f3ee;
+    --mist:#9aa0aa;
+    --line:rgba(255,255,255,.055);
+    --halo:rgba(230,240,255,.9);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--bg);
+    color:var(--bone);
+    font-family:'Inter',sans-serif;
+    overflow-x:hidden;
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:inherit;text-decoration:none}
+  ::selection{background:rgba(230,240,255,.25);color:#fff}
+
+  /* ── Vertical column grid lines (museum-poster structure) ── */
+  .column-grid{
+    position:fixed;inset:0;z-index:1;pointer-events:none;
+    display:grid;grid-template-columns:repeat(6,1fr);
+    max-width:1500px;margin:0 auto;
+  }
+  .column-grid > span{border-left:1px solid var(--line)}
+  .column-grid > span:first-child{border-left:none}
+  @media(max-width:768px){ .column-grid{grid-template-columns:repeat(3,1fr)} }
+
+  /* ── Fixed WebGL stage (the 3D canvas lives here, always centered) ── */
+  #stage{position:fixed;inset:0;z-index:2}
+  #stage canvas{display:block;width:100%;height:100%}
+
+  /* ── Loader ── */
+  #loader{position:fixed;inset:0;z-index:60;background:#000;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;
+    transition:opacity .9s ease,visibility .9s}
+  #loader.hidden{opacity:0;visibility:hidden}
+  .loader-ring{width:54px;height:54px;border-radius:50%;
+    border:1px solid rgba(255,255,255,.15);border-top-color:#fff;animation:spin 1s linear infinite}
+  #loader p{font-family:'Cormorant Garamond',serif;letter-spacing:.4em;
+    text-transform:uppercase;font-size:.72rem;color:var(--mist)}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* ── Scroll content overlays the fixed stage ── */
+  #scroll{position:relative;z-index:10}
+  .panel{min-height:100vh;display:flex;align-items:center;
+    padding:0 clamp(24px,6vw,120px);pointer-events:none}
+  .panel a,.panel button{pointer-events:auto}
+
+  .kicker{font-family:'Cormorant Garamond',serif;text-transform:uppercase;
+    letter-spacing:.42em;font-size:.72rem;color:var(--mist);font-weight:600}
+  .display{font-family:'Playfair Display',serif;line-height:.98;letter-spacing:-.02em}
+  .lede{font-family:'Cormorant Garamond',serif;font-size:clamp(1.05rem,1.6vw,1.35rem);
+    line-height:1.65;color:#cdd2da;font-weight:400}
+
+  .halo-text{ text-shadow:0 2px 40px rgba(0,0,0,.9),0 0 90px rgba(0,0,0,.8) }
+
+  /* Fade blocks — GSAP animates these in/out on scroll */
+  .fade{opacity:0;will-change:transform,opacity}
+
+  /* Fixed chrome */
+  .chrome{position:fixed;z-index:30;color:var(--bone)}
+  .topbar{top:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;
+    padding:26px clamp(24px,5vw,60px);mix-blend-mode:difference}
+  .brandmark{font-family:'Playfair Display',serif;font-weight:600;letter-spacing:.02em;font-size:1.05rem}
+  .navdots{display:flex;gap:26px;font-family:'Cormorant Garamond',serif;
+    text-transform:uppercase;letter-spacing:.28em;font-size:.7rem;color:var(--mist)}
+  @media(max-width:768px){ .navdots{display:none} }
+
+  /* scroll cue */
+  .cue{position:fixed;bottom:30px;left:50%;transform:translateX(-50%);z-index:30;
+    display:flex;flex-direction:column;align-items:center;gap:10px;
+    font-family:'Cormorant Garamond',serif;letter-spacing:.3em;text-transform:uppercase;
+    font-size:.62rem;color:var(--mist);transition:opacity .6s}
+  .cue .bar{width:1px;height:46px;background:linear-gradient(var(--mist),transparent);overflow:hidden;position:relative}
+  .cue .bar::after{content:"";position:absolute;top:-46px;left:0;width:100%;height:46px;
+    background:linear-gradient(#fff,transparent);animation:drop 2.2s ease-in-out infinite}
+  @keyframes drop{0%{top:-46px}60%,100%{top:46px}}
+
+  /* progress rail */
+  .rail{position:fixed;right:26px;top:50%;transform:translateY(-50%);z-index:30;
+    width:1px;height:180px;background:rgba(255,255,255,.12)}
+  .rail i{position:absolute;left:0;top:0;width:100%;height:0;background:var(--bone);transition:height .1s linear}
+  @media(max-width:768px){ .rail{display:none} }
+
+  /* stat numerals */
+  .numeral{font-family:'Playfair Display',serif;font-weight:600;line-height:.9;
+    font-size:clamp(3.4rem,9vw,8rem);letter-spacing:-.03em}
+  .plaque{border-top:1px solid rgba(255,255,255,.16);padding-top:16px}
+  .plaque dt{font-family:'Cormorant Garamond',serif;text-transform:uppercase;
+    letter-spacing:.24em;font-size:.66rem;color:var(--mist);margin-bottom:6px}
+  .plaque dd{font-family:'Playfair Display',serif;font-size:1.15rem;margin:0}
+
+  .btn-line{display:inline-flex;align-items:center;gap:12px;
+    font-family:'Cormorant Garamond',serif;text-transform:uppercase;letter-spacing:.24em;
+    font-size:.78rem;color:var(--bone);padding-bottom:6px;border-bottom:1px solid rgba(255,255,255,.4);
+    transition:.4s}
+  .btn-line:hover{letter-spacing:.32em;border-color:#fff}
+
+  @media (prefers-reduced-motion: reduce){ .fade{opacity:1!important;transform:none!important} }
+
+  /* ── Minimal utility classes (replacing the Tailwind CDN) ── */
+  .max-w-md{max-width:28rem}.max-w-lg{max-width:32rem}.max-w-2xl{max-width:42rem}.max-w-4xl{max-width:56rem}
+  .mx-auto{margin-left:auto;margin-right:auto}
+  .mt-2{margin-top:.5rem}.mt-4{margin-top:1rem}.mt-5{margin-top:1.25rem}.mt-6{margin-top:1.5rem}
+  .mt-8{margin-top:2rem}.mt-12{margin-top:3rem}
+  .italic{font-style:italic}.font-medium{font-weight:500}
+  .text-left{text-align:left}
+  .grid{display:grid}.grid-cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .gap-x-10{column-gap:2.5rem}.gap-y-8{row-gap:2rem}.gap-10{gap:2.5rem}
+  .flex{display:flex}.items-center{align-items:center}.justify-center{justify-content:center}
+
+  /* placeholder note (only shown when the .glb is absent) */
+  #placeholder-note{position:fixed;left:50%;bottom:10px;transform:translateX(-50%);z-index:31;
+    font-family:'Cormorant Garamond',serif;letter-spacing:.14em;font-size:.68rem;color:var(--mist);
+    text-transform:uppercase;text-align:center;opacity:0;transition:opacity .8s;max-width:80vw}
+  #placeholder-note code{color:#cfd6df;letter-spacing:.05em;font-family:ui-monospace,monospace}
+</style>
+</head>
+<body>
+
+<!-- ═══════════ LOADER ═══════════ -->
+<div id="loader">
+  <div class="loader-ring"></div>
+  <p>Preparing the exhibition</p>
+</div>
+
+<!-- ═══════════ FIXED CHROME ═══════════ -->
+<header class="chrome topbar">
+  <a href="/company/" class="brandmark">The White Tiger</a>
+  <nav class="navdots">
+    <span>Exhibit</span><span>Profile</span><span>Anatomy</span><span>Ethos</span>
+  </nav>
+  <a href="/company/" class="brandmark" style="font-size:.8rem;letter-spacing:.2em">SHERR·BYTE</a>
+</header>
+
+<div class="rail"><i id="railFill"></i></div>
+
+<div class="cue" id="cue"><span>Scroll to explore</span><span class="bar"></span></div>
+
+<p id="placeholder-note">Placeholder shown — drop <code>assets/white_tiger.glb</code> in to reveal the model</p>
+
+<!-- ═══════════ VERTICAL COLUMN GRID ═══════════ -->
+<div class="column-grid" aria-hidden="true">
+  <span></span><span></span><span></span><span></span><span></span><span></span>
+</div>
+
+<!-- ═══════════ THE 3D STAGE (fixed, centered) ═══════════ -->
+<div id="stage"></div>
+
+<!-- ═══════════ SCROLL-DRIVEN CONTENT ═══════════ -->
+<main id="scroll">
+
+  <!-- Section 1 — HERO: title overlays the tiger, which faces slightly away -->
+  <section class="panel" data-scene="hero" style="justify-content:center;text-align:center">
+    <div class="max-w-4xl">
+      <p class="kicker fade" data-anim="up">An Exhibition in Information Sovereignty</p>
+      <h1 class="display halo-text fade mt-6" data-anim="up"
+          style="font-size:clamp(3.2rem,12vw,10rem);font-weight:600">
+        The&nbsp;White<br><em class="italic font-medium">Tiger</em>
+      </h1>
+      <p class="lede fade mx-auto mt-8" data-anim="up" style="max-width:520px">
+        A rare apparition rendered in light and bone — circle the specimen,
+        study its structure, and read the ethos it was named for.
+      </p>
+    </div>
+  </section>
+
+  <!-- Section 2 — PROFILE: copy on the left as the tiger turns to profile -->
+  <section class="panel" data-scene="profile">
+    <div class="max-w-md">
+      <p class="kicker fade" data-anim="left">01 — The Profile</p>
+      <h2 class="display fade mt-5" data-anim="left" style="font-size:clamp(2.2rem,5vw,3.6rem)">
+        Poised in the<br>ink of night.
+      </h2>
+      <p class="lede fade mt-6" data-anim="left">
+        Leucistic, not albino — its pale coat carries every stripe, drawn in charcoal across snow.
+        As you descend, the specimen rotates on its axis, offering profile, shoulder and flank
+        to the light of the ring.
+      </p>
+    </div>
+  </section>
+
+  <!-- Section 3 — ANATOMY / STATS: bold numerals + museum plaques on the right -->
+  <section class="panel" data-scene="stats" style="justify-content:flex-end;text-align:right">
+    <div class="max-w-lg">
+      <p class="kicker fade" data-anim="right">02 — Anatomy of the Specimen</p>
+      <div class="numeral fade mt-6" data-anim="right">203<span style="font-size:.3em;letter-spacing:0"> CM</span></div>
+      <p class="lede fade mt-2" data-anim="right">Nose-to-tail length of a full-grown male.</p>
+
+      <dl class="grid grid-cols-2 gap-x-10 gap-y-8 mt-12 text-left">
+        <div class="plaque fade" data-anim="right"><dt>Classification</dt><dd>Panthera tigris</dd></div>
+        <div class="plaque fade" data-anim="right"><dt>Mass</dt><dd>Up to 230 kg</dd></div>
+        <div class="plaque fade" data-anim="right"><dt>Coat</dt><dd>Leucistic structure</dd></div>
+        <div class="plaque fade" data-anim="right"><dt>Bite force</dt><dd>≈ 1050 psi</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <!-- Section 4 — ETHOS: brand tie-in, camera closest here -->
+  <section class="panel" data-scene="ethos" style="justify-content:center;text-align:center">
+    <div class="max-w-2xl">
+      <p class="kicker fade" data-anim="up">03 — Why we took the name</p>
+      <h2 class="display halo-text fade mt-6" data-anim="up" style="font-size:clamp(2.4rem,7vw,5.2rem)">
+        Watchful.<br><em class="italic">Objective.</em> Unfiltered.
+      </h2>
+      <p class="lede fade mx-auto mt-8" data-anim="up" style="max-width:560px">
+        The tiger sees through the dark and misses nothing. So does our engine —
+        stripping noise and bias from the world's information to hand you clean, verified truth.
+      </p>
+      <div class="fade mt-12 flex items-center justify-center gap-10" data-anim="up">
+        <a href="/download/" class="btn-line">Enter SherrByte</a>
+        <a href="/company/" class="btn-line">The Company</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Section 5 — CREDIT / OUTRO -->
+  <section class="panel" data-scene="outro" style="justify-content:center;text-align:center;min-height:70vh">
+    <div>
+      <p class="kicker fade" data-anim="up">TheWhiteTiger · SherrByte</p>
+      <p class="lede fade mt-4" data-anim="up" style="opacity:.7">
+        Information Sovereignty for India — © <span id="yr">2026</span>
+      </p>
+    </div>
+  </section>
+</main>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     THREE.JS SCENE + GSAP SCROLL CHOREOGRAPHY
+════════════════════════════════════════════════════════════════ -->
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader }   from 'three/addons/loaders/GLTFLoader.js';
+import { DRACOLoader }  from 'three/addons/loaders/DRACOLoader.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { EffectComposer }  from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass }      from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass }      from 'three/addons/postprocessing/OutputPass.js';
+
+const { gsap } = window;
+gsap.registerPlugin(window.ScrollTrigger);
+const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ───────────────────────── 1. RENDERER ───────────────────────── */
+const stage = document.getElementById('stage');
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;   // cinematic filmic response
+renderer.toneMappingExposure = 1.12;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+stage.appendChild(renderer.domElement);
+
+/* ───────────────────────── 2. SCENE + CAMERA ─────────────────── */
+const scene = new THREE.Scene();
+scene.background = null;                                // let the black CSS body show through
+scene.fog = new THREE.FogExp2(0x000000, 0.045);        // deep matte falloff into the dark
+
+const camera = new THREE.PerspectiveCamera(38, window.innerWidth / window.innerHeight, 0.1, 100);
+camera.position.set(0, 0.4, 6.2);
+
+/* Studio reflections for the white fur (image-based lighting) */
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+/* ───────────────────────── 3. CINEMATIC LIGHTING ─────────────── */
+// Soft ambient base so shadows never go fully black
+scene.add(new THREE.HemisphereLight(0xbcd4ff, 0x0a0a0f, 0.35));
+
+// Bright directional KEY light — strong highlights on the white fur
+const key = new THREE.DirectionalLight(0xfff6ec, 3.4);
+key.position.set(4, 6, 5);
+scene.add(key);
+
+// Cool RIM / back light — separates the silhouette from the black void
+const rim = new THREE.DirectionalLight(0x88b6ff, 2.6);
+rim.position.set(-5, 3, -6);
+scene.add(rim);
+
+// Subtle warm fill from below-front to lift the chest/paws
+const fill = new THREE.DirectionalLight(0xffffff, 0.6);
+fill.position.set(-2, -1, 4);
+scene.add(fill);
+
+/* ───────────────────────── 4. THE GLOWING NEON RING (HALO) ───── */
+// A bright ring encircling the subject; UnrealBloom turns it into a neon halo.
+const ringGroup = new THREE.Group();
+const ringGeo = new THREE.TorusGeometry(2.15, 0.018, 24, 200);
+const ringMat = new THREE.MeshBasicMaterial({ color: 0xffffff });   // pure white → blooms hot
+const ring = new THREE.Mesh(ringGeo, ringMat);
+ringGroup.add(ring);
+// A faint second ring for depth
+const ring2 = new THREE.Mesh(
+  new THREE.TorusGeometry(2.15, 0.05, 24, 200),
+  new THREE.MeshBasicMaterial({ color: 0xbcd4ff, transparent: true, opacity: 0.18 })
+);
+ringGroup.add(ring2);
+ringGroup.position.z = -0.6;   // sit just behind the tiger
+scene.add(ringGroup);
+
+/* A slow drift of motes for atmosphere */
+const moteGeo = new THREE.BufferGeometry();
+const moteCount = 260, mp = new Float32Array(moteCount * 3);
+for (let i = 0; i < moteCount; i++) {
+  mp[i*3]   = (Math.random() - 0.5) * 12;
+  mp[i*3+1] = (Math.random() - 0.5) * 8;
+  mp[i*3+2] = (Math.random() - 0.5) * 8 - 1;
+}
+moteGeo.setAttribute('position', new THREE.BufferAttribute(mp, 3));
+const motes = new THREE.Points(moteGeo, new THREE.PointsMaterial({
+  color: 0xdfe8ff, size: 0.012, transparent: true, opacity: 0.5, depthWrite: false
+}));
+scene.add(motes);
+
+/* ───────────────────────── 5. POST-PROCESSING (BLOOM) ────────── */
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(
+  new THREE.Vector2(window.innerWidth, window.innerHeight),
+  0.85,   // strength
+  0.5,    // radius
+  0.9     // threshold — only very bright pixels (the ring) bloom
+);
+composer.addPass(bloom);
+composer.addPass(new OutputPass());
+
+/* ───────────────────────── 6. LOAD THE MODEL ─────────────────── */
+// `tiger` is the object whose Y-rotation we bind to the scrollbar.
+let tiger = new THREE.Group();
+scene.add(tiger);
+const BASE_ROT = -0.55;          // hero pose: turned slightly away / to the side
+tiger.rotation.y = BASE_ROT;
+
+const loader = new GLTFLoader();
+const draco = new DRACOLoader();
+draco.setDecoderPath('vendor/jsm/libs/draco/');
+loader.setDRACOLoader(draco);
+
+function frameModel(obj) {
+  // Center the model at the origin and scale it to a consistent height.
+  const box = new THREE.Box3().setFromObject(obj);
+  const size = box.getSize(new THREE.Vector3());
+  const center = box.getCenter(new THREE.Vector3());
+  const scale = 3.2 / Math.max(size.x, size.y, size.z);
+  obj.scale.setScalar(scale);
+  obj.position.sub(center.multiplyScalar(scale));
+  // Enhance any white-fur materials for the studio look
+  obj.traverse((n) => {
+    if (n.isMesh && n.material) {
+      n.material.envMapIntensity = 1.15;
+      if ('roughness' in n.material) n.material.roughness = Math.min(n.material.roughness ?? 0.6, 0.8);
+      n.castShadow = n.receiveShadow = false;
+    }
+  });
+}
+
+loader.load(
+  'assets/white_tiger.glb',
+  (gltf) => {                                   // ── success: real model ──
+    frameModel(gltf.scene);
+    tiger.add(gltf.scene);
+    revealStage();
+  },
+  undefined,
+  () => {                                       // ── error: build a placeholder ──
+    buildPlaceholder();
+    revealStage();
+    const note = document.getElementById('placeholder-note');
+    if (note) gsap.to(note, { opacity: 1, delay: 1.2, duration: 1 });
+  }
+);
+
+/* Placeholder: crossed billboard planes carrying the tiger motif, so the
+   halo is never empty before the real .glb is supplied. */
+function buildPlaceholder() {
+  const tex = new THREE.TextureLoader().load('assets/tiger-motif.png');
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide, opacity: 0.96 });
+  const geo = new THREE.PlaneGeometry(2.9, 2.9);
+  for (let i = 0; i < 3; i++) {                 // 3 crossed planes → always something facing camera
+    const p = new THREE.Mesh(geo, mat);
+    p.rotation.y = (Math.PI / 3) * i;
+    tiger.add(p);
+  }
+  // a faint glass core to give the crossed planes some body
+  tiger.add(new THREE.Mesh(
+    new THREE.IcosahedronGeometry(0.9, 1),
+    new THREE.MeshStandardMaterial({ color: 0x0b0d12, roughness: 0.15, metalness: 0.9,
+      transparent: true, opacity: 0.25 })
+  ));
+}
+
+function revealStage() {
+  const l = document.getElementById('loader');
+  l.classList.add('hidden');
+  gsap.fromTo(tiger.scale, { x: 0.75, y: 0.75, z: 0.75 }, { x: 1, y: 1, z: 1, duration: 1.6, ease: 'power3.out' });
+}
+
+/* ───────────────────────── 7. SCROLL CHOREOGRAPHY (GSAP) ─────── */
+// A single scrubbed timeline hooks the whole page's scroll to the 3D world:
+// full 360° Y-rotation + a slow camera dolly-in, mirroring a 360° showcase.
+const camState = { z: 6.2, y: 0.4, ringZ: -0.6 };
+
+if (!prefersReduced) {
+  gsap.timeline({
+    scrollTrigger: {
+      trigger: '#scroll',
+      start: 'top top',
+      end: 'bottom bottom',
+      scrub: 1,                                 // smoothly hooks animation to scroll speed
+      onUpdate: (self) => {
+        document.getElementById('railFill').style.height = (self.progress * 100) + '%';
+        // Bind rotation directly to scroll — a clean 360° turn across the page.
+        tiger.rotation.y = BASE_ROT + self.progress * Math.PI * 2;
+      }
+    }
+  })
+  // Camera pushes gently closer as we descend toward the "Anatomy" reveal…
+  .to(camState, { z: 4.4, y: 0.15, ringZ: -0.9, ease: 'sine.inOut' }, 0)
+  // …then eases back for the ethos finale.
+  .to(camState, { z: 4.9, y: 0.35, ringZ: -0.75, ease: 'sine.inOut' }, 0.75);
+
+  // Hide the scroll cue once the user starts moving.
+  window.ScrollTrigger.create({
+    start: 'top -80',
+    onEnter: () => gsap.to('#cue', { opacity: 0, duration: .4 }),
+    onLeaveBack: () => gsap.to('#cue', { opacity: 1, duration: .4 }),
+  });
+
+  // Per-section text reveals — synchronized fade + slide as each panel enters.
+  const dir = { up: { y: 60 }, left: { x: -60 }, right: { x: 60 } };
+  document.querySelectorAll('.panel').forEach((panel) => {
+    const items = panel.querySelectorAll('.fade');
+    const from = (el) => dir[el.dataset.anim] || dir.up;
+    gsap.fromTo(items,
+      (i, el) => ({ opacity: 0, ...from(el) }),
+      {
+        opacity: 1, x: 0, y: 0, duration: 1, ease: 'power3.out', stagger: 0.08,
+        scrollTrigger: { trigger: panel, start: 'top 68%', end: 'bottom 40%', toggleActions: 'play reverse play reverse' }
+      }
+    );
+  });
+} else {
+  // Reduced motion: reveal everything, no scrubbing.
+  document.querySelectorAll('.fade').forEach(el => el.style.opacity = 1);
+}
+
+/* ───────────────────────── 8. RENDER LOOP ────────────────────── */
+const clock = new THREE.Clock();
+function animate() {
+  const t = clock.getElapsedTime();
+  // Apply the scrubbed camera state + a subtle idle breathing motion.
+  camera.position.z = camState.z;
+  camera.position.y = camState.y + Math.sin(t * 0.6) * 0.04;
+  camera.lookAt(0, 0.1, 0);
+  ringGroup.position.z = camState.ringZ;
+  ringGroup.rotation.z = t * 0.05;              // the halo slowly turns
+  ring2.rotation.z = -t * 0.08;
+  motes.rotation.y = t * 0.02;                  // drifting atmosphere
+  if (prefersReduced) tiger.rotation.y = BASE_ROT + t * 0.15;  // gentle auto-spin fallback
+  composer.render();
+  requestAnimationFrame(animate);
+}
+animate();
+
+/* ───────────────────────── 9. RESIZE ─────────────────────────── */
+window.addEventListener('resize', () => {
+  const w = window.innerWidth, h = window.innerHeight;
+  camera.aspect = w / h; camera.updateProjectionMatrix();
+  renderer.setSize(w, h);
+  composer.setSize(w, h);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+});
+
+// Safety: if WebGL or the CDN modules never resolve, don't trap the user on the loader.
+setTimeout(() => document.getElementById('loader')?.classList.add('hidden'), 9000);
+document.getElementById('yr').textContent = new Date().getFullYear();
+</script>
+</body>
+</html>
