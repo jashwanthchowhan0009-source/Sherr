@@ -18,7 +18,7 @@
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 
 <style>
@@ -84,6 +84,55 @@ a{color:inherit;text-decoration:none}
 img{display:block;max-width:100%}
 button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
 section{position:relative}
+
+/* ── Cinematic intro overlay (plays once per session, skippable) ── */
+body.intro-lock{overflow:hidden}
+#intro{position:fixed;inset:0;z-index:3000;background:#04060b;
+  display:grid;place-items:center;overflow:hidden;
+  transition:opacity 1s var(--ease),visibility 1s}
+#intro.done{opacity:0;visibility:hidden}
+#intro .veil{position:absolute;inset:0;background:
+  radial-gradient(60% 50% at 50% 45%,rgba(240,167,60,.10),transparent 60%),
+  radial-gradient(50% 40% at 50% 60%,rgba(127,212,255,.08),transparent 60%)}
+#intro .stage{position:relative;display:grid;place-items:center;text-align:center;padding:24px}
+#intro .halo{position:relative;width:min(360px,68vw);aspect-ratio:1;display:grid;place-items:center;
+  margin-bottom:34px}
+#intro .halo .ring{position:absolute;inset:0;border-radius:50%;border:1px solid rgba(240,167,60,.5);
+  box-shadow:0 0 60px rgba(240,167,60,.35),0 0 70px rgba(240,167,60,.18) inset;
+  opacity:0;transform:scale(.6);animation:introRing 1.3s var(--spring) .1s forwards}
+#intro .halo .ring.r2{inset:12%;border-color:rgba(127,212,255,.35);border-style:dashed;
+  animation-delay:.28s;animation-name:introRing2}
+#intro .halo img{width:60%;height:60%;object-fit:contain;opacity:0;transform:scale(.8);
+  filter:drop-shadow(0 0 26px rgba(240,167,60,.5));
+  animation:introTiger 1.4s var(--spring) .3s forwards}
+#intro .sweep{position:absolute;inset:0;border-radius:50%;
+  background:conic-gradient(from 0deg,transparent 0deg,rgba(255,255,255,.55) 20deg,transparent 60deg);
+  -webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 3px),#000 calc(100% - 2px));
+  mask:radial-gradient(farthest-side,transparent calc(100% - 3px),#000 calc(100% - 2px));
+  opacity:0;animation:introSweep 2.6s linear .4s forwards}
+#intro .title{font-family:'Cormorant Garamond',serif;font-weight:600;letter-spacing:.01em;
+  font-size:clamp(2.6rem,8vw,5.4rem);line-height:.98;color:#fff;
+  opacity:0;transform:translateY(20px);animation:introUp .9s var(--ease) .55s forwards}
+#intro .title em{font-style:italic;color:var(--gold-2)}
+#intro .sub{font-family:'Space Grotesk',sans-serif;text-transform:uppercase;letter-spacing:.4em;
+  font-size:.7rem;color:var(--ink-soft);margin-top:22px;
+  opacity:0;animation:introFade 1s .95s forwards}
+#intro .meter{width:min(220px,50vw);height:1px;background:rgba(255,255,255,.12);margin-top:30px;overflow:hidden;
+  opacity:0;animation:introFade .6s 1.1s forwards}
+#intro .meter i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--gold),var(--ice));
+  animation:introMeter 1.7s var(--ease) 1.1s forwards}
+#intro .skip{position:absolute;bottom:28px;right:30px;font-family:'Space Grotesk',sans-serif;
+  font-size:.72rem;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-dim);
+  border:1px solid var(--line-2);padding:9px 16px;border-radius:999px;background:var(--glass);
+  opacity:0;animation:introFade .8s 1.3s forwards;transition:.25s}
+#intro .skip:hover{color:#fff;border-color:var(--gold)}
+@keyframes introRing{to{opacity:1;transform:scale(1)}}
+@keyframes introRing2{to{opacity:1;transform:scale(1) rotate(180deg)}}
+@keyframes introTiger{to{opacity:1;transform:scale(1)}}
+@keyframes introSweep{0%{opacity:0;transform:rotate(0)}15%{opacity:1}100%{opacity:0;transform:rotate(360deg)}}
+@keyframes introUp{to{opacity:1;transform:none}}
+@keyframes introFade{to{opacity:1}}
+@keyframes introMeter{to{width:100%}}
 
 /* ── Scroll progress ── */
 #progress{
@@ -458,6 +507,23 @@ footer{border-top:1px solid var(--line);padding:64px 0 36px;margin-top:40px}
 </style>
 </head>
 <body>
+
+<!-- ══════════ CINEMATIC INTRO (once per session) ══════════ -->
+<div id="intro">
+  <div class="veil"></div>
+  <div class="stage">
+    <div class="halo">
+      <span class="ring"></span>
+      <span class="ring r2"></span>
+      <span class="sweep"></span>
+      <img src="/tiger-logo.png" alt="The White Tiger">
+    </div>
+    <h1 class="title">The White <em>Tiger</em></h1>
+    <p class="sub">The Information Sovereignty Engine</p>
+    <div class="meter"><i></i></div>
+  </div>
+  <button class="skip" id="introSkip">Skip intro →</button>
+</div>
 
 <div id="progress"></div>
 <div class="bg-fx" aria-hidden="true">
@@ -1020,6 +1086,26 @@ footer{border-top:1px solid var(--line);padding:64px 0 36px;margin-top:40px}
 (function(){
   "use strict";
   var rm = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ── Cinematic intro: play once per browser session, always skippable ── */
+  (function(){
+    var intro = document.getElementById('intro');
+    if(!intro) return;
+    var seen = false;
+    try { seen = sessionStorage.getItem('twt_intro') === '1'; } catch(e){}
+    function dismiss(){
+      intro.classList.add('done');
+      document.body.classList.remove('intro-lock');
+      try { sessionStorage.setItem('twt_intro','1'); } catch(e){}
+      setTimeout(function(){ intro.remove(); }, 1100);
+    }
+    if(seen || rm){ dismiss(); return; }          // returning visitor / reduced motion → no intro
+    document.body.classList.add('intro-lock');    // lock scroll during the intro
+    var timer = setTimeout(dismiss, 3200);        // auto-reveal the site
+    document.getElementById('introSkip').addEventListener('click', function(){ clearTimeout(timer); dismiss(); });
+    // let a scroll / tap through the intro dismiss it early
+    intro.addEventListener('wheel', function(){ clearTimeout(timer); dismiss(); }, {passive:true, once:true});
+  })();
 
   /* Scroll progress + header */
   var hdr = document.getElementById('hdr'), prog = document.getElementById('progress');
