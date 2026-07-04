@@ -430,6 +430,7 @@ _STOCK_SYM = {"NIFTY": "^NSEI", "SENSEX": "^BSESN", "NASDAQ": "^IXIC", "SP500": 
 _FOREX_SYM = {"USDINR": "USDINR=X", "EURINR": "EURINR=X", "GBPINR": "GBPINR=X",
               "JPYINR": "JPYINR=X", "EURUSD": "EURUSD=X", "GBPUSD": "GBPUSD=X"}
 _METAL_SYM = {"GOLD": "GC=F", "SILVER": "SI=F", "PLATINUM": "PL=F", "PALLADIUM": "PA=F"}
+_COMMO_SYM = {"WTI_CRUDE": "CL=F", "BRENT": "BZ=F", "NATGAS": "NG=F"}
 
 # Constituent companies shown when an index is opened (symbol, display name).
 _INDEX_CONSTITUENTS = {
@@ -509,7 +510,8 @@ async def markets_history(category: str, symbol: str, range: str = "1M", days: i
         elif cat == "metals":
             series = await _yahoo_series(client, _METAL_SYM.get(sym, sym), yf_range, yf_int)
         else:
-            symap = {"stocks": _STOCK_SYM, "forex": _FOREX_SYM}.get(cat, {})
+            symap = {"stocks": _STOCK_SYM, "forex": _FOREX_SYM,
+                     "commodities": _COMMO_SYM}.get(cat, {})
             ysym = symap.get(sym, sym)
             series = await _yahoo_series(client, ysym, yf_range, yf_int)
     out = {"category": cat, "symbol": sym, "range": rng, "series": series}

@@ -3088,6 +3088,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   <div id="mkt-stocks-wrap"></div>
   <div id="mkt-crypto-wrap"></div>
   <div id="mkt-metals-wrap"></div>
+  <div id="mkt-commodities-wrap"></div>
   <div id="mkt-forex-wrap"></div>
 
   <!-- Dictionary (replaces Discover) -->
@@ -6550,6 +6551,7 @@ async function loadMarkets(_retry) {
     renderStocks(data.stocks);
     renderCrypto(data.crypto);
     renderMetals(data.metals);
+    renderCommodities(data.commodities);
     renderForex(data.forex);
     renderTicker(data);
   } catch(e) {
@@ -6586,7 +6588,7 @@ function renderTicker(data) {
 function renderStocks(stocks) {
   const wrap = document.getElementById('mkt-stocks-wrap');
   if (!wrap) return;
-  const tiles = ['NIFTY','SENSEX','NASDAQ','DOW'];
+  const tiles = ['NIFTY','SENSEX','NASDAQ','DOW','SP500','FTSE','NIKKEI'];
   wrap.innerHTML = `
     <div class="mkt-section">
       <div class="mkt-section-hdr">
@@ -6618,8 +6620,11 @@ function renderCrypto(crypto) {
     {sym:'BTC',  color:'#F7931A'},
     {sym:'ETH',  color:'#627EEA'},
     {sym:'SOL',  color:'#9945FF'},
-    {sym:'DOGE', color:'#C2A633'},
+    {sym:'BNB',  color:'#F3BA2F'},
     {sym:'XRP',  color:'#23292F'},
+    {sym:'ADA',  color:'#0033AD'},
+    {sym:'DOGE', color:'#C2A633'},
+    {sym:'DOT',  color:'#E6007A'},
   ];
   wrap.innerHTML = `
     <div class="mkt-section">
@@ -6675,10 +6680,40 @@ function renderMetals(metals) {
     </div>`;
 }
 
+function renderCommodities(comm) {
+  const wrap = document.getElementById('mkt-commodities-wrap');
+  if (!wrap) return;
+  const list = [
+    {key:'WTI_CRUDE', label:'WTI Crude', emoji:'🛢️', unit:'/bbl'},
+    {key:'BRENT',     label:'Brent',     emoji:'🛢️', unit:'/bbl'},
+    {key:'NATGAS',    label:'Nat Gas',   emoji:'🔥', unit:'/MMBtu'},
+  ];
+  // Skip the section entirely if the feed returned nothing usable.
+  if (!list.some(m => (comm && comm[m.key] && comm[m.key].price))) { wrap.innerHTML = ''; return; }
+  wrap.innerHTML = `
+    <div class="mkt-section">
+      <div class="mkt-section-hdr">
+        <div class="mkt-section-title">🛢️ Commodities</div>
+        <div class="mkt-section-live">Live</div>
+      </div>
+      <div class="mkt-metals-grid">
+        ${list.map(m => {
+          const d = (comm && comm[m.key]) || {};
+          const pct = d.change_pct || 0;
+          return `<div class="mkt-metals-tile tap" onclick="openMarketDetail('commodities','${m.key}','${m.label}')">
+            <div class="mkt-tile-name">${m.emoji} ${m.label.toUpperCase()}</div>
+            <div class="mkt-tile-price">$${fmtNum(d.price || 0)}<span style="font-size:0.6rem;color:var(--t3);font-weight:500"> ${m.unit}</span></div>
+            ${pct !== 0 ? `<div class="mkt-tile-change ${mktCls(pct)}">${mktArrow(pct)} ${Math.abs(pct).toFixed(2)}%</div>` : ''}
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+}
+
 function renderForex(forex) {
   const wrap = document.getElementById('mkt-forex-wrap');
   if (!wrap) return;
-  const pairs = ['USDINR','EURINR','GBPINR','EURUSD'];
+  const pairs = ['USDINR','EURINR','GBPINR','JPYINR','EURUSD','GBPUSD'];
   wrap.innerHTML = `
     <div class="mkt-section">
       <div class="mkt-section-hdr">
@@ -6700,13 +6735,14 @@ function renderForex(forex) {
 }
 
 // ── Market detail (history chart + related items in same category) ──
-const MKT_LABELS = { crypto:'Crypto', stocks:'Stocks', metals:'Metals', forex:'Forex' };
+const MKT_LABELS = { crypto:'Crypto', stocks:'Stocks', metals:'Metals', forex:'Forex', commodities:'Commodities' };
 function _mktVal(cat, d){ if(!d) return 0;
   if(cat==='crypto') return d.price_usd||0;
   if(cat==='metals') return d.price_inr_10g||d.price_usd_oz||0;
   return d.price||0; }
 function _mktFmt(cat, v){
   if(cat==='crypto') return '$'+fmtNum(v);
+  if(cat==='commodities') return '$'+fmtNum(v);   // oil / gas priced in USD
   if(cat==='metals') return '₹'+fmtNum(v);   // metals are always shown in ₹/10g
   return fmtNum(v); }
 function buildSparkSVG(series, up){
