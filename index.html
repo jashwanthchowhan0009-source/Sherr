@@ -209,6 +209,27 @@ html, body {
 [data-theme="dark"] .exp-rcard img, [data-theme="dark"] .exp-rcard-ph {
   box-shadow: 0 8px 26px rgba(0,0,0,0.4), inset 0 0 0 1px rgba(14,183,214,0.12);
 }
+/* Home feed → glassy futuristic panels (was a flat separator list) */
+[data-theme="dark"] #v-home .nc {
+  margin: 0 12px 14px;
+  padding: 14px;
+  border: 1px solid rgba(14,183,214,0.14);
+  border-bottom: 1px solid rgba(14,183,214,0.14);   /* override the flat divider */
+  border-radius: 20px;
+  background: linear-gradient(160deg, rgba(255,255,255,0.055), rgba(255,255,255,0.018));
+  box-shadow: 0 12px 32px -16px rgba(0,0,0,0.66), inset 0 1px 0 rgba(255,255,255,0.05);
+  backdrop-filter: blur(10px) saturate(150%);
+  -webkit-backdrop-filter: blur(10px) saturate(150%);
+  transition: transform 0.18s var(--ease), border-color 0.2s, background 0.2s;
+}
+[data-theme="dark"] #v-home .nc:active {
+  transform: scale(0.99);
+  border-color: rgba(14,183,214,0.4);
+  background: linear-gradient(160deg, rgba(14,183,214,0.12), rgba(255,255,255,0.02));
+}
+[data-theme="dark"] #v-home .nc-hero-image {
+  box-shadow: 0 8px 24px rgba(0,0,0,0.42), inset 0 0 0 1px rgba(14,183,214,0.14);
+}
 
 /* ── White-mode (Light) fixes for the dark-built components ── */
 [data-theme="light"] nav {
