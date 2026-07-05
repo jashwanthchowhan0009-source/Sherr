@@ -275,7 +275,7 @@ async def fetch_crypto() -> dict:
     cached = _cget("crypto")
     if cached:
         return cached
-    ids = ["bitcoin", "ethereum", "solana", "dogecoin", "cardano", "ripple", "binancecoin"]
+    ids = ["bitcoin", "ethereum", "solana", "dogecoin", "cardano", "ripple", "binancecoin", "polkadot"]
     async with httpx.AsyncClient() as client:
         data = await _coingecko(client, ids)
         # CoinGecko's keyless tier is heavily rate-limited and frequently returns
@@ -368,11 +368,44 @@ async def fetch_commodities() -> dict:
     cached = _cget("commodities")
     if cached:
         return cached
+    syms = ["CL=F", "BZ=F", "NG=F", "HG=F", "ZW=F", "ZC=F", "SB=F"]
     async with httpx.AsyncClient() as client:
-        data = await _yahoo(client, ["CL=F", "BZ=F", "NG=F"])
+        data = await _yahoo(client, syms)
     result = {"WTI_CRUDE": data.get("CL=F", {}), "BRENT": data.get("BZ=F", {}),
-              "NATGAS": data.get("NG=F", {})}
+              "NATGAS": data.get("NG=F", {}), "COPPER": data.get("HG=F", {}),
+              "WHEAT": data.get("ZW=F", {}), "CORN": data.get("ZC=F", {}),
+              "SUGAR": data.get("SB=F", {})}
     _cset("commodities", result, 120)
+    return result
+
+
+async def fetch_sectors() -> dict:
+    """Indian sectoral indices — Bank Nifty, Nifty IT/Auto/Pharma/FMCG/Metal."""
+    cached = _cget("sectors")
+    if cached:
+        return cached
+    symbols = ["^NSEBANK", "^CNXIT", "^CNXAUTO", "^CNXPHARMA", "^CNXFMCG", "^CNXMETAL"]
+    labels = {"^NSEBANK": "BANKNIFTY", "^CNXIT": "NIFTY_IT", "^CNXAUTO": "NIFTY_AUTO",
+              "^CNXPHARMA": "NIFTY_PHARMA", "^CNXFMCG": "NIFTY_FMCG", "^CNXMETAL": "NIFTY_METAL"}
+    async with httpx.AsyncClient() as client:
+        base = await _yahoo(client, symbols)
+    result = {labels[s]: base.get(s, {}) for s in symbols}
+    _cset("sectors", result, 90)
+    return result
+
+
+async def fetch_rates() -> dict:
+    """US Treasury bond yields (CBOE indices) — 13-week, 5Y, 10Y, 30Y. The
+    Yahoo 'price' for these is the yield in percent."""
+    cached = _cget("rates")
+    if cached:
+        return cached
+    symbols = ["^IRX", "^FVX", "^TNX", "^TYX"]
+    labels = {"^IRX": "US13W", "^FVX": "US5Y", "^TNX": "US10Y", "^TYX": "US30Y"}
+    async with httpx.AsyncClient() as client:
+        base = await _yahoo(client, symbols)
+    result = {labels[s]: base.get(s, {}) for s in symbols}
+    _cset("rates", result, 120)
     return result
 
 
@@ -380,14 +413,16 @@ async def fetch_commodities() -> dict:
 @router.get("")
 @router.get("/")
 async def markets_all(spark: bool = False):
-    stocks, crypto, metals, forex, comm = await asyncio.gather(
-        fetch_stocks(spark), fetch_crypto(), fetch_metals(), fetch_forex(), fetch_commodities(),
+    stocks, crypto, metals, forex, comm, sectors, rates = await asyncio.gather(
+        fetch_stocks(spark), fetch_crypto(), fetch_metals(), fetch_forex(),
+        fetch_commodities(), fetch_sectors(), fetch_rates(),
         return_exceptions=True,
     )
     _safe = lambda v: v if isinstance(v, dict) else {}
     return {
         "stocks": _safe(stocks), "crypto": _safe(crypto), "metals": _safe(metals),
         "forex": _safe(forex), "commodities": _safe(comm),
+        "sectors": _safe(sectors), "rates": _safe(rates),
         "timestamp": int(time.time()),
         "providers": {
             "stocks_primary": "finnhub" if FINNHUB_KEY else "yahoo",
@@ -422,6 +457,16 @@ async def markets_commodities():
     return await fetch_commodities()
 
 
+@router.get("/sectors")
+async def markets_sectors():
+    return await fetch_sectors()
+
+
+@router.get("/rates")
+async def markets_rates():
+    return await fetch_rates()
+
+
 # ─── Historical series (for per-item detail graphs) ────────────────────────────
 _COIN_IDS = {"BTC": "bitcoin", "ETH": "ethereum", "SOL": "solana", "DOGE": "dogecoin",
              "ADA": "cardano", "XRP": "ripple", "BNB": "binancecoin", "DOT": "polkadot"}
@@ -430,7 +475,11 @@ _STOCK_SYM = {"NIFTY": "^NSEI", "SENSEX": "^BSESN", "NASDAQ": "^IXIC", "SP500": 
 _FOREX_SYM = {"USDINR": "USDINR=X", "EURINR": "EURINR=X", "GBPINR": "GBPINR=X",
               "JPYINR": "JPYINR=X", "EURUSD": "EURUSD=X", "GBPUSD": "GBPUSD=X"}
 _METAL_SYM = {"GOLD": "GC=F", "SILVER": "SI=F", "PLATINUM": "PL=F", "PALLADIUM": "PA=F"}
-_COMMO_SYM = {"WTI_CRUDE": "CL=F", "BRENT": "BZ=F", "NATGAS": "NG=F"}
+_COMMO_SYM = {"WTI_CRUDE": "CL=F", "BRENT": "BZ=F", "NATGAS": "NG=F", "COPPER": "HG=F",
+              "WHEAT": "ZW=F", "CORN": "ZC=F", "SUGAR": "SB=F"}
+_SECTOR_SYM = {"BANKNIFTY": "^NSEBANK", "NIFTY_IT": "^CNXIT", "NIFTY_AUTO": "^CNXAUTO",
+               "NIFTY_PHARMA": "^CNXPHARMA", "NIFTY_FMCG": "^CNXFMCG", "NIFTY_METAL": "^CNXMETAL"}
+_RATES_SYM = {"US13W": "^IRX", "US5Y": "^FVX", "US10Y": "^TNX", "US30Y": "^TYX"}
 
 # Constituent companies shown when an index is opened (symbol, display name).
 _INDEX_CONSTITUENTS = {
@@ -511,7 +560,8 @@ async def markets_history(category: str, symbol: str, range: str = "1M", days: i
             series = await _yahoo_series(client, _METAL_SYM.get(sym, sym), yf_range, yf_int)
         else:
             symap = {"stocks": _STOCK_SYM, "forex": _FOREX_SYM,
-                     "commodities": _COMMO_SYM}.get(cat, {})
+                     "commodities": _COMMO_SYM, "sectors": _SECTOR_SYM,
+                     "rates": _RATES_SYM}.get(cat, {})
             ysym = symap.get(sym, sym)
             series = await _yahoo_series(client, ysym, yf_range, yf_int)
     out = {"category": cat, "symbol": sym, "range": rng, "series": series}

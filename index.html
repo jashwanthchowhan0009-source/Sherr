@@ -3086,10 +3086,12 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   </div>
   <!-- v5.1 — Live market widgets, populated by loadMarkets() -->
   <div id="mkt-stocks-wrap"></div>
+  <div id="mkt-sectors-wrap"></div>
   <div id="mkt-crypto-wrap"></div>
   <div id="mkt-metals-wrap"></div>
   <div id="mkt-commodities-wrap"></div>
   <div id="mkt-forex-wrap"></div>
+  <div id="mkt-rates-wrap"></div>
 
   <!-- Dictionary (replaces Discover) -->
   <div class="exp-sec-hdr">
@@ -6549,10 +6551,12 @@ async function loadMarkets(_retry) {
     const data = await api('/markets?spark=true', { timeout: 25000 });
     window._lastMkt = data;            // cached for the market-detail "related" list
     renderStocks(data.stocks);
+    renderSectors(data.sectors);
     renderCrypto(data.crypto);
     renderMetals(data.metals);
     renderCommodities(data.commodities);
     renderForex(data.forex);
+    renderRates(data.rates);
     renderTicker(data);
   } catch(e) {
     // Render free tier sleeps; the first hit wakes it — retry once on the warm instance.
@@ -6565,7 +6569,8 @@ async function loadMarkets(_retry) {
 function renderTicker(data) {
   const el = document.getElementById('ticker-inner');
   if (!el || !data) return;
-  const s = data.stocks || {}, m = data.metals || {}, f = data.forex || {}, comm = data.commodities || {};
+  const s = data.stocks || {}, m = data.metals || {}, f = data.forex || {}, comm = data.commodities || {},
+        sec = data.sectors || {}, rt = data.rates || {};
   const items = [];
   const push = (label, color, val, pct) => {
     if (val == null || val === '' ) return;
@@ -6580,6 +6585,8 @@ function renderTicker(data) {
   if (m.GOLD)   push('GOLD', '#FBC02D', metalVal(m.GOLD), m.GOLD.change_pct);
   if (m.SILVER) push('SILVER', '#cfd3da', metalVal(m.SILVER), m.SILVER.change_pct);
   if (comm.WTI_CRUDE?.price) push('CRUDE', '#E53935', '$' + fmtNum(comm.WTI_CRUDE.price), comm.WTI_CRUDE.change_pct);
+  if (sec.BANKNIFTY?.price) push('BANKNIFTY', '#00ACC1', fmtNum(sec.BANKNIFTY.price), sec.BANKNIFTY.change_pct);
+  if (rt.US10Y?.price) push('US 10Y', '#8E24AA', fmtNum(rt.US10Y.price) + '%', rt.US10Y.change_pct);
   if (f.USDINR?.price) push('USD/INR', '#FB8C00', '₹' + fmtNum(f.USDINR.price), f.USDINR.change_pct);
   if (!items.length) return;   // keep static fallback until live data arrives
   el.innerHTML = items.concat(items).join('');
@@ -6606,6 +6613,38 @@ function renderStocks(stocks) {
             <div class="mkt-tile-spark">${spark}</div>
             <div class="mkt-tile-name">${sym}</div>
             <div class="mkt-tile-price">${fmtNum(price)}</div>
+            <div class="mkt-tile-change ${mktCls(pct)}">${mktArrow(pct)} ${Math.abs(pct).toFixed(2)}%</div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+}
+
+function renderSectors(sectors) {
+  const wrap = document.getElementById('mkt-sectors-wrap');
+  if (!wrap) return;
+  const list = [
+    {key:'BANKNIFTY',    label:'Bank Nifty'},
+    {key:'NIFTY_IT',     label:'Nifty IT'},
+    {key:'NIFTY_AUTO',   label:'Nifty Auto'},
+    {key:'NIFTY_PHARMA', label:'Nifty Pharma'},
+    {key:'NIFTY_FMCG',   label:'Nifty FMCG'},
+    {key:'NIFTY_METAL',  label:'Nifty Metal'},
+  ].filter(m => sectors && sectors[m.key] && sectors[m.key].price);   // hide any index Yahoo didn't return
+  if (!list.length) { wrap.innerHTML = ''; return; }
+  wrap.innerHTML = `
+    <div class="mkt-section">
+      <div class="mkt-section-hdr">
+        <div class="mkt-section-title">🏦 Sectors · India</div>
+        <div class="mkt-section-live">Live</div>
+      </div>
+      <div class="mkt-grid-stocks">
+        ${list.map(m => {
+          const d = (sectors && sectors[m.key]) || {};
+          const pct = d.change_pct || 0;
+          return `<div class="mkt-tile tap" onclick="openMarketDetail('sectors','${m.key}','${m.label}')">
+            <div class="mkt-tile-name">${m.label}</div>
+            <div class="mkt-tile-price">${fmtNum(d.price || 0)}</div>
             <div class="mkt-tile-change ${mktCls(pct)}">${mktArrow(pct)} ${Math.abs(pct).toFixed(2)}%</div>
           </div>`;
         }).join('')}
@@ -6687,9 +6726,13 @@ function renderCommodities(comm) {
     {key:'WTI_CRUDE', label:'WTI Crude', emoji:'🛢️', unit:'/bbl'},
     {key:'BRENT',     label:'Brent',     emoji:'🛢️', unit:'/bbl'},
     {key:'NATGAS',    label:'Nat Gas',   emoji:'🔥', unit:'/MMBtu'},
-  ];
+    {key:'COPPER',    label:'Copper',    emoji:'🟤', unit:'/lb'},
+    {key:'WHEAT',     label:'Wheat',     emoji:'🌾', unit:'/bu'},
+    {key:'CORN',      label:'Corn',      emoji:'🌽', unit:'/bu'},
+    {key:'SUGAR',     label:'Sugar',     emoji:'🍬', unit:'/lb'},
+  ].filter(m => comm && comm[m.key] && comm[m.key].price);   // hide anything the feed didn't return
   // Skip the section entirely if the feed returned nothing usable.
-  if (!list.some(m => (comm && comm[m.key] && comm[m.key].price))) { wrap.innerHTML = ''; return; }
+  if (!list.length) { wrap.innerHTML = ''; return; }
   wrap.innerHTML = `
     <div class="mkt-section">
       <div class="mkt-section-hdr">
@@ -6734,8 +6777,38 @@ function renderForex(forex) {
     </div>`;
 }
 
+function renderRates(rates) {
+  const wrap = document.getElementById('mkt-rates-wrap');
+  if (!wrap) return;
+  const list = [
+    {key:'US13W', label:'US 13W'},
+    {key:'US5Y',  label:'US 5Y'},
+    {key:'US10Y', label:'US 10Y'},
+    {key:'US30Y', label:'US 30Y'},
+  ];
+  if (!list.some(m => (rates && rates[m.key] && rates[m.key].price))) { wrap.innerHTML = ''; return; }
+  wrap.innerHTML = `
+    <div class="mkt-section">
+      <div class="mkt-section-hdr">
+        <div class="mkt-section-title">📉 Bond Yields</div>
+        <div class="mkt-section-live">Live</div>
+      </div>
+      <div class="mkt-metals-grid">
+        ${list.map(m => {
+          const d = (rates && rates[m.key]) || {};
+          const pct = d.change_pct || 0;
+          return `<div class="mkt-metals-tile tap" onclick="openMarketDetail('rates','${m.key}','${m.label}')">
+            <div class="mkt-tile-name">${m.label}</div>
+            <div class="mkt-tile-price">${fmtNum(d.price || 0)}<span style="font-size:0.6rem;color:var(--t3);font-weight:500"> %</span></div>
+            ${pct !== 0 ? `<div class="mkt-tile-change ${mktCls(pct)}">${mktArrow(pct)} ${Math.abs(pct).toFixed(2)}%</div>` : ''}
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+}
+
 // ── Market detail (history chart + related items in same category) ──
-const MKT_LABELS = { crypto:'Crypto', stocks:'Stocks', metals:'Metals', forex:'Forex', commodities:'Commodities' };
+const MKT_LABELS = { crypto:'Crypto', stocks:'Stocks', metals:'Metals', forex:'Forex', commodities:'Commodities', sectors:'Sectors', rates:'Bond Yields' };
 function _mktVal(cat, d){ if(!d) return 0;
   if(cat==='crypto') return d.price_usd||0;
   if(cat==='metals') return d.price_inr_10g||d.price_usd_oz||0;
@@ -6744,6 +6817,7 @@ function _mktFmt(cat, v){
   if(cat==='crypto') return '$'+fmtNum(v);
   if(cat==='commodities') return '$'+fmtNum(v);   // oil / gas priced in USD
   if(cat==='metals') return '₹'+fmtNum(v);   // metals are always shown in ₹/10g
+  if(cat==='rates') return fmtNum(v)+'%';    // treasury yields in percent
   return fmtNum(v); }
 function buildSparkSVG(series, up){
   const W=320,H=170,pad=6, ps=series.map(p=>p.p);
