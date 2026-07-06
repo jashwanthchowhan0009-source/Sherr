@@ -2713,7 +2713,18 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   .ax-card-t{font:600 .9rem/1.32 var(--f,sans-serif);color:#eafbff;
     display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
   .ax-empty{text-align:center;color:rgba(220,235,245,.5);font-size:.85rem;padding:30px 20px;}
-  @media (prefers-reduced-motion:reduce){.atlas-enter i{animation:none;}}
+  /* live news pins on the globe */
+  .ax-pin{cursor:pointer;}
+  .ax-pin .dot{fill:#ffd23f;stroke:#fff;stroke-width:.6;filter:drop-shadow(0 0 4px rgba(255,210,63,.9));}
+  .ax-pin .ping{fill:none;stroke:#ffd23f;stroke-width:1;opacity:0;transform-origin:center;transform-box:fill-box;
+    animation:ax-ping 2.4s ease-out infinite;}
+  .ax-pin.sel .dot{fill:#0EB7D6;stroke:#eafbff;filter:drop-shadow(0 0 6px rgba(14,183,214,1));}
+  .ax-pin.sel .ping{stroke:#0EB7D6;}
+  @keyframes ax-ping{0%{opacity:.7;r:2}70%{opacity:0;r:11}100%{opacity:0;r:11}}
+  .ax-card.sel{border-color:rgba(255,210,63,.6);background:linear-gradient(160deg,rgba(255,210,63,.12),rgba(255,255,255,.02));}
+  .ax-loc{display:inline-flex;align-items:center;gap:3px;color:#ffd23f;}
+  .ax-loc i{font-size:.56rem;}
+  @media (prefers-reduced-motion:reduce){.atlas-enter i,.ax-pin .ping{animation:none;}}
 </style>
 <div id="atlas-overlay">
   <div class="ax-head">
@@ -2768,15 +2779,17 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
             <circle cx="100" cy="100" r="64" fill="url(#axGloss)"/>
           </g>
           <circle cx="100" cy="100" r="64" fill="none" stroke="rgba(14,183,214,.6)" stroke-width="1.3"/>
-          <g fill="#bdf3ff" class="atlas-pulse">
-            <circle cx="132" cy="76" r="2.6"/><circle cx="74" cy="124" r="2.2"/><circle cx="122" cy="134" r="2"/>
-          </g>
+          <!-- live news pins injected by openAtlas() -->
+          <g id="ax-pins"></g>
         </svg>
       </div>
       <div class="ax-stat-row">
         <span class="ax-chip"><i class="fa-solid fa-satellite-dish" style="color:#0EB7D6"></i> <b id="ax-count">—</b> Stories</span>
         <span class="ax-chip"><i class="fa-solid fa-globe" style="color:#0EB7D6"></i> Global</span>
         <span class="ax-chip"><i class="fa-solid fa-bolt" style="color:#0EB7D6"></i> <b id="ax-clock">00:00:00</b></span>
+      </div>
+      <div style="font:600 .62rem/1.4 var(--f,sans-serif);color:rgba(220,235,245,.45);text-align:center;margin-top:2px">
+        <i class="fa-solid fa-location-dot" style="color:#ffd23f"></i> Tap a glowing pin to locate its story
       </div>
     </div>
     <div class="ax-sec">
@@ -2787,25 +2800,94 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 </div>
 <script>
   // ── Atlas immersive overlay ──
+  // Stylised globe coordinates (SVG viewBox units, disc centred at 100,100 r≈64).
+  var AX_LOC = {
+    us:{x:74,y:84,l:'United States'}, ca:{x:76,y:70,l:'Canada'}, mx:{x:66,y:98,l:'Mexico'},
+    br:{x:84,y:126,l:'Brazil'}, ar:{x:82,y:140,l:'Argentina'},
+    uk:{x:99,y:74,l:'United Kingdom'}, fr:{x:103,y:80,l:'France'}, de:{x:109,y:74,l:'Germany'},
+    es:{x:97,y:86,l:'Spain'}, it:{x:107,y:86,l:'Italy'}, eu:{x:106,y:78,l:'Europe'},
+    ru:{x:126,y:68,l:'Russia'}, ua:{x:117,y:76,l:'Ukraine'}, tr:{x:112,y:88,l:'Turkey'},
+    il:{x:114,y:98,l:'Israel'}, ir:{x:121,y:94,l:'Iran'}, me:{x:119,y:103,l:'Middle East'},
+    af:{x:109,y:110,l:'Africa'}, ng:{x:101,y:116,l:'Nigeria'}, za:{x:110,y:132,l:'South Africa'},
+    in:{x:123,y:100,l:'India'}, pk:{x:119,y:96,l:'Pakistan'},
+    cn:{x:134,y:90,l:'China'}, jp:{x:142,y:88,l:'Japan'}, kr:{x:138,y:84,l:'South Korea'},
+    sg:{x:133,y:114,l:'Singapore'}, id:{x:137,y:120,l:'Indonesia'}, au:{x:140,y:130,l:'Australia'}
+  };
+  // keyword → location key (word-boundary matched). Order = priority.
+  var AX_KW = [
+    ['washington','us'],['new york','us'],['united states','us'],['america','us'],['u\\.s\\.','us'],['\\bus\\b','us'],['american','us'],['biden','us'],['trump','us'],['pentagon','us'],['nasdaq','us'],['silicon valley','us'],
+    ['canada','ca'],['canadian','ca'],['toronto','ca'],['mexico','mx'],['mexican','mx'],
+    ['brazil','br'],['brazilian','br'],['sao paulo','br'],['argentina','ar'],['buenos aires','ar'],
+    ['london','uk'],['britain','uk'],['british','uk'],['england','uk'],['u\\.k\\.','uk'],['\\buk\\b','uk'],['scotland','uk'],
+    ['france','fr'],['french','fr'],['paris','fr'],['germany','de'],['german','de'],['berlin','de'],
+    ['spain','es'],['spanish','es'],['madrid','es'],['italy','it'],['italian','it'],['rome','it'],
+    ['europe','eu'],['european','eu'],['\\beu\\b','eu'],['brussels','eu'],
+    ['russia','ru'],['russian','ru'],['moscow','ru'],['putin','ru'],['kremlin','ru'],
+    ['ukraine','ua'],['ukrainian','ua'],['kyiv','ua'],['kiev','ua'],['turkey','tr'],['turkish','tr'],['istanbul','tr'],
+    ['israel','il'],['israeli','il'],['gaza','il'],['jerusalem','il'],['hamas','il'],
+    ['iran','ir'],['iranian','ir'],['tehran','ir'],['saudi','me'],['dubai','me'],['\\buae\\b','me'],['qatar','me'],['middle east','me'],
+    ['africa','af'],['african','af'],['nigeria','ng'],['lagos','ng'],['south africa','za'],['johannesburg','za'],
+    ['india','in'],['indian','in'],['delhi','in'],['mumbai','in'],['bengaluru','in'],['bangalore','in'],['modi','in'],['\\bnifty\\b','in'],['sensex','in'],
+    ['pakistan','pk'],['pakistani','pk'],['islamabad','pk'],['karachi','pk'],
+    ['china','cn'],['chinese','cn'],['beijing','cn'],['shanghai','cn'],['xi jinping','cn'],
+    ['japan','jp'],['japanese','jp'],['tokyo','jp'],['korea','kr'],['korean','kr'],['seoul','kr'],['samsung','kr'],
+    ['singapore','sg'],['indonesia','id'],['jakarta','id'],['australia','au'],['australian','au'],['sydney','au'],['melbourne','au']
+  ];
+  function axDetect(a){
+    var t=((a&&a.title)||'')+' '+((a&&a.source)||'')+' '+((a&&a.preview)||'');
+    t=t.toLowerCase();
+    for(var i=0;i<AX_KW.length;i++){
+      try{ if(new RegExp('\\b'+AX_KW[i][0]+'\\b').test(t)) return AX_KW[i][1]; }catch(e){}
+    }
+    return null;
+  }
+  function axSelect(idx){
+    var pins=document.querySelectorAll('.ax-pin'), cards=document.querySelectorAll('.ax-card');
+    pins.forEach(function(p){ p.classList.toggle('sel', +p.dataset.idx===idx); });
+    cards.forEach(function(c){ c.classList.toggle('sel', +c.dataset.idx===idx); });
+    var card=document.querySelector('.ax-card[data-idx="'+idx+'"]');
+    if(card) card.scrollIntoView({behavior:'smooth',block:'center'});
+  }
   function openAtlas(){
     var ov=document.getElementById('atlas-overlay'); if(!ov) return;
-    var list=document.getElementById('ax-list');
+    var list=document.getElementById('ax-list'), gpins=document.getElementById('ax-pins');
     var arts=(typeof atlasArts!=='undefined'&&atlasArts&&atlasArts.length)?atlasArts:(expHeroArts||[]);
     var cnt=document.getElementById('ax-count'); if(cnt) cnt.textContent=arts.length?String(arts.length):'—';
+    var shown=arts.slice(0,24), locs=[], used={};
     if(list){
       if(!arts.length){
         list.innerHTML='<div class="ax-empty">No global stories loaded yet — open Explore for a moment, then tap Atlas again.</div>';
       } else {
-        list.innerHTML=arts.slice(0,24).map(function(a,i){
+        list.innerHTML=shown.map(function(a,i){
+          var loc=axDetect(a); if(loc) locs.push({idx:i,key:loc});
           var img=a.image_url?('<img class="ax-card-img" loading="lazy" src="'+a.image_url+'" alt="" onerror="this.style.visibility=\'hidden\'">')
                               :('<div class="ax-card-img"></div>');
-          var meta=((a.source||'Global'))+' · '+(typeof timeAgo==='function'?(timeAgo(a.published_at)||'now'):'now');
-          return '<div class="ax-card" onclick="closeAtlas();openArticle('+JSON.stringify(a).replace(/'/g,"&#39;").replace(/"/g,'&quot;')+')">'
+          var locChip=loc&&AX_LOC[loc]?('<span class="ax-loc"><i class="fa-solid fa-location-dot"></i>'+AX_LOC[loc].l+'</span> · '):'';
+          var meta=locChip+((a.source||'Global'))+' · '+(typeof timeAgo==='function'?(timeAgo(a.published_at)||'now'):'now');
+          return '<div class="ax-card" data-idx="'+i+'" onclick="closeAtlas();openArticle('+JSON.stringify(a).replace(/'/g,"&#39;").replace(/"/g,'&quot;')+')">'
                + img
                + '<div class="ax-card-b"><div class="ax-card-meta">'+meta+'</div><div class="ax-card-t">'+(a.title||'')+'</div></div></div>';
         }).join('');
       }
     }
+    // Drop up to 14 pins on the globe; nudge overlapping locations apart.
+    if(gpins){
+      var svg='';
+      locs.slice(0,14).forEach(function(o){
+        var L=AX_LOC[o.key]; if(!L) return;
+        var n=used[o.key]||0; used[o.key]=n+1;
+        var ox=(n%2? 1:-1)*n*2.2, oy=(n%2?-1:1)*n*1.6;
+        svg+='<g class="ax-pin" data-idx="'+o.idx+'" transform="translate('+(L.x+ox)+','+(L.y+oy)+')">'
+           + '<circle class="ping" r="2"></circle><circle class="dot" r="2.4"></circle>'
+           + '<title>'+L.l+'</title></g>';
+      });
+      gpins.innerHTML=svg;
+      gpins.querySelectorAll('.ax-pin').forEach(function(p){
+        p.addEventListener('click', function(){ axSelect(+p.dataset.idx); });
+      });
+    }
+    // Count chip → number of located stories, if any.
+    if(cnt && locs.length) cnt.textContent=locs.length+'/'+shown.length;
     ov.classList.add('open');
     var ck=document.getElementById('ax-clock');
     function pad(n){return n<10?'0'+n:''+n;}
