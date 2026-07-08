@@ -2477,10 +2477,16 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 .glance-mark {
   position: absolute; inset: 0; z-index: 1;
   display: flex; align-items: center; justify-content: center;
-  font-family: Georgia, "Times New Roman", var(--fd), serif;
-  font-weight: 700; font-style: italic; font-size: 4rem; line-height: 0.9;
-  color: #17164f; letter-spacing: -0.02em;
-  text-shadow: 0 1px 0 rgba(255,255,255,0.6), 0 3px 7px rgba(20,20,70,0.3);
+  font-family: "SF Pro Rounded", "Arial Rounded MT Bold", var(--fd), sans-serif;
+  font-weight: 900; font-size: 4.1rem; line-height: 0.82; letter-spacing: -0.04em;
+  /* glossy 3D navy glyph: sheen gradient fill + highlight edge + depth shadow */
+  background: linear-gradient(158deg, #5a5fd6 0%, #33339c 34%, #1c1b64 64%, #101040 100%);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: transparent;
+  filter:
+    drop-shadow(0 1.5px 0 rgba(255,255,255,0.6))
+    drop-shadow(0 -1px 1px rgba(120,124,220,0.5))
+    drop-shadow(0 5px 7px rgba(12,12,55,0.45));
 }
 .glance-lbl {
   font: 700 0.58rem/1.14 var(--f); color: var(--t2); text-align: center; letter-spacing: 0.01em;
@@ -2514,7 +2520,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   width: 40px; height: 40px; border-radius: 12px; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
   color: #17164f; border: 1px solid #21205c;
-  font: italic 700 1.5rem/1 Georgia, "Times New Roman", serif;
+  font: 900 1.5rem/1 "SF Pro Rounded", "Arial Rounded MT Bold", var(--fd), sans-serif;
   background: radial-gradient(115% 115% at 32% 22%, #f2f3ff, #cccfff 55%, #a9adf6);
   box-shadow: inset 0 1.5px 2px rgba(255,255,255,0.8), 0 4px 12px -5px rgba(33,32,92,0.6);
 }
