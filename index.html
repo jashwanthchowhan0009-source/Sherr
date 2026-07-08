@@ -2449,44 +2449,45 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
    v6 — "At a Glance" glossy launcher tiles (logo-style)
 ═══════════════════════════════════════════════════════════ */
 .glance-grid {
-  display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px 10px;
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px 8px;
   padding: 6px 14px 16px;
 }
-.glance-cell { display: flex; flex-direction: column; align-items: center; gap: 7px; cursor: pointer; }
+.glance-cell { display: flex; flex-direction: column; align-items: center; gap: 6px; cursor: pointer; }
+/* logo palette: light periwinkle glossy surface, deep-navy frame + mark */
 .glance-btn {
-  position: relative; width: 100%; aspect-ratio: 1 / 1; border-radius: 22px;
+  position: relative; width: 100%; aspect-ratio: 1 / 1; border-radius: 19px;
   overflow: hidden; isolation: isolate;
   background:
-    radial-gradient(120% 120% at 32% 22%, #aab0ff 0%, #767cf0 30%, #454bd0 62%, #1e1f66 100%);
-  border: 1px solid rgba(20,20,80,0.5);
+    radial-gradient(115% 115% at 32% 22%, #f2f3ff 0%, #d4d7ff 40%, #b3b7fb 78%, #9ea3f4 100%);
+  border: 1.5px solid #21205c;
   box-shadow:
-    0 8px 18px -8px rgba(24,24,100,0.7),
-    inset 0 1.5px 2px rgba(255,255,255,0.5),
-    inset 0 -8px 16px rgba(9,9,50,0.5);
+    0 6px 14px -6px rgba(33,32,92,0.55),
+    inset 0 2px 3px rgba(255,255,255,0.85),
+    inset 0 -7px 13px rgba(120,124,214,0.4);
   transition: transform 0.16s var(--ease), box-shadow 0.2s;
 }
-.glance-cell:active .glance-btn { transform: scale(0.92); box-shadow: 0 5px 12px -6px rgba(24,24,100,0.7), inset 0 1.5px 2px rgba(255,255,255,0.4); }
-/* subtle gloss sweep (refined, not plasticky) */
+.glance-cell:active .glance-btn { transform: scale(0.9); box-shadow: 0 4px 9px -5px rgba(33,32,92,0.6), inset 0 2px 3px rgba(255,255,255,0.7); }
+/* glossy top sweep like the app icon */
 .glance-btn::before {
-  content: ""; position: absolute; left: 8%; right: 8%; top: 6%; height: 40%;
+  content: ""; position: absolute; left: 9%; right: 9%; top: 6%; height: 42%;
   border-radius: 50% 50% 46% 46% / 70% 70% 100% 100%;
-  background: linear-gradient(180deg, rgba(255,255,255,0.44), rgba(255,255,255,0) 78%);
+  background: linear-gradient(180deg, rgba(255,255,255,0.85), rgba(255,255,255,0) 82%);
   pointer-events: none; z-index: 2;
 }
 .glance-mark {
   position: absolute; inset: 0; z-index: 1;
-  display: flex; align-items: center; justify-content: center; color: #15154d;
+  display: flex; align-items: center; justify-content: center; color: #17164f;
 }
-.glance-mark i { font-size: 1.55rem; filter: drop-shadow(0 1px 0 rgba(255,255,255,0.35)); }
+.glance-mark i { font-size: 1.5rem; filter: drop-shadow(0 1px 0 rgba(255,255,255,0.6)); }
 .glance-lbl {
-  font: 700 0.62rem/1.16 var(--f); color: var(--t2); text-align: center; letter-spacing: 0.01em;
+  font: 700 0.58rem/1.14 var(--f); color: var(--t2); text-align: center; letter-spacing: 0.01em;
 }
 .glance-badge {
-  position: absolute; top: 6px; right: 6px; z-index: 3;
-  font: 800 0.5rem/1 var(--fd); padding: 2px 5px; border-radius: 999px;
-  background: rgba(9,9,45,0.4); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+  position: absolute; top: 5px; right: 5px; z-index: 3;
+  font: 800 0.46rem/1 var(--fd); padding: 2px 4px; border-radius: 999px;
+  background: rgba(23,22,79,0.55); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
 }
-.glance-badge.up { color: #7dffb0; } .glance-badge.down { color: #ff9db2; }
+.glance-badge.up { color: #59f0a0; } .glance-badge.down { color: #ff8fa6; }
 
 /* Full-screen category "rectangular tab" overlay */
 #mktcat-overlay {
@@ -2509,9 +2510,9 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 .mc-ico {
   width: 40px; height: 40px; border-radius: 12px; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
-  color: #14144a; font-size: 1.2rem;
-  background: radial-gradient(130% 130% at 30% 20%, #b7bcff, #4a50d6 60%, #23246e);
-  box-shadow: inset 0 1px 2px rgba(255,255,255,0.5), 0 4px 12px -4px rgba(28,28,110,0.7);
+  color: #17164f; font-size: 1.15rem; border: 1px solid #21205c;
+  background: radial-gradient(115% 115% at 32% 22%, #f2f3ff, #cccfff 55%, #a9adf6);
+  box-shadow: inset 0 1.5px 2px rgba(255,255,255,0.8), 0 4px 12px -5px rgba(33,32,92,0.6);
 }
 .mc-title { font: 800 1.25rem/1.1 var(--fd); color: var(--t1); letter-spacing: -0.02em; }
 .mc-sub { font: 600 0.68rem/1 var(--f); color: var(--t3); margin-top: 3px; }
@@ -6880,7 +6881,7 @@ function renderGlance(){
         ${badge}
         <div class="glance-mark"><i class="fa-solid ${c.icon}"></i></div>
       </div>
-      <div class="glance-lbl">${c.title}</div>
+      <div class="glance-lbl">${c.title.split(' · ')[0]}</div>
     </div>`;
   }).join('');
 }
