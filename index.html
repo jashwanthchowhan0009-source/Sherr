@@ -2449,7 +2449,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
    v6 — "At a Glance" glossy launcher tiles (logo-style)
 ═══════════════════════════════════════════════════════════ */
 .glance-grid {
-  display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px 8px;
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px 10px;
   padding: 6px 14px 16px;
 }
 .glance-cell { display: flex; flex-direction: column; align-items: center; gap: 6px; cursor: pointer; }
@@ -2476,9 +2476,12 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 }
 .glance-mark {
   position: absolute; inset: 0; z-index: 1;
-  display: flex; align-items: center; justify-content: center; color: #17164f;
+  display: flex; align-items: center; justify-content: center;
+  font-family: Georgia, "Times New Roman", var(--fd), serif;
+  font-weight: 700; font-style: italic; font-size: 4rem; line-height: 0.9;
+  color: #17164f; letter-spacing: -0.02em;
+  text-shadow: 0 1px 0 rgba(255,255,255,0.6), 0 3px 7px rgba(20,20,70,0.3);
 }
-.glance-mark i { font-size: 1.5rem; filter: drop-shadow(0 1px 0 rgba(255,255,255,0.6)); }
 .glance-lbl {
   font: 700 0.58rem/1.14 var(--f); color: var(--t2); text-align: center; letter-spacing: 0.01em;
 }
@@ -2510,7 +2513,8 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 .mc-ico {
   width: 40px; height: 40px; border-radius: 12px; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
-  color: #17164f; font-size: 1.15rem; border: 1px solid #21205c;
+  color: #17164f; border: 1px solid #21205c;
+  font: italic 700 1.5rem/1 Georgia, "Times New Roman", serif;
   background: radial-gradient(115% 115% at 32% 22%, #f2f3ff, #cccfff 55%, #a9adf6);
   box-shadow: inset 0 1.5px 2px rgba(255,255,255,0.8), 0 4px 12px -5px rgba(33,32,92,0.6);
 }
@@ -6852,19 +6856,17 @@ async function loadMarkets(_retry) {
 
 // ── "At a Glance" market launcher (logo-style tiles → full-screen category) ──
 const MKT_DEF = [
-  { key:'stocks',      icon:'fa-chart-line',         title:'Stocks',          sub:'Global indices',
+  { key:'stocks',      mark:'S',  title:'Stocks',      sub:'Global indices',
     items:[['NIFTY','NIFTY'],['SENSEX','SENSEX'],['NASDAQ','NASDAQ'],['DOW','DOW'],['SP500','S&P 500'],['FTSE','FTSE'],['NIKKEI','NIKKEI']] },
-  { key:'sectors',     icon:'fa-building-columns',   title:'Sectors · India', sub:'NSE sectoral indices',
-    items:[['BANKNIFTY','Bank Nifty'],['NIFTY_IT','Nifty IT'],['NIFTY_AUTO','Nifty Auto'],['NIFTY_PHARMA','Nifty Pharma'],['NIFTY_FMCG','Nifty FMCG'],['NIFTY_METAL','Nifty Metal']] },
-  { key:'crypto',      icon:'fa-bitcoin-sign',       title:'Crypto',          sub:'Top coins · USD',
+  { key:'crypto',      mark:'₿',  title:'Crypto',      sub:'Top coins · USD',
     items:[['BTC','Bitcoin'],['ETH','Ethereum'],['SOL','Solana'],['BNB','BNB'],['XRP','XRP'],['ADA','Cardano'],['DOGE','Dogecoin'],['DOT','Polkadot']] },
-  { key:'metals',      icon:'fa-gem',                title:'Metals',          sub:'Precious · ₹/10g',
+  { key:'metals',      mark:'M',  title:'Metals',      sub:'Precious · ₹/10g',
     items:[['GOLD','Gold'],['SILVER','Silver'],['PLATINUM','Platinum'],['PALLADIUM','Palladium']] },
-  { key:'commodities', icon:'fa-oil-well',           title:'Commodities',     sub:'Energy · agri · USD',
+  { key:'commodities', mark:'C',  title:'Commodities', sub:'Energy · agri · USD',
     items:[['WTI_CRUDE','WTI Crude'],['BRENT','Brent'],['NATGAS','Nat Gas'],['COPPER','Copper'],['WHEAT','Wheat'],['CORN','Corn'],['SUGAR','Sugar']] },
-  { key:'rates',       icon:'fa-landmark',           title:'Bond Yields',     sub:'US Treasuries · %',
+  { key:'rates',       mark:'B',  title:'Bond Yields', sub:'US Treasuries · %',
     items:[['US13W','US 13W'],['US5Y','US 5Y'],['US10Y','US 10Y'],['US30Y','US 30Y']] },
-  { key:'forex',       icon:'fa-money-bill-transfer',title:'Forex',           sub:'Major currency pairs',
+  { key:'forex',       mark:'F',  title:'Forex',       sub:'Major currency pairs',
     items:[['USDINR','USD/INR'],['EURINR','EUR/INR'],['GBPINR','GBP/INR'],['JPYINR','JPY/INR'],['EURUSD','EUR/USD'],['GBPUSD','GBP/USD']] },
 ];
 function _mktBucket(key){ return (window._lastMkt||{})[key] || {}; }
@@ -6879,7 +6881,7 @@ function renderGlance(){
     return `<div class="glance-cell tap" onclick="openMktCat('${c.key}')" role="button" aria-label="${c.title}">
       <div class="glance-btn">
         ${badge}
-        <div class="glance-mark"><i class="fa-solid ${c.icon}"></i></div>
+        <div class="glance-mark">${c.mark}</div>
       </div>
       <div class="glance-lbl">${c.title.split(' · ')[0]}</div>
     </div>`;
@@ -6903,7 +6905,7 @@ function _mcTile(kind, sym, label, d){
 function openMktCat(key){
   const c = MKT_DEF.find(x => x.key === key); if(!c) return;
   window._openCat = key;
-  document.getElementById('mc-ico').innerHTML = '<i class="fa-solid ' + c.icon + '"></i>';
+  document.getElementById('mc-ico').textContent = c.mark;
   document.getElementById('mc-title').textContent = c.title;
   document.getElementById('mc-sub').textContent = c.sub;
   const b = _mktBucket(key), grid = document.getElementById('mc-grid');
