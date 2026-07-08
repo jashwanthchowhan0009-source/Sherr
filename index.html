@@ -2477,12 +2477,13 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 }
 .glance-mark {
   position: absolute; inset: 0; z-index: 1;
-  display: flex; align-items: center; justify-content: center; color: #2f5fe0;
+  display: flex; align-items: center; justify-content: center;
 }
-.glance-mark i {
-  font-size: 2rem;
-  filter: drop-shadow(0 1.5px 0 rgba(255,255,255,0.75)) drop-shadow(0 3px 5px rgba(20,50,160,0.4));
+.glance-mark svg {
+  width: 60%; height: 60%;
+  filter: drop-shadow(0 3px 4px rgba(20,50,160,0.3));
 }
+.mc-ico svg { width: 24px; height: 24px; }
 .glance-lbl {
   font: 700 0.58rem/1.14 var(--f); color: var(--t2); text-align: center; letter-spacing: 0.01em;
 }
@@ -3382,10 +3383,13 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
       <div class="bw-icon" id="bw-icon"><i class="fa-solid fa-cloud-sun"></i></div>
     </div>
   </div>
-  <!-- v6 — "At a Glance": logo-style launcher tiles → full-screen category -->
-  <div class="exp-sec-hdr">
-    <div class="exp-sec-hdr-title"><i class="fa-solid fa-layer-group"></i> At a Glance</div>
-  </div>
+  <!-- v6 — market launcher (hand-built 3D glass finance icons) -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+    <linearGradient id="gcBlue" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9cbcff"/><stop offset="1" stop-color="#2f5fe0"/></linearGradient>
+    <linearGradient id="gcBlueD" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4b78ea"/><stop offset="1" stop-color="#1a3aa8"/></linearGradient>
+    <linearGradient id="gcTop" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f0f6ff"/><stop offset="1" stop-color="#c3d8ff"/></linearGradient>
+    <linearGradient id="gcWhite" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#dbe6ff"/></linearGradient>
+  </defs></svg>
   <div class="glance-grid" id="glance-grid"></div>
 
   <!-- Dictionary (replaces Discover) -->
@@ -6854,7 +6858,53 @@ async function loadMarkets(_retry) {
   }
 }
 
-// ── "At a Glance" market launcher (logo-style tiles → full-screen category) ──
+// ── Market launcher — hand-built 3D glassmorphic finance icons (shared gradient sprite) ──
+const GLANCE_SVG = {
+  stocks: `<svg viewBox="0 0 48 48">
+    <rect x="8" y="27" width="8" height="13" rx="2" fill="url(#gcBlue)"/>
+    <rect x="20" y="21" width="8" height="19" rx="2" fill="url(#gcBlue)"/>
+    <rect x="32" y="14" width="8" height="26" rx="2" fill="url(#gcBlue)"/>
+    <rect x="8" y="27" width="8" height="5" rx="2" fill="url(#gcTop)"/>
+    <rect x="20" y="21" width="8" height="5" rx="2" fill="url(#gcTop)"/>
+    <rect x="32" y="14" width="8" height="5" rx="2" fill="url(#gcTop)"/>
+    <path d="M11 24 L23 18 L29 21 L39 11" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M34 11 h5 v5" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>`,
+  crypto: `<svg viewBox="0 0 48 48">
+    <ellipse cx="24" cy="27" rx="15" ry="15" fill="url(#gcBlueD)"/>
+    <circle cx="24" cy="23" r="15" fill="url(#gcBlue)"/>
+    <circle cx="24" cy="23" r="15" fill="none" stroke="#fff" stroke-opacity=".55" stroke-width="1.4"/>
+    <text x="24" y="29.5" text-anchor="middle" font-family="Arial,sans-serif" font-size="17" font-weight="800" fill="#fff">₿</text>
+    <ellipse cx="18" cy="16" rx="6" ry="3" fill="#fff" opacity=".4"/>
+  </svg>`,
+  metals: `<svg viewBox="0 0 48 48">
+    <path d="M9 27 v4 a15 5 0 0 0 30 0 v-4 z" fill="url(#gcBlue)"/><ellipse cx="24" cy="27" rx="15" ry="5" fill="url(#gcTop)"/>
+    <path d="M9 21 v4 a15 5 0 0 0 30 0 v-4 z" fill="url(#gcBlue)"/><ellipse cx="24" cy="21" rx="15" ry="5" fill="url(#gcTop)"/>
+    <path d="M9 15 v4 a15 5 0 0 0 30 0 v-4 z" fill="url(#gcBlue)"/><ellipse cx="24" cy="15" rx="15" ry="5" fill="url(#gcTop)"/>
+    <text x="24" y="17" text-anchor="middle" font-family="Arial,sans-serif" font-size="7" font-weight="800" fill="#2f5fe0">$</text>
+  </svg>`,
+  commodities: `<svg viewBox="0 0 48 48">
+    <path d="M24 7 C24 7 11 22 11 30 A13 13 0 0 0 37 30 C37 22 24 7 24 7 Z" fill="url(#gcBlue)"/>
+    <path d="M18 30 a6 6 0 0 0 6 6" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" opacity=".65"/>
+    <ellipse cx="19" cy="23" rx="3" ry="5.5" fill="#fff" opacity=".35" transform="rotate(-20 19 23)"/>
+  </svg>`,
+  rates: `<svg viewBox="0 0 48 48">
+    <path d="M24 6 L40 16 H8 Z" fill="url(#gcBlue)"/>
+    <path d="M24 6 L40 16 H24 Z" fill="url(#gcBlueD)"/>
+    <rect x="9" y="16" width="30" height="3.6" fill="url(#gcTop)"/>
+    <g fill="url(#gcWhite)"><rect x="12" y="20" width="3.6" height="13"/><rect x="18.4" y="20" width="3.6" height="13"/><rect x="24.8" y="20" width="3.6" height="13"/><rect x="31.2" y="20" width="3.6" height="13"/></g>
+    <rect x="8" y="33" width="32" height="3" fill="url(#gcTop)"/>
+    <rect x="6" y="36" width="36" height="4" rx="1.5" fill="url(#gcBlue)"/>
+  </svg>`,
+  forex: `<svg viewBox="0 0 48 48">
+    <circle cx="18" cy="19" r="10.5" fill="url(#gcBlue)"/>
+    <circle cx="18" cy="19" r="10.5" fill="none" stroke="#fff" stroke-opacity=".5" stroke-width="1.2"/>
+    <text x="18" y="23.5" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="800" fill="#fff">$</text>
+    <circle cx="30" cy="30" r="10.5" fill="url(#gcBlueD)"/>
+    <circle cx="30" cy="30" r="10.5" fill="none" stroke="#fff" stroke-opacity=".5" stroke-width="1.2"/>
+    <text x="30" y="34.5" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="800" fill="#fff">₹</text>
+  </svg>`,
+};
 const MKT_DEF = [
   { key:'stocks',      icon:'fa-chart-line',        title:'Stocks',      sub:'Global indices',
     items:[['NIFTY','NIFTY'],['SENSEX','SENSEX'],['NASDAQ','NASDAQ'],['DOW','DOW'],['SP500','S&P 500'],['FTSE','FTSE'],['NIKKEI','NIKKEI']] },
@@ -6881,7 +6931,7 @@ function renderGlance(){
     return `<div class="glance-cell tap" onclick="openMktCat('${c.key}')" role="button" aria-label="${c.title}">
       <div class="glance-btn">
         ${badge}
-        <div class="glance-mark"><i class="fa-solid ${c.icon}"></i></div>
+        <div class="glance-mark">${GLANCE_SVG[c.key] || ''}</div>
       </div>
       <div class="glance-lbl">${c.title.split(' · ')[0]}</div>
     </div>`;
@@ -6905,7 +6955,7 @@ function _mcTile(kind, sym, label, d){
 function openMktCat(key){
   const c = MKT_DEF.find(x => x.key === key); if(!c) return;
   window._openCat = key;
-  document.getElementById('mc-ico').innerHTML = '<i class="fa-solid ' + c.icon + '"></i>';
+  document.getElementById('mc-ico').innerHTML = GLANCE_SVG[key] || '';
   document.getElementById('mc-title').textContent = c.title;
   document.getElementById('mc-sub').textContent = c.sub;
   const b = _mktBucket(key), grid = document.getElementById('mc-grid');
