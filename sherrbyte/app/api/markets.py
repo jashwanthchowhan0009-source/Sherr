@@ -81,6 +81,14 @@ async def _yahoo_quote_one(client: httpx.AsyncClient, symbol: str) -> tuple[str,
         prev = meta.get("chartPreviousClose") or meta.get("previousClose") or 0
         change = (price - prev) if (price and prev) else 0
         change_pct = (change / prev * 100) if prev else 0
+        # The same response carries the intraday close series → derive a ~20-pt
+        # sparkline for free (no extra request), for every Yahoo-based tile.
+        closes = [c for c in (result[0].get("indicators", {}).get("quote", [{}])[0].get("close") or [])
+                  if c is not None]
+        spark: list[float] = []
+        if len(closes) > 2:
+            step = max(1, len(closes) // 20)
+            spark = [round(c, 4) for c in closes[::step]][-20:]
         return symbol, {
             "price": round(price, 2),
             "change": round(change, 2),
@@ -89,6 +97,7 @@ async def _yahoo_quote_one(client: httpx.AsyncClient, symbol: str) -> tuple[str,
             "low": round(meta.get("regularMarketDayLow", 0) or 0, 2),
             "prev_close": round(prev, 2),
             "currency": meta.get("currency", ""),
+            "spark": spark,
         }
     except Exception as e:
         log.warning("Yahoo chart %s failed: %s", symbol, e)
@@ -233,12 +242,8 @@ async def fetch_stocks(with_sparkline: bool = False) -> dict:
               "^GSPC": "SP500", "^DJI": "DOW", "^FTSE": "FTSE", "^N225": "NIKKEI"}
     async with httpx.AsyncClient() as client:
         base = await _yahoo(client, symbols)
+        # Quotes already carry a ~20-pt intraday spark (same request) → no extra calls.
         result = {labels[s]: base.get(s, {}) for s in symbols}
-        if with_sparkline:
-            sparks = await asyncio.gather(*[_yahoo_history(client, s, 20) for s in symbols])
-            for s, spark in zip(symbols, sparks):
-                if spark and result.get(labels[s]):
-                    result[labels[s]]["spark"] = spark
     _cset(f"stocks_{with_sparkline}", result, 60)
     return result
 
