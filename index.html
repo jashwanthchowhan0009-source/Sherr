@@ -2453,40 +2453,35 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   padding: 6px 14px 16px;
 }
 .glance-cell { display: flex; flex-direction: column; align-items: center; gap: 6px; cursor: pointer; }
-/* logo palette: light periwinkle glossy surface, deep-navy frame + mark */
+/* glassmorphic finance tiles — frosted glass plate + blue glossy glyph */
 .glance-btn {
-  position: relative; width: 100%; aspect-ratio: 1 / 1; border-radius: 19px;
+  position: relative; width: 100%; aspect-ratio: 1 / 1; border-radius: 20px;
   overflow: hidden; isolation: isolate;
   background:
-    radial-gradient(115% 115% at 32% 22%, #f2f3ff 0%, #d4d7ff 40%, #b3b7fb 78%, #9ea3f4 100%);
-  border: 1.5px solid #21205c;
+    linear-gradient(155deg, rgba(240,246,255,0.92) 0%, rgba(206,224,255,0.7) 55%, rgba(170,198,255,0.6) 100%);
+  backdrop-filter: blur(14px) saturate(160%); -webkit-backdrop-filter: blur(14px) saturate(160%);
+  border: 1px solid rgba(255,255,255,0.7);
   box-shadow:
-    0 6px 14px -6px rgba(33,32,92,0.55),
-    inset 0 2px 3px rgba(255,255,255,0.85),
-    inset 0 -7px 13px rgba(120,124,214,0.4);
+    0 10px 24px -10px rgba(40,80,200,0.5),
+    inset 0 1.5px 2px rgba(255,255,255,0.95),
+    inset 0 -10px 20px rgba(120,150,240,0.22);
   transition: transform 0.16s var(--ease), box-shadow 0.2s;
 }
-.glance-cell:active .glance-btn { transform: scale(0.9); box-shadow: 0 4px 9px -5px rgba(33,32,92,0.6), inset 0 2px 3px rgba(255,255,255,0.7); }
-/* glossy top sweep like the app icon */
+.glance-cell:active .glance-btn { transform: scale(0.9); box-shadow: 0 5px 12px -6px rgba(40,80,200,0.5), inset 0 1.5px 2px rgba(255,255,255,0.8); }
+/* glossy top sweep */
 .glance-btn::before {
-  content: ""; position: absolute; left: 9%; right: 9%; top: 6%; height: 42%;
+  content: ""; position: absolute; left: 9%; right: 9%; top: 5%; height: 44%;
   border-radius: 50% 50% 46% 46% / 70% 70% 100% 100%;
-  background: linear-gradient(180deg, rgba(255,255,255,0.85), rgba(255,255,255,0) 82%);
+  background: linear-gradient(180deg, rgba(255,255,255,0.9), rgba(255,255,255,0) 82%);
   pointer-events: none; z-index: 2;
 }
 .glance-mark {
   position: absolute; inset: 0; z-index: 1;
-  display: flex; align-items: center; justify-content: center;
-  font-family: "SF Pro Rounded", "Arial Rounded MT Bold", var(--fd), sans-serif;
-  font-weight: 900; font-size: 4.1rem; line-height: 0.82; letter-spacing: -0.04em;
-  /* glossy 3D navy glyph: sheen gradient fill + highlight edge + depth shadow */
-  background: linear-gradient(158deg, #5a5fd6 0%, #33339c 34%, #1c1b64 64%, #101040 100%);
-  -webkit-background-clip: text; background-clip: text;
-  -webkit-text-fill-color: transparent; color: transparent;
-  filter:
-    drop-shadow(0 1.5px 0 rgba(255,255,255,0.6))
-    drop-shadow(0 -1px 1px rgba(120,124,220,0.5))
-    drop-shadow(0 5px 7px rgba(12,12,55,0.45));
+  display: flex; align-items: center; justify-content: center; color: #2f5fe0;
+}
+.glance-mark i {
+  font-size: 2rem;
+  filter: drop-shadow(0 1.5px 0 rgba(255,255,255,0.75)) drop-shadow(0 3px 5px rgba(20,50,160,0.4));
 }
 .glance-lbl {
   font: 700 0.58rem/1.14 var(--f); color: var(--t2); text-align: center; letter-spacing: 0.01em;
@@ -2519,10 +2514,9 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 .mc-ico {
   width: 40px; height: 40px; border-radius: 12px; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
-  color: #17164f; border: 1px solid #21205c;
-  font: 900 1.5rem/1 "SF Pro Rounded", "Arial Rounded MT Bold", var(--fd), sans-serif;
-  background: radial-gradient(115% 115% at 32% 22%, #f2f3ff, #cccfff 55%, #a9adf6);
-  box-shadow: inset 0 1.5px 2px rgba(255,255,255,0.8), 0 4px 12px -5px rgba(33,32,92,0.6);
+  color: #2f5fe0; font-size: 1.15rem; border: 1px solid rgba(255,255,255,0.7);
+  background: linear-gradient(155deg, rgba(240,246,255,0.95), rgba(200,220,255,0.7));
+  box-shadow: inset 0 1.5px 2px rgba(255,255,255,0.9), 0 4px 12px -5px rgba(40,80,200,0.5);
 }
 .mc-title { font: 800 1.25rem/1.1 var(--fd); color: var(--t1); letter-spacing: -0.02em; }
 .mc-sub { font: 600 0.68rem/1 var(--f); color: var(--t3); margin-top: 3px; }
@@ -6862,17 +6856,17 @@ async function loadMarkets(_retry) {
 
 // ── "At a Glance" market launcher (logo-style tiles → full-screen category) ──
 const MKT_DEF = [
-  { key:'stocks',      mark:'S',  title:'Stocks',      sub:'Global indices',
+  { key:'stocks',      icon:'fa-chart-line',        title:'Stocks',      sub:'Global indices',
     items:[['NIFTY','NIFTY'],['SENSEX','SENSEX'],['NASDAQ','NASDAQ'],['DOW','DOW'],['SP500','S&P 500'],['FTSE','FTSE'],['NIKKEI','NIKKEI']] },
-  { key:'crypto',      mark:'₿',  title:'Crypto',      sub:'Top coins · USD',
+  { key:'crypto',      icon:'fa-bitcoin-sign',      title:'Crypto',      sub:'Top coins · USD',
     items:[['BTC','Bitcoin'],['ETH','Ethereum'],['SOL','Solana'],['BNB','BNB'],['XRP','XRP'],['ADA','Cardano'],['DOGE','Dogecoin'],['DOT','Polkadot']] },
-  { key:'metals',      mark:'M',  title:'Metals',      sub:'Precious · ₹/10g',
+  { key:'metals',      icon:'fa-coins',             title:'Metals',      sub:'Precious · ₹/10g',
     items:[['GOLD','Gold'],['SILVER','Silver'],['PLATINUM','Platinum'],['PALLADIUM','Palladium']] },
-  { key:'commodities', mark:'C',  title:'Commodities', sub:'Energy · agri · USD',
+  { key:'commodities', icon:'fa-droplet',           title:'Commodities', sub:'Energy · agri · USD',
     items:[['WTI_CRUDE','WTI Crude'],['BRENT','Brent'],['NATGAS','Nat Gas'],['COPPER','Copper'],['WHEAT','Wheat'],['CORN','Corn'],['SUGAR','Sugar']] },
-  { key:'rates',       mark:'B',  title:'Bond Yields', sub:'US Treasuries · %',
+  { key:'rates',       icon:'fa-shield-halved',     title:'Bond Yields', sub:'US Treasuries · %',
     items:[['US13W','US 13W'],['US5Y','US 5Y'],['US10Y','US 10Y'],['US30Y','US 30Y']] },
-  { key:'forex',       mark:'F',  title:'Forex',       sub:'Major currency pairs',
+  { key:'forex',       icon:'fa-money-bill-transfer',title:'Forex',      sub:'Major currency pairs',
     items:[['USDINR','USD/INR'],['EURINR','EUR/INR'],['GBPINR','GBP/INR'],['JPYINR','JPY/INR'],['EURUSD','EUR/USD'],['GBPUSD','GBP/USD']] },
 ];
 function _mktBucket(key){ return (window._lastMkt||{})[key] || {}; }
@@ -6887,7 +6881,7 @@ function renderGlance(){
     return `<div class="glance-cell tap" onclick="openMktCat('${c.key}')" role="button" aria-label="${c.title}">
       <div class="glance-btn">
         ${badge}
-        <div class="glance-mark">${c.mark}</div>
+        <div class="glance-mark"><i class="fa-solid ${c.icon}"></i></div>
       </div>
       <div class="glance-lbl">${c.title.split(' · ')[0]}</div>
     </div>`;
@@ -6911,7 +6905,7 @@ function _mcTile(kind, sym, label, d){
 function openMktCat(key){
   const c = MKT_DEF.find(x => x.key === key); if(!c) return;
   window._openCat = key;
-  document.getElementById('mc-ico').textContent = c.mark;
+  document.getElementById('mc-ico').innerHTML = '<i class="fa-solid ' + c.icon + '"></i>';
   document.getElementById('mc-title').textContent = c.title;
   document.getElementById('mc-sub').textContent = c.sub;
   const b = _mktBucket(key), grid = document.getElementById('mc-grid');
