@@ -2379,9 +2379,12 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 }
 
 .mkt-grid-stocks {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+  display: flex; gap: 10px; overflow-x: auto; padding: 2px 0 4px;
+  scroll-snap-type: x proximity;
 }
+.mkt-grid-stocks::-webkit-scrollbar { display: none; }
 .mkt-tile {
+  flex-shrink: 0; width: 158px; scroll-snap-align: start;
   padding: 12px;
   background: var(--bgcard); border: 1px solid var(--line);
   border-radius: 14px;
@@ -2420,7 +2423,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 }
 .mkt-crypto-row::-webkit-scrollbar { display: none; }
 .mkt-crypto-tile {
-  flex-shrink: 0; width: 140px;
+  flex-shrink: 0; width: 158px; scroll-snap-align: start;
   padding: 12px;
   border-radius: 14px;
   background: var(--bgcard); border: 1px solid var(--line);
@@ -2439,9 +2442,12 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 }
 
 .mkt-metals-grid {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+  display: flex; gap: 10px; overflow-x: auto; padding: 2px 0 4px;
+  scroll-snap-type: x proximity;
 }
+.mkt-metals-grid::-webkit-scrollbar { display: none; }
 .mkt-metals-tile {
+  flex-shrink: 0; width: 158px; scroll-snap-align: start;
   padding: 12px;
   border-radius: 14px;
   border: 1px solid rgba(255,214,0,0.25);
