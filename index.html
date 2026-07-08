@@ -296,6 +296,35 @@ html, body {
   backdrop-filter: blur(10px) saturate(150%); -webkit-backdrop-filter: blur(10px) saturate(150%);
 }
 [data-theme="dark"] .byte-foot-title { color: #eafbff; }
+/* ── Top header + Search → futuristic chrome (dark theme) ── */
+[data-theme="dark"] header {
+  background: linear-gradient(180deg, rgba(6,10,18,0.82), rgba(6,10,18,0.5));
+  border-bottom: 1px solid rgba(14,183,214,0.18);
+  box-shadow: 0 6px 24px -12px rgba(0,0,0,0.6);
+}
+[data-theme="dark"] .hbtn {
+  background: rgba(255,255,255,0.05); border: 1px solid rgba(14,183,214,0.16); color: #cfeef6;
+}
+[data-theme="dark"] .hbtn:active { background: rgba(14,183,214,0.14); }
+[data-theme="dark"] .hico:active { color: #0EB7D6; }
+[data-theme="dark"] .h-logo { border-color: rgba(14,183,214,0.25); box-shadow: 0 0 14px rgba(14,183,214,0.4); }
+[data-theme="dark"] .h-avatar {
+  background: linear-gradient(#05080f,#05080f) padding-box,
+              linear-gradient(140deg,#0EB7D6,#7be8ff) border-box;
+  box-shadow: 0 0 12px rgba(14,183,214,0.5);
+}
+[data-theme="dark"] #search-overlay {
+  background: radial-gradient(120% 60% at 50% 0%, rgba(14,183,214,0.12), rgba(14,183,214,0) 55%),
+              linear-gradient(180deg, #05080f, #03060c);
+}
+[data-theme="dark"] .srch-bar {
+  border: 1.5px solid rgba(14,183,214,0.6); background: rgba(255,255,255,0.05);
+  box-shadow: 0 0 0 3px rgba(14,183,214,0.14), 0 0 22px -3px rgba(14,183,214,0.8);
+}
+[data-theme="dark"] .srch-bar > i { color: #0EB7D6; }
+[data-theme="dark"] .srch-item { border-bottom-color: rgba(14,183,214,0.12); }
+[data-theme="dark"] .srch-item:active { background: rgba(14,183,214,0.08); }
+[data-theme="dark"] .srch-item-img { box-shadow: inset 0 0 0 1px rgba(14,183,214,0.2); }
 
 /* ── White-mode (Light) fixes for the dark-built components ── */
 [data-theme="light"] nav {
