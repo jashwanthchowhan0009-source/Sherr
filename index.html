@@ -2480,9 +2480,11 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 .glance-mark {
   position: absolute; inset: 0; z-index: 1;
   display: flex; align-items: center; justify-content: center;
-  font-family: var(--fd); font-weight: 800; font-style: italic;
-  font-size: 3rem; letter-spacing: -0.04em; color: #12123f;
-  text-shadow: 0 1px 0 rgba(255,255,255,0.28), 0 -1px 3px rgba(8,8,38,0.55);
+  color: #14144a;
+}
+.glance-mark i {
+  font-size: 2.2rem;
+  filter: drop-shadow(0 1px 0 rgba(255,255,255,0.3)) drop-shadow(0 -1px 3px rgba(8,8,38,0.5));
 }
 .glance-lbl {
   position: absolute; left: 0; right: 0; bottom: 11px; z-index: 3; text-align: center;
@@ -2517,7 +2519,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 .mc-ico {
   width: 40px; height: 40px; border-radius: 12px; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
-  font: italic 800 1.4rem/1 var(--fd); color: #12123f; letter-spacing: -0.04em;
+  color: #14144a; font-size: 1.2rem;
   background: radial-gradient(130% 130% at 30% 20%, #b7bcff, #4a50d6 60%, #23246e);
   box-shadow: inset 0 1px 2px rgba(255,255,255,0.5), 0 4px 12px -4px rgba(28,28,110,0.7);
 }
@@ -6859,19 +6861,19 @@ async function loadMarkets(_retry) {
 
 // ── "At a Glance" market launcher (logo-style tiles → full-screen category) ──
 const MKT_DEF = [
-  { key:'stocks',      mark:'S',  title:'Stocks',          sub:'Global indices',
+  { key:'stocks',      icon:'fa-arrow-trend-up',     title:'Stocks',          sub:'Global indices',
     items:[['NIFTY','NIFTY'],['SENSEX','SENSEX'],['NASDAQ','NASDAQ'],['DOW','DOW'],['SP500','S&P 500'],['FTSE','FTSE'],['NIKKEI','NIKKEI']] },
-  { key:'sectors',     mark:'Se', title:'Sectors · India', sub:'NSE sectoral indices',
+  { key:'sectors',     icon:'fa-industry',           title:'Sectors · India', sub:'NSE sectoral indices',
     items:[['BANKNIFTY','Bank Nifty'],['NIFTY_IT','Nifty IT'],['NIFTY_AUTO','Nifty Auto'],['NIFTY_PHARMA','Nifty Pharma'],['NIFTY_FMCG','Nifty FMCG'],['NIFTY_METAL','Nifty Metal']] },
-  { key:'crypto',      mark:'C',  title:'Crypto',          sub:'Top coins · USD',
+  { key:'crypto',      icon:'fa-coins',              title:'Crypto',          sub:'Top coins · USD',
     items:[['BTC','Bitcoin'],['ETH','Ethereum'],['SOL','Solana'],['BNB','BNB'],['XRP','XRP'],['ADA','Cardano'],['DOGE','Dogecoin'],['DOT','Polkadot']] },
-  { key:'metals',      mark:'M',  title:'Metals',          sub:'Precious · ₹/10g',
+  { key:'metals',      icon:'fa-gem',                title:'Metals',          sub:'Precious · ₹/10g',
     items:[['GOLD','Gold'],['SILVER','Silver'],['PLATINUM','Platinum'],['PALLADIUM','Palladium']] },
-  { key:'commodities', mark:'Co', title:'Commodities',     sub:'Energy · agri · USD',
+  { key:'commodities', icon:'fa-oil-well',           title:'Commodities',     sub:'Energy · agri · USD',
     items:[['WTI_CRUDE','WTI Crude'],['BRENT','Brent'],['NATGAS','Nat Gas'],['COPPER','Copper'],['WHEAT','Wheat'],['CORN','Corn'],['SUGAR','Sugar']] },
-  { key:'rates',       mark:'B',  title:'Bond Yields',     sub:'US Treasuries · %',
+  { key:'rates',       icon:'fa-percent',            title:'Bond Yields',     sub:'US Treasuries · %',
     items:[['US13W','US 13W'],['US5Y','US 5Y'],['US10Y','US 10Y'],['US30Y','US 30Y']] },
-  { key:'forex',       mark:'F',  title:'Forex',           sub:'Major currency pairs',
+  { key:'forex',       icon:'fa-money-bill-transfer',title:'Forex',           sub:'Major currency pairs',
     items:[['USDINR','USD/INR'],['EURINR','EUR/INR'],['GBPINR','GBP/INR'],['JPYINR','JPY/INR'],['EURUSD','EUR/USD'],['GBPUSD','GBP/USD']] },
 ];
 function _mktBucket(key){ return (window._lastMkt||{})[key] || {}; }
@@ -6885,7 +6887,7 @@ function renderGlance(){
       `<span class="glance-badge ${pct>=0?'up':'down'}">${pct>=0?'▲':'▼'} ${Math.abs(pct).toFixed(2)}%</span>`;
     return `<div class="glance-btn tap" onclick="openMktCat('${c.key}')" role="button" aria-label="${c.title}">
       ${badge}
-      <div class="glance-mark">${c.mark}</div>
+      <div class="glance-mark"><i class="fa-solid ${c.icon}"></i></div>
       <div class="glance-lbl">${c.title}</div>
     </div>`;
   }).join('');
@@ -6908,7 +6910,7 @@ function _mcTile(kind, sym, label, d){
 function openMktCat(key){
   const c = MKT_DEF.find(x => x.key === key); if(!c) return;
   window._openCat = key;
-  document.getElementById('mc-ico').textContent = c.mark;
+  document.getElementById('mc-ico').innerHTML = '<i class="fa-solid ' + c.icon + '"></i>';
   document.getElementById('mc-title').textContent = c.title;
   document.getElementById('mc-sub').textContent = c.sub;
   const b = _mktBucket(key), grid = document.getElementById('mc-grid');
