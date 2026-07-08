@@ -275,6 +275,27 @@ html, body {
 }
 [data-theme="dark"] .sr { border-bottom-color: rgba(14,183,214,0.10); }
 [data-theme="dark"] .sr:active { background: rgba(14,183,214,0.08); }
+/* ── Bytes screen → futuristic immersive pass (dark theme) ── */
+[data-theme="dark"] .byte-card {
+  background: linear-gradient(180deg, #070b12 0%, #05080e 62%, #03060c 100%);
+}
+[data-theme="dark"] .byte-media { box-shadow: inset 0 -1px 0 rgba(14,183,214,0.4), inset 0 -40px 60px -30px rgba(0,0,0,0.55); }
+[data-theme="dark"] .byte-media::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(180deg, rgba(5,8,14,0) 52%, rgba(5,8,14,0.9) 100%);
+}
+[data-theme="dark"] .byte-src-logo {
+  background: linear-gradient(140deg, #0a6f86, #0EB7D6); color: #04141b;
+  box-shadow: 0 0 12px rgba(14,183,214,0.5);
+}
+[data-theme="dark"] .byte-srcacts .on i { color: #0EB7D6; }
+[data-theme="dark"] .byte-headline { text-shadow: 0 0 22px rgba(14,183,214,0.22); }
+[data-theme="dark"] .byte-foot {
+  border-top: 1px solid rgba(14,183,214,0.22);
+  background: linear-gradient(160deg, rgba(14,183,214,0.12), rgba(255,255,255,0.02));
+  backdrop-filter: blur(10px) saturate(150%); -webkit-backdrop-filter: blur(10px) saturate(150%);
+}
+[data-theme="dark"] .byte-foot-title { color: #eafbff; }
 
 /* ── White-mode (Light) fixes for the dark-built components ── */
 [data-theme="light"] nav {
