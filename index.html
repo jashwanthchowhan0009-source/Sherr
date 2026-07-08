@@ -230,6 +230,51 @@ html, body {
 [data-theme="dark"] #v-home .nc-hero-image {
   box-shadow: 0 8px 24px rgba(0,0,0,0.42), inset 0 0 0 1px rgba(14,183,214,0.14);
 }
+/* ── Profile screen → glassy futuristic pass (dark theme) ── */
+[data-theme="dark"] .prof-hero {
+  background: radial-gradient(120% 130% at 0% -20%, rgba(14,183,214,0.14), rgba(14,183,214,0) 55%),
+              linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.015));
+  border-bottom: 1px solid rgba(14,183,214,0.16);
+  padding: 20px 16px 18px;
+}
+[data-theme="dark"] .prof-hero::before {
+  background: radial-gradient(circle, rgba(14,183,214,0.28), transparent 70%);
+}
+[data-theme="dark"] .prof-ava {
+  width: 72px; height: 72px;
+  background: linear-gradient(#05080f,#05080f) padding-box,
+              linear-gradient(140deg,#0EB7D6,#7be8ff) border-box;
+  box-shadow: 0 0 22px rgba(14,183,214,0.55);
+}
+[data-theme="dark"] .prof-name { font-size: 1.4rem; text-shadow: 0 0 22px rgba(14,183,214,0.3); }
+[data-theme="dark"] .prof-handle { color: #0EB7D6; }
+/* stats: three separated glass blocks instead of one joined bar */
+[data-theme="dark"] .prof-stats {
+  background: transparent; border: none; overflow: visible; gap: 8px;
+}
+[data-theme="dark"] .prof-stats .ps {
+  border: 1px solid rgba(14,183,214,0.16); border-radius: 16px;
+  background: linear-gradient(160deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+}
+[data-theme="dark"] .prof-stats .ps-n { color: #eafbff; font-size: 1.25rem; }
+[data-theme="dark"] .prof-stats .ps:last-child { border-right: 1px solid rgba(14,183,214,0.16); }
+/* buttons */
+[data-theme="dark"] .prof-btns .pb-sec {
+  background: rgba(255,255,255,0.06); border: 1px solid rgba(14,183,214,0.18); color: #eafbff;
+}
+[data-theme="dark"] .prof-btns .pb-feed {
+  background: linear-gradient(90deg, #0a6f86, #0EB7D6); border: 1px solid rgba(14,183,214,0.5);
+  box-shadow: 0 6px 20px rgba(14,183,214,0.45); color: #04141b;
+}
+/* frosted setting groups */
+[data-theme="dark"] .set-grp {
+  background: linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.015));
+  border: 1px solid rgba(14,183,214,0.14);
+  backdrop-filter: blur(10px) saturate(150%); -webkit-backdrop-filter: blur(10px) saturate(150%);
+}
+[data-theme="dark"] .sr { border-bottom-color: rgba(14,183,214,0.10); }
+[data-theme="dark"] .sr:active { background: rgba(14,183,214,0.08); }
 
 /* ── White-mode (Light) fixes for the dark-built components ── */
 [data-theme="light"] nav {
