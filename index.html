@@ -2518,6 +2518,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   border-radius: 14px;
   border: 1px solid rgba(255,214,0,0.25);
   background: linear-gradient(135deg, rgba(255,214,0,0.08), rgba(255,140,0,0.03));
+  position: relative; overflow: hidden;
 }
 
 /* Skeleton & empty states */
@@ -6817,7 +6818,9 @@ function renderSectors(sectors) {
         ${list.map(m => {
           const d = (sectors && sectors[m.key]) || {};
           const pct = d.change_pct || 0;
+          const spark = d.spark ? miniSpark(d.spark, mktColor(pct)) : '';
           return `<div class="mkt-tile tap" onclick="openMarketDetail('sectors','${m.key}','${m.label}')">
+            <div class="mkt-tile-spark">${spark}</div>
             <div class="mkt-tile-name">${m.label}</div>
             <div class="mkt-tile-price">${fmtNum(d.price || 0)}</div>
             <div class="mkt-tile-change ${mktCls(pct)}">${mktArrow(pct)} ${Math.abs(pct).toFixed(2)}%</div>
@@ -6883,7 +6886,9 @@ function renderMetals(metals) {
         ${list.map(m => {
           const d = (metals && metals[m.key]) || {};
           const pct = d.change_pct || 0;
+          const spark = d.spark ? miniSpark(d.spark, mktColor(pct)) : '';
           return `<div class="mkt-metals-tile tap" onclick="openMarketDetail('metals','${m.key}','${m.label}')">
+            <div class="mkt-tile-spark">${spark}</div>
             <div class="mkt-tile-name">${m.emoji} ${m.label.toUpperCase()}</div>
             ${d.price_inr_10g ? `<div class="mkt-tile-price">₹${fmtNum(d.price_inr_10g)}<span style="font-size:0.6rem;color:var(--t3);font-weight:500"> /10g</span></div>`
               : `<div class="mkt-tile-price">$${fmtNum(d.price_usd_oz || 0)}<span style="font-size:0.6rem;color:var(--t3);font-weight:500"> /oz</span></div>`}
@@ -6918,7 +6923,9 @@ function renderCommodities(comm) {
         ${list.map(m => {
           const d = (comm && comm[m.key]) || {};
           const pct = d.change_pct || 0;
+          const spark = d.spark ? miniSpark(d.spark, mktColor(pct)) : '';
           return `<div class="mkt-metals-tile tap" onclick="openMarketDetail('commodities','${m.key}','${m.label}')">
+            <div class="mkt-tile-spark">${spark}</div>
             <div class="mkt-tile-name">${m.emoji} ${m.label.toUpperCase()}</div>
             <div class="mkt-tile-price">$${fmtNum(d.price || 0)}<span style="font-size:0.6rem;color:var(--t3);font-weight:500"> ${m.unit}</span></div>
             ${pct !== 0 ? `<div class="mkt-tile-change ${mktCls(pct)}">${mktArrow(pct)} ${Math.abs(pct).toFixed(2)}%</div>` : ''}
@@ -6942,7 +6949,9 @@ function renderForex(forex) {
         ${pairs.map(p => {
           const d = (forex && forex[p]) || {};
           const pct = d.change_pct || 0;
+          const spark = d.spark ? miniSpark(d.spark, mktColor(pct)) : '';
           return `<div class="mkt-tile tap" onclick="openMarketDetail('forex','${p}','${p.slice(0,3)}/${p.slice(3)}')">
+            <div class="mkt-tile-spark">${spark}</div>
             <div class="mkt-tile-name">${p.slice(0,3)}/${p.slice(3)}</div>
             <div class="mkt-tile-price">${fmtNum(d.price || 0)}</div>
             <div class="mkt-tile-change ${mktCls(pct)}">${mktArrow(pct)} ${Math.abs(pct).toFixed(2)}%</div>
@@ -6972,7 +6981,9 @@ function renderRates(rates) {
         ${list.map(m => {
           const d = (rates && rates[m.key]) || {};
           const pct = d.change_pct || 0;
+          const spark = d.spark ? miniSpark(d.spark, mktColor(pct)) : '';
           return `<div class="mkt-metals-tile tap" onclick="openMarketDetail('rates','${m.key}','${m.label}')">
+            <div class="mkt-tile-spark">${spark}</div>
             <div class="mkt-tile-name">${m.label}</div>
             <div class="mkt-tile-price">${fmtNum(d.price || 0)}<span style="font-size:0.6rem;color:var(--t3);font-weight:500"> %</span></div>
             ${pct !== 0 ? `<div class="mkt-tile-change ${mktCls(pct)}">${mktArrow(pct)} ${Math.abs(pct).toFixed(2)}%</div>` : ''}
