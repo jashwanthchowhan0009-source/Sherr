@@ -125,10 +125,12 @@ async def _yahoo_history(client: httpx.AsyncClient, symbol: str, points: int = 2
 
 async def _coingecko(client: httpx.AsyncClient, ids: list[str]) -> dict:
     try:
+        # /coins/markets carries price + 24h change + market cap AND a 7-day
+        # sparkline in a single call, so crypto tiles get a graph for free.
         r = await client.get(
-            "https://api.coingecko.com/api/v3/simple/price",
-            params={"ids": ",".join(ids), "vs_currencies": "usd,inr",
-                    "include_24hr_change": "true", "include_market_cap": "true"},
+            "https://api.coingecko.com/api/v3/coins/markets",
+            params={"vs_currency": "usd", "ids": ",".join(ids),
+                    "sparkline": "true", "price_change_percentage": "24h"},
             headers=({"x-cg-demo-api-key": COINGECKO_KEY} if COINGECKO_KEY else {}),
             timeout=8,
         )
@@ -138,12 +140,20 @@ async def _coingecko(client: httpx.AsyncClient, ids: list[str]) -> dict:
                     "dogecoin": "DOGE", "cardano": "ADA", "ripple": "XRP",
                     "binancecoin": "BNB", "polkadot": "DOT"}
         out = {}
-        for coin, d in r.json().items():
-            out[name_map.get(coin, coin.upper())] = {
-                "price_usd": round(d.get("usd", 0) or 0, 2),
-                "price_inr": round(d.get("inr", 0) or 0, 2),
-                "change_pct": round(d.get("usd_24h_change", 0) or 0, 2),
-                "market_cap_usd": int(d.get("usd_market_cap", 0) or 0),
+        for d in r.json():
+            cid = d.get("id", "")
+            usd = d.get("current_price", 0) or 0
+            raw = (d.get("sparkline_in_7d") or {}).get("price") or []
+            spark = []
+            if len(raw) > 2:
+                step = max(1, len(raw) // 24)
+                spark = [round(x, 4) for x in raw[::step]][-24:]
+            out[name_map.get(cid, cid.upper())] = {
+                "price_usd": round(usd, 2),
+                "price_inr": round(usd * 84.0, 2),   # approx; CoinGecko markets is USD-only
+                "change_pct": round(d.get("price_change_percentage_24h", 0) or 0, 2),
+                "market_cap_usd": int(d.get("market_cap", 0) or 0),
+                "spark": spark,
             }
         return out
     except Exception as e:
