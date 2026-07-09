@@ -6919,7 +6919,7 @@ const GLANCE_SVG = {
 };
 const MKT_DEF = [
   { key:'stocks',      icon:'fa-chart-line',        title:'Stocks',      sub:'Global indices',
-    items:[['NIFTY','NIFTY'],['SENSEX','SENSEX'],['NASDAQ','NASDAQ'],['DOW','DOW'],['SP500','S&P 500'],['FTSE','FTSE'],['NIKKEI','NIKKEI']] },
+    items:[['NIFTY','NIFTY'],['SENSEX','SENSEX'],['NASDAQ','NASDAQ'],['DOW','DOW'],['SP500','S&P 500'],['FTSE','FTSE'],['NIKKEI','NIKKEI'],['DAX','DAX'],['HANGSENG','Hang Seng'],['SHANGHAI','Shanghai'],['KOSPI','KOSPI']] },
   { key:'crypto',      icon:'fa-bitcoin-sign',      title:'Crypto',      sub:'Top coins · USD',
     items:[['BTC','Bitcoin'],['ETH','Ethereum'],['SOL','Solana'],['BNB','BNB'],['XRP','XRP'],['ADA','Cardano'],['DOGE','Dogecoin'],['DOT','Polkadot']] },
   { key:'metals',      icon:'fa-coins',             title:'Metals',      sub:'Precious · ₹/10g',
@@ -6929,7 +6929,7 @@ const MKT_DEF = [
   { key:'rates',       icon:'fa-shield-halved',     title:'Bond Yields', sub:'US Treasuries · %',
     items:[['US13W','US 13W'],['US5Y','US 5Y'],['US10Y','US 10Y'],['US30Y','US 30Y']] },
   { key:'forex',       icon:'fa-money-bill-transfer',title:'Forex',      sub:'Major currency pairs',
-    items:[['USDINR','USD/INR'],['EURINR','EUR/INR'],['GBPINR','GBP/INR'],['JPYINR','JPY/INR'],['EURUSD','EUR/USD'],['GBPUSD','GBP/USD']] },
+    items:[['USDINR','USD/INR'],['EURINR','EUR/INR'],['GBPINR','GBP/INR'],['JPYINR','JPY/INR'],['EURUSD','EUR/USD'],['GBPUSD','GBP/USD'],['USDJPY','USD/JPY'],['AUDUSD','AUD/USD']] },
 ];
 function _mktBucket(key){ return (window._lastMkt||{})[key] || {}; }
 function renderGlance(){
