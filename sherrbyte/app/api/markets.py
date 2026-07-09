@@ -247,9 +247,11 @@ async def fetch_stocks(with_sparkline: bool = False) -> dict:
     cached = _cget(f"stocks_{with_sparkline}")
     if cached:
         return cached
-    symbols = ["^NSEI", "^BSESN", "^IXIC", "^GSPC", "^DJI", "^FTSE", "^N225"]
+    symbols = ["^NSEI", "^BSESN", "^IXIC", "^GSPC", "^DJI", "^FTSE", "^N225",
+               "^GDAXI", "^HSI", "000001.SS", "^KS11"]
     labels = {"^NSEI": "NIFTY", "^BSESN": "SENSEX", "^IXIC": "NASDAQ",
-              "^GSPC": "SP500", "^DJI": "DOW", "^FTSE": "FTSE", "^N225": "NIKKEI"}
+              "^GSPC": "SP500", "^DJI": "DOW", "^FTSE": "FTSE", "^N225": "NIKKEI",
+              "^GDAXI": "DAX", "^HSI": "HANGSENG", "000001.SS": "SHANGHAI", "^KS11": "KOSPI"}
     async with httpx.AsyncClient() as client:
         base = await _yahoo(client, symbols)
         # Quotes already carry a ~20-pt intraday spark (same request) → no extra calls.
@@ -369,11 +371,13 @@ async def fetch_forex() -> dict:
     cached = _cget("forex")
     if cached:
         return cached
-    pairs = ["USDINR=X", "EURINR=X", "GBPINR=X", "JPYINR=X", "EURUSD=X", "GBPUSD=X"]
+    pairs = ["USDINR=X", "EURINR=X", "GBPINR=X", "JPYINR=X", "EURUSD=X", "GBPUSD=X",
+             "USDJPY=X", "AUDUSD=X"]
     async with httpx.AsyncClient() as client:
         data = await _yahoo(client, pairs)
     labels = {"USDINR=X": "USDINR", "EURINR=X": "EURINR", "GBPINR=X": "GBPINR",
-              "JPYINR=X": "JPYINR", "EURUSD=X": "EURUSD", "GBPUSD=X": "GBPUSD"}
+              "JPYINR=X": "JPYINR", "EURUSD=X": "EURUSD", "GBPUSD=X": "GBPUSD",
+              "USDJPY=X": "USDJPY", "AUDUSD=X": "AUDUSD"}
     result = {labels[p]: data.get(p, {}) for p in pairs}
     _cset("forex", result, 90)
     return result
@@ -486,8 +490,10 @@ async def markets_rates():
 _COIN_IDS = {"BTC": "bitcoin", "ETH": "ethereum", "SOL": "solana", "DOGE": "dogecoin",
              "ADA": "cardano", "XRP": "ripple", "BNB": "binancecoin", "DOT": "polkadot"}
 _STOCK_SYM = {"NIFTY": "^NSEI", "SENSEX": "^BSESN", "NASDAQ": "^IXIC", "SP500": "^GSPC",
-              "DOW": "^DJI", "FTSE": "^FTSE", "NIKKEI": "^N225"}
+              "DOW": "^DJI", "FTSE": "^FTSE", "NIKKEI": "^N225",
+              "DAX": "^GDAXI", "HANGSENG": "^HSI", "SHANGHAI": "000001.SS", "KOSPI": "^KS11"}
 _FOREX_SYM = {"USDINR": "USDINR=X", "EURINR": "EURINR=X", "GBPINR": "GBPINR=X",
+              "USDJPY": "USDJPY=X", "AUDUSD": "AUDUSD=X",
               "JPYINR": "JPYINR=X", "EURUSD": "EURUSD=X", "GBPUSD": "GBPUSD=X"}
 _METAL_SYM = {"GOLD": "GC=F", "SILVER": "SI=F", "PLATINUM": "PL=F", "PALLADIUM": "PA=F"}
 _COMMO_SYM = {"WTI_CRUDE": "CL=F", "BRENT": "BZ=F", "NATGAS": "NG=F", "COPPER": "HG=F",
