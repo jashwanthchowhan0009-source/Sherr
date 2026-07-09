@@ -3385,10 +3385,12 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   </div>
   <!-- v6 — market launcher (hand-built 3D glass finance icons) -->
   <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
-    <linearGradient id="gcBlue" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9cbcff"/><stop offset="1" stop-color="#2f5fe0"/></linearGradient>
-    <linearGradient id="gcBlueD" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4b78ea"/><stop offset="1" stop-color="#1a3aa8"/></linearGradient>
-    <linearGradient id="gcTop" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f0f6ff"/><stop offset="1" stop-color="#c3d8ff"/></linearGradient>
-    <linearGradient id="gcWhite" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#dbe6ff"/></linearGradient>
+    <linearGradient id="gcBlue" x1="0" y1="0" x2="0.3" y2="1"><stop offset="0" stop-color="#aecaff"/><stop offset=".5" stop-color="#5183f0"/><stop offset="1" stop-color="#2246c8"/></linearGradient>
+    <linearGradient id="gcBlueD" x1="0" y1="0" x2="0.3" y2="1"><stop offset="0" stop-color="#4b78ea"/><stop offset="1" stop-color="#16308f"/></linearGradient>
+    <linearGradient id="gcTop" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#cfe0ff"/></linearGradient>
+    <linearGradient id="gcWhite" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#d7e4ff"/></linearGradient>
+    <radialGradient id="gcSpec" cx="35%" cy="26%" r="62%"><stop offset="0" stop-color="#ffffff" stop-opacity=".9"/><stop offset="55%" stop-color="#ffffff" stop-opacity="0"/></radialGradient>
+    <filter id="gcSoft" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="1.3"/></filter>
   </defs></svg>
   <div class="glance-grid" id="glance-grid"></div>
 
@@ -6861,47 +6863,57 @@ async function loadMarkets(_retry) {
 // ── Market launcher — hand-built 3D glassmorphic finance icons (shared gradient sprite) ──
 const GLANCE_SVG = {
   stocks: `<svg viewBox="0 0 48 48">
-    <rect x="8" y="27" width="8" height="13" rx="2" fill="url(#gcBlue)"/>
-    <rect x="20" y="21" width="8" height="19" rx="2" fill="url(#gcBlue)"/>
-    <rect x="32" y="14" width="8" height="26" rx="2" fill="url(#gcBlue)"/>
-    <rect x="8" y="27" width="8" height="5" rx="2" fill="url(#gcTop)"/>
-    <rect x="20" y="21" width="8" height="5" rx="2" fill="url(#gcTop)"/>
-    <rect x="32" y="14" width="8" height="5" rx="2" fill="url(#gcTop)"/>
-    <path d="M11 24 L23 18 L29 21 L39 11" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M34 11 h5 v5" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+    <ellipse cx="25" cy="42" rx="17" ry="2.4" fill="#1c3fb0" opacity=".22" filter="url(#gcSoft)"/>
+    <rect x="8" y="27" width="8" height="13" rx="2.5" fill="url(#gcBlue)"/>
+    <rect x="20" y="21" width="8" height="19" rx="2.5" fill="url(#gcBlue)"/>
+    <rect x="32" y="14" width="8" height="26" rx="2.5" fill="url(#gcBlue)"/>
+    <rect x="8" y="27" width="8" height="6" rx="2.5" fill="url(#gcTop)"/>
+    <rect x="20" y="21" width="8" height="6" rx="2.5" fill="url(#gcTop)"/>
+    <rect x="32" y="14" width="8" height="6" rx="2.5" fill="url(#gcTop)"/>
+    <path d="M11 24 L23 18 L29 21 L39 11" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M34 11 h5 v5" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
   </svg>`,
   crypto: `<svg viewBox="0 0 48 48">
+    <ellipse cx="24" cy="41" rx="13" ry="2.3" fill="#1c3fb0" opacity=".24" filter="url(#gcSoft)"/>
     <ellipse cx="24" cy="27" rx="15" ry="15" fill="url(#gcBlueD)"/>
     <circle cx="24" cy="23" r="15" fill="url(#gcBlue)"/>
-    <circle cx="24" cy="23" r="15" fill="none" stroke="#fff" stroke-opacity=".55" stroke-width="1.4"/>
+    <circle cx="24" cy="23" r="15" fill="url(#gcSpec)"/>
+    <circle cx="24" cy="23" r="15" fill="none" stroke="#fff" stroke-opacity=".6" stroke-width="1.4"/>
     <text x="24" y="29.5" text-anchor="middle" font-family="Arial,sans-serif" font-size="17" font-weight="800" fill="#fff">₿</text>
-    <ellipse cx="18" cy="16" rx="6" ry="3" fill="#fff" opacity=".4"/>
   </svg>`,
   metals: `<svg viewBox="0 0 48 48">
+    <ellipse cx="24" cy="42" rx="16" ry="2.3" fill="#1c3fb0" opacity=".22" filter="url(#gcSoft)"/>
     <path d="M9 27 v4 a15 5 0 0 0 30 0 v-4 z" fill="url(#gcBlue)"/><ellipse cx="24" cy="27" rx="15" ry="5" fill="url(#gcTop)"/>
     <path d="M9 21 v4 a15 5 0 0 0 30 0 v-4 z" fill="url(#gcBlue)"/><ellipse cx="24" cy="21" rx="15" ry="5" fill="url(#gcTop)"/>
     <path d="M9 15 v4 a15 5 0 0 0 30 0 v-4 z" fill="url(#gcBlue)"/><ellipse cx="24" cy="15" rx="15" ry="5" fill="url(#gcTop)"/>
-    <text x="24" y="17" text-anchor="middle" font-family="Arial,sans-serif" font-size="7" font-weight="800" fill="#2f5fe0">$</text>
+    <ellipse cx="18" cy="14" rx="6" ry="1.8" fill="#fff" opacity=".7"/>
+    <text x="24" y="17.4" text-anchor="middle" font-family="Arial,sans-serif" font-size="7" font-weight="800" fill="#2f5fe0">$</text>
   </svg>`,
   commodities: `<svg viewBox="0 0 48 48">
-    <path d="M24 7 C24 7 11 22 11 30 A13 13 0 0 0 37 30 C37 22 24 7 24 7 Z" fill="url(#gcBlue)"/>
-    <path d="M18 30 a6 6 0 0 0 6 6" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" opacity=".65"/>
-    <ellipse cx="19" cy="23" rx="3" ry="5.5" fill="#fff" opacity=".35" transform="rotate(-20 19 23)"/>
+    <ellipse cx="24" cy="42" rx="12" ry="2.2" fill="#1c3fb0" opacity=".22" filter="url(#gcSoft)"/>
+    <path d="M24 6 C24 6 11 22 11 30 A13 13 0 0 0 37 30 C37 22 24 6 24 6 Z" fill="url(#gcBlue)"/>
+    <path d="M24 6 C24 6 11 22 11 30 A13 13 0 0 0 37 30 C37 22 24 6 24 6 Z" fill="url(#gcSpec)"/>
+    <path d="M18 31 a6 6 0 0 0 6 6" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" opacity=".7"/>
   </svg>`,
   rates: `<svg viewBox="0 0 48 48">
+    <ellipse cx="24" cy="42" rx="18" ry="2.4" fill="#1c3fb0" opacity=".22" filter="url(#gcSoft)"/>
     <path d="M24 6 L40 16 H8 Z" fill="url(#gcBlue)"/>
     <path d="M24 6 L40 16 H24 Z" fill="url(#gcBlueD)"/>
+    <path d="M24 6 L40 16 H8 Z" fill="url(#gcSpec)"/>
     <rect x="9" y="16" width="30" height="3.6" fill="url(#gcTop)"/>
-    <g fill="url(#gcWhite)"><rect x="12" y="20" width="3.6" height="13"/><rect x="18.4" y="20" width="3.6" height="13"/><rect x="24.8" y="20" width="3.6" height="13"/><rect x="31.2" y="20" width="3.6" height="13"/></g>
+    <g fill="url(#gcWhite)"><rect x="12" y="20" width="3.6" height="13" rx="0.6"/><rect x="18.4" y="20" width="3.6" height="13" rx="0.6"/><rect x="24.8" y="20" width="3.6" height="13" rx="0.6"/><rect x="31.2" y="20" width="3.6" height="13" rx="0.6"/></g>
     <rect x="8" y="33" width="32" height="3" fill="url(#gcTop)"/>
     <rect x="6" y="36" width="36" height="4" rx="1.5" fill="url(#gcBlue)"/>
   </svg>`,
   forex: `<svg viewBox="0 0 48 48">
+    <ellipse cx="24" cy="42" rx="15" ry="2.3" fill="#1c3fb0" opacity=".22" filter="url(#gcSoft)"/>
     <circle cx="18" cy="19" r="10.5" fill="url(#gcBlue)"/>
-    <circle cx="18" cy="19" r="10.5" fill="none" stroke="#fff" stroke-opacity=".5" stroke-width="1.2"/>
+    <circle cx="18" cy="19" r="10.5" fill="url(#gcSpec)"/>
+    <circle cx="18" cy="19" r="10.5" fill="none" stroke="#fff" stroke-opacity=".55" stroke-width="1.2"/>
     <text x="18" y="23.5" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="800" fill="#fff">$</text>
     <circle cx="30" cy="30" r="10.5" fill="url(#gcBlueD)"/>
-    <circle cx="30" cy="30" r="10.5" fill="none" stroke="#fff" stroke-opacity=".5" stroke-width="1.2"/>
+    <circle cx="30" cy="30" r="10.5" fill="url(#gcSpec)"/>
+    <circle cx="30" cy="30" r="10.5" fill="none" stroke="#fff" stroke-opacity=".55" stroke-width="1.2"/>
     <text x="30" y="34.5" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="800" fill="#fff">₹</text>
   </svg>`,
 };
