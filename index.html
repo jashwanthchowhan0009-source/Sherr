@@ -326,6 +326,32 @@ html, body {
 [data-theme="dark"] .srch-item:active { background: rgba(14,183,214,0.08); }
 [data-theme="dark"] .srch-item-img { box-shadow: inset 0 0 0 1px rgba(14,183,214,0.2); }
 
+/* ── Theme parity ── */
+/* Launcher glass tiles: crisper on the white Light theme so they don't wash out */
+[data-theme="light"] .glance-btn {
+  background: linear-gradient(155deg, #ffffff 0%, #eaf0ff 60%, #dfe8ff 100%);
+  border: 1px solid rgba(90,120,220,0.26);
+  box-shadow:
+    0 8px 20px -10px rgba(40,80,200,0.42),
+    inset 0 1.5px 2px rgba(255,255,255,0.95),
+    inset 0 -8px 16px rgba(150,175,245,0.28);
+}
+[data-theme="light"] .mc-ico { background: linear-gradient(155deg, #ffffff, #e6edff); border-color: rgba(90,120,220,0.26); }
+/* Navy (System) theme inherits the cyan signature: nav glow + header hairline */
+[data-theme="navy"] nav {
+  border-color: rgba(14,183,214,0.22);
+  box-shadow: 0 18px 46px rgba(0,0,0,0.4), 0 0 0 1px rgba(14,183,214,0.06), inset 0 1px 1px rgba(255,255,255,0.2);
+}
+[data-theme="navy"] .nb.on .nb-icon {
+  background: rgba(14,183,214,0.2); color: #eafbff;
+  box-shadow: inset 0 0 0 0.5px rgba(14,183,214,0.45), 0 2px 16px rgba(14,183,214,0.35);
+}
+[data-theme="navy"] header { border-bottom: 1px solid rgba(14,183,214,0.2); }
+[data-theme="navy"] .h-avatar {
+  background: linear-gradient(#02153F,#02153F) padding-box, linear-gradient(140deg,#0EB7D6,#7be8ff) border-box;
+  box-shadow: 0 0 12px rgba(14,183,214,0.5);
+}
+
 /* ── White-mode (Light) fixes for the dark-built components ── */
 [data-theme="light"] nav {
   background: rgba(255,255,255,0.72);
