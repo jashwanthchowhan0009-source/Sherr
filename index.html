@@ -3013,7 +3013,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
     transform:translateY(100%);transition:transform .4s var(--snap);display:flex;flex-direction:column;overflow:hidden;}
   #module-overlay.open{transform:translateY(0);}
   .mod-ico{width:46px;height:46px;border-radius:13px;flex-shrink:0;display:flex;align-items:center;justify-content:center;
-    font-size:1.6rem;background:linear-gradient(158deg,rgba(34,48,84,.92),rgba(10,16,34,.96));border:1px solid rgba(120,150,235,.32);}
+    font-size:1.3rem;color:rgba(255,255,255,.95);background:linear-gradient(158deg,rgba(34,48,84,.92),rgba(10,16,34,.96));border:1px solid rgba(120,150,235,.32);}
   .mod-open{width:100%;padding:14px;border:none;border-radius:14px;background:linear-gradient(90deg,#0a6f86,#0EB7D6);
     color:#04141b;font:800 .9rem/1 var(--fd);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;}
   .mod-soon{padding:14px 16px;border-radius:14px;background:rgba(245,179,1,.09);border:1px solid rgba(245,179,1,.28);
@@ -3073,92 +3073,109 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
     /* Explore = ONLY the modules launcher; hide every other section in the view */
     #v-explore{padding:0;}
     #v-explore > *:not(.orbit-hero){display:none !important;}
-    .orbit-hero{position:relative;height:calc(100dvh - 150px);min-height:480px;margin:0;overflow:hidden;
+    .orbit-hero{position:relative;height:calc(100dvh - 132px);min-height:520px;margin:0;overflow:hidden;
       touch-action:pan-y;user-select:none;-webkit-user-select:none;
-      background:radial-gradient(85% 55% at 50% 58%,rgba(26,50,112,.5),rgba(2,4,10,0) 62%),
-        radial-gradient(70% 50% at 62% 38%,rgba(30,54,124,.24),rgba(2,4,10,0) 70%),
-        linear-gradient(180deg,#02040a,#04060f 58%,#01030a);}
+      background:
+        radial-gradient(60% 42% at 50% 100%, rgba(20,72,120,.45), rgba(3,6,14,0) 70%),
+        radial-gradient(100% 60% at 50% 108%, rgba(14,120,150,.18), rgba(3,6,14,0) 60%),
+        linear-gradient(180deg, #010208 0%, #02040c 55%, #030814 100%);}
     .orbit-stars{position:absolute;top:0;left:0;width:1px;height:1px;border-radius:50%;background:#fff;
-      animation:orbTwk 4s ease-in-out infinite alternate;}
-    @keyframes orbTwk{0%{opacity:.5}100%{opacity:1}}
-    .orbit-cap{position:absolute;top:16px;left:0;right:0;text-align:center;z-index:6;pointer-events:none;
-      font:800 .58rem/1 var(--fd);letter-spacing:.24em;text-transform:uppercase;color:rgba(14,183,214,.9);
-      text-shadow:0 0 14px rgba(14,183,214,.5);}
-    .orbit-cap small{display:block;margin-top:5px;font:600 .54rem/1 var(--f);letter-spacing:.06em;
-      text-transform:none;color:rgba(200,220,255,.5);}
-    .orbit-globe{position:absolute;left:50%;top:60%;width:200px;height:200px;margin:-100px 0 0 -100px;z-index:2;pointer-events:none;}
+      animation:orbTwk 5s ease-in-out infinite alternate;}
+    @keyframes orbTwk{0%{opacity:.45}100%{opacity:.9}}
+    .orbit-globe{position:absolute;left:50%;top:95%;width:340px;height:340px;margin:-170px 0 0 -170px;z-index:2;pointer-events:none;}
     .orbit-globe svg{width:100%;height:100%;overflow:visible;}
-    .orbit-wheel{position:absolute;left:50%;top:60%;width:0;height:0;z-index:3;}
-    .orbit-card{position:absolute;left:-33px;top:-40px;width:66px;height:80px;border-radius:16px;
-      display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;
-      background:linear-gradient(158deg,rgba(38,52,92,.94),rgba(9,14,30,.96));
-      border:1px solid rgba(120,150,235,.34);
-      box-shadow:0 12px 26px -8px rgba(0,0,0,.7),inset 0 1px 0 rgba(255,255,255,.1);
+    .orb-spin{transform-origin:120px 120px;animation:orbGlobe 90s linear infinite;}
+    @keyframes orbGlobe{to{transform:rotate(-360deg);}}
+    .orbit-wheel{position:absolute;left:50%;top:95%;width:0;height:0;z-index:3;}
+    .orbit-card{position:absolute;left:-33px;top:-39px;width:66px;height:78px;border-radius:18px;
+      display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;
+      background:linear-gradient(160deg, rgba(30,37,54,.66), rgba(9,12,22,.78));
+      backdrop-filter:blur(9px) saturate(140%);-webkit-backdrop-filter:blur(9px) saturate(140%);
+      border:.5px solid rgba(255,255,255,.16);
+      box-shadow:0 16px 34px -12px rgba(0,0,0,.8), inset 0 .5px 0 rgba(255,255,255,.18);
       cursor:pointer;will-change:transform,opacity;}
-    .orbit-card .oc-emoji{font-size:1.6rem;line-height:1;filter:drop-shadow(0 2px 3px rgba(0,0,0,.5));}
-    .orbit-card .oc-name{font:700 .5rem/1.12 var(--fd);color:#d6e3ff;text-align:center;letter-spacing:.01em;padding:0 3px;}
-    .orbit-card .oc-dot{position:absolute;top:6px;right:7px;width:5px;height:5px;border-radius:50%;}
-    .orbit-hint{position:absolute;bottom:16px;left:0;right:0;text-align:center;z-index:6;pointer-events:none;
-      font:600 .56rem/1 var(--f);color:rgba(200,220,255,.45);letter-spacing:.04em;}
+    .orbit-card .oc-i{font-size:1.42rem;line-height:1;color:rgba(255,255,255,.96);}
+    .orbit-card.soon .oc-i{color:rgba(255,255,255,.5);}
+    .orbit-card .oc-name{font:590 .47rem/1.1 var(--f);color:rgba(255,255,255,.6);text-align:center;
+      letter-spacing:.02em;max-width:60px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .orbit-card .oc-live{position:absolute;top:8px;right:8px;width:5px;height:5px;border-radius:50%;
+      background:#30d158;box-shadow:0 0 6px rgba(48,209,88,.9);}
+    .orbit-hint{position:absolute;bottom:calc(env(safe-area-inset-bottom,0px) + 14px);left:0;right:0;text-align:center;
+      z-index:6;pointer-events:none;font:590 .58rem/1 var(--f);color:rgba(200,220,255,.4);letter-spacing:.03em;}
   </style>
   <div class="orbit-hero" id="orbit-hero">
     <div class="orbit-stars" id="orbit-stars"></div>
-    <div class="orbit-cap">Intelligence Modules<small>The world, in one dashboard</small></div>
     <div class="orbit-wheel" id="orbit-wheel"></div>
     <div class="orbit-globe" id="orbit-globe">
-        <svg viewBox="0 0 200 200" aria-hidden="true">
+        <svg viewBox="0 0 240 240" aria-hidden="true">
           <defs>
-            <radialGradient id="orbOcean" cx="42%" cy="36%" r="70%"><stop offset="0" stop-color="#1aa6c4"/><stop offset=".5" stop-color="#0c5e78"/><stop offset="1" stop-color="#04222e"/></radialGradient>
+            <radialGradient id="orbSea" cx="37%" cy="30%" r="74%">
+              <stop offset="0" stop-color="#4bb4dd"/><stop offset="42%" stop-color="#177293"/><stop offset="100%" stop-color="#05202e"/>
+            </radialGradient>
+            <radialGradient id="orbShade" cx="72%" cy="76%" r="72%">
+              <stop offset="0" stop-color="#000" stop-opacity=".55"/><stop offset="62%" stop-color="#000" stop-opacity="0"/>
+            </radialGradient>
+            <radialGradient id="orbAtm" cx="50%" cy="50%" r="50%">
+              <stop offset="70%" stop-color="#28b6f0" stop-opacity="0"/><stop offset="88%" stop-color="#28b6f0" stop-opacity=".42"/><stop offset="100%" stop-color="#28b6f0" stop-opacity="0"/>
+            </radialGradient>
+            <clipPath id="orbClip"><circle cx="120" cy="120" r="96"/></clipPath>
           </defs>
-          <circle cx="100" cy="100" r="70" fill="url(#orbOcean)"/>
-          <g fill="#2f7d52" fill-opacity=".9">
-            <path d="M70 62 q16 -12 30 -4 q12 7 4 18 q-9 14 -25 11 q-18 -5 -9 -25 z"/>
-            <path d="M124 80 q14 2 16 16 q1 14 -14 16 q-16 1 -16 -14 q0 -16 14 -18 z"/>
-            <path d="M62 118 q18 -7 25 7 q5 14 -11 20 q-18 5 -23 -11 q-3 -12 9 -16 z"/>
-            <path d="M108 136 q16 -5 20 9 q3 14 -13 16 q-14 1 -16 -11 q-1 -10 9 -14 z"/>
+          <circle cx="120" cy="120" r="118" fill="url(#orbAtm)"/>
+          <circle cx="120" cy="120" r="96" fill="url(#orbSea)"/>
+          <g clip-path="url(#orbClip)">
+            <g class="orb-spin">
+              <g fill="#2f9068" fill-opacity=".82">
+                <path d="M78 60 q22 -16 40 -5 q16 9 6 25 q-12 19 -34 15 q-24 -6 -12 -34 z"/>
+                <path d="M150 92 q18 3 20 21 q1 18 -18 20 q-21 1 -21 -18 q0 -21 19 -23 z"/>
+                <path d="M64 140 q24 -9 33 9 q7 19 -14 27 q-24 6 -31 -14 q-4 -16 12 -22 z"/>
+                <path d="M132 156 q21 -6 26 12 q4 18 -17 21 q-19 1 -21 -14 q-1 -13 12 -19 z"/>
+                <path d="M170 138 q14 0 14 14 q-1 13 -16 12 q-13 -3 -10 -16 q1 -10 12 -10 z"/>
+              </g>
+              <g stroke="rgba(190,240,255,.14)" stroke-width="1" fill="none">
+                <ellipse cx="120" cy="120" rx="96" ry="32"/><ellipse cx="120" cy="120" rx="96" ry="64"/>
+                <line x1="24" y1="120" x2="216" y2="120"/><line x1="120" y1="24" x2="120" y2="216"/>
+              </g>
+            </g>
           </g>
-          <g stroke="rgba(190,243,255,.28)" stroke-width=".8" fill="none">
-            <circle cx="100" cy="100" r="70"/>
-            <ellipse cx="100" cy="100" rx="70" ry="24"/><ellipse cx="100" cy="100" rx="70" ry="48"/>
-            <ellipse cx="100" cy="100" rx="24" ry="70"/><ellipse cx="100" cy="100" rx="48" ry="70"/>
-          </g>
-          <circle cx="100" cy="100" r="70" fill="none" stroke="rgba(14,183,214,.6)" stroke-width="1.4"/>
+          <circle cx="120" cy="120" r="96" fill="url(#orbShade)"/>
+          <ellipse cx="92" cy="82" rx="38" ry="22" fill="#fff" opacity=".07"/>
+          <circle cx="120" cy="120" r="96" fill="none" stroke="rgba(150,220,255,.5)" stroke-width="1"/>
         </svg>
     </div>
-    <div class="orbit-hint">↔ drag to rotate · tap a module</div>
+    <div class="orbit-hint">Drag to explore · tap a module</div>
   </div>
   <script>
     // ── Intelligence Modules registry ──
     const MODULES = [
-      {key:'news',      name:'News',        emoji:'📰', status:'live', feeds:['Top Stories','Local','National','Global','Bytes','Trending']},
-      {key:'markets',   name:'Markets',     emoji:'📈', status:'live', feeds:['Stocks','Crypto','Metals','Commodities','Bond Yields','Forex','Sectors']},
-      {key:'weather',   name:'Weather',     emoji:'🌦️', status:'soon', feeds:['Forecast','Radar','Alerts','UV Index','Air Quality']},
-      {key:'dictionary',name:'Dictionary',  emoji:'📖', status:'live', feeds:['Definitions','Phonetics','Examples','Word of the Day']},
-      {key:'earth',     name:'Earth',       emoji:'🌍', status:'soon', feeds:['Earthquakes','Volcanoes','Tsunami','Hurricanes','Wildfires','Floods','Air Quality','Sea Level','Lightning','UV Index']},
-      {key:'space',     name:'Space',       emoji:'🛰️', status:'soon', feeds:['ISS Live','Satellite Tracker','Rocket Launches','Solar Storms','Aurora','Meteor Showers','Near-Earth Objects','Moon Phase','Planet Positions']},
-      {key:'traffic',   name:'Traffic',     emoji:'🚦', status:'soon', feeds:['Live Traffic','Accidents','Road Closures','Metro','Train Status','Bus Tracking']},
-      {key:'aviation',  name:'Aviation',    emoji:'✈️', status:'soon', feeds:['Live Flights','Airport Delays','Airline Performance','Aircraft Tracker','Airport Weather']},
-      {key:'marine',    name:'Marine',      emoji:'🚢', status:'soon', feeds:['Ships','Ports','Cargo','Oil Tankers','Fishing Zones','Ocean Routes']},
-      {key:'energy',    name:'Energy',      emoji:'⚡', status:'soon', feeds:['Electricity Demand','Grid Status','Renewable %','Solar','Wind','Nuclear','Gas Prices']},
-      {key:'water',     name:'Water',       emoji:'💧', status:'soon', feeds:['Reservoir Levels','River Levels','Dam Levels','Rainfall','Water Quality']},
-      {key:'industry',  name:'Industry',    emoji:'🏭', status:'soon', feeds:['Manufacturing Index','Supply Chain','Factory Output','Shipping Cost','Container Rates']},
-      {key:'agri',      name:'Agriculture', emoji:'🌾', status:'soon', feeds:['Crop Prices','Crop Calendar','Soil Moisture','Irrigation','Pest Alerts','Fertilizer Prices']},
-      {key:'sports',    name:'Sports',      emoji:'⚽', status:'soon', feeds:['Cricket','Football','Basketball','Tennis','Formula 1','Live Scores','Standings','Player Stats']},
-      {key:'gaming',    name:'Gaming',      emoji:'🎮', status:'soon', feeds:['Steam Charts','Game Releases','Esports','Twitch Trends','Top Games']},
-      {key:'ent',       name:'Entertainment',emoji:'🎬',status:'soon', feeds:['Movies','TV Shows','OTT','Music Charts','Box Office','Celebrity Calendar']},
-      {key:'education', name:'Education',   emoji:'📚', status:'soon', feeds:['Exams','Scholarships','University Rankings','Research Papers','Courses','Books']},
-      {key:'jobs',      name:'Jobs',        emoji:'💼', status:'soon', feeds:['Job Search','Remote Jobs','Salaries','Hiring Trends','Skills','Resume']},
-      {key:'dev',       name:'Developers',  emoji:'💻', status:'soon', feeds:['GitHub Trending','New Releases','Languages','APIs','StackOverflow','Hacker News']},
-      {key:'ai',        name:'AI Hub',      emoji:'🤖', status:'soon', feeds:['New Models','Benchmarks','Papers','HuggingFace','Leaderboards','AI Tools','GPU Prices']},
-      {key:'research',  name:'Research',    emoji:'🔬', status:'soon', feeds:['arXiv','Nature','Science','Patents','Clinical Trials','White Papers']},
-      {key:'health',    name:'Health',      emoji:'🏥', status:'soon', feeds:['Disease Outbreaks','Air Quality','Hospitals','Medicine Availability','Vaccination']},
-      {key:'elections', name:'Elections',   emoji:'🗳️', status:'soon', feeds:['Polls','Results','Seat Count','Maps','Trends']},
-      {key:'economy',   name:'Economy',     emoji:'💰', status:'soon', feeds:['Inflation','GDP','Interest Rates','CPI','Employment','Trade Balance','PMI']},
-      {key:'gov',       name:'Government',  emoji:'🏛️', status:'soon', feeds:['Schemes','Laws','Policies','Notifications','Budget','Tenders']},
-      {key:'shopping',  name:'Shopping',    emoji:'🛍️', status:'soon', feeds:['Product Prices','Price Drops','Deals','Coupons','E-commerce Trends']},
-      {key:'internet',  name:'Internet',    emoji:'🌐', status:'soon', feeds:['Website Status','Internet Outages','Domain Trends','DNS','ISP Status']},
-      {key:'cyber',     name:'Cybersecurity',emoji:'🔐',status:'soon', feeds:['CVEs','Threat Intelligence','Malware','Ransomware','Security Alerts','Data Breaches']},
-      {key:'events',    name:'Events',      emoji:'📅', status:'soon', feeds:['Conferences','Startup Events','Festivals','Concerts','Hackathons','Meetups']},
+      {key:'news',      name:'News',        icon:'fa-newspaper',        status:'live', feeds:['Top Stories','Local','National','Global','Bytes','Trending']},
+      {key:'markets',   name:'Markets',     icon:'fa-arrow-trend-up',   status:'live', feeds:['Stocks','Crypto','Metals','Commodities','Bond Yields','Forex','Sectors']},
+      {key:'weather',   name:'Weather',     icon:'fa-cloud-sun',        status:'soon', feeds:['Forecast','Radar','Alerts','UV Index','Air Quality']},
+      {key:'dictionary',name:'Dictionary',  icon:'fa-book-open',        status:'live', feeds:['Definitions','Phonetics','Examples','Word of the Day']},
+      {key:'earth',     name:'Earth',       icon:'fa-earth-americas',   status:'soon', feeds:['Earthquakes','Volcanoes','Tsunami','Hurricanes','Wildfires','Floods','Air Quality','Sea Level','Lightning','UV Index']},
+      {key:'space',     name:'Space',       icon:'fa-satellite',        status:'soon', feeds:['ISS Live','Satellite Tracker','Rocket Launches','Solar Storms','Aurora','Meteor Showers','Near-Earth Objects','Moon Phase','Planet Positions']},
+      {key:'traffic',   name:'Traffic',     icon:'fa-traffic-light',    status:'soon', feeds:['Live Traffic','Accidents','Road Closures','Metro','Train Status','Bus Tracking']},
+      {key:'aviation',  name:'Aviation',    icon:'fa-plane-up',         status:'soon', feeds:['Live Flights','Airport Delays','Airline Performance','Aircraft Tracker','Airport Weather']},
+      {key:'marine',    name:'Marine',      icon:'fa-ship',             status:'soon', feeds:['Ships','Ports','Cargo','Oil Tankers','Fishing Zones','Ocean Routes']},
+      {key:'energy',    name:'Energy',      icon:'fa-bolt',             status:'soon', feeds:['Electricity Demand','Grid Status','Renewable %','Solar','Wind','Nuclear','Gas Prices']},
+      {key:'water',     name:'Water',       icon:'fa-droplet',          status:'soon', feeds:['Reservoir Levels','River Levels','Dam Levels','Rainfall','Water Quality']},
+      {key:'industry',  name:'Industry',    icon:'fa-industry',         status:'soon', feeds:['Manufacturing Index','Supply Chain','Factory Output','Shipping Cost','Container Rates']},
+      {key:'agri',      name:'Agriculture', icon:'fa-wheat-awn',        status:'soon', feeds:['Crop Prices','Crop Calendar','Soil Moisture','Irrigation','Pest Alerts','Fertilizer Prices']},
+      {key:'sports',    name:'Sports',      icon:'fa-futbol',           status:'soon', feeds:['Cricket','Football','Basketball','Tennis','Formula 1','Live Scores','Standings','Player Stats']},
+      {key:'gaming',    name:'Gaming',      icon:'fa-gamepad',          status:'soon', feeds:['Steam Charts','Game Releases','Esports','Twitch Trends','Top Games']},
+      {key:'ent',       name:'Entertainment',icon:'fa-film',           status:'soon', feeds:['Movies','TV Shows','OTT','Music Charts','Box Office','Celebrity Calendar']},
+      {key:'education', name:'Education',   icon:'fa-graduation-cap',   status:'soon', feeds:['Exams','Scholarships','University Rankings','Research Papers','Courses','Books']},
+      {key:'jobs',      name:'Jobs',        icon:'fa-briefcase',        status:'soon', feeds:['Job Search','Remote Jobs','Salaries','Hiring Trends','Skills','Resume']},
+      {key:'dev',       name:'Developers',  icon:'fa-code',             status:'soon', feeds:['GitHub Trending','New Releases','Languages','APIs','StackOverflow','Hacker News']},
+      {key:'ai',        name:'AI Hub',      icon:'fa-microchip',        status:'soon', feeds:['New Models','Benchmarks','Papers','HuggingFace','Leaderboards','AI Tools','GPU Prices']},
+      {key:'research',  name:'Research',    icon:'fa-flask',            status:'soon', feeds:['arXiv','Nature','Science','Patents','Clinical Trials','White Papers']},
+      {key:'health',    name:'Health',      icon:'fa-heart-pulse',      status:'soon', feeds:['Disease Outbreaks','Air Quality','Hospitals','Medicine Availability','Vaccination']},
+      {key:'elections', name:'Elections',   icon:'fa-check-to-slot',    status:'soon', feeds:['Polls','Results','Seat Count','Maps','Trends']},
+      {key:'economy',   name:'Economy',     icon:'fa-chart-pie',        status:'soon', feeds:['Inflation','GDP','Interest Rates','CPI','Employment','Trade Balance','PMI']},
+      {key:'gov',       name:'Government',  icon:'fa-landmark',         status:'soon', feeds:['Schemes','Laws','Policies','Notifications','Budget','Tenders']},
+      {key:'shopping',  name:'Shopping',    icon:'fa-bag-shopping',     status:'soon', feeds:['Product Prices','Price Drops','Deals','Coupons','E-commerce Trends']},
+      {key:'internet',  name:'Internet',    icon:'fa-wifi',             status:'soon', feeds:['Website Status','Internet Outages','Domain Trends','DNS','ISP Status']},
+      {key:'cyber',     name:'Cybersecurity',icon:'fa-shield-halved',  status:'soon', feeds:['CVEs','Threat Intelligence','Malware','Ransomware','Security Alerts','Data Breaches']},
+      {key:'events',    name:'Events',      icon:'fa-calendar-day',     status:'soon', feeds:['Conferences','Startup Events','Festivals','Concerts','Hackathons','Meetups']},
     ];
     const MOD_BY_KEY = {}; MODULES.forEach(m => MOD_BY_KEY[m.key] = m);
     (function(){
@@ -3166,35 +3183,33 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
           hero=document.getElementById('orbit-hero'), stars=document.getElementById('orbit-stars');
       if(!wheel) return;
       // starfield
-      if(stars){ var sh=[]; for(var s=0;s<150;s++){ var x=Math.floor(Math.random()*760)-380, y=Math.floor(Math.random()*760)-60,
-        b=(Math.random()*0.7+0.3).toFixed(2); sh.push(x+'px '+y+'px rgba(255,255,255,'+b+')'); } stars.style.boxShadow=sh.join(','); }
-      // fan radius scales down as more modules are added so the arc stays readable
-      var N=MODULES.length, step=360/N, Rw=Math.max(150, Math.min(210, 150 + N*2));
-      var cards=[];
+      if(stars){ var sh=[]; for(var s=0;s<120;s++){ var x=Math.floor(Math.random()*600), y=Math.floor(Math.random()*560),
+        b=(Math.random()*0.55+0.2).toFixed(2); sh.push(x+'px '+y+'px rgba(255,255,255,'+b+')'); } stars.style.boxShadow=sh.join(','); }
+      var N=MODULES.length, step=360/N, Rw=210, cards=[];
       MODULES.forEach(function(m,i){
-        var el=document.createElement('div'); el.className='orbit-card'; el.dataset.a=i*step;
+        var el=document.createElement('div'); el.className='orbit-card'+(m.status==='live'?'':' soon');
+        el.dataset.a=i*step;
         el.addEventListener('click', function(){ if(!window._orbDragged) openModule(m.key); });
-        var col=m.status==='live'?'#33d17a':'#f5b301';
-        el.innerHTML='<span class="oc-dot" style="background:'+col+';box-shadow:0 0 6px '+col+'"></span>'+
-          '<span class="oc-emoji">'+m.emoji+'</span><span class="oc-name">'+m.name+'</span>';
-        el.style.transform='rotate('+(i*step)+'deg) translateY(-'+Rw+'px)';
+        el.innerHTML=(m.status==='live'?'<span class="oc-live"></span>':'')+
+          '<i class="fa-solid '+m.icon+' oc-i"></i><span class="oc-name">'+m.name+'</span>';
         wheel.appendChild(el); cards.push(el);
       });
-      var spin=0,gspin=0,dragging=false,startX=0,startY=0,base=0;
+      var spin=0,dragging=false,startX=0,startY=0,base=0;
       window._orbDragged=false;
       function norm(d){ d=d%360; if(d>180)d-=360; if(d<-180)d+=360; return d; }
       function render(){
-        wheel.style.transform='rotate('+spin+'deg)';
-        if(globe) globe.style.transform='rotate('+gspin+'deg)';
         for(var i=0;i<cards.length;i++){
-          var ang=Math.abs(norm(parseFloat(cards[i].dataset.a)+spin));   // 0 = top of the fan
-          var op = ang>=128 ? 0 : (ang<=74 ? 1 : 1-(ang-74)/54);
+          var t=parseFloat(cards[i].dataset.a)+spin, ang=Math.abs(norm(t));
+          // tight premium fan: ~5 cards prominent up top, edges recede & fade out
+          var op = ang>=66 ? 0 : (ang<=26 ? 1 : 1-(ang-26)/40);
+          var sc = 1 - Math.min(ang,64)/64*0.26;
+          cards[i].style.transform='rotate('+t.toFixed(2)+'deg) translateY(-'+Rw+'px) scale('+sc.toFixed(3)+')';
           cards[i].style.opacity=op.toFixed(2);
-          cards[i].style.zIndex = op<=0 ? -1 : Math.round(300-ang);
-          cards[i].style.pointerEvents = op<0.15 ? 'none' : 'auto';
+          cards[i].style.zIndex = op<=0 ? -1 : Math.round(200-ang);
+          cards[i].style.pointerEvents = op<0.2 ? 'none' : 'auto';
         }
       }
-      function loop(){ if(hero && hero.offsetParent!==null){ if(!dragging) spin+=0.05; gspin-=0.04; render(); } requestAnimationFrame(loop); }
+      function loop(){ if(hero && hero.offsetParent!==null){ if(!dragging) spin+=0.028; render(); } requestAnimationFrame(loop); }
       render(); requestAnimationFrame(loop);
       hero.addEventListener('pointerdown', function(e){ dragging=true; window._orbDragged=false; startX=e.clientX; startY=e.clientY; base=spin; });
       window.addEventListener('pointermove', function(e){ if(!dragging) return; var dx=e.clientX-startX, dy=e.clientY-startY;
@@ -3203,7 +3218,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
     })();
     function openModule(key){
       var m=MOD_BY_KEY[key]; if(!m) return;
-      document.getElementById('mod-ico').textContent=m.emoji;
+      document.getElementById('mod-ico').innerHTML='<i class="fa-solid '+m.icon+'"></i>';
       document.getElementById('mod-title').textContent=m.name;
       document.getElementById('mod-sub').innerHTML=(m.status==='live'
         ? '<span style="color:#33d17a">● Live</span>' : '<span style="color:#f5b301">● Coming soon</span>')+' · '+m.feeds.length+' data feeds';
@@ -7172,7 +7187,7 @@ function renderMetals(metals) {
           const spark = d.spark ? miniSpark(d.spark, mktColor(pct)) : '';
           return `<div class="mkt-metals-tile tap" onclick="openMarketDetail('metals','${m.key}','${m.label}')">
             <div class="mkt-tile-spark">${spark}</div>
-            <div class="mkt-tile-name">${m.emoji} ${m.label.toUpperCase()}</div>
+            <div class="mkt-tile-name">${m.label.toUpperCase()}</div>
             ${d.price_inr_10g ? `<div class="mkt-tile-price">₹${fmtNum(d.price_inr_10g)}<span style="font-size:0.6rem;color:var(--t3);font-weight:500"> /10g</span></div>`
               : `<div class="mkt-tile-price">$${fmtNum(d.price_usd_oz || 0)}<span style="font-size:0.6rem;color:var(--t3);font-weight:500"> /oz</span></div>`}
             ${pct !== 0 ? `<div class="mkt-tile-change ${mktCls(pct)}">${mktArrow(pct)} ${Math.abs(pct).toFixed(2)}%</div>` : ''}
@@ -7209,7 +7224,7 @@ function renderCommodities(comm) {
           const spark = d.spark ? miniSpark(d.spark, mktColor(pct)) : '';
           return `<div class="mkt-metals-tile tap" onclick="openMarketDetail('commodities','${m.key}','${m.label}')">
             <div class="mkt-tile-spark">${spark}</div>
-            <div class="mkt-tile-name">${m.emoji} ${m.label.toUpperCase()}</div>
+            <div class="mkt-tile-name">${m.label.toUpperCase()}</div>
             <div class="mkt-tile-price">$${fmtNum(d.price || 0)}<span style="font-size:0.6rem;color:var(--t3);font-weight:500"> ${m.unit}</span></div>
             ${pct !== 0 ? `<div class="mkt-tile-change ${mktCls(pct)}">${mktArrow(pct)} ${Math.abs(pct).toFixed(2)}%</div>` : ''}
           </div>`;
