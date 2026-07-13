@@ -3019,6 +3019,13 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   .mod-soon{padding:14px 16px;border-radius:14px;background:rgba(245,179,1,.09);border:1px solid rgba(245,179,1,.28);
     color:#f2d79a;font-size:.8rem;line-height:1.55;}
   .mod-feed-hdr{margin:18px 2px 11px;font:800 .64rem/1 var(--fd);letter-spacing:.18em;text-transform:uppercase;color:var(--t3);}
+  .mod-caps{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .mod-cap{display:flex;align-items:center;gap:10px;padding:12px;border-radius:14px;
+    background:linear-gradient(160deg,rgba(255,255,255,.05),rgba(255,255,255,.02));border:1px solid rgba(120,150,235,.14);}
+  .mod-cap i{width:18px;flex-shrink:0;text-align:center;color:#0EB7D6;font-size:.9rem;}
+  .mod-cap span{font:600 .74rem/1.15 var(--f);color:var(--t1);}
+  .mod-cap.off{opacity:.45;}
+  .mod-cap.off i{color:var(--t3);}
   .mod-feedgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
   .mod-feed{padding:14px 12px;border-radius:14px;color:var(--t1);font:600 .82rem/1.25 var(--f);
     background:linear-gradient(160deg,rgba(255,255,255,.05),rgba(255,255,255,.02));border:1px solid rgba(120,150,235,.16);
@@ -3036,7 +3043,9 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   </div>
   <div class="mc-body">
     <div id="mod-action"></div>
-    <div class="mod-feed-hdr">Data feeds</div>
+    <div class="mod-feed-hdr">Module capabilities</div>
+    <div class="mod-caps" id="mod-caps"></div>
+    <div class="mod-feed-hdr">Live data feeds</div>
     <div class="mod-feedgrid" id="mod-feeds"></div>
   </div>
 </div>
@@ -3216,15 +3225,25 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
         if(Math.abs(dx)>5) window._orbDragged=true; if(Math.abs(dx)>=Math.abs(dy)) spin=base+dx*0.4; });
       window.addEventListener('pointerup', function(){ dragging=false; setTimeout(function(){ window._orbDragged=false; },40); });
     })();
+    // Every Intelligence Module is a self-contained ecosystem with the same pillars.
+    var MOD_CAPS=[
+      ['fa-satellite-dish','Live data feeds'],['fa-gauge-high','Dashboards & graphics'],
+      ['fa-map-location-dot','Maps & charts'],['fa-bell','Alerts'],
+      ['fa-newspaper','Related news'],['fa-clock-rotate-left','Historical trends'],
+      ['fa-wand-magic-sparkles','Sherr AI insights'],['fa-magnifying-glass','Search & filters']
+    ];
     function openModule(key){
       var m=MOD_BY_KEY[key]; if(!m) return;
       document.getElementById('mod-ico').innerHTML='<i class="fa-solid '+m.icon+'"></i>';
       document.getElementById('mod-title').textContent=m.name;
       document.getElementById('mod-sub').innerHTML=(m.status==='live'
-        ? '<span style="color:#33d17a">● Live</span>' : '<span style="color:#f5b301">● Coming soon</span>')+' · '+m.feeds.length+' data feeds';
+        ? '<span style="color:#33d17a">● Live</span>' : '<span style="color:#f5b301">● Coming soon</span>')+' · self-contained intelligence module';
       document.getElementById('mod-action').innerHTML = m.status==='live'
         ? '<button class="mod-open" onclick="openModuleLive(\''+key+'\')">Open live dashboard <i class="fa-solid fa-arrow-right"></i></button>'
-        : '<div class="mod-soon"><b>Intelligence module — wiring live feeds.</b><br>This dashboard will stream the data feeds below with charts, maps, alerts &amp; Sherr AI insights.</div>';
+        : '<div class="mod-soon"><b>Ecosystem in build.</b><br>Live feeds, dashboards, maps, alerts, related news, historical trends and Sherr AI insights are being wired into this module.</div>';
+      var off = m.status==='live' ? '' : ' off';
+      document.getElementById('mod-caps').innerHTML=MOD_CAPS.map(function(c){
+        return '<div class="mod-cap'+off+'"><i class="fa-solid '+c[0]+'"></i><span>'+c[1]+'</span></div>'; }).join('');
       document.getElementById('mod-feeds').innerHTML=m.feeds.map(function(f){ return '<div class="mod-feed">'+f+'</div>'; }).join('');
       document.getElementById('module-overlay').classList.add('open');
     }
