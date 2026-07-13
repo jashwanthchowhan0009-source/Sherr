@@ -3091,13 +3091,20 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
     .orbit-stars{position:absolute;top:0;left:0;width:1px;height:1px;border-radius:50%;background:#fff;
       animation:orbTwk 5s ease-in-out infinite alternate;}
     @keyframes orbTwk{0%{opacity:.45}100%{opacity:.9}}
-    .orbit-globe{position:absolute;left:50%;top:95%;width:340px;height:340px;margin:-170px 0 0 -170px;z-index:2;pointer-events:none;}
+    .orbit-back{position:absolute;top:14px;left:14px;z-index:8;width:40px;height:40px;border-radius:50%;
+      display:flex;align-items:center;justify-content:center;font-size:1rem;color:#eaf2ff;cursor:pointer;
+      background:rgba(255,255,255,.08);border:.5px solid rgba(255,255,255,.2);
+      backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);}
+    .orbit-back:active{transform:scale(.9);}
+    /* globe sits low so only ~1/3 (a horizon sliver) is visible */
+    .orbit-globe{position:absolute;left:50%;top:112%;width:440px;height:440px;margin:-220px 0 0 -220px;z-index:2;pointer-events:none;}
     .orbit-globe svg{width:100%;height:100%;overflow:visible;}
     .orb-spin{transform-origin:120px 120px;animation:orbGlobe 90s linear infinite;}
     @keyframes orbGlobe{to{transform:rotate(-360deg);}}
-    .orbit-wheel{position:absolute;left:50%;top:95%;width:0;height:0;z-index:3;}
-    .orbit-card{position:absolute;left:-33px;top:-39px;width:66px;height:78px;border-radius:18px;
-      display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;
+    .orbit-wheel{position:absolute;left:50%;top:112%;width:0;height:0;z-index:3;}
+    /* portrait rectangular module cards */
+    .orbit-card{position:absolute;left:-30px;top:-46px;width:60px;height:92px;border-radius:13px;
+      display:flex;flex-direction:column;align-items:center;justify-content:center;gap:11px;
       background:linear-gradient(160deg, rgba(30,37,54,.66), rgba(9,12,22,.78));
       backdrop-filter:blur(9px) saturate(140%);-webkit-backdrop-filter:blur(9px) saturate(140%);
       border:.5px solid rgba(255,255,255,.16);
@@ -3113,6 +3120,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
       z-index:6;pointer-events:none;font:590 .58rem/1 var(--f);color:rgba(200,220,255,.4);letter-spacing:.03em;}
   </style>
   <div class="orbit-hero" id="orbit-hero">
+    <div class="orbit-back" onclick="exitExplore()" role="button" aria-label="Back"><i class="fa-solid fa-chevron-left"></i></div>
     <div class="orbit-stars" id="orbit-stars"></div>
     <div class="orbit-wheel" id="orbit-wheel"></div>
     <div class="orbit-globe" id="orbit-globe">
@@ -3194,10 +3202,13 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
       // starfield
       if(stars){ var sh=[]; for(var s=0;s<120;s++){ var x=Math.floor(Math.random()*600), y=Math.floor(Math.random()*560),
         b=(Math.random()*0.55+0.2).toFixed(2); sh.push(x+'px '+y+'px rgba(255,255,255,'+b+')'); } stars.style.boxShadow=sh.join(','); }
-      var N=MODULES.length, step=360/N, Rw=210, cards=[];
+      var N=MODULES.length, step=360/N, Rw=235, cards=[];
       MODULES.forEach(function(m,i){
         var el=document.createElement('div'); el.className='orbit-card'+(m.status==='live'?'':' soon');
         el.dataset.a=i*step;
+        // each module gets its own muted, premium gradient (Panora-grade glance card)
+        var h=Math.round(i*360/N);
+        el.style.background='linear-gradient(152deg, hsla('+h+',34%,32%,.9) 0%, hsla('+((h+46)%360)+',40%,13%,.94) 62%, hsla('+((h+70)%360)+',44%,8%,.96) 100%)';
         el.addEventListener('click', function(){ if(!window._orbDragged) openModule(m.key); });
         el.innerHTML=(m.status==='live'?'<span class="oc-live"></span>':'')+
           '<i class="fa-solid '+m.icon+' oc-i"></i><span class="oc-name">'+m.name+'</span>';
@@ -3254,6 +3265,16 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
       else if(key==='dictionary'){ if(window.openDictionary) openDictionary(); }
       else if(key==='markets'){ if(window.openMktCat) openMktCat('stocks'); }
     }
+    // Explore is an immersive full-screen console: hide the bottom nav here; the
+    // back button is the only way out.
+    function exitExplore(){ if(window.navTo) navTo('home'); }
+    (function(){
+      var ev=document.getElementById('v-explore');
+      function sync(){ if(!ev) return; var a=ev.classList.contains('active');
+        var n=document.querySelector('nav'), h=document.querySelector('header');
+        if(n) n.style.display=a?'none':''; if(h) h.style.display=a?'none':''; }
+      if(ev){ new MutationObserver(sync).observe(ev,{attributes:true,attributeFilter:['class']}); sync(); }
+    })();
   </script>
 
   <!-- ════════ ATLAS — futuristic global HUD ════════ -->
