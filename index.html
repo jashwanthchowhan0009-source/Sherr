@@ -3180,6 +3180,40 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   <div class="mc-body"><div class="mc-grid" id="mc-grid"><div class="mc-empty">Loading…</div></div></div>
 </div>
 
+<!-- INTELLIGENCE MODULE OVERLAY -->
+<style>
+  #module-overlay{position:absolute;inset:0;z-index:709;background:var(--bg);
+    transform:translateY(100%);transition:transform .4s var(--snap);display:flex;flex-direction:column;overflow:hidden;}
+  #module-overlay.open{transform:translateY(0);}
+  .mod-ico{width:46px;height:46px;border-radius:13px;flex-shrink:0;display:flex;align-items:center;justify-content:center;
+    font-size:1.6rem;background:linear-gradient(158deg,rgba(34,48,84,.92),rgba(10,16,34,.96));border:1px solid rgba(120,150,235,.32);}
+  .mod-open{width:100%;padding:14px;border:none;border-radius:14px;background:linear-gradient(90deg,#0a6f86,#0EB7D6);
+    color:#04141b;font:800 .9rem/1 var(--fd);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;}
+  .mod-soon{padding:14px 16px;border-radius:14px;background:rgba(245,179,1,.09);border:1px solid rgba(245,179,1,.28);
+    color:#f2d79a;font-size:.8rem;line-height:1.55;}
+  .mod-feed-hdr{margin:18px 2px 11px;font:800 .64rem/1 var(--fd);letter-spacing:.18em;text-transform:uppercase;color:var(--t3);}
+  .mod-feedgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .mod-feed{padding:14px 12px;border-radius:14px;color:var(--t1);font:600 .82rem/1.25 var(--f);
+    background:linear-gradient(160deg,rgba(255,255,255,.05),rgba(255,255,255,.02));border:1px solid rgba(120,150,235,.16);
+    display:flex;align-items:center;gap:8px;}
+  .mod-feed::before{content:"›";color:#0EB7D6;font-weight:800;font-size:1rem;}
+</style>
+<div id="module-overlay">
+  <div class="mc-head">
+    <div class="mc-back" onclick="closeModule()"><i class="fa-solid fa-chevron-left"></i></div>
+    <div class="mod-ico" id="mod-ico">🌍</div>
+    <div>
+      <div class="mc-title" id="mod-title">Module</div>
+      <div class="mc-sub" id="mod-sub"></div>
+    </div>
+  </div>
+  <div class="mc-body">
+    <div id="mod-action"></div>
+    <div class="mod-feed-hdr">Data feeds</div>
+    <div class="mod-feedgrid" id="mod-feeds"></div>
+  </div>
+</div>
+
 <!-- MARKET DETAIL OVERLAY -->
 <div id="market-overlay">
   <div class="ao-header">
@@ -3206,6 +3240,153 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
       <span class="tick-item" style="opacity:.55">● Live market data loading…</span>
     </div>
   </div>
+
+  <!-- ════════ INTELLIGENCE MODULES — rotating globe launcher ════════ -->
+  <style>
+    .orbit-hero{position:relative;height:360px;margin:6px 0 10px;overflow:hidden;border-radius:20px;
+      touch-action:pan-y;user-select:none;-webkit-user-select:none;
+      background:radial-gradient(120% 70% at 50% 118%,rgba(24,48,104,.55),rgba(2,4,10,0) 60%),
+        radial-gradient(80% 60% at 60% 42%,rgba(30,52,120,.28),rgba(2,4,10,0) 70%),
+        linear-gradient(180deg,#02040a,#04060f 65%,#01030a);}
+    .orbit-stars{position:absolute;top:0;left:0;width:1px;height:1px;border-radius:50%;background:#fff;
+      animation:orbTwk 4s ease-in-out infinite alternate;}
+    @keyframes orbTwk{0%{opacity:.55}100%{opacity:1}}
+    .orbit-cap{position:absolute;top:12px;left:0;right:0;text-align:center;z-index:5;pointer-events:none;
+      font:800 .56rem/1 var(--fd);letter-spacing:.24em;text-transform:uppercase;color:rgba(14,183,214,.85);
+      text-shadow:0 0 14px rgba(14,183,214,.5);}
+    .orbit-cap small{display:block;margin-top:4px;font:600 .52rem/1 var(--f);letter-spacing:.06em;
+      text-transform:none;color:rgba(200,220,255,.45);}
+    .orbit-stage{position:absolute;inset:0;perspective:1000px;}
+    .orbit-globe{position:absolute;left:50%;top:52%;width:150px;height:150px;transform:translate(-50%,-50%);z-index:1;}
+    .orbit-globe svg{width:100%;height:100%;overflow:visible;}
+    .orbit-ring{position:absolute;left:50%;top:52%;width:0;height:0;transform-style:preserve-3d;z-index:2;}
+    .orbit-card{position:absolute;left:-34px;top:-43px;width:68px;height:86px;border-radius:15px;
+      backface-visibility:hidden;-webkit-backface-visibility:hidden;
+      display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;
+      background:linear-gradient(158deg,rgba(34,48,84,.9),rgba(10,16,34,.94));
+      border:1px solid rgba(120,150,235,.3);
+      box-shadow:0 10px 22px -8px rgba(0,0,0,.65),inset 0 1px 0 rgba(255,255,255,.09);cursor:pointer;}
+    .orbit-card .oc-emoji{font-size:1.55rem;line-height:1;filter:drop-shadow(0 2px 3px rgba(0,0,0,.5));}
+    .orbit-card .oc-name{font:700 .5rem/1.12 var(--fd);color:#d3e2ff;text-align:center;letter-spacing:.01em;padding:0 3px;}
+    .orbit-card .oc-dot{position:absolute;top:6px;right:7px;width:5px;height:5px;border-radius:50%;}
+    .orbit-hint{position:absolute;bottom:9px;left:0;right:0;text-align:center;z-index:5;pointer-events:none;
+      font:600 .54rem/1 var(--f);color:rgba(200,220,255,.4);letter-spacing:.04em;}
+  </style>
+  <div class="orbit-hero" id="orbit-hero">
+    <div class="orbit-stars" id="orbit-stars"></div>
+    <div class="orbit-cap">Intelligence Modules<small>The world, in one dashboard</small></div>
+    <div class="orbit-stage">
+      <div class="orbit-globe" id="orbit-globe">
+        <svg viewBox="0 0 200 200" aria-hidden="true">
+          <defs>
+            <radialGradient id="orbOcean" cx="42%" cy="36%" r="70%"><stop offset="0" stop-color="#1aa6c4"/><stop offset=".5" stop-color="#0c5e78"/><stop offset="1" stop-color="#04222e"/></radialGradient>
+          </defs>
+          <circle cx="100" cy="100" r="70" fill="url(#orbOcean)"/>
+          <g fill="#2f7d52" fill-opacity=".9">
+            <path d="M70 62 q16 -12 30 -4 q12 7 4 18 q-9 14 -25 11 q-18 -5 -9 -25 z"/>
+            <path d="M124 80 q14 2 16 16 q1 14 -14 16 q-16 1 -16 -14 q0 -16 14 -18 z"/>
+            <path d="M62 118 q18 -7 25 7 q5 14 -11 20 q-18 5 -23 -11 q-3 -12 9 -16 z"/>
+            <path d="M108 136 q16 -5 20 9 q3 14 -13 16 q-14 1 -16 -11 q-1 -10 9 -14 z"/>
+          </g>
+          <g stroke="rgba(190,243,255,.28)" stroke-width=".8" fill="none">
+            <circle cx="100" cy="100" r="70"/>
+            <ellipse cx="100" cy="100" rx="70" ry="24"/><ellipse cx="100" cy="100" rx="70" ry="48"/>
+            <ellipse cx="100" cy="100" rx="24" ry="70"/><ellipse cx="100" cy="100" rx="48" ry="70"/>
+          </g>
+          <circle cx="100" cy="100" r="70" fill="none" stroke="rgba(14,183,214,.6)" stroke-width="1.4"/>
+        </svg>
+      </div>
+      <div class="orbit-ring" id="orbit-ring"></div>
+    </div>
+    <div class="orbit-hint">↔ drag to rotate · tap a module</div>
+  </div>
+  <script>
+    // ── Intelligence Modules registry ──
+    const MODULES = [
+      {key:'news',      name:'News',        emoji:'📰', status:'live', feeds:['Top Stories','Local','National','Global','Bytes','Trending']},
+      {key:'markets',   name:'Markets',     emoji:'📈', status:'live', feeds:['Stocks','Crypto','Metals','Commodities','Bond Yields','Forex','Sectors']},
+      {key:'weather',   name:'Weather',     emoji:'🌦️', status:'live', feeds:['Forecast','Radar','Alerts','UV Index','Air Quality']},
+      {key:'dictionary',name:'Dictionary',  emoji:'📖', status:'live', feeds:['Definitions','Phonetics','Examples','Word of the Day']},
+      {key:'earth',     name:'Earth',       emoji:'🌍', status:'soon', feeds:['Earthquakes','Volcanoes','Tsunami','Hurricanes','Wildfires','Floods','Air Quality','Sea Level','Lightning','UV Index']},
+      {key:'space',     name:'Space',       emoji:'🛰️', status:'soon', feeds:['ISS Live','Satellite Tracker','Rocket Launches','Solar Storms','Aurora','Meteor Showers','Near-Earth Objects','Moon Phase','Planet Positions']},
+      {key:'traffic',   name:'Traffic',     emoji:'🚦', status:'soon', feeds:['Live Traffic','Accidents','Road Closures','Metro','Train Status','Bus Tracking']},
+      {key:'aviation',  name:'Aviation',    emoji:'✈️', status:'soon', feeds:['Live Flights','Airport Delays','Airline Performance','Aircraft Tracker','Airport Weather']},
+      {key:'marine',    name:'Marine',      emoji:'🚢', status:'soon', feeds:['Ships','Ports','Cargo','Oil Tankers','Fishing Zones','Ocean Routes']},
+      {key:'energy',    name:'Energy',      emoji:'⚡', status:'soon', feeds:['Electricity Demand','Grid Status','Renewable %','Solar','Wind','Nuclear','Gas Prices']},
+      {key:'water',     name:'Water',       emoji:'💧', status:'soon', feeds:['Reservoir Levels','River Levels','Dam Levels','Rainfall','Water Quality']},
+      {key:'industry',  name:'Industry',    emoji:'🏭', status:'soon', feeds:['Manufacturing Index','Supply Chain','Factory Output','Shipping Cost','Container Rates']},
+      {key:'agri',      name:'Agriculture', emoji:'🌾', status:'soon', feeds:['Crop Prices','Crop Calendar','Soil Moisture','Irrigation','Pest Alerts','Fertilizer Prices']},
+      {key:'sports',    name:'Sports',      emoji:'⚽', status:'soon', feeds:['Cricket','Football','Basketball','Tennis','Formula 1','Live Scores','Standings','Player Stats']},
+      {key:'gaming',    name:'Gaming',      emoji:'🎮', status:'soon', feeds:['Steam Charts','Game Releases','Esports','Twitch Trends','Top Games']},
+      {key:'ent',       name:'Entertainment',emoji:'🎬',status:'soon', feeds:['Movies','TV Shows','OTT','Music Charts','Box Office','Celebrity Calendar']},
+      {key:'education', name:'Education',   emoji:'📚', status:'soon', feeds:['Exams','Scholarships','University Rankings','Research Papers','Courses','Books']},
+      {key:'jobs',      name:'Jobs',        emoji:'💼', status:'soon', feeds:['Job Search','Remote Jobs','Salaries','Hiring Trends','Skills','Resume']},
+      {key:'dev',       name:'Developers',  emoji:'💻', status:'soon', feeds:['GitHub Trending','New Releases','Languages','APIs','StackOverflow','Hacker News']},
+      {key:'ai',        name:'AI Hub',      emoji:'🤖', status:'soon', feeds:['New Models','Benchmarks','Papers','HuggingFace','Leaderboards','AI Tools','GPU Prices']},
+      {key:'research',  name:'Research',    emoji:'🔬', status:'soon', feeds:['arXiv','Nature','Science','Patents','Clinical Trials','White Papers']},
+      {key:'health',    name:'Health',      emoji:'🏥', status:'soon', feeds:['Disease Outbreaks','Air Quality','Hospitals','Medicine Availability','Vaccination']},
+      {key:'elections', name:'Elections',   emoji:'🗳️', status:'soon', feeds:['Polls','Results','Seat Count','Maps','Trends']},
+      {key:'economy',   name:'Economy',     emoji:'💰', status:'soon', feeds:['Inflation','GDP','Interest Rates','CPI','Employment','Trade Balance','PMI']},
+      {key:'gov',       name:'Government',  emoji:'🏛️', status:'soon', feeds:['Schemes','Laws','Policies','Notifications','Budget','Tenders']},
+      {key:'shopping',  name:'Shopping',    emoji:'🛍️', status:'soon', feeds:['Product Prices','Price Drops','Deals','Coupons','E-commerce Trends']},
+      {key:'internet',  name:'Internet',    emoji:'🌐', status:'soon', feeds:['Website Status','Internet Outages','Domain Trends','DNS','ISP Status']},
+      {key:'cyber',     name:'Cybersecurity',emoji:'🔐',status:'soon', feeds:['CVEs','Threat Intelligence','Malware','Ransomware','Security Alerts','Data Breaches']},
+      {key:'events',    name:'Events',      emoji:'📅', status:'soon', feeds:['Conferences','Startup Events','Festivals','Concerts','Hackathons','Meetups']},
+    ];
+    const MOD_BY_KEY = {}; MODULES.forEach(m => MOD_BY_KEY[m.key] = m);
+    (function(){
+      var ring=document.getElementById('orbit-ring'), globe=document.getElementById('orbit-globe'),
+          hero=document.getElementById('orbit-hero'), stars=document.getElementById('orbit-stars');
+      if(!ring) return;
+      // starfield
+      if(stars){ var sh=[]; for(var s=0;s<130;s++){ var x=Math.floor(Math.random()*720)-360, y=Math.floor(Math.random()*360),
+        b=(Math.random()*0.7+0.3).toFixed(2); sh.push(x+'px '+y+'px rgba(255,255,255,'+b+')'); } stars.style.boxShadow=sh.join(','); }
+      var N=MODULES.length, step=360/N, R=Math.min(255, 118 + N*4.6);
+      MODULES.forEach(function(m,i){
+        var el=document.createElement('div'); el.className='orbit-card'; el.dataset.a=i*step;
+        el.addEventListener('click', function(){ if(!window._orbDragged) openModule(m.key); });
+        var col=m.status==='live'?'#33d17a':'#f5b301';
+        el.innerHTML='<span class="oc-dot" style="background:'+col+';box-shadow:0 0 6px '+col+'"></span>'+
+          '<span class="oc-emoji">'+m.emoji+'</span><span class="oc-name">'+m.name+'</span>';
+        el.style.transform='rotateY('+(i*step)+'deg) translateZ('+R+'px)';
+        ring.appendChild(el);
+      });
+      var spin=0,gspin=0,dragging=false,startX=0,startY=0,base=0,cards=ring.children;
+      window._orbDragged=false;
+      function render(){
+        ring.style.transform='translate(-50%,-50%) rotateX(-8deg) rotateY('+spin+'deg)';
+        if(globe) globe.style.transform='translate(-50%,-50%) rotate('+gspin+'deg)';
+        for(var i=0;i<cards.length;i++){ var a=(parseFloat(cards[i].dataset.a)+spin)*Math.PI/180;
+          cards[i].style.opacity=(0.2+0.8*((Math.cos(a)+1)/2)).toFixed(2); }
+      }
+      function loop(){ if(hero && hero.offsetParent!==null){ if(!dragging) spin+=0.07; gspin-=0.05; render(); } requestAnimationFrame(loop); }
+      render(); requestAnimationFrame(loop);
+      hero.addEventListener('pointerdown', function(e){ dragging=true; window._orbDragged=false; startX=e.clientX; startY=e.clientY; base=spin; });
+      window.addEventListener('pointermove', function(e){ if(!dragging) return; var dx=e.clientX-startX, dy=e.clientY-startY;
+        if(Math.abs(dx)>5) window._orbDragged=true; if(Math.abs(dx)>=Math.abs(dy)) spin=base+dx*0.45; });
+      window.addEventListener('pointerup', function(){ dragging=false; setTimeout(function(){ window._orbDragged=false; },40); });
+    })();
+    function openModule(key){
+      var m=MOD_BY_KEY[key]; if(!m) return;
+      document.getElementById('mod-ico').textContent=m.emoji;
+      document.getElementById('mod-title').textContent=m.name;
+      document.getElementById('mod-sub').innerHTML=(m.status==='live'
+        ? '<span style="color:#33d17a">● Live</span>' : '<span style="color:#f5b301">● Coming soon</span>')+' · '+m.feeds.length+' data feeds';
+      document.getElementById('mod-action').innerHTML = m.status==='live'
+        ? '<button class="mod-open" onclick="openModuleLive(\''+key+'\')">Open live dashboard <i class="fa-solid fa-arrow-right"></i></button>'
+        : '<div class="mod-soon"><b>Intelligence module — wiring live feeds.</b><br>This dashboard will stream the data feeds below with charts, maps, alerts &amp; Sherr AI insights.</div>';
+      document.getElementById('mod-feeds').innerHTML=m.feeds.map(function(f){ return '<div class="mod-feed">'+f+'</div>'; }).join('');
+      document.getElementById('module-overlay').classList.add('open');
+    }
+    function closeModule(){ document.getElementById('module-overlay').classList.remove('open'); }
+    function openModuleLive(key){
+      closeModule();
+      if(key==='news'){ if(window.navTo) navTo('home'); }
+      else if(key==='dictionary'){ if(window.openDictionary) openDictionary(); }
+      else if(key==='markets'){ var g=document.getElementById('glance-grid'); if(g) g.scrollIntoView({behavior:'smooth',block:'center'}); }
+      else if(key==='weather'){ var v=document.getElementById('v-explore'); if(v) v.scrollTo({top:0,behavior:'smooth'}); }
+    }
+  </script>
 
   <!-- ════════ ATLAS — futuristic global HUD ════════ -->
   <style>
