@@ -3096,25 +3096,26 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
       background:rgba(255,255,255,.08);border:.5px solid rgba(255,255,255,.2);
       backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);}
     .orbit-back:active{transform:scale(.9);}
-    /* globe centred inside the ring of modules */
-    .orbit-globe{position:absolute;left:50%;top:47%;width:190px;height:190px;margin:-95px 0 0 -95px;z-index:2;pointer-events:none;}
+    /* globe = a horizon dome; only ~1/3 shows at the very bottom, never in the middle */
+    .orbit-globe{position:absolute;left:50%;top:108%;width:480px;height:480px;margin:-240px 0 0 -240px;z-index:2;pointer-events:none;}
     .orbit-globe svg{width:100%;height:100%;overflow:visible;}
     .orb-spin{transform-origin:120px 120px;animation:orbGlobe 100s linear infinite;}
     @keyframes orbGlobe{to{transform:rotate(-360deg);}}
-    .orbit-wheel{position:absolute;left:50%;top:47%;width:0;height:0;z-index:3;}
+    /* fan pivot sits near the bottom edge so cards rise into the lower third */
+    .orbit-wheel{position:absolute;left:50%;top:103%;width:0;height:0;z-index:3;}
     /* Panora-style rounded gradient module cards */
-    .orbit-card{position:absolute;left:-27px;top:-31px;width:54px;height:62px;border-radius:15px;
-      display:flex;align-items:flex-end;justify-content:center;padding:7px;
+    .orbit-card{position:absolute;left:-24px;top:-28px;width:48px;height:56px;border-radius:14px;
+      display:flex;align-items:flex-end;justify-content:center;padding:6px;
       border:.5px solid rgba(255,255,255,.14);
       box-shadow:0 14px 30px -12px rgba(0,0,0,.72), inset 0 .5px 0 rgba(255,255,255,.22);
       cursor:pointer;overflow:hidden;will-change:transform;}
     .orbit-card::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
       background:radial-gradient(120% 90% at 28% 14%, rgba(255,255,255,.28), rgba(255,255,255,0) 55%);}
     .orbit-card.soon{filter:saturate(.82) brightness(.92);}
-    .orbit-card .oc-name{position:relative;font:600 .48rem/1.12 var(--f);color:rgba(255,255,255,.94);text-align:center;
-      letter-spacing:.01em;max-width:56px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-      text-shadow:0 1px 3px rgba(0,0,0,.5);}
-    .orbit-card .oc-live{position:absolute;top:7px;right:8px;width:5px;height:5px;border-radius:50%;z-index:2;
+    .orbit-card .oc-name{position:relative;font:600 .42rem/1.06 var(--f);color:rgba(255,255,255,.95);text-align:center;
+      letter-spacing:.01em;max-width:44px;overflow:hidden;
+      display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;text-shadow:0 1px 3px rgba(0,0,0,.5);}
+    .orbit-card .oc-live{position:absolute;top:6px;right:6px;width:4px;height:4px;border-radius:50%;z-index:2;
       background:#30d158;box-shadow:0 0 6px rgba(48,209,88,.9);}
     .orbit-hint{position:absolute;bottom:calc(env(safe-area-inset-bottom,0px) + 14px);left:0;right:0;text-align:center;
       z-index:6;pointer-events:none;font:590 .58rem/1 var(--f);color:rgba(200,220,255,.4);letter-spacing:.03em;}
@@ -3201,32 +3202,49 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
       // starfield
       if(stars){ var sh=[]; for(var s=0;s<160;s++){ var x=Math.floor(Math.random()*620), y=Math.floor(Math.random()*920),
         b=(Math.random()*0.55+0.18).toFixed(2); sh.push(x+'px '+y+'px rgba(255,255,255,'+b+')'); } stars.style.boxShadow=sh.join(','); }
-      var N=MODULES.length, step=360/N, Rw=182, cards=[];
+      // even spacing: evenly placed by angle; large radius + small cards → real gaps, no overlap
+      var N=MODULES.length, step=360/N, Rw=272, cards=[];
       MODULES.forEach(function(m,i){
         var el=document.createElement('div'); el.className='orbit-card'+(m.status==='live'?'':' soon');
         el.dataset.a=i*step;
-        // each module gets its own muted, desaturated gradient
         var h=Math.round(i*360/N);
         el.style.background='linear-gradient(150deg, hsla('+h+',26%,40%,.94) 0%, hsla('+((h+30)%360)+',30%,15%,.96) 60%, hsla('+((h+52)%360)+',34%,8%,.97) 100%)';
         el.addEventListener('click', function(){ if(!window._orbDragged) openModule(m.key); });
         el.innerHTML=(m.status==='live'?'<span class="oc-live"></span>':'')+'<span class="oc-name">'+m.name+'</span>';
         wheel.appendChild(el); cards.push(el);
       });
-      var spin=0,dragging=false,startX=0,startY=0,base=0;
+      var spin=0, vel=0, dragging=false, lastX=0, moved=0;
       window._orbDragged=false;
+      function norm(d){ d=d%360; if(d>180)d-=360; if(d<-180)d+=360; return d; }
       function render(){
         for(var i=0;i<cards.length;i++){
-          var t=parseFloat(cards[i].dataset.a)+spin, c=Math.cos(t*Math.PI/180);
-          // full ring: every card visible, radial tilt; bottom-of-ring cards layer on top
-          cards[i].style.transform='rotate('+t.toFixed(2)+'deg) translateY(-'+Rw+'px)';
-          cards[i].style.zIndex = Math.round(100 - c*60);
+          var t=parseFloat(cards[i].dataset.a)+spin, ang=Math.abs(norm(t));
+          var op = ang>=56 ? 0 : (ang<=30 ? 1 : 1-(ang-30)/26);
+          var sc = 1.1 - Math.min(ang,56)/56*0.34;
+          cards[i].style.transform='rotate('+t.toFixed(3)+'deg) translateY(-'+Rw+'px) scale('+sc.toFixed(3)+')';
+          cards[i].style.opacity=op.toFixed(3);
+          cards[i].style.zIndex = op<=0 ? -1 : Math.round(200-ang);
+          cards[i].style.pointerEvents = op<0.25 ? 'none' : 'auto';
         }
       }
-      function loop(){ if(hero && hero.offsetParent!==null){ if(!dragging) spin+=0.02; render(); } requestAnimationFrame(loop); }
+      function loop(){
+        if(hero && hero.offsetParent!==null){
+          if(!dragging){
+            spin += vel;                 // momentum from the last drag
+            vel  *= 0.95;                // smooth inertial decay
+            if(Math.abs(vel)<0.012){ vel=0; spin += 0.02; }   // gentle idle drift
+          }
+          render();
+        }
+        requestAnimationFrame(loop);
+      }
       render(); requestAnimationFrame(loop);
-      hero.addEventListener('pointerdown', function(e){ dragging=true; window._orbDragged=false; startX=e.clientX; startY=e.clientY; base=spin; });
-      window.addEventListener('pointermove', function(e){ if(!dragging) return; var dx=e.clientX-startX, dy=e.clientY-startY;
-        if(Math.abs(dx)>5) window._orbDragged=true; if(Math.abs(dx)>=Math.abs(dy)) spin=base+dx*0.4; });
+      hero.addEventListener('pointerdown', function(e){ dragging=true; window._orbDragged=false; lastX=e.clientX; moved=0; vel=0; });
+      window.addEventListener('pointermove', function(e){ if(!dragging) return;
+        var dx=e.clientX-lastX; lastX=e.clientX; moved+=Math.abs(dx);
+        if(moved>5) window._orbDragged=true;
+        var d=dx*0.34; spin+=d; vel=d;   // track velocity for release inertia
+      });
       window.addEventListener('pointerup', function(){ dragging=false; setTimeout(function(){ window._orbDragged=false; },40); });
     })();
     // Every Intelligence Module is a self-contained ecosystem with the same pillars.
