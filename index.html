@@ -329,53 +329,53 @@ html, body {
    HEADER
 ═══════════════════════════════════ */
 header {
-  position: absolute; top: 0; left: 0; width: 100%; height: var(--hh);
+  position: absolute; top: 0; left: 0; width: 100%; height: 48px;
   display: flex; align-items: center; justify-content: space-between;
-  padding: 0 16px;
+  padding: 0 14px;
   background: var(--glass);
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
   border-bottom: 1px solid var(--glassB); z-index: 500;
   transition: background 0.3s;
 }
-.h-left { display: flex; align-items: center; gap: 10px; }
-.h-right { display: flex; align-items: center; gap: 8px; }
+.h-left { display: flex; align-items: center; gap: 9px; }
+.h-right { display: flex; align-items: center; gap: 7px; }
 
 .hbtn {
-  width: 34px; height: 34px; border-radius: 12px;
+  width: 29px; height: 29px; border-radius: 10px;
   display: flex; align-items: center; justify-content: center;
-  color: var(--t2); font-size: 0.9rem;
+  color: var(--t2); font-size: 0.77rem;
   background: var(--bgcard); border: 1px solid var(--line);
   cursor: pointer; transition: all 0.15s var(--spring);
 }
 .hbtn:active { transform: scale(0.86); background: var(--bg3); }
 
 .h-logo {
-  width: 30px; height: 30px; border-radius: 10px; overflow: hidden;
+  width: 26px; height: 26px; border-radius: 9px; overflow: hidden;
   flex-shrink: 0; display: flex; align-items: center; justify-content: center;
-  font-size: 1rem;
+  font-size: 0.85rem;
   background: #000;
   border: 1px solid rgba(255,255,255,0.08);
   box-shadow: 0 0 12px rgba(44,61,143,0.28);
 }
 .h-brand {
-  font-family: var(--fd); font-size: 1.1rem; font-weight: 700;
+  font-family: var(--fd); font-size: 0.94rem; font-weight: 700;
   letter-spacing: -0.5px; color: var(--t1);
 }
 .h-brand span { color: #0EB7D6; }
 .h-page {
-  font-size: 1rem; font-weight: 700; color: var(--t1);
+  font-size: 0.85rem; font-weight: 700; color: var(--t1);
   letter-spacing: -0.3px; display: none;
 }
 .hico {
-  width: 34px; height: 34px; border-radius: 50%;
+  width: 29px; height: 29px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
-  color: var(--t2); font-size: 0.9rem;
+  color: var(--t2); font-size: 0.77rem;
   cursor: pointer; transition: all 0.14s var(--spring);
 }
 .hico:active { transform: scale(0.82); color: var(--t1); }
 .h-avatar {
-  width: 32px; height: 32px; border-radius: 50%; overflow: hidden;
+  width: 27px; height: 27px; border-radius: 50%; overflow: hidden;
   border: 2px solid transparent;
   background: linear-gradient(var(--bg), var(--bg)) padding-box,
               var(--accent) border-box;
@@ -3078,180 +3078,6 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   </div>
 
 
-  <!-- ════════ ATLAS — futuristic global HUD ════════ -->
-  <style>
-    .atlas-wrap{position:relative;margin:14px 0 18px;padding:18px 16px 16px;border-radius:22px;
-      background:radial-gradient(130% 150% at 50% -10%,rgba(14,183,214,.12) 0%,rgba(8,12,22,0) 52%),
-        linear-gradient(165deg,rgba(11,17,30,.96),rgba(5,8,14,.98));
-      border:1px solid rgba(14,183,214,.22);overflow:hidden;
-      box-shadow:0 22px 60px -26px rgba(14,183,214,.5),inset 0 1px 0 rgba(255,255,255,.05);}
-    .atlas-wrap::before{content:"";position:absolute;inset:0;pointer-events:none;
-      background:linear-gradient(rgba(14,183,214,.05) 1px,transparent 1px) 0 0/100% 26px;opacity:.45;}
-    .atlas-wrap::after{content:"";position:absolute;top:0;left:0;right:0;height:1px;pointer-events:none;
-      background:linear-gradient(90deg,transparent,rgba(14,183,214,.8),transparent);}
-    .atlas-grid{position:relative;display:grid;grid-template-columns:1fr 176px;gap:14px;align-items:center;z-index:2;}
-    .atlas-badge{display:inline-flex;align-items:center;gap:7px;font:700 .58rem/1 var(--fd,sans-serif);
-      letter-spacing:.22em;text-transform:uppercase;color:#0EB7D6;
-      padding:5px 11px;border:1px solid rgba(14,183,214,.38);border-radius:999px;
-      background:rgba(14,183,214,.08);}
-    .atlas-badge i{font-size:.6rem;animation:atlas-blink 2.2s ease-in-out infinite;}
-    @keyframes atlas-blink{0%,100%{opacity:1}50%{opacity:.2}}
-    .atlas-title{margin:11px 0 3px;font:800 1.5rem/1.02 var(--fd,sans-serif);letter-spacing:-.015em;
-      color:#fff;text-shadow:0 0 26px rgba(14,183,214,.4);}
-    .atlas-title b{color:#0EB7D6;font-weight:800;}
-    .atlas-sub{font:500 .72rem/1.35 var(--f,sans-serif);color:rgba(220,235,245,.6);max-width:215px;}
-    /* reference-style stat bars: CLASS / HYDROGEN / HELIUM */
-    .atlas-bars{margin-top:14px;display:flex;flex-direction:column;gap:8px;max-width:215px;}
-    .atlas-bar{display:grid;grid-template-columns:62px 1fr 30px;align-items:center;gap:8px;}
-    .atlas-bar .bl{font:700 .5rem/1 var(--fd,sans-serif);letter-spacing:.13em;text-transform:uppercase;
-      color:rgba(14,183,214,.78);}
-    .atlas-bar .bt{height:4px;border-radius:99px;background:rgba(14,183,214,.14);overflow:hidden;}
-    .atlas-bar .bf{height:100%;border-radius:99px;
-      background:linear-gradient(90deg,#0a6f86,#0EB7D6);box-shadow:0 0 8px rgba(14,183,214,.7);}
-    .atlas-bar .bv{font:700 .56rem/1 var(--fd,sans-serif);color:#fff;text-align:right;}
-    .atlas-timer{margin-top:12px;display:inline-flex;align-items:center;gap:8px;
-      font:700 .62rem/1 var(--fd,sans-serif);letter-spacing:.16em;color:rgba(220,235,245,.7);}
-    .atlas-timer .dot{width:5px;height:5px;border-radius:50%;background:#0EB7D6;
-      box-shadow:0 0 8px #0EB7D6;animation:atlas-blink 1.4s ease-in-out infinite;}
-    .atlas-timer b{color:#0EB7D6;font-variant-numeric:tabular-nums;}
-    /* circular frame */
-    .atlas-ring{position:relative;width:176px;height:176px;margin:0 auto;}
-    .atlas-ring svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible;}
-    .atlas-spin-slow{transform-origin:50% 50%;animation:atlas-spin 60s linear infinite;}
-    .atlas-spin-rev{transform-origin:50% 50%;animation:atlas-spin 42s linear infinite reverse;}
-    .atlas-spin-fast{transform-origin:50% 50%;animation:atlas-spin 22s linear infinite;}
-    .atlas-spin-earth{transform-origin:50% 50%;animation:atlas-spin 90s linear infinite;}
-    @keyframes atlas-spin{to{transform:rotate(360deg);}}
-    .atlas-pulse{animation:atlas-pulse 3.2s ease-in-out infinite;transform-origin:50% 50%;}
-    @keyframes atlas-pulse{0%,100%{opacity:.35}50%{opacity:.95}}
-    .atlas-coord{position:absolute;left:50%;bottom:-3px;transform:translateX(-50%);
-      font:700 .5rem/1 var(--fd,sans-serif);letter-spacing:.12em;color:rgba(14,183,214,.85);
-      white-space:nowrap;text-shadow:0 0 10px rgba(14,183,214,.6);}
-    /* tappable affordance */
-    .atlas-wrap.tap{cursor:pointer;transition:transform .2s var(--ease,ease),box-shadow .25s ease;}
-    .atlas-wrap.tap:active{transform:scale(.985);}
-    .atlas-enter{position:absolute;top:13px;right:14px;z-index:3;display:inline-flex;align-items:center;gap:6px;
-      font:800 .54rem/1 var(--fd,sans-serif);letter-spacing:.18em;text-transform:uppercase;color:#04141b;
-      padding:6px 11px;border-radius:999px;background:linear-gradient(90deg,#0EB7D6,#7be8ff);
-      box-shadow:0 4px 16px rgba(14,183,214,.5);}
-    .atlas-enter i{font-size:.56rem;animation:atlas-nudge 1.6s ease-in-out infinite;}
-    @keyframes atlas-nudge{0%,100%{transform:translateX(0)}50%{transform:translateX(3px)}}
-    @media (prefers-reduced-motion:reduce){
-      .atlas-spin-slow,.atlas-spin-rev,.atlas-spin-fast,.atlas-spin-earth,.atlas-pulse,
-      .atlas-badge i,.atlas-timer .dot{animation:none;}
-    }
-    @media(max-width:380px){
-      .atlas-grid{grid-template-columns:1fr 138px;}
-      .atlas-ring{width:138px;height:138px;}
-    }
-  </style>
-  <div class="atlas-wrap tap" onclick="openAtlas()" role="button" tabindex="0"
-       onkeydown="if(event.key==='Enter'||event.key===' ')openAtlas()">
-    <div class="atlas-enter">Enter <i class="fa-solid fa-arrow-right"></i></div>
-    <div class="atlas-grid">
-      <div class="atlas-info">
-        <span class="atlas-badge"><i class="fa-solid fa-circle"></i> 01 · Atlas</span>
-        <div class="atlas-title">Going <b>Global</b></div>
-        <div class="atlas-sub">Worldwide intelligence, mapped live across every signal you follow.</div>
-        <div class="atlas-bars">
-          <div class="atlas-bar"><span class="bl">Live Feeds</span>
-            <span class="bt"><span class="bf" style="width:82%"></span></span>
-            <span class="bv" id="atlas-live">—</span></div>
-          <div class="atlas-bar"><span class="bl">Coverage</span>
-            <span class="bt"><span class="bf" style="width:65%"></span></span>
-            <span class="bv">65%</span></div>
-          <div class="atlas-bar"><span class="bl">Signal</span>
-            <span class="bt"><span class="bf" style="width:98%"></span></span>
-            <span class="bv">98%</span></div>
-        </div>
-        <div class="atlas-timer"><span class="dot"></span> SYNC <b id="atlas-clock">00:00:00</b> · GLOBAL</div>
-      </div>
-      <div class="atlas-ring" aria-hidden="true">
-        <svg viewBox="0 0 200 200">
-          <defs>
-            <radialGradient id="atlasOcean" cx="42%" cy="36%" r="70%">
-              <stop offset="0%" stop-color="#1aa6c4"/>
-              <stop offset="45%" stop-color="#0c5e78"/>
-              <stop offset="100%" stop-color="#04222e"/>
-            </radialGradient>
-            <linearGradient id="atlasMer" x1="0" y1="0" x2="1" y2="0">
-              <stop offset="0%" stop-color="#bdf3ff" stop-opacity="0"/>
-              <stop offset="50%" stop-color="#bdf3ff" stop-opacity=".8"/>
-              <stop offset="100%" stop-color="#bdf3ff" stop-opacity="0"/>
-            </linearGradient>
-            <radialGradient id="atlasGloss" cx="38%" cy="30%" r="50%">
-              <stop offset="0%" stop-color="#ffffff" stop-opacity=".4"/>
-              <stop offset="40%" stop-color="#ffffff" stop-opacity=".06"/>
-              <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
-            </radialGradient>
-            <clipPath id="atlasClip"><circle cx="100" cy="100" r="58"/></clipPath>
-          </defs>
-          <!-- faint outer ring -->
-          <circle cx="100" cy="100" r="96" fill="none" stroke="rgba(14,183,214,.16)" stroke-width="1"/>
-          <!-- rugged bezel: rotating tick ring -->
-          <g class="atlas-spin-slow">
-            <circle cx="100" cy="100" r="88" fill="none" stroke="rgba(14,183,214,.32)" stroke-width="6"
-              stroke-dasharray="1.5 5.5"/>
-          </g>
-          <!-- rotating dashed mid ring (reverse) -->
-          <g class="atlas-spin-rev">
-            <circle cx="100" cy="100" r="76" fill="none" stroke="rgba(14,183,214,.5)" stroke-width="1.5"
-              stroke-dasharray="34 14 6 14"/>
-          </g>
-          <!-- ── satellite Earth core ── -->
-          <circle cx="100" cy="100" r="58" fill="url(#atlasOcean)"/>
-          <g clip-path="url(#atlasClip)">
-            <!-- slowly drifting land masses (stylised) -->
-            <g class="atlas-spin-earth" fill="#2f7d52" fill-opacity=".9">
-              <path d="M70 64 q14 -10 26 -4 q10 6 4 16 q-8 12 -22 10 q-16 -4 -8 -22 z"/>
-              <path d="M118 78 q12 2 14 14 q1 12 -12 14 q-14 1 -14 -12 q0 -14 12 -16 z"/>
-              <path d="M64 112 q16 -6 22 6 q4 12 -10 18 q-16 4 -20 -10 q-3 -10 8 -14 z"/>
-              <path d="M104 128 q14 -4 18 8 q2 12 -12 14 q-12 1 -14 -10 q-1 -9 8 -12 z"/>
-              <path d="M132 108 q10 0 10 10 q-1 9 -11 8 q-9 -2 -7 -11 q1 -7 8 -7 z"/>
-            </g>
-            <!-- lat/long grid -->
-            <g stroke="rgba(190,243,255,.28)" stroke-width=".7" fill="none">
-              <ellipse cx="100" cy="100" rx="58" ry="20"/>
-              <ellipse cx="100" cy="100" rx="58" ry="40"/>
-              <ellipse cx="100" cy="100" rx="20" ry="58"/>
-              <ellipse cx="100" cy="100" rx="40" ry="58"/>
-              <line x1="42" y1="100" x2="158" y2="100"/>
-              <line x1="100" y1="42" x2="100" y2="158"/>
-            </g>
-            <!-- sweeping scan meridian -->
-            <g class="atlas-spin-fast">
-              <ellipse cx="100" cy="100" rx="13" ry="58" stroke="url(#atlasMer)" stroke-width="2" fill="none"/>
-            </g>
-            <!-- glossy highlight -->
-            <circle cx="100" cy="100" r="58" fill="url(#atlasGloss)"/>
-          </g>
-          <!-- core rim -->
-          <circle cx="100" cy="100" r="58" fill="none" stroke="rgba(14,183,214,.6)" stroke-width="1.2"/>
-          <!-- pulsing signal dots -->
-          <g fill="#bdf3ff" class="atlas-pulse">
-            <circle cx="128" cy="74" r="2.4"/>
-            <circle cx="74" cy="118" r="2"/>
-            <circle cx="118" cy="128" r="1.8"/>
-          </g>
-          <!-- crosshair corners -->
-          <g stroke="rgba(14,183,214,.6)" stroke-width="1.4" fill="none">
-            <path d="M8 22 V8 H22"/><path d="M178 8 H192 V22"/>
-            <path d="M192 178 V192 H178"/><path d="M22 192 H8 V178"/>
-          </g>
-        </svg>
-        <div class="atlas-coord">14.68°N · 77.60°E</div>
-      </div>
-    </div>
-  </div>
-  <script>
-    // Atlas live SYNC clock (HH:MM:SS, local time) — purely cosmetic HUD detail.
-    (function(){
-      var el=document.getElementById('atlas-clock'); if(!el) return;
-      function pad(n){return n<10?'0'+n:''+n;}
-      function tick(){var d=new Date();el.textContent=pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());}
-      tick(); setInterval(tick,1000);
-    })();
-  </script>
 
   <!-- Top News Hero -->
   <div id="exp-hero-wrap"></div>
@@ -3291,6 +3117,119 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   </defs></svg>
   <div class="glance-grid" id="glance-grid"></div>
 
+  <!-- ════════ SherrByte Modules — intelligence ecosystems (V1 placement) ════════ -->
+  <style>
+    .mods-grp-lbl{font:800 .6rem/1 var(--fd);letter-spacing:.14em;text-transform:uppercase;color:var(--t3);margin:18px 2px 10px;}
+    .mods-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+    .mod2-card{position:relative;display:flex;flex-direction:column;align-items:center;gap:9px;padding:14px 6px 12px;
+      border-radius:16px;background:var(--bgcard);border:1px solid var(--line);cursor:pointer;
+      transition:transform .14s var(--spring),background .15s;}
+    .mod2-card:active{transform:scale(.95);background:var(--bg2);}
+    .mod2-ico{width:44px;height:44px;border-radius:13px;display:flex;align-items:center;justify-content:center;font-size:1.12rem;}
+    .mod2-name{font:600 .65rem/1.16 var(--f);color:var(--t2);text-align:center;}
+    .mod2-live{position:absolute;top:9px;right:10px;width:6px;height:6px;border-radius:50%;background:#30D158;box-shadow:0 0 6px rgba(48,209,88,.8);}
+    .mods-note{font:500 .68rem/1.45 var(--f);color:var(--t3);text-align:center;padding:16px 22px 2px;}
+    #topic-overlay{position:absolute;inset:0;z-index:2000;background:var(--bg);transform:translateY(100%);
+      transition:transform .4s var(--snap);display:flex;flex-direction:column;overflow:hidden;}
+    #topic-overlay.open{transform:translateY(0);}
+    .tp-head{display:flex;align-items:center;gap:12px;padding:calc(env(safe-area-inset-top,0px) + 12px) 16px 12px;border-bottom:1px solid var(--line2);}
+    .tp-back{width:38px;height:38px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:var(--bgcard);border:1px solid var(--line);color:var(--t1);cursor:pointer;}
+    .tp-ico{width:40px;height:40px;border-radius:12px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:1.1rem;}
+    .tp-ttl{font:800 1.2rem/1.1 var(--fd);color:var(--t1);}
+    .tp-body{flex:1;overflow-y:auto;padding:22px 18px;}
+    .tp-soon{display:inline-flex;align-items:center;gap:7px;font:700 .62rem/1 var(--fd);letter-spacing:.1em;text-transform:uppercase;
+      color:#FF9F0A;background:rgba(255,159,10,.12);border:1px solid rgba(255,159,10,.3);padding:7px 12px;border-radius:999px;}
+    .tp-desc{font:400 .92rem/1.6 var(--f);color:var(--t2);margin:16px 0 4px;}
+    .tp-sub{font:800 .62rem/1 var(--fd);letter-spacing:.14em;text-transform:uppercase;color:var(--t3);margin:22px 0 12px;}
+    .tp-row{display:flex;align-items:center;gap:12px;padding:13px 14px;border-radius:14px;background:var(--bg1);border:1px solid var(--line);margin-bottom:9px;opacity:.55;}
+    .tp-row .d{width:8px;height:8px;border-radius:50%;background:var(--t3);flex-shrink:0;}
+    .tp-row .t{flex:1;height:9px;border-radius:5px;background:var(--bg3);}
+    .tp-row .v{width:44px;height:9px;border-radius:5px;background:var(--bg3);}
+  </style>
+  <div class="exp-sec-hdr"><div class="exp-sec-hdr-title"><i class="fa-solid fa-compass"></i> Explore Modules</div></div>
+  <div id="mods-wrap"></div>
+  <div class="mods-note">30+ intelligence modules — live ones are ready now, the rest are being wired in. Tap any to preview.</div>
+  <script>
+    var TOPIC_GROUPS = [
+      { g:'News & Markets', items:[
+        {k:'news',n:'News',i:'fa-newspaper',c:'#0A84FF',go:'news'},
+        {k:'stocks',n:'Stocks',i:'fa-arrow-trend-up',c:'#30D158',go:'mkt:stocks'},
+        {k:'forex',n:'Forex',i:'fa-money-bill-transfer',c:'#5E5CE6',go:'mkt:forex'},
+        {k:'crypto',n:'Crypto',i:'fa-bitcoin-sign',c:'#FF9F0A',go:'mkt:crypto'},
+        {k:'commodities',n:'Commodities',i:'fa-gem',c:'#FFD60A',go:'mkt:commodities'},
+        {k:'economy',n:'Economy',i:'fa-chart-pie',c:'#64D2FF'},
+        {k:'companies',n:'Companies',i:'fa-building',c:'#BF5AF2'},
+      ]},
+      { g:'Planet & Weather', items:[
+        {k:'weather',n:'Weather',i:'fa-cloud-sun',c:'#0A84FF',go:'weather'},
+        {k:'aqi',n:'Air Quality',i:'fa-wind',c:'#30D158'},
+        {k:'quakes',n:'Earthquakes',i:'fa-house-crack',c:'#FF453A'},
+        {k:'wildfires',n:'Wildfires',i:'fa-fire',c:'#FF9F0A'},
+        {k:'floods',n:'Flood Alerts',i:'fa-water',c:'#64D2FF'},
+        {k:'climate',n:'Climate',i:'fa-temperature-half',c:'#FF375F'},
+      ]},
+      { g:'Space & Science', items:[
+        {k:'space',n:'Space',i:'fa-rocket',c:'#5E5CE6'},
+        {k:'nasa',n:'NASA Photo',i:'fa-star',c:'#BF5AF2'},
+        {k:'research',n:'Research',i:'fa-flask',c:'#0A84FF'},
+        {k:'patents',n:'Patents',i:'fa-lightbulb',c:'#FFD60A'},
+      ]},
+      { g:'Work & Learn', items:[
+        {k:'jobs',n:'Jobs',i:'fa-briefcase',c:'#30D158'},
+        {k:'universities',n:'Universities',i:'fa-building-columns',c:'#0A84FF'},
+        {k:'scholarships',n:'Scholarships',i:'fa-graduation-cap',c:'#FF9F0A'},
+      ]},
+      { g:'Tech & Dev', items:[
+        {k:'ai',n:'AI & Tech',i:'fa-microchip',c:'#64D2FF'},
+        {k:'programming',n:'Programming',i:'fa-code',c:'#5E5CE6'},
+        {k:'github',n:'GitHub Trending',i:'fa-code-branch',c:'#BF5AF2'},
+        {k:'cyber',n:'Cybersecurity',i:'fa-shield-halved',c:'#FF453A'},
+      ]},
+      { g:'Government & Public', items:[
+        {k:'schemes',n:'Govt Schemes',i:'fa-landmark',c:'#0A84FF'},
+        {k:'tenders',n:'Tenders',i:'fa-file-contract',c:'#30D158'},
+        {k:'maps',n:'Maps & Traffic',i:'fa-map-location-dot',c:'#FF9F0A'},
+        {k:'holidays',n:'Public Holidays',i:'fa-calendar-day',c:'#FF375F'},
+      ]},
+      { g:'Live & Culture', items:[
+        {k:'sports',n:'Sports',i:'fa-futbol',c:'#30D158'},
+        {k:'movies',n:'Movies & TV',i:'fa-film',c:'#BF5AF2'},
+        {k:'flights',n:'Flight Status',i:'fa-plane-up',c:'#64D2FF'},
+        {k:'fuel',n:'Fuel Prices',i:'fa-gas-pump',c:'#FF9F0A'},
+      ]},
+    ];
+    var TOPIC_BY_KEY={};
+    function renderTopics(){
+      var w=document.getElementById('mods-wrap'); if(!w) return;
+      w.innerHTML=TOPIC_GROUPS.map(function(grp){
+        return '<div class="mods-grp-lbl">'+grp.g+'</div><div class="mods-grid">'+grp.items.map(function(it){
+          TOPIC_BY_KEY[it.k]=it;
+          var live=it.go?'<span class="mod2-live"></span>':'';
+          return '<div class="mod2-card" onclick="openTopic(\''+it.k+'\')">'+live+
+            '<div class="mod2-ico" style="background:'+it.c+'22;color:'+it.c+'"><i class="fa-solid '+it.i+'"></i></div>'+
+            '<div class="mod2-name">'+it.n+'</div></div>';
+        }).join('')+'</div>';
+      }).join('');
+    }
+    function openTopic(k){
+      var it=TOPIC_BY_KEY[k]; if(!it) return;
+      if(it.go==='news'){ if(window.navTo) navTo('home'); return; }
+      if(it.go==='weather'){ var b=document.getElementById('bento-weather'); if(b) b.scrollIntoView({behavior:'smooth',block:'center'}); return; }
+      if(it.go && it.go.indexOf('mkt:')===0){ if(window.openMktCat) openMktCat(it.go.slice(4)); return; }
+      // placeholder preview for modules still being wired
+      document.getElementById('tp-ico').style.background=it.c+'22';
+      document.getElementById('tp-ico').style.color=it.c;
+      document.getElementById('tp-ico').innerHTML='<i class="fa-solid '+it.i+'"></i>';
+      document.getElementById('tp-ttl').textContent=it.n;
+      document.getElementById('tp-desc').textContent='Live '+it.n+' — data feeds, charts, maps, alerts and related news — is being wired into this module. Here’s a preview of the layout.';
+      var rows=''; for(var r=0;r<5;r++){ rows+='<div class="tp-row"><span class="d"></span><span class="t"></span><span class="v"></span></div>'; }
+      document.getElementById('tp-rows').innerHTML=rows;
+      document.getElementById('topic-overlay').classList.add('open');
+    }
+    function closeTopic(){ document.getElementById('topic-overlay').classList.remove('open'); }
+    renderTopics();
+  </script>
+
   <!-- Dictionary (replaces Discover) -->
   <div class="exp-sec-hdr">
     <div class="exp-sec-hdr-title"><i class="fa-solid fa-book"></i> Dictionary</div>
@@ -3318,6 +3257,21 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   <div class="exp-cat-feed" id="exp-cat-feed"></div>
 
   <div style="height:16px"></div>
+</div>
+
+<!-- TOPIC MODULE PREVIEW OVERLAY -->
+<div id="topic-overlay">
+  <div class="tp-head">
+    <div class="tp-back" onclick="closeTopic()"><i class="fa-solid fa-chevron-left"></i></div>
+    <div class="tp-ico" id="tp-ico"><i class="fa-solid fa-compass"></i></div>
+    <div class="tp-ttl" id="tp-ttl">Module</div>
+  </div>
+  <div class="tp-body">
+    <span class="tp-soon"><i class="fa-solid fa-wrench"></i> Coming soon</span>
+    <div class="tp-desc" id="tp-desc"></div>
+    <div class="tp-sub">Preview</div>
+    <div id="tp-rows"></div>
+  </div>
 </div>
 
 <!-- ════════ PROFILE ════════ -->
