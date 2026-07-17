@@ -3120,9 +3120,22 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   <!-- ════════ BENTO ECOSYSTEM — Intelligence Explorer dashboard ════════ -->
   <style>
     .bento{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;grid-auto-rows:minmax(94px,auto);}
-    .bt{position:relative;overflow:hidden;border-radius:26px;background:#1a1a1c;border:1px solid rgba(255,255,255,.06);
-      padding:14px;box-shadow:0 18px 42px -28px #000;cursor:pointer;transition:transform .16s var(--spring);}
-    .bt:active{transform:scale(.975);}
+    /* Glassic Lighting: thick illuminated glass slab — bright top edge + semantic bottom glow + backlight */
+    .bt{position:relative;overflow:hidden;border-radius:26px;--gc:#3a3a3c;
+      background:linear-gradient(180deg,#161618,#0d0d0f);border:1px solid rgba(255,255,255,.05);
+      padding:14px;cursor:pointer;transition:transform .16s var(--spring),box-shadow .25s;
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.2),
+        inset 0 26px 34px -30px rgba(255,255,255,.5),
+        inset 0 -72px 62px -38px color-mix(in srgb, var(--gc) 60%, transparent),
+        0 24px 50px -26px rgba(0,0,0,.9),
+        0 8px 34px -12px color-mix(in srgb, var(--gc) 30%, transparent);}
+    .bt:active{transform:scale(.975);box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.2),
+        inset 0 26px 34px -30px rgba(255,255,255,.5),
+        inset 0 -72px 62px -38px color-mix(in srgb, var(--gc) 72%, transparent),
+        0 16px 34px -22px rgba(0,0,0,.9),
+        0 6px 26px -10px color-mix(in srgb, var(--gc) 40%, transparent);}
     .bt.w2{grid-column:span 2;} .bt.h2{grid-row:span 2;}
     .pack-gap{grid-column:span 2;height:8px;}
     .bt-hd{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
@@ -3332,6 +3345,9 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
       if(t&&bt&&t.textContent&&t.textContent.indexOf('-')<0){ bt.innerHTML=t.textContent.replace('°','')+'<small>°</small>'; }
       if(c&&bc&&c.textContent&&c.textContent!=='Loading…'){ bc.textContent=c.textContent; }
     }
+    // Glassic Lighting: each tile's bottom glow + backlight take its own semantic accent (from its icon).
+    (function(){ document.querySelectorAll('.bento .bt').forEach(function(bt){
+      var ic=bt.querySelector('.bt-hd i'); if(ic){ var c=getComputedStyle(ic).color; if(c) bt.style.setProperty('--gc', c); } }); })();
     updateBento(); setInterval(updateBento, 4000);
   </script>
 
