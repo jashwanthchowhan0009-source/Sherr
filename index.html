@@ -719,6 +719,9 @@ header {
   font-size: 0.6rem; font-weight: 800; flex-shrink: 0;
 }
 .ao-src-name { font-size: 0.78rem; font-weight: 600; color: var(--t2); }
+.ao-byline { display: flex; align-items: center; gap: 6px; margin-top: 7px;
+  font-size: 0.68rem; font-weight: 600; color: var(--t3); }
+.ao-byline i { color: #A855F7; font-size: 0.72rem; }
 .ao-src-time { font-size: 0.7rem; color: var(--t3); margin-left: auto; }
 .ao-main-title {
   font-family: var(--fd); font-size: 1.2rem; font-weight: 700;
@@ -2955,6 +2958,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
         <span class="ao-src-name" id="ao-src-name"></span>
         <span class="ao-src-time" id="ao-src-time"></span>
       </div>
+      <div class="ao-byline" id="ao-byline"></div>
       <div class="ao-main-title" id="ao-main-title"></div>
       <div id="ao-tldr-box" class="ao-tldr" style="display:none"></div>
       <div class="ao-text" id="ao-text"></div>
@@ -5192,6 +5196,9 @@ function openArticle(rawA) {
   srcDot.textContent = (a.source||'S').charAt(0).toUpperCase();
   srcDot.style.background = cc.bg; srcDot.style.color = cc.hex;
   document.getElementById('ao-src-name').textContent = a.source || '';
+  var _by = document.getElementById('ao-byline');
+  if (_by) _by.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> Written by Sherr AI'
+    + (a.source ? ' · based on reporting from ' + a.source : '');
   document.getElementById('ao-src-time').textContent = timeAgo(a.published_at) || '';
   document.getElementById('ao-main-title').textContent = a.title;
   const body = a.body_ai || a.preview || a.summary || '';

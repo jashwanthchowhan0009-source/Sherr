@@ -26,6 +26,15 @@ GROK_API_KEY   = os.getenv("GROK_API_KEY", "")
 GEMINI_MODEL   = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 GROQ_MODEL     = os.getenv("GROQ_MODEL",   "llama-3.3-70b-versatile")
 
+# Copyright-safe placeholders. When no AI rewrite is available we NEVER fall back
+# to the source article's text — we show these neutral, original strings instead.
+_SAFE_SUMMARY = "Sherr AI is preparing an original summary of this story."
+_SAFE_BODY = (
+    "Sherr AI is preparing an original, plain-language summary of this story — "
+    "the key facts, who is involved and why it matters will appear here shortly. "
+    "Use the source link to read the full report at the original publisher."
+)
+
 VALID_CATEGORIES = [
     "society", "economy", "tech", "arts", "nature",
     "selfwell", "philo", "lifestyle", "sports"
@@ -187,14 +196,12 @@ Return ONLY a single JSON object matching the schema. No markdown, no code fence
 
 
 def _rule_based_fallback(title: str, body: str, fallback_category: str = "tech") -> dict:
-    body_clean = clean_html_fragments(body)
-    summary    = extract_sentences(body_clean, 2) or title
-    summary    = truncate_to_words(summary, 55)
-    full       = truncate_to_words(body_clean, 180) or title
+    # Copyright-safe: never reproduce the source article's text. With no AI
+    # rewrite available, emit a neutral placeholder; Sherr AI backfills later.
     return {
         "refined_title": truncate_to_words(title, 12),
-        "summary":       summary,
-        "full_body":     full,
+        "summary":       _SAFE_SUMMARY,
+        "full_body":     _SAFE_BODY,
         "category":      fallback_category,
         "topic_tags":    [],
         "is_trending":   False,
@@ -227,27 +234,17 @@ def _validate_and_fix(result: dict, title: str, body: str, fallback_category: st
     if word_count(result["refined_title"]) > 14:
         result["refined_title"] = truncate_to_words(result["refined_title"], 12)
 
-    # Fill in a bad/empty summary
+    # Fill in a bad/empty summary — copyright-safe: use our own title or a
+    # neutral placeholder, never the source article's sentences.
     if not result["summary"] or word_count(result["summary"]) < 10:
-        body_clean = clean_html_fragments(body)
-        alt = extract_sentences(body_clean, 2)
-        result["summary"] = alt or result["refined_title"]
-
-    # Summary that just restates the title → use next sentences from the body
-    if summary_conflicts_with_title(result["summary"], result["refined_title"]):
-        body_clean = clean_html_fragments(body)
-        all_sentences = re.split(r'(?<=[.!?])\s+', body_clean.strip())
-        alt = ' '.join(all_sentences[1:3]).strip()
-        if alt and word_count(alt) >= 15 and not summary_conflicts_with_title(alt, result["refined_title"]):
-            result["summary"] = alt
+        result["summary"] = result["refined_title"] or _SAFE_SUMMARY
 
     if word_count(result["summary"]) > 65:
         result["summary"] = truncate_to_words(result["summary"], 55)
 
-    # Fill in empty full_body
+    # Fill in empty full_body — never fall back to the source text.
     if not result["full_body"] or word_count(result["full_body"]) < 40:
-        body_clean = clean_html_fragments(body)
-        result["full_body"] = truncate_to_words(body_clean, 180) or result["summary"]
+        result["full_body"] = _SAFE_BODY
 
     # Normalize tags
     if not isinstance(result["topic_tags"], list):
