@@ -3117,21 +3117,51 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   </defs></svg>
   <div class="glance-grid" id="glance-grid"></div>
 
-  <!-- ════════ SherrByte Modules — intelligence ecosystems (V1 placement) ════════ -->
+  <!-- ════════ BENTO ECOSYSTEM — Intelligence Explorer dashboard ════════ -->
   <style>
-    .mods-grp-lbl{font:700 1rem/1 var(--fd);letter-spacing:-.015em;color:var(--t1);margin:26px 4px 14px;}
-    .mods-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
-    .mod2-card{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:14px;padding:15px 13px 14px;
-      border-radius:20px;background:var(--bgcard);border:1px solid var(--line2);overflow:hidden;
-      box-shadow:0 12px 28px -18px rgba(0,0,0,.6);cursor:pointer;
-      transition:transform .16s var(--spring),background .18s;}
-    .mod2-card:active{transform:scale(.955);background:var(--bg2);}
-    .mod2-card::before{content:"";position:absolute;left:0;top:0;right:0;height:64%;pointer-events:none;
-      background:radial-gradient(130% 100% at 16% 0%, var(--tint), transparent 60%);opacity:.7;}
-    .mod2-ico{position:relative;width:42px;height:42px;border-radius:13px;display:flex;align-items:center;justify-content:center;font-size:1.05rem;}
-    .mod2-name{position:relative;font:600 .72rem/1.2 var(--f);color:var(--t1);}
-    .mod2-live{position:absolute;top:12px;right:12px;width:6px;height:6px;border-radius:50%;background:#30D158;box-shadow:0 0 7px rgba(48,209,88,.9);z-index:2;}
-    .mods-note{font:500 .7rem/1.5 var(--f);color:var(--t3);text-align:center;padding:22px 24px 4px;}
+    .bento{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;grid-auto-rows:minmax(94px,auto);}
+    .bt{position:relative;overflow:hidden;border-radius:26px;background:#1a1a1c;border:1px solid rgba(255,255,255,.06);
+      padding:14px;box-shadow:0 18px 42px -28px #000;cursor:pointer;transition:transform .16s var(--spring);}
+    .bt:active{transform:scale(.975);}
+    .bt.w2{grid-column:span 2;} .bt.h2{grid-row:span 2;}
+    .pack-gap{grid-column:span 2;height:8px;}
+    .bt-hd{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
+    .bt-hd i{font-size:.82rem;} .bt-hd .nm{font:700 .73rem/1 var(--fd);color:#fff;letter-spacing:-.01em;}
+    .bt-hd .tag{margin-left:auto;font:800 .48rem/1 var(--fd);letter-spacing:.12em;text-transform:uppercase;padding:4px 7px;border-radius:999px;}
+    .tag-live{color:#22C55E;background:rgba(34,197,94,.14);} .tag-alert{color:#EF4444;background:rgba(239,68,68,.14);}
+    .tag-soon{color:#8a8a92;background:rgba(255,255,255,.06);} .tag-sport{color:#EAB308;background:rgba(234,179,8,.14);}
+    .bt-temp{font:800 2.5rem/1 var(--fd);color:#fff;letter-spacing:-.03em;} .bt-temp small{font:600 1rem/1 var(--fd);color:rgba(255,255,255,.5);}
+    .bt-cond{font:600 .72rem/1.2 var(--f);color:rgba(255,255,255,.6);margin-top:7px;}
+    .bt-hilo{font:600 .6rem/1 var(--f);color:rgba(255,255,255,.4);margin-top:7px;}
+    .bt-wave{position:absolute;left:0;right:0;bottom:0;height:44px;opacity:.75;pointer-events:none;} .bt-wave svg{width:100%;height:100%;}
+    .ring{display:flex;align-items:center;gap:12px;} .ring svg{width:54px;height:54px;flex-shrink:0;}
+    .ring .rv{font:800 1.28rem/1 var(--fd);color:#fff;} .ring .rl{font:600 .56rem/1.2 var(--f);color:rgba(255,255,255,.5);margin-top:3px;}
+    .alerts .a{display:flex;align-items:center;gap:9px;padding:6px 0;font:600 .64rem/1.2 var(--f);color:rgba(255,255,255,.82);}
+    .alerts .a .dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
+    .mkt-cols{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;}
+    .mkt-col .mn{font:700 .54rem/1 var(--fd);letter-spacing:.06em;color:rgba(255,255,255,.5);text-transform:uppercase;}
+    .mkt-col .mp{font:800 .88rem/1 var(--fd);color:#fff;margin-top:6px;} .mkt-col .mc{font:700 .56rem/1;margin-top:4px;min-height:9px;}
+    .mkt-col .ms{height:22px;margin-top:6px;} .mkt-col .ms svg{width:100%;height:100%;}
+    .seg{display:flex;gap:3px;margin-top:11px;} .seg span{height:5px;flex:1;border-radius:3px;background:rgba(255,255,255,.12);} .seg span.on{background:currentColor;}
+    .score{display:flex;align-items:center;justify-content:space-between;margin-top:2px;}
+    .score .tm{display:flex;flex-direction:column;align-items:center;gap:6px;flex:1;}
+    .score .tm .fl{width:34px;height:34px;border-radius:10px;background:rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center;font-size:1.05rem;}
+    .score .tm .tn{font:700 .58rem/1 var(--fd);color:rgba(255,255,255,.7);}
+    .score .sc{font:800 1.45rem/1 var(--fd);color:#fff;text-align:center;} .score .sc small{font:600 .56rem/1;color:rgba(255,255,255,.45);display:block;margin-top:5px;}
+    .rank .r{display:flex;align-items:center;gap:10px;padding:5px 0;} .rank .r .rk{font:800 .7rem/1 var(--fd);color:rgba(255,255,255,.4);width:14px;}
+    .rank .r .th{width:24px;height:32px;border-radius:6px;flex-shrink:0;} .rank .r .rt{flex:1;font:600 .62rem/1.2 var(--f);color:#fff;} .rank .r .rv{font:700 .6rem/1;}
+    .flt-row{display:flex;justify-content:space-between;font:600 .58rem/1.2 var(--f);color:rgba(255,255,255,.55);}
+    .flt-row b{color:#fff;font:800 .8rem/1 var(--fd);}
+    .flt-line{display:flex;align-items:center;gap:6px;margin:12px 0 8px;} .flt-line .p{width:9px;height:9px;border-radius:50%;background:#64D2FF;flex-shrink:0;}
+    .flt-line .ln{flex:1;height:2px;background:linear-gradient(90deg,#64D2FF,rgba(100,210,255,.25));position:relative;} .flt-line .pl{position:absolute;top:-7px;left:58%;color:#64D2FF;font-size:.66rem;}
+    .cd{font:800 1.5rem/1 var(--fd);color:#fff;letter-spacing:.02em;margin-top:2px;}
+    .bars{display:flex;align-items:flex-end;gap:5px;height:38px;margin-top:8px;} .bars span{flex:1;border-radius:3px 3px 0 0;background:currentColor;opacity:.85;}
+    .sub{font:600 .6rem/1.3 var(--f);color:rgba(255,255,255,.5);margin-top:8px;}
+    .matx .mr{display:flex;align-items:center;gap:11px;padding:9px 0;border-top:1px solid rgba(255,255,255,.06);}
+    .matx .mr:first-of-type{border-top:none;} .matx .mr .mi{width:30px;height:30px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:.72rem;}
+    .matx .mr .mt{flex:1;min-width:0;} .matx .mr .mt b{font:600 .66rem/1.2 var(--f);color:#fff;display:block;} .matx .mr .mt span{font:500 .56rem/1.2 var(--f);color:rgba(255,255,255,.45);}
+    .matx .mr .mb{font:700 .58rem/1;padding:4px 9px;border-radius:8px;background:rgba(255,255,255,.06);color:rgba(255,255,255,.7);}
+    .bt-note{font:500 .68rem/1.5 var(--f);color:var(--t3);text-align:center;padding:20px 24px 2px;}
     #topic-overlay{position:absolute;inset:0;z-index:2000;background:var(--bg);transform:translateY(100%);
       transition:transform .4s var(--snap);display:flex;flex-direction:column;overflow:hidden;}
     #topic-overlay.open{transform:translateY(0);}
@@ -3140,8 +3170,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
     .tp-ico{width:40px;height:40px;border-radius:12px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:1.1rem;}
     .tp-ttl{font:800 1.2rem/1.1 var(--fd);color:var(--t1);}
     .tp-body{flex:1;overflow-y:auto;padding:22px 18px;}
-    .tp-soon{display:inline-flex;align-items:center;gap:7px;font:700 .62rem/1 var(--fd);letter-spacing:.1em;text-transform:uppercase;
-      color:#FF9F0A;background:rgba(255,159,10,.12);border:1px solid rgba(255,159,10,.3);padding:7px 12px;border-radius:999px;}
+    .tp-soon{display:inline-flex;align-items:center;gap:7px;font:700 .62rem/1 var(--fd);letter-spacing:.1em;text-transform:uppercase;color:#FF9F0A;background:rgba(255,159,10,.12);border:1px solid rgba(255,159,10,.3);padding:7px 12px;border-radius:999px;}
     .tp-desc{font:400 .92rem/1.6 var(--f);color:var(--t2);margin:16px 0 4px;}
     .tp-sub{font:800 .62rem/1 var(--fd);letter-spacing:.14em;text-transform:uppercase;color:var(--t3);margin:22px 0 12px;}
     .tp-row{display:flex;align-items:center;gap:12px;padding:13px 14px;border-radius:14px;background:var(--bg1);border:1px solid var(--line);margin-bottom:9px;opacity:.55;}
@@ -3149,9 +3178,80 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
     .tp-row .t{flex:1;height:9px;border-radius:5px;background:var(--bg3);}
     .tp-row .v{width:44px;height:9px;border-radius:5px;background:var(--bg3);}
   </style>
-  <div class="exp-sec-hdr"><div class="exp-sec-hdr-title"><i class="fa-solid fa-compass"></i> Explore Modules</div></div>
-  <div id="mods-wrap"></div>
-  <div class="mods-note">30+ intelligence modules — live ones are ready now, the rest are being wired in. Tap any to preview.</div>
+  <div class="bento">
+    <div class="bt h2" onclick="openTopic('weather')">
+      <div class="bt-hd"><i class="fa-solid fa-cloud-sun" style="color:#0A84FF"></i><span class="nm">Weather</span><span class="tag tag-live">Live</span></div>
+      <div class="bt-temp" id="bt-temp">--<small>&deg;</small></div>
+      <div class="bt-cond" id="bt-cond">Fetching conditions</div>
+      <div class="bt-hilo">Air, wind &amp; rain radar</div>
+      <div class="bt-wave"><svg viewBox="0 0 200 44" preserveAspectRatio="none"><path d="M0 28 Q25 12 50 24 T100 22 T150 28 T200 20 V44 H0 Z" fill="#0A84FF22"/><path d="M0 28 Q25 12 50 24 T100 22 T150 28 T200 20" fill="none" stroke="#0A84FF" stroke-width="2"/></svg></div>
+    </div>
+    <div class="bt" onclick="openTopic('aqi')">
+      <div class="bt-hd"><i class="fa-solid fa-wind" style="color:#22C55E"></i><span class="nm">Air Quality</span></div>
+      <div class="ring"><svg viewBox="0 0 36 36"><circle cx="18" cy="18" r="15.5" fill="none" stroke="rgba(255,255,255,.1)" stroke-width="4"/><circle cx="18" cy="18" r="15.5" fill="none" stroke="#22C55E" stroke-width="4" stroke-linecap="round" stroke-dasharray="40 97" transform="rotate(-90 18 18)"/></svg><div><div class="rv">42</div><div class="rl">Good &middot; AQI</div></div></div>
+    </div>
+    <div class="bt alerts" onclick="openTopic('quakes')">
+      <div class="bt-hd"><i class="fa-solid fa-triangle-exclamation" style="color:#EF4444"></i><span class="nm">Alerts</span><span class="tag tag-alert">3 near</span></div>
+      <div class="a"><span class="dot" style="background:#EF4444"></span> M4.2 quake &middot; 120km</div>
+      <div class="a"><span class="dot" style="background:#EAB308"></span> Wildfire watch &middot; N zone</div>
+      <div class="a"><span class="dot" style="background:#64D2FF"></span> Flood advisory &middot; river</div>
+    </div>
+
+    <div class="pack-gap"></div>
+
+    <div class="bt w2" onclick="openMktCat('stocks')">
+      <div class="bt-hd"><i class="fa-solid fa-arrow-trend-up" style="color:#22C55E"></i><span class="nm">Markets</span><span class="tag tag-live">Live</span></div>
+      <div class="mkt-cols">
+        <div class="mkt-col"><div class="mn">Nifty</div><div class="mp" id="mk-nifty">--</div><div class="mc" id="mc-nifty"></div><div class="ms" id="ms-nifty"></div></div>
+        <div class="mkt-col"><div class="mn">Bitcoin</div><div class="mp" id="mk-btc">--</div><div class="mc" id="mc-btc"></div><div class="ms" id="ms-btc"></div></div>
+        <div class="mkt-col"><div class="mn">Gold</div><div class="mp" id="mk-gold">--</div><div class="mc" id="mc-gold"></div><div class="ms" id="ms-gold"></div></div>
+        <div class="mkt-col"><div class="mn">USD/INR</div><div class="mp" id="mk-usd">--</div><div class="mc" id="mc-usd"></div><div class="ms" id="ms-usd"></div></div>
+      </div>
+    </div>
+
+    <div class="pack-gap"></div>
+
+    <div class="bt w2" onclick="openTopic('sports')">
+      <div class="bt-hd"><i class="fa-solid fa-futbol" style="color:#EAB308"></i><span class="nm">Sports</span><span class="tag tag-sport">&#9679; Live</span></div>
+      <div class="score"><div class="tm"><div class="fl">&#127470;&#127475;</div><div class="tn">IND</div></div><div class="sc">245/4<small>38.2 overs</small></div><div class="tm"><div class="fl">&#127462;&#127482;</div><div class="tn">AUS</div></div></div>
+      <div class="seg" style="color:#EAB308"><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span><span></span><span></span><span></span></div>
+    </div>
+    <div class="bt rank" onclick="openTopic('movies')">
+      <div class="bt-hd"><i class="fa-solid fa-film" style="color:#A855F7"></i><span class="nm">Movies &amp; TV</span></div>
+      <div class="r"><span class="rk">1</span><span class="th" style="background:#A855F733"></span><span class="rt">Top release</span><span class="rv" style="color:#22C55E">&#9650;</span></div>
+      <div class="r"><span class="rk">2</span><span class="th" style="background:#5E5CE633"></span><span class="rt">Trending series</span><span class="rv" style="color:#22C55E">&#9650;</span></div>
+      <div class="r"><span class="rk">3</span><span class="th" style="background:#64D2FF33"></span><span class="rt">New this week</span><span class="rv" style="color:#EF4444">&#9660;</span></div>
+    </div>
+    <div class="bt" onclick="openTopic('flights')">
+      <div class="bt-hd"><i class="fa-solid fa-plane-up" style="color:#64D2FF"></i><span class="nm">Flights</span></div>
+      <div class="flt-row"><b>DEL</b><b>BOM</b></div>
+      <div class="flt-line"><span class="p"></span><span class="ln"><span class="pl"><i class="fa-solid fa-plane"></i></span></span><span class="p"></span></div>
+      <div class="flt-row"><span style="color:#22C55E">On time</span><span>2h 10m</span></div>
+    </div>
+
+    <div class="pack-gap"></div>
+
+    <div class="bt" onclick="openTopic('space')">
+      <div class="bt-hd"><i class="fa-solid fa-rocket" style="color:#5E5CE6"></i><span class="nm">Space</span></div>
+      <div class="cd">T- 06:12:44</div><div class="sub">Next launch window</div>
+      <div class="seg" style="color:#5E5CE6"><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+    </div>
+    <div class="bt" onclick="openTopic('ai')">
+      <div class="bt-hd"><i class="fa-solid fa-microchip" style="color:#A855F7"></i><span class="nm">AI &amp; Tech</span><span class="tag tag-soon">Compute</span></div>
+      <div class="bars" style="color:#A855F7"><span style="height:40%"></span><span style="height:62%"></span><span style="height:48%"></span><span style="height:80%"></span><span style="height:55%"></span><span style="height:90%"></span><span style="height:70%"></span></div>
+      <div class="sub">New models this week</div>
+    </div>
+
+    <div class="pack-gap"></div>
+
+    <div class="bt w2 matx" onclick="openTopic('jobs')">
+      <div class="bt-hd"><i class="fa-solid fa-layer-group" style="color:#22C55E"></i><span class="nm">Opportunities</span><span class="tag tag-soon">Matrix</span></div>
+      <div class="mr"><div class="mi" style="background:#22C55E22;color:#22C55E"><i class="fa-solid fa-briefcase"></i></div><div class="mt"><b>Jobs &amp; Internships</b><span>Matched roles near you</span></div><div class="mb">128</div></div>
+      <div class="mr"><div class="mi" style="background:#0A84FF22;color:#0A84FF"><i class="fa-solid fa-graduation-cap"></i></div><div class="mt"><b>Scholarships</b><span>Open funding &amp; grants</span></div><div class="mb">36</div></div>
+      <div class="mr"><div class="mi" style="background:#EAB30822;color:#EAB308"><i class="fa-solid fa-file-contract"></i></div><div class="mt"><b>Govt Tenders</b><span>Live bids closing soon</span></div><div class="mb">54</div></div>
+    </div>
+  </div>
+  <div class="bt-note">Live modules stream real data now &middot; the rest show their real layout, ready for upgrades. Tap any to open.</div>
   <script>
     var TOPIC_GROUPS = [
       { g:'News & Markets', items:[
@@ -3201,25 +3301,12 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
         {k:'fuel',n:'Fuel Prices',i:'fa-gas-pump',c:'#FF9F0A'},
       ]},
     ];
-    var TOPIC_BY_KEY={};
-    function renderTopics(){
-      var w=document.getElementById('mods-wrap'); if(!w) return;
-      w.innerHTML=TOPIC_GROUPS.map(function(grp){
-        return '<div class="mods-grp-lbl">'+grp.g+'</div><div class="mods-grid">'+grp.items.map(function(it){
-          TOPIC_BY_KEY[it.k]=it;
-          var live=it.go?'<span class="mod2-live"></span>':'';
-          return '<div class="mod2-card" style="--tint:'+it.c+'26" onclick="openTopic(\''+it.k+'\')">'+live+
-            '<div class="mod2-ico" style="background:'+it.c+'22;color:'+it.c+'"><i class="fa-solid '+it.i+'"></i></div>'+
-            '<div class="mod2-name">'+it.n+'</div></div>';
-        }).join('')+'</div>';
-      }).join('');
-    }
+    var TOPIC_BY_KEY={}; TOPIC_GROUPS.forEach(function(gr){gr.items.forEach(function(it){TOPIC_BY_KEY[it.k]=it;});});
     function openTopic(k){
       var it=TOPIC_BY_KEY[k]; if(!it) return;
       if(it.go==='news'){ if(window.navTo) navTo('home'); return; }
       if(it.go==='weather'){ var b=document.getElementById('bento-weather'); if(b) b.scrollIntoView({behavior:'smooth',block:'center'}); return; }
       if(it.go && it.go.indexOf('mkt:')===0){ if(window.openMktCat) openMktCat(it.go.slice(4)); return; }
-      // placeholder preview for modules still being wired
       document.getElementById('tp-ico').style.background=it.c+'22';
       document.getElementById('tp-ico').style.color=it.c;
       document.getElementById('tp-ico').innerHTML='<i class="fa-solid '+it.i+'"></i>';
@@ -3230,8 +3317,24 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
       document.getElementById('topic-overlay').classList.add('open');
     }
     function closeTopic(){ document.getElementById('topic-overlay').classList.remove('open'); }
-    renderTopics();
+    function updateBento(){
+      var mk=window._lastMkt||{}; function g(b,s){return (mk[b]||{})[s];}
+      function P(id,v){var e=document.getElementById(id);if(e&&v!=null)e.textContent=v;}
+      function C(id,p){var e=document.getElementById(id);if(!e||p==null)return;var up=p>=0;e.textContent=(up?'▲ ':'▼ ')+Math.abs(p).toFixed(2)+'%';e.style.color=up?'#22C55E':'#EF4444';}
+      function S(id,arr,up){var e=document.getElementById(id);if(!e||!arr||arr.length<2||typeof miniSpark!=='function')return;e.innerHTML=miniSpark(arr,up?'#22C55E':'#EF4444');}
+      var f=(typeof fmtNum==='function')?fmtNum:function(x){return x;};
+      var nifty=g('stocks','NIFTY'),btc=g('crypto','BTC'),gold=g('metals','GOLD'),usd=g('forex','USDINR');
+      if(nifty){P('mk-nifty',f(nifty.price));C('mc-nifty',nifty.change_pct);S('ms-nifty',nifty.spark,nifty.change_pct>=0);}
+      if(btc){P('mk-btc','$'+f(btc.price_usd));C('mc-btc',btc.change_pct);S('ms-btc',btc.spark,btc.change_pct>=0);}
+      if(gold){P('mk-gold',gold.price_inr_10g?('₹'+f(gold.price_inr_10g)):('$'+f(gold.price_usd_oz||0)));C('mc-gold',gold.change_pct);}
+      if(usd){P('mk-usd','₹'+f(usd.price));C('mc-usd',usd.change_pct);S('ms-usd',usd.spark,usd.change_pct>=0);}
+      var t=document.getElementById('bw-temp'), c=document.getElementById('bw-desc'), bt=document.getElementById('bt-temp'), bc=document.getElementById('bt-cond');
+      if(t&&bt&&t.textContent&&t.textContent.indexOf('-')<0){ bt.innerHTML=t.textContent.replace('°','')+'<small>°</small>'; }
+      if(c&&bc&&c.textContent&&c.textContent!=='Loading…'){ bc.textContent=c.textContent; }
+    }
+    updateBento(); setInterval(updateBento, 4000);
   </script>
+
 
   <!-- Dictionary (replaces Discover) -->
   <div class="exp-sec-hdr">
