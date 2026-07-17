@@ -837,13 +837,17 @@ def link_stories(conn, window_days: int = STORY_WINDOW_DAYS) -> int:
     number of multi-article threads formed.
     """
     rows = conn.execute(
-        "SELECT id, headline, micro_tags FROM articles "
+        "SELECT id, headline, micro_tags, pillar_id FROM articles "
         "WHERE ai_processed=1 AND published_at >= datetime('now', ?) "
         "ORDER BY id ASC",
         (f"-{int(window_days)} days",)
     ).fetchall()
     if len(rows) < 2:
         return 0
+
+    # Threads stay within one category — a story only links articles of the
+    # same pillar, so unrelated stories that merely share a word don't merge.
+    pillar_of = {r["id"]: r["pillar_id"] for r in rows}
 
     inverted: dict[str, list] = {}
     for r in rows:
@@ -881,7 +885,7 @@ def link_stories(conn, window_days: int = STORY_WINDOW_DAYS) -> int:
 
     MIN_SHARED = 2
     for (a, b), shared in pair_shared.items():
-        if shared >= MIN_SHARED:
+        if shared >= MIN_SHARED and pillar_of.get(a) == pillar_of.get(b):
             union(a, b)
 
     roots = {r["id"]: find(r["id"]) for r in rows}
