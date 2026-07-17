@@ -52,7 +52,7 @@
 
   /* Structural */
   --hh: 48px;
-  --nh: 60px;
+  --nh: 70px;
   --r:        18px;   /* squircle cards — refined, a touch softer */
   --r-card:   18px;
   --r-button: 14px;
@@ -1459,10 +1459,10 @@ header {
    FLOATING BOTTOM NAV
 ═══════════════════════════════════ */
 nav {
-  position: absolute; bottom: max(14px, env(safe-area-inset-bottom));
+  position: absolute; bottom: max(16px, env(safe-area-inset-bottom));
   left: 50%; transform: translateX(-50%);
-  width: calc(100% - 40px); max-width: 320px;
-  height: 54px;
+  width: calc(100% - 30px); max-width: 358px;
+  height: 64px;
   display: flex; align-items: center; justify-content: space-around;
   z-index: 600;
 
@@ -1473,10 +1473,10 @@ nav {
   border: 1px solid rgba(255,255,255,0.16);
   border-radius: 999px;
   box-shadow:
-    0 14px 38px rgba(0,0,0,0.38),
+    0 16px 44px rgba(0,0,0,0.38),
     inset 0 1px 1px rgba(255,255,255,0.24),
     inset 0 -1px 1px rgba(0,0,0,0.12);
-  padding: 0 8px;
+  padding: 0 10px;
 }
 
 .nb {
@@ -1485,16 +1485,16 @@ nav {
   transition: all 0.25s var(--spring); position: relative;
 }
 .nb-icon {
-  min-width: 40px; height: 40px; padding: 0 11px; border-radius: 999px;
+  min-width: 47px; height: 47px; padding: 0 13px; border-radius: 999px;
   display: flex; align-items: center; justify-content: center;
-  font-size: 1.07rem; color: rgba(255,255,255,0.6);
+  font-size: 1.26rem; color: rgba(255,255,255,0.6);
   transition: background .28s var(--snap), color .28s var(--snap), box-shadow .28s var(--snap), padding .28s var(--snap);
 }
-.nb-icon i { font-size: 1.07rem; }
+.nb-icon i { font-size: 1.26rem; }
 .nb-lbl { display: none; }
 /* Active = an elongated frosted pill behind the icon — slick iOS glass. */
 .nb.on .nb-icon {
-  padding: 0 21px;
+  padding: 0 24px;
   background: rgba(255,255,255,0.15);
   color: #fff;
   box-shadow: inset 0 0 0 0.5px rgba(255,255,255,0.30), 0 2px 10px rgba(0,0,0,0.18);
@@ -3004,7 +3004,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
       <div class="mc-sub" id="mc-sub">Live market data</div>
     </div>
   </div>
-  <div class="mc-body"><div class="mc-grid" id="mc-grid"><div class="mc-empty">Loading…</div></div></div>
+  <div class="mc-body"><div class="mc-grid" id="mc-grid"><div class="mc-empty">Loading…</div></div><div class="mc-about" id="mc-about"></div></div>
 </div>
 
 <!-- INTELLIGENCE MODULE OVERLAY -->
@@ -3134,6 +3134,16 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
     .gc-price{position:relative;z-index:1;font:800 1.18rem/1 var(--fd);color:#fff;margin-top:13px;letter-spacing:-.02em;}
     .gc-sub{position:relative;z-index:1;font:600 .52rem/1 var(--fd);letter-spacing:.06em;text-transform:uppercase;color:rgba(255,255,255,.42);margin-top:6px;}
     .gc-spark{position:absolute;left:0;right:0;bottom:0;height:32px;opacity:.85;pointer-events:none;} .gc-spark svg{width:100%;height:100%;}
+    /* Category detail → dark glassic tiles + topic explainer */
+    .mc-grid .mkt-tile, .mc-grid .mkt-metals-tile{background:linear-gradient(178deg,#151517,#0c0c0e)!important;border:1px solid rgba(255,255,255,.05)!important;border-radius:18px;box-shadow:inset 0 1px 0 rgba(255,255,255,.1), 0 12px 26px -20px rgba(0,0,0,.8)!important;}
+    .mc-grid .mkt-tile-name{color:rgba(255,255,255,.5)!important;} .mc-grid .mkt-tile-price{color:#fff!important;}
+    .mc-about{margin-top:20px;padding:17px 16px;border-radius:20px;background:linear-gradient(178deg,#151517,#0c0c0e);border:1px solid rgba(255,255,255,.05);box-shadow:inset 0 1px 0 rgba(255,255,255,.08), 0 14px 30px -22px rgba(0,0,0,.85);}
+    .mca-hd{font:800 1.02rem/1.1 var(--fd);color:#fff;margin-bottom:10px;letter-spacing:-.01em;}
+    .mca-p{font:400 .84rem/1.62 var(--f);color:rgba(255,255,255,.72);}
+    .mca-row{display:flex;gap:10px;align-items:flex-start;margin-top:14px;font:500 .76rem/1.5 var(--f);color:rgba(255,255,255,.58);}
+    .mca-row i{color:#0EB7D6;font-size:.82rem;margin-top:2px;flex-shrink:0;}
+    .mca-sub{font:800 .6rem/1 var(--fd);letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.4);margin:16px 0 9px;}
+    .mca-steps{margin:0;padding-left:18px;} .mca-steps li{font:500 .78rem/1.6 var(--f);color:rgba(255,255,255,.72);margin-bottom:4px;}
   </style>
   <div class="glance-grid" id="glance-grid"></div>
 
@@ -7006,6 +7016,14 @@ function _mcTile(kind, sym, label, d){
     ${chg}
   </div>`;
 }
+const MKT_INFO = {
+  stocks:{d:'A stock is a share of ownership in a public company. Indices such as the Nifty 50 or S&P 500 bundle many companies together to gauge a whole market’s health.',o:'Organised share trading dates to the Amsterdam exchange in 1602 and the New York Stock Exchange in 1792.',i:['Open a broker / Demat account','Begin with a low-cost index fund or ETF','Invest a fixed amount monthly and hold for years'],n:'Watch company earnings, central-bank rate decisions and index rebalances.'},
+  crypto:{d:'Cryptocurrencies are digital assets secured by blockchains — decentralised networks that run without a central bank.',o:'Bitcoin launched in 2009; Ethereum added programmable smart contracts in 2015.',i:['Use a regulated exchange or self-custody wallet','Start small — only what you can afford to lose','Average in over time and secure your keys'],n:'Track network upgrades, regulation and ETF fund flows.'},
+  metals:{d:'Precious metals like gold and silver are physical stores of value, often held as a hedge against inflation and uncertainty.',o:'Gold has served as money for over 4,000 years; the classical gold standard ran from the 1870s to 1914.',i:['Buy ETFs, sovereign gold bonds or coins','Keep it a small slice of your portfolio','Prefer regulated, hallmarked sources'],n:'Follow the US dollar, real yields and central-bank buying.'},
+  commodities:{d:'Commodities are raw materials — energy (oil, gas), metals and agriculture — whose prices swing with global supply and demand.',o:'Organised futures trading began at the Chicago Board of Trade in 1848.',i:['Get exposure via ETFs (futures are advanced)','Learn each market’s seasonality and storage costs','Diversify across energy and agri'],n:'Watch OPEC decisions, weather and inventory reports.'},
+  rates:{d:'Bond yields are the return on government and corporate debt. Rising yields mean cheaper bonds and higher borrowing costs across the economy.',o:'Sovereign bonds trace back to Venetian and Dutch state financing in the 1500s–1600s.',i:['Buy government bonds, T-bills or bond funds','Ladder maturities for steady income','Match duration to your time horizon'],n:'Follow central-bank policy, inflation and the yield curve.'},
+  forex:{d:'Foreign exchange is the trading of one currency for another. Rates like USD/INR reflect trade, interest rates and capital flows.',o:'The modern floating-rate system began after the Bretton Woods collapse in 1971.',i:['Understand currency pairs and leverage risk','Most people get exposure via travel, remittance or funds','Trading FX directly is high-risk'],n:'Track interest-rate gaps, inflation and trade balances.'}
+};
 function openMktCat(key){
   const c = MKT_DEF.find(x => x.key === key); if(!c) return;
   window._openCat = key;
@@ -7017,6 +7035,15 @@ function openMktCat(key){
                        .map(([sym, label]) => _mcTile(key, sym, label, b[sym]));
   grid.innerHTML = tiles.length ? tiles.join('')
     : '<div class="mc-empty">Live data is warming up — go back and tap again in a moment.</div>';
+  const inf = MKT_INFO[key], ab = document.getElementById('mc-about');
+  if (ab) ab.innerHTML = inf ? (
+    '<div class="mca-hd">About '+c.title+'</div>'+
+    '<div class="mca-p">'+inf.d+'</div>'+
+    '<div class="mca-row"><i class="fa-solid fa-clock-rotate-left"></i><span>'+inf.o+'</span></div>'+
+    '<div class="mca-sub">How to invest</div>'+
+    '<ol class="mca-steps">'+inf.i.map(function(s){return '<li>'+s+'</li>';}).join('')+'</ol>'+
+    '<div class="mca-row"><i class="fa-solid fa-newspaper"></i><span>'+inf.n+'</span></div>'
+  ) : '';
   document.getElementById('mktcat-overlay').classList.add('open');
 }
 function closeMktCat(){
