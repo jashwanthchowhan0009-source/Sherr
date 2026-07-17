@@ -761,17 +761,41 @@ header {
   border-radius: 100px; padding: 9px 18px; font-size: 0.82rem; font-weight: 700;
   cursor: pointer; margin: 4px 0 2px; display: inline-flex; align-items: center; gap: 7px; }
 .ao-acts {
-  display: flex; align-items: center; gap: 8px; padding: 6px 0 4px;
-  margin-bottom: 18px;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+  padding: 6px 0 2px; margin-bottom: 18px;
 }
+/* Glossy 3D "coin" pill actions — colored specular icon-disc + label */
 .ao-act {
-  display: inline-flex; flex-direction: row; align-items: center; gap: 7px;
-  padding: 7px 14px; border-radius: 100px;
-  font-size: 0.76rem; font-weight: 600; color: var(--t2);
-  cursor: pointer; transition: all 0.15s var(--spring);
-  background: var(--bgcard); border: 1px solid var(--line2);
+  --ac: #4F6BD4;
+  display: flex; flex-direction: row; align-items: center; gap: 11px;
+  padding: 8px 16px 8px 8px; border-radius: 100px;
+  font-family: var(--fd); font-size: 0.86rem; font-weight: 700; color: var(--t1);
+  cursor: pointer; transition: transform 0.15s var(--spring), box-shadow 0.2s;
+  background: linear-gradient(180deg, rgba(255,255,255,0.055), rgba(255,255,255,0.02));
+  border: 1px solid rgba(255,255,255,0.08);
 }
-.ao-act-share { margin-left: auto; }
+.ao-act .disc {
+  position: relative; width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(125% 125% at 30% 20%,
+    color-mix(in srgb, var(--ac) 45%, #fff) 0%,
+    var(--ac) 46%,
+    color-mix(in srgb, var(--ac) 60%, #000) 100%);
+  box-shadow:
+    0 7px 15px -5px color-mix(in srgb, var(--ac) 72%, transparent),
+    inset 0 1.5px 1px rgba(255,255,255,0.8),
+    inset 0 -4px 7px -3px color-mix(in srgb, var(--ac) 82%, #000);
+}
+.ao-act .disc::after {
+  content: ""; position: absolute; inset: 2px; border-radius: 50%; pointer-events: none;
+  background: radial-gradient(62% 46% at 34% 18%, rgba(255,255,255,0.9), rgba(255,255,255,0) 62%);
+}
+.ao-act .disc i {
+  position: relative; z-index: 1; color: #fff; font-size: 0.95rem;
+  filter: drop-shadow(0 1px 1px rgba(0,0,0,0.32));
+}
+.ao-act .lbl { line-height: 1; }
+.ao-act-share { margin-left: 0; }
 .ao-tldr { margin: 0 0 14px; padding: 12px 14px; border-radius: 12px;
   background: var(--as, rgba(79,107,212,0.10)); border: 1px solid rgba(79,107,212,0.28); }
 .ao-tldr-h { font-size: 0.7rem; font-weight: 800; letter-spacing: 0.6px; text-transform: uppercase;
@@ -779,10 +803,12 @@ header {
 .ao-tldr ul { margin: 0; padding-left: 18px; }
 .ao-tldr li { font-size: 0.85rem; line-height: 1.5; color: var(--t1); margin-bottom: 5px; }
 .ao-tldr .tldr-msg { font-size: 0.82rem; color: var(--t3); }
-.ao-act:active { transform: scale(0.94); }
-.ao-act i { font-size: 0.92rem; }
-.ao-act.liked { color: var(--c-red); background: rgba(255,91,91,0.08); border-color: rgba(255,91,91,0.2); }
-.ao-act.saved { color: var(--accent); background: var(--as); border-color: rgba(79,107,212,0.2); }
+.ao-act:active { transform: scale(0.955); }
+.ao-act.liked, .ao-act.saved { border-color: color-mix(in srgb, var(--ac) 40%, transparent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--ac) 12%, transparent), rgba(255,255,255,0.02)); }
+[data-theme="light"] .ao-act { color: #14161c;
+  background: linear-gradient(180deg, rgba(0,0,0,0.03), rgba(0,0,0,0.015));
+  border-color: rgba(0,0,0,0.07); }
 .ao-related-hdr {
   font-family: var(--fd); font-size: 0.88rem; font-weight: 700;
   color: var(--t1); margin-bottom: 12px;
@@ -1581,10 +1607,7 @@ nav {
   backdrop-filter: blur(14px) saturate(160%); -webkit-backdrop-filter: blur(14px) saturate(160%); }
 .ao-source-link i { color: var(--neon); }
 .ao-source-link:active { transform: scale(0.98); }
-.ao-acts .ao-act { background: var(--bgcard); border: 1px solid var(--glassB);
-  border-radius: 100px; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
-.ao-acts .ao-act.liked { color: #FF5B7F; }
-.ao-acts .ao-act.saved { color: var(--neon); }
+.ao-acts .ao-act { border-radius: 100px; }
 
 /* ─── Phase 7: Dictionary card + lookup result ─── */
 .dict-card { display: flex; align-items: center; gap: 12px; margin: 0 14px 10px; padding: 14px 16px; cursor: pointer; }
@@ -2998,10 +3021,10 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
         <div class="ao-string-track" id="ao-string-track"></div>
       </div>
       <div class="ao-acts">
-        <div class="ao-act tap" id="ao-like" onclick="aoLike()"><i class="fa-regular fa-heart"></i><span>Like</span></div>
-        <div class="ao-act tap" id="ao-save" onclick="aoSave()"><i class="fa-regular fa-bookmark"></i><span>Save</span></div>
-        <div class="ao-act tap" id="ao-tldr-btn" onclick="aoSummarize()"><i class="fa-solid fa-wand-magic-sparkles"></i><span>Summarize</span></div>
-        <div class="ao-act tap ao-act-share" onclick="shareArticleCard(currentArticle)"><i class="fa-regular fa-paper-plane"></i><span>Share</span></div>
+        <div class="ao-act tap" id="ao-like" style="--ac:#FF5B7F" onclick="aoLike()"><span class="disc"><i class="fa-regular fa-heart"></i></span><span class="lbl">Like</span></div>
+        <div class="ao-act tap" id="ao-save" style="--ac:#F5A623" onclick="aoSave()"><span class="disc"><i class="fa-regular fa-bookmark"></i></span><span class="lbl">Save</span></div>
+        <div class="ao-act tap" id="ao-tldr-btn" style="--ac:#A855F7" onclick="aoSummarize()"><span class="disc"><i class="fa-solid fa-wand-magic-sparkles"></i></span><span class="lbl">Summarize</span></div>
+        <div class="ao-act tap ao-act-share" id="ao-share" style="--ac:#3B9EFF" onclick="shareArticleCard(currentArticle)"><span class="disc"><i class="fa-solid fa-paper-plane"></i></span><span class="lbl">Share</span></div>
       </div>
 
       <div class="ao-cmt-sec">
