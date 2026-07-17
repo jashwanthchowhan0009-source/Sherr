@@ -724,6 +724,32 @@ header {
 .ao-byline i { color: #A855F7; font-size: 0.72rem; }
 .ao-byline-bottom { margin: 20px 0 4px; padding-top: 16px; border-top: 1px solid var(--line2);
   font-size: 0.72rem; }
+
+/* ── The String — chronological story thread ─────────────────────────────── */
+.ao-string { margin: 22px 0 4px; padding: 16px 4px 6px; border-top: 1px solid var(--line2); }
+.ao-string-hdr { display: flex; align-items: center; gap: 8px; margin: 0 4px 16px;
+  font-family: var(--fd); font-size: 0.9rem; font-weight: 800; letter-spacing: .2px; color: var(--t1); }
+.ao-string-hdr i { color: #A855F7; font-size: 0.9rem; }
+.ao-string-sub { margin-left: auto; font-family: var(--ft); font-size: 0.64rem; font-weight: 700;
+  letter-spacing: .6px; text-transform: uppercase; color: var(--t3); }
+.ao-string-track { position: relative; padding-left: 26px; }
+.ao-string-track::before { content: ""; position: absolute; left: 8px; top: 4px; bottom: 10px;
+  width: 2px; background: linear-gradient(180deg, #A855F7, color-mix(in srgb, #A855F7 18%, transparent)); }
+.ao-sn { position: relative; padding: 0 0 18px; cursor: pointer; }
+.ao-sn:last-child { padding-bottom: 2px; }
+.ao-sn-dot { position: absolute; left: -22px; top: 3px; width: 12px; height: 12px; border-radius: 50%;
+  background: var(--bgcard); border: 2px solid var(--sn-c, #A855F7);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--sn-c, #A855F7) 16%, transparent); }
+.ao-sn.is-current .ao-sn-dot { background: var(--sn-c, #A855F7); }
+.ao-sn-date { font-size: 0.62rem; font-weight: 800; letter-spacing: .5px; text-transform: uppercase;
+  color: var(--sn-c, #A855F7); margin-bottom: 3px; }
+.ao-sn-title { font-size: 0.82rem; font-weight: 700; line-height: 1.32; color: var(--t1); }
+.ao-sn.is-current .ao-sn-title { color: var(--t1); }
+.ao-sn-cur { display: inline-block; margin-left: 7px; padding: 1px 7px; border-radius: 999px;
+  font-size: 0.54rem; font-weight: 800; letter-spacing: .6px; text-transform: uppercase;
+  color: #A855F7; background: color-mix(in srgb, #A855F7 16%, transparent); vertical-align: middle; }
+.ao-sn-sum { font-size: 0.72rem; line-height: 1.4; color: var(--t3); margin-top: 4px; }
+.ao-sn:hover .ao-sn-title { color: var(--accent); }
 .ao-src-time { font-size: 0.7rem; color: var(--t3); margin-left: auto; }
 .ao-main-title {
   font-family: var(--fd); font-size: 1.2rem; font-weight: 700;
@@ -2965,6 +2991,14 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
       <div class="ao-text" id="ao-text"></div>
       <div class="ao-keypoints" id="ao-keypoints"></div>
       <div class="ao-byline ao-byline-bottom" id="ao-byline"></div>
+      <div class="ao-string" id="ao-string" style="display:none">
+        <div class="ao-string-hdr">
+          <i class="fa-solid fa-timeline"></i>
+          <span>The String</span>
+          <span class="ao-string-sub" id="ao-string-count"></span>
+        </div>
+        <div class="ao-string-track" id="ao-string-track"></div>
+      </div>
       <div class="ao-acts">
         <div class="ao-act tap" id="ao-like" onclick="aoLike()"><i class="fa-regular fa-heart"></i><span>Like</span></div>
         <div class="ao-act tap" id="ao-save" onclick="aoSave()"><i class="fa-regular fa-bookmark"></i><span>Save</span></div>
@@ -5154,6 +5188,61 @@ async function aoLoadFullContext(id) {
     currentArticle._wwww = d.wwww || {};   // shown on demand via aoSummarize()
   } catch (e) { /* full endpoint not reachable */ }
 }
+
+// "The String" — pull the chronological story thread this article belongs to
+// and render it as a connected timeline. Hidden unless ≥2 linked articles.
+async function aoLoadStory(id) {
+  const wrap  = document.getElementById('ao-string');
+  const track = document.getElementById('ao-string-track');
+  const sub   = document.getElementById('ao-string-count');
+  if (!wrap || !track) return;
+  wrap.style.display = 'none'; track.innerHTML = '';
+  if (!id) return;
+  try {
+    const d = await api('/story/' + encodeURIComponent(id));
+    // Guard against races: the overlay may have moved to another article.
+    if (!d || !currentArticle || String(currentArticle.id) !== String(id)) return;
+    const thread = (d.thread || []).filter(n => n && n.id);
+    if (thread.length < 2) return;
+
+    track.innerHTML = thread.map(n => {
+      const cc  = CATS[n.pillar_slug] || CATS.tech;
+      const hex = cc.hex || n.pillar_color || '#A855F7';
+      const when = fmtStoryDate(n.published_at);
+      const cur  = n.is_current;
+      const sum  = (n.summary || '').trim();
+      return `<div class="ao-sn${cur ? ' is-current' : ''}" style="--sn-c:${hex}"
+                   ${cur ? '' : `onclick="openStoryNode(${n.id})"`}>
+        <div class="ao-sn-dot"></div>
+        <div class="ao-sn-date">${when}</div>
+        <div class="ao-sn-title">${bEsc(n.headline || '')}${cur ? '<span class="ao-sn-cur">You are here</span>' : ''}</div>
+        ${sum ? `<div class="ao-sn-sum">${bEsc(sum)}</div>` : ''}
+      </div>`;
+    }).join('');
+    if (sub) sub.textContent = thread.length + ' updates';
+    wrap.style.display = '';
+  } catch (e) { /* story endpoint not reachable — leave hidden */ }
+}
+
+// A compact date label for the timeline (e.g. "17 Jul"). Falls back gracefully.
+function fmtStoryDate(s) {
+  if (!s) return '';
+  const d = new Date((s + '').replace(' ', 'T'));
+  if (isNaN(d)) return (s + '').slice(0, 10);
+  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+}
+
+// Open another article in the same thread when its timeline node is tapped.
+async function openStoryNode(id) {
+  if (!id) return;
+  const local = (typeof homeArticles !== 'undefined' && homeArticles || [])
+    .map(normalizeArticle).find(x => String(x.id) === String(id));
+  if (local) { openArticle(local); return; }
+  try {
+    const a = await api('/article/' + encodeURIComponent(id));
+    if (a && a.id) openArticle(a);
+  } catch (e) { /* couldn't load that article — ignore the tap */ }
+}
 function openArticle(rawA) {
   markSeen(rawA && (rawA.id || rawA.info_object_id || rawA.info_id));   // persist "already seen"
   const a = normalizeArticle(rawA);
@@ -5208,6 +5297,8 @@ function openArticle(rawA) {
   document.getElementById('ao-keypoints').innerHTML = '';
   // Fetch the fuller article body + key points (who/what/where/when/why).
   aoLoadFullContext(a.id);
+  // Fetch the story thread ("the string") this article belongs to.
+  aoLoadStory(a.id);
 
   // Source link(s) — tapping opens the original news page in a new tab.
   const srcWrap = document.getElementById('ao-sources');
