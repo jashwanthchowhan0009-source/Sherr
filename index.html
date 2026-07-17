@@ -3115,6 +3115,26 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
     <radialGradient id="gcSpec" cx="35%" cy="26%" r="62%"><stop offset="0" stop-color="#ffffff" stop-opacity=".9"/><stop offset="55%" stop-color="#ffffff" stop-opacity="0"/></radialGradient>
     <filter id="gcSoft" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="1.3"/></filter>
   </defs></svg>
+  <style>
+    /* Market launcher → dark glassic cards with live flagship data + sparkline */
+    .glance-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:2px 14px 12px;}
+    .glance-card{position:relative;overflow:hidden;border-radius:22px;--gc:#5AC8FA;min-height:110px;padding:13px 14px 12px;cursor:pointer;
+      background:linear-gradient(178deg,#151517,#0c0c0e);border:1px solid rgba(255,255,255,.05);
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.12),
+        inset 0 -50px 44px -40px color-mix(in srgb, var(--gc) 42%, transparent),
+        inset 0 -1px 0 color-mix(in srgb, var(--gc) 34%, transparent),
+        0 16px 34px -24px rgba(0,0,0,.9),
+        0 3px 18px -10px color-mix(in srgb, var(--gc) 18%, transparent);
+      transition:transform .16s var(--spring);}
+    .glance-card:active{transform:scale(.97);}
+    .gc-hd{display:flex;align-items:center;gap:8px;position:relative;z-index:1;}
+    .gc-hd i{font-size:.82rem;color:var(--gc);} .gc-hd .t{font:700 .74rem/1 var(--fd);color:#fff;letter-spacing:-.01em;}
+    .gc-hd .gc-ch{margin-left:auto;font:800 .58rem/1 var(--fd);}
+    .gc-price{position:relative;z-index:1;font:800 1.18rem/1 var(--fd);color:#fff;margin-top:13px;letter-spacing:-.02em;}
+    .gc-sub{position:relative;z-index:1;font:600 .52rem/1 var(--fd);letter-spacing:.06em;text-transform:uppercase;color:rgba(255,255,255,.42);margin-top:6px;}
+    .gc-spark{position:absolute;left:0;right:0;bottom:0;height:32px;opacity:.85;pointer-events:none;} .gc-spark svg{width:100%;height:100%;}
+  </style>
   <div class="glance-grid" id="glance-grid"></div>
 
   <!-- ════════ BENTO ECOSYSTEM — Intelligence Explorer dashboard ════════ -->
@@ -6949,20 +6969,25 @@ const MKT_DEF = [
     items:[['USDINR','USD/INR'],['EURINR','EUR/INR'],['GBPINR','GBP/INR'],['JPYINR','JPY/INR'],['EURUSD','EUR/USD'],['GBPUSD','GBP/USD'],['USDJPY','USD/JPY'],['AUDUSD','AUD/USD']] },
 ];
 function _mktBucket(key){ return (window._lastMkt||{})[key] || {}; }
+const GLANCE_FLAG={stocks:['stocks','NIFTY','Nifty 50'],crypto:['crypto','BTC','Bitcoin'],metals:['metals','GOLD','Gold'],commodities:['commodities','WTI_CRUDE','WTI Crude'],rates:['rates','US10Y','US 10Y'],forex:['forex','USDINR','USD/INR']};
+const GLANCE_AC={stocks:'#22C55E',crypto:'#FF9F0A',metals:'#EAB308',commodities:'#64D2FF',rates:'#A855F7',forex:'#5E5CE6'};
 function renderGlance(){
   const grid = document.getElementById('glance-grid'); if(!grid) return;
   grid.innerHTML = MKT_DEF.map(c => {
-    const b = _mktBucket(c.key);
-    let pct = null;
-    for (const [sym] of c.items){ const d = b[sym]; if (d && d.change_pct != null) { pct = d.change_pct; break; } }
-    const badge = pct == null ? '' :
-      `<span class="glance-badge ${pct>=0?'up':'down'}">${pct>=0?'▲':'▼'} ${Math.abs(pct).toFixed(2)}%</span>`;
-    return `<div class="glance-cell tap" onclick="openMktCat('${c.key}')" role="button" aria-label="${c.title}">
-      <div class="glance-btn">
-        ${badge}
-        <div class="glance-mark">${GLANCE_SVG[c.key] || ''}</div>
-      </div>
-      <div class="glance-lbl">${c.title.split(' · ')[0]}</div>
+    const fl = GLANCE_FLAG[c.key] || [c.key, c.items[0][0], c.items[0][1]];
+    const d = _mktBucket(fl[0])[fl[1]] || {};
+    const pct = d.change_pct;
+    const up = (pct||0) >= 0;
+    const val = (typeof _mktVal==='function') ? _mktVal(fl[0], d) : 0;
+    const price = (val > 0) ? _mktFmt(fl[0], val) : '—';
+    const ch = pct == null ? '' : `<span class="gc-ch" style="color:${up?'#22C55E':'#EF4444'}">${up?'▲':'▼'} ${Math.abs(pct).toFixed(2)}%</span>`;
+    const spark = d.spark ? miniSpark(d.spark, up?'#22C55E':'#EF4444') : '';
+    const ac = GLANCE_AC[c.key] || '#5AC8FA';
+    return `<div class="glance-card" style="--gc:${ac}" onclick="openMktCat('${c.key}')" role="button" aria-label="${c.title}">
+      <div class="gc-hd"><i class="fa-solid ${c.icon}"></i><span class="t">${c.title}</span>${ch}</div>
+      <div class="gc-price">${price}</div>
+      <div class="gc-sub">${fl[2]}</div>
+      <div class="gc-spark">${spark}</div>
     </div>`;
   }).join('');
 }
