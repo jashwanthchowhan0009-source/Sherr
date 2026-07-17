@@ -3092,11 +3092,11 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   <!-- Category icons: All Stories + Arts, Well-being, Business, … (filters the feed below) -->
   <div class="exp-cat-row" id="exp-cat-row"></div>
 
-  <!-- At a Glance: Weather + Live Markets -->
+  <!-- At a Glance: Live Markets (weather card removed; its data feeds the bento weather tile) -->
   <div class="exp-sec-hdr">
     <div class="exp-sec-hdr-title"><i class="fa-solid fa-chart-simple"></i> At a Glance</div>
   </div>
-  <div class="exp-bento" style="grid-template-columns:1fr;gap:0">
+  <div class="exp-bento" style="display:none;grid-template-columns:1fr;gap:0">
     <div class="bento-weather tap" id="bento-weather" onclick="requestGeo(true)" style="margin-bottom:8px">
       <div>
         <div class="bw-loc" id="bw-loc"><i class="fa-solid fa-location-dot" style="font-size:0.6rem"></i> Locating…</div>
@@ -3119,9 +3119,9 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 
   <!-- ════════ BENTO ECOSYSTEM — Intelligence Explorer dashboard ════════ -->
   <style>
-    .bento{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;grid-auto-rows:minmax(94px,auto);}
+    .bento{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;grid-auto-rows:auto;margin:2px 14px 10px;}
     /* Glassic Lighting: thick illuminated glass slab — bright top edge + semantic bottom glow + backlight */
-    .bt{position:relative;overflow:hidden;border-radius:26px;--gc:#3a3a3c;
+    .bt{position:relative;overflow:hidden;border-radius:26px;--gc:#3a3a3c;min-height:104px;
       background:linear-gradient(178deg,#151517 0%,#101012 46%,#0a0a0c 100%);border:1px solid rgba(255,255,255,.045);
       padding:14px;cursor:pointer;transition:transform .16s var(--spring),box-shadow .28s;
       box-shadow:
@@ -3153,7 +3153,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
     .bt.is-offline .bt-state,.bt.is-error .bt-state{display:inline-flex;}
     .bt.is-error .bt-state{color:#EF4444;background:rgba(239,68,68,.14);}
     @media (prefers-reduced-motion:reduce){.bt.is-loading::after{animation:none;}}
-    .pack-gap{grid-column:span 2;height:8px;}
+    .pack-gap{grid-column:span 2;height:2px;}
     .bt-hd{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
     .bt-hd i{font-size:.82rem;} .bt-hd .nm{font:700 .73rem/1 var(--fd);color:#fff;letter-spacing:-.01em;}
     .bt-hd .tag{margin-left:auto;font:800 .48rem/1 var(--fd);letter-spacing:.12em;text-transform:uppercase;padding:4px 7px;border-radius:999px;}
