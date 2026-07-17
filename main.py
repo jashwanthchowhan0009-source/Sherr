@@ -1043,7 +1043,7 @@ async def get_feed(
 
     if has_p:
         await asyncio.get_event_loop().run_in_executor(None, compute_feed_for_user, uid)
-        q = "SELECT a.*, f.score FROM articles a JOIN feeds f ON a.id=f.article_id WHERE f.user_id=?"
+        q = "SELECT a.*, f.score FROM articles a JOIN feeds f ON a.id=f.article_id WHERE f.user_id=? AND a.ai_processed=1"
         p = [uid]
         if scope:
             q += " AND a.scope=?"; p.append(scope)
@@ -1054,12 +1054,12 @@ async def get_feed(
         rows = conn.execute(q, p).fetchall()
         if len(rows) < 5:
             rows = conn.execute(
-                "SELECT *, 1.0 as score FROM articles ORDER BY published_at DESC, id DESC LIMIT ? OFFSET ?",
+                "SELECT *, 1.0 as score FROM articles WHERE ai_processed=1 ORDER BY published_at DESC, id DESC LIMIT ? OFFSET ?",
                 (limit + 1, offset)
             ).fetchall()
     else:
         rows = conn.execute(
-            "SELECT *, 1.0 as score FROM articles ORDER BY published_at DESC, id DESC LIMIT ? OFFSET ?",
+            "SELECT *, 1.0 as score FROM articles WHERE ai_processed=1 ORDER BY published_at DESC, id DESC LIMIT ? OFFSET ?",
             (limit + 1, offset)
         ).fetchall()
 
@@ -1081,7 +1081,7 @@ async def explore_feed(
     get_current_user(authorization)
     offset = (page - 1) * limit
     conn = get_db()
-    q = "SELECT * FROM articles WHERE 1=1"
+    q = "SELECT * FROM articles WHERE ai_processed=1"
     p = []
     if category and not pillar:
         resolved = FRONTEND_SLUG_MAP.get(category.lower())
@@ -1108,7 +1108,7 @@ async def trending_feed(
     get_current_user(authorization)
     conn = get_db()
     rows = conn.execute(
-        "SELECT * FROM articles WHERE is_trending=1 ORDER BY published_at DESC LIMIT ?",
+        "SELECT * FROM articles WHERE is_trending=1 AND ai_processed=1 ORDER BY published_at DESC LIMIT ?",
         (limit,)
     ).fetchall()
     conn.close()
@@ -1177,7 +1177,7 @@ async def search(q: str = Query(""), authorization: str = Header("")):
     conn = get_db()
     q_like = f"%{q}%"
     rows = conn.execute(
-        "SELECT * FROM articles WHERE headline LIKE ? OR summary_60 LIKE ? "
+        "SELECT * FROM articles WHERE (headline LIKE ? OR summary_60 LIKE ?) AND ai_processed=1 "
         "ORDER BY published_at DESC LIMIT 25",
         (q_like, q_like)
     ).fetchall()
