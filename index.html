@@ -722,8 +722,7 @@ header {
 .ao-byline { display: flex; align-items: center; gap: 6px; margin-top: 7px;
   font-size: 0.68rem; font-weight: 600; color: var(--t3); }
 .ao-byline i { color: #A855F7; font-size: 0.72rem; }
-.ao-byline-bottom { margin: 20px 0 4px; padding-top: 16px; border-top: 1px solid var(--line2);
-  font-size: 0.72rem; }
+.ao-byline-bottom { margin: 18px 0 2px; padding-top: 2px; font-size: 0.72rem; }
 
 /* ── The String — chronological story thread ─────────────────────────────── */
 .ao-string { margin: 22px 0 4px; padding: 16px 4px 6px; border-top: 1px solid var(--line2); }
@@ -762,18 +761,41 @@ header {
   border-radius: 100px; padding: 9px 18px; font-size: 0.82rem; font-weight: 700;
   cursor: pointer; margin: 4px 0 2px; display: inline-flex; align-items: center; gap: 7px; }
 .ao-acts {
-  display: flex; align-items: center; gap: 8px; padding: 11px 0;
-  border-top: 1px solid var(--line2); border-bottom: 1px solid var(--line2);
-  margin-bottom: 20px;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+  padding: 6px 0 2px; margin-bottom: 18px;
 }
+/* Glossy 3D "coin" pill actions — colored specular icon-disc + label */
 .ao-act {
-  display: inline-flex; flex-direction: row; align-items: center; gap: 7px;
-  padding: 7px 14px; border-radius: 100px;
-  font-size: 0.76rem; font-weight: 600; color: var(--t2);
-  cursor: pointer; transition: all 0.15s var(--spring);
-  background: var(--bgcard); border: 1px solid var(--line2);
+  --ac: #4F6BD4;
+  display: flex; flex-direction: row; align-items: center; gap: 11px;
+  padding: 8px 16px 8px 8px; border-radius: 100px;
+  font-family: var(--fd); font-size: 0.86rem; font-weight: 700; color: var(--t1);
+  cursor: pointer; transition: transform 0.15s var(--spring), box-shadow 0.2s;
+  background: linear-gradient(180deg, rgba(255,255,255,0.055), rgba(255,255,255,0.02));
+  border: 1px solid rgba(255,255,255,0.08);
 }
-.ao-act-share { margin-left: auto; }
+.ao-act .disc {
+  position: relative; width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(125% 125% at 30% 20%,
+    color-mix(in srgb, var(--ac) 45%, #fff) 0%,
+    var(--ac) 46%,
+    color-mix(in srgb, var(--ac) 60%, #000) 100%);
+  box-shadow:
+    0 7px 15px -5px color-mix(in srgb, var(--ac) 72%, transparent),
+    inset 0 1.5px 1px rgba(255,255,255,0.8),
+    inset 0 -4px 7px -3px color-mix(in srgb, var(--ac) 82%, #000);
+}
+.ao-act .disc::after {
+  content: ""; position: absolute; inset: 2px; border-radius: 50%; pointer-events: none;
+  background: radial-gradient(62% 46% at 34% 18%, rgba(255,255,255,0.9), rgba(255,255,255,0) 62%);
+}
+.ao-act .disc i {
+  position: relative; z-index: 1; color: #fff; font-size: 0.95rem;
+  filter: drop-shadow(0 1px 1px rgba(0,0,0,0.32));
+}
+.ao-act .lbl { line-height: 1; }
+.ao-act-share { margin-left: 0; }
 .ao-tldr { margin: 0 0 14px; padding: 12px 14px; border-radius: 12px;
   background: var(--as, rgba(79,107,212,0.10)); border: 1px solid rgba(79,107,212,0.28); }
 .ao-tldr-h { font-size: 0.7rem; font-weight: 800; letter-spacing: 0.6px; text-transform: uppercase;
@@ -781,10 +803,12 @@ header {
 .ao-tldr ul { margin: 0; padding-left: 18px; }
 .ao-tldr li { font-size: 0.85rem; line-height: 1.5; color: var(--t1); margin-bottom: 5px; }
 .ao-tldr .tldr-msg { font-size: 0.82rem; color: var(--t3); }
-.ao-act:active { transform: scale(0.94); }
-.ao-act i { font-size: 0.92rem; }
-.ao-act.liked { color: var(--c-red); background: rgba(255,91,91,0.08); border-color: rgba(255,91,91,0.2); }
-.ao-act.saved { color: var(--accent); background: var(--as); border-color: rgba(79,107,212,0.2); }
+.ao-act:active { transform: scale(0.955); }
+.ao-act.liked, .ao-act.saved { border-color: color-mix(in srgb, var(--ac) 40%, transparent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--ac) 12%, transparent), rgba(255,255,255,0.02)); }
+[data-theme="light"] .ao-act { color: #14161c;
+  background: linear-gradient(180deg, rgba(0,0,0,0.03), rgba(0,0,0,0.015));
+  border-color: rgba(0,0,0,0.07); }
 .ao-related-hdr {
   font-family: var(--fd); font-size: 0.88rem; font-weight: 700;
   color: var(--t1); margin-bottom: 12px;
@@ -1583,10 +1607,7 @@ nav {
   backdrop-filter: blur(14px) saturate(160%); -webkit-backdrop-filter: blur(14px) saturate(160%); }
 .ao-source-link i { color: var(--neon); }
 .ao-source-link:active { transform: scale(0.98); }
-.ao-acts .ao-act { background: var(--bgcard); border: 1px solid var(--glassB);
-  border-radius: 100px; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
-.ao-acts .ao-act.liked { color: #FF5B7F; }
-.ao-acts .ao-act.saved { color: var(--neon); }
+.ao-acts .ao-act { border-radius: 100px; }
 
 /* ─── Phase 7: Dictionary card + lookup result ─── */
 .dict-card { display: flex; align-items: center; gap: 12px; margin: 0 14px 10px; padding: 14px 16px; cursor: pointer; }
@@ -3000,10 +3021,10 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
         <div class="ao-string-track" id="ao-string-track"></div>
       </div>
       <div class="ao-acts">
-        <div class="ao-act tap" id="ao-like" onclick="aoLike()"><i class="fa-regular fa-heart"></i><span>Like</span></div>
-        <div class="ao-act tap" id="ao-save" onclick="aoSave()"><i class="fa-regular fa-bookmark"></i><span>Save</span></div>
-        <div class="ao-act tap" id="ao-tldr-btn" onclick="aoSummarize()"><i class="fa-solid fa-wand-magic-sparkles"></i><span>Summarize</span></div>
-        <div class="ao-act tap ao-act-share" onclick="shareArticleCard(currentArticle)"><i class="fa-solid fa-arrow-up-from-bracket"></i><span>Share</span></div>
+        <div class="ao-act tap" id="ao-like" style="--ac:#FF5B7F" onclick="aoLike()"><span class="disc"><i class="fa-regular fa-heart"></i></span><span class="lbl">Like</span></div>
+        <div class="ao-act tap" id="ao-save" style="--ac:#F5A623" onclick="aoSave()"><span class="disc"><i class="fa-regular fa-bookmark"></i></span><span class="lbl">Save</span></div>
+        <div class="ao-act tap" id="ao-tldr-btn" style="--ac:#A855F7" onclick="aoSummarize()"><span class="disc"><i class="fa-solid fa-wand-magic-sparkles"></i></span><span class="lbl">Summarize</span></div>
+        <div class="ao-act tap ao-act-share" id="ao-share" style="--ac:#3B9EFF" onclick="shareArticleCard(currentArticle)"><span class="disc"><i class="fa-solid fa-paper-plane"></i></span><span class="lbl">Share</span></div>
       </div>
 
       <div class="ao-cmt-sec">
@@ -3272,6 +3293,62 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
     .matx .mr .mt{flex:1;min-width:0;} .matx .mr .mt b{font:600 .66rem/1.2 var(--f);color:#fff;display:block;} .matx .mr .mt span{font:500 .56rem/1.2 var(--f);color:rgba(255,255,255,.45);}
     .matx .mr .mb{font:700 .58rem/1;padding:4px 9px;border-radius:8px;background:rgba(255,255,255,.06);color:rgba(255,255,255,.7);}
     .bt-note{font:500 .68rem/1.5 var(--f);color:var(--t3);text-align:center;padding:20px 24px 2px;}
+    /* ── Light theme: turn the dark glass tiles into clean white cards ── */
+    [data-theme="light"] .glance-card,
+    [data-theme="light"] .bt,
+    [data-theme="light"] .mc-about,
+    [data-theme="light"] .mc-grid .mkt-tile,
+    [data-theme="light"] .mc-grid .mkt-metals-tile{
+      background:linear-gradient(178deg,#ffffff,#eef1f6)!important;
+      border:1px solid rgba(0,0,0,.07)!important;
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.9),
+        inset 0 -50px 44px -40px color-mix(in srgb, var(--gc) 20%, transparent),
+        inset 0 -1px 0 color-mix(in srgb, var(--gc) 28%, transparent),
+        0 12px 26px -20px rgba(20,30,60,.18)!important;}
+    /* strong text (headings / values) → ink */
+    [data-theme="light"] .glance-card .gc-hd .t,
+    [data-theme="light"] .glance-card .gc-price,
+    [data-theme="light"] .bt .bt-hd .nm,
+    [data-theme="light"] .bt .bt-temp,
+    [data-theme="light"] .bt .ring .rv,
+    [data-theme="light"] .bt .score .sc,
+    [data-theme="light"] .bt .sp-next .cd,
+    [data-theme="light"] .bt .sp-bat b,
+    [data-theme="light"] .bt .sp-meta b,
+    [data-theme="light"] .bt .rank .r .rt,
+    [data-theme="light"] .bt .flt-row b,
+    [data-theme="light"] .bt .cd,
+    [data-theme="light"] .bt .matx .mr .mt b,
+    [data-theme="light"] .bt .mkt-col .mp,
+    [data-theme="light"] .mc-about .mca-hd{color:#14161c!important;}
+    /* muted text (labels / captions) → soft ink */
+    [data-theme="light"] .glance-card .gc-sub,
+    [data-theme="light"] .bt .bt-temp small,
+    [data-theme="light"] .bt .bt-cond,
+    [data-theme="light"] .bt .bt-hilo,
+    [data-theme="light"] .bt .ring .rl,
+    [data-theme="light"] .bt .alerts .a,
+    [data-theme="light"] .bt .mkt-col .mn,
+    [data-theme="light"] .bt .sub,
+    [data-theme="light"] .bt .sp-over,
+    [data-theme="light"] .bt .sp-bat,
+    [data-theme="light"] .bt .sp-meta,
+    [data-theme="light"] .bt .sp-next,
+    [data-theme="light"] .bt .flt-row,
+    [data-theme="light"] .bt .rank .r .rk,
+    [data-theme="light"] .bt .matx .mr .mt span,
+    [data-theme="light"] .mc-about .mca-p,
+    [data-theme="light"] .mc-about .mca-row,
+    [data-theme="light"] .mc-about .mca-steps li{color:rgba(20,22,28,.62)!important;}
+    /* faint white-on-dark surface fills → dark-on-light */
+    [data-theme="light"] .bt .seg span{background:rgba(0,0,0,.10);}
+    [data-theme="light"] .bt .seg span.on{background:currentColor;}
+    [data-theme="light"] .bt .score .tm .fl,
+    [data-theme="light"] .bt .matx .mr .mb{background:rgba(0,0,0,.06)!important;}
+    [data-theme="light"] .bt .matx .mr{border-top-color:rgba(0,0,0,.08);}
+    [data-theme="light"] .mc-grid .mkt-tile-name{color:rgba(20,22,28,.55)!important;}
+    [data-theme="light"] .mc-grid .mkt-tile-price{color:#14161c!important;}
     #topic-overlay{position:absolute;inset:0;z-index:2000;background:var(--bg);transform:translateY(100%);
       transition:transform .4s var(--snap);display:flex;flex-direction:column;overflow:hidden;}
     #topic-overlay.open{transform:translateY(0);}
