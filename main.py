@@ -234,17 +234,41 @@ def classify_article(title: str, body: str) -> tuple[int, list[str]]:
 
 def classify_scope(title: str, body: str) -> str:
     text = (title + " " + body).lower()
-    india_words = ["india","delhi","mumbai","bangalore","chennai","hyderabad","kolkata",
-                   "indian","modi","bjp","congress","rupee","nifty","sensex","kerala","tamil"]
-    local_words = ["city","district","local","municipal","village","town","ward","panchayat"]
-    global_words = ["world","global","international","nato","china","russia","europe",
-                    "america","washington","beijing","moscow","london"]
+    india_words = ["india","delhi","mumbai","bengaluru","bangalore","chennai","hyderabad",
+                   "kolkata","pune","ahmedabad","jaipur","lucknow","indian","modi","bjp",
+                   "congress","rupee","nifty","sensex","rbi","lok sabha","kerala","tamil",
+                   "karnataka","maharashtra","gujarat","punjab","bihar","bengal","odisha",
+                   "isro","supreme court","new delhi"]
+    local_words = ["district","municipal","village","town","ward","panchayat","corporation",
+                   "locality","neighbourhood","neighborhood","civic","metro station","tehsil"]
+    global_words = ["world","global","international","nato","china","russia","ukraine","europe",
+                    "european","america","american","washington","beijing","moscow","london",
+                    "united nations","white house","pentagon","brussels","tokyo","israel","gaza"]
     i = sum(1 for w in india_words if w in text)
     l = sum(1 for w in local_words if w in text)
     g = sum(1 for w in global_words if w in text)
-    if l >= 2 and i > 0:
+    # Local: clearly sub-national civic reporting with an India signal.
+    if l >= 1 and i >= 1:
         return "local"
-    return "national" if i > g else "global"
+    # National: any India signal that isn't outweighed by global framing.
+    if i >= 1 and i >= g:
+        return "national"
+    return "global"
+
+
+def _scope_clause(scope: str, col: str = "scope"):
+    """Inclusive scope filter used by the feeds.
+
+    global   → broadest, no geographic filter (all stories)
+    national → India-focused stories, including the local ones beneath them
+    local    → strictly local civic stories
+    """
+    s = (scope or "").lower()
+    if s == "national":
+        return f" AND {col} IN ('national','local')", []
+    if s == "local":
+        return f" AND {col}=?", ["local"]
+    return "", []   # global / unknown → no filter
 
 
 # ─── IMAGE EXTRACTION ────────────────────────────────────────────────────────
@@ -1170,8 +1194,8 @@ async def get_feed(
         await asyncio.get_event_loop().run_in_executor(None, compute_feed_for_user, uid)
         q = "SELECT a.*, f.score FROM articles a JOIN feeds f ON a.id=f.article_id WHERE f.user_id=? AND a.ai_processed=1"
         p = [uid]
-        if scope:
-            q += " AND a.scope=?"; p.append(scope)
+        sc_sql, sc_params = _scope_clause(scope, "a.scope")
+        q += sc_sql; p += sc_params
         if pillar:
             q += " AND a.pillar_id=?"; p.append(pillar)
         q += " ORDER BY f.score DESC, a.published_at DESC, a.id DESC LIMIT ? OFFSET ?"
@@ -1214,8 +1238,8 @@ async def explore_feed(
             pillar = resolved
     if pillar:
         q += " AND pillar_id=?"; p.append(pillar)
-    if scope:
-        q += " AND scope=?"; p.append(scope)
+    sc_sql, sc_params = _scope_clause(scope)
+    q += sc_sql; p += sc_params
     q += " ORDER BY published_at DESC, id DESC LIMIT ? OFFSET ?"
     p += [limit + 1, offset]
     rows = conn.execute(q, p).fetchall()
@@ -1550,6 +1574,26 @@ async def admin_relink(x_admin_token: str = Header("")):
     threads = link_stories(conn)
     conn.close()
     return {"threads": threads, "window_days": STORY_WINDOW_DAYS}
+
+
+@app.post("/admin/rescope")
+async def admin_rescope(x_admin_token: str = Header("")):
+    """Re-bucket every article into local / national / global with the current
+    classifier, so the Explore region tabs work on existing rows immediately.
+    Cheap and AI-free — recomputes from the headline + body text."""
+    _check_admin(x_admin_token)
+    conn = get_db()
+    rows = conn.execute("SELECT id, headline, summary_60, full_body FROM articles").fetchall()
+    counts = {"local": 0, "national": 0, "global": 0}
+    for r in rows:
+        body = r["full_body"] or r["summary_60"] or ""
+        sc = classify_scope(r["headline"] or "", body)
+        counts[sc] = counts.get(sc, 0) + 1
+        conn.execute("UPDATE articles SET scope=? WHERE id=?", (sc, r["id"]))
+    conn.commit()
+    conn.close()
+    log.info("[RESCOPE] %d rows → %s", len(rows), counts)
+    return {"rescoped": len(rows), "distribution": counts}
 
 
 @app.get("/story/{article_id}")
