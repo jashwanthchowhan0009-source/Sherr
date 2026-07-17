@@ -3139,6 +3139,20 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
         0 14px 30px -22px rgba(0,0,0,.9),
         0 4px 24px -8px color-mix(in srgb, var(--gc) 34%, transparent);}
     .bt.w2{grid-column:span 2;} .bt.h2{grid-row:span 2;}
+    /* ── State engine: loading shimmer + offline/error/empty (layout preserved) ── */
+    .bt.is-loading::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;z-index:5;
+      background:linear-gradient(100deg,transparent 32%,rgba(255,255,255,.07) 50%,transparent 68%);
+      background-size:220% 100%;animation:btShim 1.5s linear infinite;}
+    @keyframes btShim{to{background-position:-220% 0;}}
+    .bt.is-offline,.bt.is-error{filter:saturate(.5);}
+    .bt.is-offline::after,.bt.is-error::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;z-index:4;
+      background:radial-gradient(120% 100% at 50% 120%, color-mix(in srgb, var(--gc) 14%, transparent), transparent 60%);}
+    .bt-state{position:absolute;top:12px;right:12px;z-index:6;display:none;align-items:center;gap:5px;
+      font:800 .46rem/1 var(--fd);letter-spacing:.1em;text-transform:uppercase;padding:4px 7px;border-radius:999px;
+      background:rgba(255,255,255,.07);color:#9a9aa2;}
+    .bt.is-offline .bt-state,.bt.is-error .bt-state{display:inline-flex;}
+    .bt.is-error .bt-state{color:#EF4444;background:rgba(239,68,68,.14);}
+    @media (prefers-reduced-motion:reduce){.bt.is-loading::after{animation:none;}}
     .pack-gap{grid-column:span 2;height:8px;}
     .bt-hd{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
     .bt-hd i{font-size:.82rem;} .bt-hd .nm{font:700 .73rem/1 var(--fd);color:#fff;letter-spacing:-.01em;}
@@ -3194,7 +3208,8 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
     .tp-row .v{width:44px;height:9px;border-radius:5px;background:var(--bg3);}
   </style>
   <div class="bento">
-    <div class="bt h2" onclick="openTopic('weather')">
+    <div class="bt h2 is-loading" id="tile-weather" onclick="openTopic('weather')">
+      <span class="bt-state"><i class="fa-solid fa-wifi"></i> Offline</span>
       <div class="bt-hd"><i class="fa-solid fa-cloud-sun" style="color:#0A84FF"></i><span class="nm">Weather</span><span class="tag tag-live">Live</span></div>
       <div class="bt-temp" id="bt-temp">--<small>&deg;</small></div>
       <div class="bt-cond" id="bt-cond">Fetching conditions</div>
@@ -3214,7 +3229,8 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 
     <div class="pack-gap"></div>
 
-    <div class="bt w2" onclick="openMktCat('stocks')">
+    <div class="bt w2 is-loading" id="tile-markets" onclick="openMktCat('stocks')">
+      <span class="bt-state"><i class="fa-solid fa-wifi"></i> Offline</span>
       <div class="bt-hd"><i class="fa-solid fa-arrow-trend-up" style="color:#22C55E"></i><span class="nm">Markets</span><span class="tag tag-live">Live</span></div>
       <div class="mkt-cols">
         <div class="mkt-col"><div class="mn">Nifty</div><div class="mp" id="mk-nifty">--</div><div class="mc" id="mc-nifty"></div><div class="ms" id="ms-nifty"></div></div>
@@ -3346,7 +3362,15 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
       var t=document.getElementById('bw-temp'), c=document.getElementById('bw-desc'), bt=document.getElementById('bt-temp'), bc=document.getElementById('bt-cond');
       if(t&&bt&&t.textContent&&t.textContent.indexOf('-')<0){ bt.innerHTML=t.textContent.replace('°','')+'<small>°</small>'; }
       if(c&&bc&&c.textContent&&c.textContent!=='Loading…'){ bc.textContent=c.textContent; }
+      // ── state engine: clear loading once real data lands; reflect connectivity ──
+      var off=(typeof navigator!=='undefined' && navigator.onLine===false);
+      function st(id,ready){ var e=document.getElementById(id); if(!e) return;
+        e.classList.toggle('is-offline', off);
+        e.classList.toggle('is-loading', !off && !ready); }
+      st('tile-markets', !!(nifty||btc));
+      st('tile-weather', !!(t && t.textContent && t.textContent.indexOf('-')<0));
     }
+    if(typeof window!=='undefined'){ window.addEventListener('online',updateBento); window.addEventListener('offline',updateBento); }
     // Glassic Lighting: each tile's bottom glow + backlight take its own semantic accent (from its icon).
     (function(){ document.querySelectorAll('.bento .bt').forEach(function(bt){
       var ic=bt.querySelector('.bt-hd i'); if(ic){ var c=getComputedStyle(ic).color; if(c) bt.style.setProperty('--gc', c); } }); })();
