@@ -722,6 +722,8 @@ header {
 .ao-byline { display: flex; align-items: center; gap: 6px; margin-top: 7px;
   font-size: 0.68rem; font-weight: 600; color: var(--t3); }
 .ao-byline i { color: #A855F7; font-size: 0.72rem; }
+.ao-byline-bottom { margin: 20px 0 4px; padding-top: 16px; border-top: 1px solid var(--line2);
+  font-size: 0.72rem; }
 .ao-src-time { font-size: 0.7rem; color: var(--t3); margin-left: auto; }
 .ao-main-title {
   font-family: var(--fd); font-size: 1.2rem; font-weight: 700;
@@ -2958,11 +2960,11 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
         <span class="ao-src-name" id="ao-src-name"></span>
         <span class="ao-src-time" id="ao-src-time"></span>
       </div>
-      <div class="ao-byline" id="ao-byline"></div>
       <div class="ao-main-title" id="ao-main-title"></div>
       <div id="ao-tldr-box" class="ao-tldr" style="display:none"></div>
       <div class="ao-text" id="ao-text"></div>
       <div class="ao-keypoints" id="ao-keypoints"></div>
+      <div class="ao-byline ao-byline-bottom" id="ao-byline"></div>
       <div class="ao-acts">
         <div class="ao-act tap" id="ao-like" onclick="aoLike()"><i class="fa-regular fa-heart"></i><span>Like</span></div>
         <div class="ao-act tap" id="ao-save" onclick="aoSave()"><i class="fa-regular fa-bookmark"></i><span>Save</span></div>
@@ -3843,7 +3845,8 @@ function normalizeArticle(a) {
   return {
     ...a,
     title:    a.headline    || a.refined_title || a.title || "",
-    source:   a.source_name || a.source   || "",
+    source:   "SherrByte News",
+    orig_source: a.source_name || a.source || "",
     // v6 emits `summary` (≈40-55 words); older builds used summary_60. Clip to 60.
     preview:  clipWords(a.summary_60 || a.summary || a.cached_summary || a.preview || "", 60),
     body_ai:  a.full_body   || a.summary || a.body_ai  || "",
@@ -5193,12 +5196,10 @@ function openArticle(rawA) {
   const catPill = document.getElementById('ao-cat-pill');
   catPill.style.color = cc.hex; catPill.textContent = cc.label;
   const srcDot = document.getElementById('ao-src-dot');
-  srcDot.textContent = (a.source||'S').charAt(0).toUpperCase();
-  srcDot.style.background = cc.bg; srcDot.style.color = cc.hex;
-  document.getElementById('ao-src-name').textContent = a.source || '';
-  var _by = document.getElementById('ao-byline');
-  if (_by) _by.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> Written by Sherr AI'
-    + (a.source ? ' · based on reporting from ' + a.source : '');
+  srcDot.style.display = 'none';               // no publisher avatar/name at the top
+  document.getElementById('ao-src-name').textContent = '';
+  var _by = document.getElementById('ao-byline');   // byline lives below the article now
+  if (_by) _by.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> Written by SherrByte';
   document.getElementById('ao-src-time').textContent = timeAgo(a.published_at) || '';
   document.getElementById('ao-main-title').textContent = a.title;
   const body = a.body_ai || a.preview || a.summary || '';
@@ -5213,11 +5214,11 @@ function openArticle(rawA) {
   if (srcWrap) {
     const sources = (Array.isArray(a.sources) && a.sources.length)
       ? a.sources
-      : (a.url ? [{ name: a.source || 'Read the original', url: a.url }] : []);
+      : ((a.url || a.orig_url) ? [{ url: a.url || a.orig_url }] : []);
     srcWrap.innerHTML = sources.length ? `
-      <div class="ao-sources-hdr">Sources — tap to read the original</div>
+      <div class="ao-sources-hdr">Verify — read the original report</div>
       ${sources.map(s => `<a class="ao-source-link tap" href="${s.url || s}" target="_blank" rel="noopener noreferrer">
-        <i class="fa-solid fa-arrow-up-right-from-square"></i><span>${s.name || s.source || s.url || 'Read original'}</span></a>`).join('')}` : '';
+        <i class="fa-solid fa-arrow-up-right-from-square"></i><span>Read the original report</span></a>`).join('')}` : '';
   }
 
   const likeEl = document.getElementById('ao-like');

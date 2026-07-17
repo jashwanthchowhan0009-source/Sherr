@@ -906,6 +906,11 @@ def article_row_to_dict(row) -> dict:
     d["refined_title"]  = d.get("headline", "")
     d["cached_summary"] = d.get("summary_60", "")
     d["isTrending"]     = bool(d.get("is_trending", 0))
+    # The visible byline is always our own brand (bodies are AI-written, not the
+    # publisher's text); the original URL stays available as a verify link.
+    d["orig_source"]    = d.get("source_name", "")
+    d["source_name"]    = "SherrByte News"
+    d["source"]         = "SherrByte News"
     try:
         d["micro_tags"] = json.loads(d.get("micro_tags") or "[]")
     except Exception:
