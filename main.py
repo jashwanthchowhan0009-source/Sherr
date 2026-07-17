@@ -48,6 +48,13 @@ AI_BATCH_SIZE   = int(os.getenv("AI_BATCH_SIZE", "50"))
 AI_CONCURRENCY  = int(os.getenv("AI_CONCURRENCY", "5"))
 COLLECT_INTERVAL_MIN = int(os.getenv("COLLECT_INTERVAL_MIN", "25"))
 
+# Admin token guarding the maintenance endpoints (/admin/*). Overridable via env;
+# a low-risk default keeps the endpoints usable out of the box for this app.
+ADMIN_TOKEN     = os.getenv("ADMIN_TOKEN", "sherr-admin")
+
+# Story-thread ("string") linking window — how far back we cluster related news.
+STORY_WINDOW_DAYS = int(os.getenv("STORY_WINDOW_DAYS", "45"))
+
 # ─── TAXONOMY: 9 PILLARS ─────────────────────────────────────────────────────
 PILLARS = {
     1: {"name": "Society & Governance",  "color": "#1E88E5", "emoji": "🏛️",  "slug": "society"},
@@ -420,6 +427,8 @@ CREATE TABLE IF NOT EXISTS articles (
     published_at TEXT DEFAULT (datetime('now')),
     collected_at TEXT DEFAULT (datetime('now')),
     ai_processed INTEGER DEFAULT 0,
+    reprocessed INTEGER DEFAULT 0,
+    story_id INTEGER DEFAULT 0,
     engagement INTEGER DEFAULT 0
 );
 
@@ -461,6 +470,7 @@ CREATE INDEX IF NOT EXISTS idx_articles_pillar ON articles(pillar_id);
 CREATE INDEX IF NOT EXISTS idx_articles_published ON articles(published_at DESC);
 CREATE INDEX IF NOT EXISTS idx_articles_title_hash ON articles(title_hash);
 CREATE INDEX IF NOT EXISTS idx_articles_trending ON articles(is_trending);
+CREATE INDEX IF NOT EXISTS idx_articles_story ON articles(story_id);
 CREATE INDEX IF NOT EXISTS idx_feeds_user ON feeds(user_id, score DESC);
 CREATE INDEX IF NOT EXISTS idx_prefs_user ON user_preferences(user_id);
 """
@@ -470,6 +480,12 @@ _MIGRATIONS = [
     "ALTER TABLE articles ADD COLUMN title_hash TEXT",
     "ALTER TABLE articles ADD COLUMN is_trending INTEGER DEFAULT 0",
     "ALTER TABLE articles ADD COLUMN sentiment TEXT DEFAULT 'neutral'",
+    # Copyright scrub flag — 1 once a row's body is guaranteed AI-written (fresh
+    # pipeline output or a /admin/reprocess pass), so legacy rows are re-run once.
+    "ALTER TABLE articles ADD COLUMN reprocessed INTEGER DEFAULT 0",
+    # Story-thread id ("string" feature) — groups related articles into a
+    # chronological thread. 0 = not part of any multi-article thread.
+    "ALTER TABLE articles ADD COLUMN story_id INTEGER DEFAULT 0",
 ]
 
 
@@ -738,7 +754,7 @@ async def run_ai_batch(conn):
                 UPDATE articles SET
                     headline=?, summary_60=?, full_body=?, source_summary=?,
                     when_info=?, where_info=?, pillar_id=?, micro_tags=?,
-                    is_trending=?, sentiment=?, ai_processed=1
+                    is_trending=?, sentiment=?, ai_processed=1, reprocessed=1
                 WHERE id=?
             """, (
                 result["refined_title"],
@@ -760,6 +776,103 @@ async def run_ai_batch(conn):
     conn.commit()
     log.info("[AI] %d/%d articles refined", success, len(rows))
     return success
+
+
+# ─── STORY THREADS ("the string") ────────────────────────────────────────────
+# Lightweight, embedding-free clustering: articles that share ≥2 significant
+# terms (proper-noun-ish tokens + AI topic tags) within a rolling window are
+# linked into one chronological thread. No external model needed at runtime.
+_STORY_STOPWORDS = set((
+    "the a an and or of to in on for with at by from as is are was were be been "
+    "being this that these those it its he she they them his her their our your "
+    "you we new say says said report reports amid over after before into out up "
+    "down off than then when what which who whom how why will would can could may "
+    "might must not no yes but if about first also more most other some such only "
+    "just very now get got make made back two one year years day days week weeks"
+).split())
+
+
+def _story_terms(headline: str, tags: list) -> set:
+    """Significant terms used to decide if two articles belong to one thread."""
+    terms = set()
+    for t in (tags or []):
+        t = str(t).strip().lower()
+        if len(t) >= 3:
+            terms.add(t)
+    for w in re.findall(r"[a-z0-9]{4,}", (headline or "").lower()):
+        if w not in _STORY_STOPWORDS:
+            terms.add(w)
+    return terms
+
+
+def link_stories(conn, window_days: int = STORY_WINDOW_DAYS) -> int:
+    """Cluster recent AI-processed articles into story threads via shared terms.
+
+    Uses union-find over an inverted term index. Over-generic terms (appearing
+    in many articles) are ignored so unrelated stories don't merge. Returns the
+    number of multi-article threads formed.
+    """
+    rows = conn.execute(
+        "SELECT id, headline, micro_tags FROM articles "
+        "WHERE ai_processed=1 AND published_at >= datetime('now', ?) "
+        "ORDER BY id ASC",
+        (f"-{int(window_days)} days",)
+    ).fetchall()
+    if len(rows) < 2:
+        return 0
+
+    inverted: dict[str, list] = {}
+    for r in rows:
+        try:
+            tags = json.loads(r["micro_tags"] or "[]")
+        except Exception:
+            tags = []
+        for term in _story_terms(r["headline"], tags):
+            inverted.setdefault(term, []).append(r["id"])
+
+    parent = {r["id"]: r["id"] for r in rows}
+
+    def find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(a, b):
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[max(ra, rb)] = min(ra, rb)
+
+    # Count shared terms per co-occurring pair; skip terms that are too generic
+    # (would merge everything) or unique (link nothing).
+    pair_shared: dict[tuple, int] = {}
+    for term, ids in inverted.items():
+        if len(ids) < 2 or len(ids) > 40:
+            continue
+        for i in range(len(ids)):
+            for j in range(i + 1, len(ids)):
+                a, b = ids[i], ids[j]
+                key = (a, b) if a < b else (b, a)
+                pair_shared[key] = pair_shared.get(key, 0) + 1
+
+    MIN_SHARED = 2
+    for (a, b), shared in pair_shared.items():
+        if shared >= MIN_SHARED:
+            union(a, b)
+
+    roots = {r["id"]: find(r["id"]) for r in rows}
+    sizes: dict[int, int] = {}
+    for root in roots.values():
+        sizes[root] = sizes.get(root, 0) + 1
+
+    for aid, root in roots.items():
+        sid = root if sizes[root] >= 2 else 0
+        conn.execute("UPDATE articles SET story_id=? WHERE id=?", (sid, aid))
+    conn.commit()
+
+    threads = sum(1 for s in sizes.values() if s >= 2)
+    log.info("[STORY] linked %d articles into %d threads", len(rows), threads)
+    return threads
 
 
 async def collect_news():
@@ -791,6 +904,12 @@ async def collect_news():
 
         # AI refinement pass
         await run_ai_batch(conn)
+
+        # Link related articles into chronological story threads ("the string")
+        try:
+            link_stories(conn)
+        except Exception as e:
+            log.warning("[STORY] linking failed: %s", e)
 
         # Stats
         for pid in range(1, 10):
@@ -906,6 +1025,7 @@ def article_row_to_dict(row) -> dict:
     d["refined_title"]  = d.get("headline", "")
     d["cached_summary"] = d.get("summary_60", "")
     d["isTrending"]     = bool(d.get("is_trending", 0))
+    d["story_id"]       = d.get("story_id", 0) or 0
     # The visible byline is always our own brand (bodies are AI-written, not the
     # publisher's text); the original URL stays available as a verify link.
     d["orig_source"]    = d.get("source_name", "")
@@ -1323,6 +1443,153 @@ async def get_notifications(authorization: str = Header("")):
             })
     conn.close()
     return {"notifications": notifs[:20]}
+
+
+def _check_admin(token: str):
+    if not token or token != ADMIN_TOKEN:
+        raise HTTPException(403, "Invalid or missing admin token")
+
+
+@app.post("/admin/reprocess")
+async def admin_reprocess(
+    limit: int = Query(50),
+    force: int = Query(0),
+    x_admin_token: str = Header(""),
+):
+    """Re-run the AI writer over legacy rows so no verbatim source text remains.
+
+    Targets rows that predate the copyright fix (reprocessed=0). Each row's body
+    is passed back through the AI writer, which produces an original SherrByte
+    rewrite — or, if the AI providers are unavailable, a neutral placeholder.
+    Idempotent: a row is only ever reprocessed once. Call repeatedly (with
+    `limit`) to drain the backlog in batches.
+    """
+    _check_admin(x_admin_token)
+
+    providers = available_providers()
+    ai_up = providers["primary"] != "rule-based"
+    # Guard: without working AI keys, reprocessing would overwrite every targeted
+    # row with a placeholder. Require force=1 to opt into that scrub explicitly.
+    if not ai_up and not force:
+        conn = get_db()
+        remaining = conn.execute(
+            "SELECT COUNT(*) c FROM articles WHERE ai_processed=1 AND COALESCE(reprocessed,0)=0"
+        ).fetchone()["c"]
+        conn.close()
+        return {
+            "reprocessed": 0, "remaining": remaining, "ai": providers["primary"],
+            "note": "AI providers unavailable — pass force=1 to scrub these rows "
+                    "to neutral placeholders anyway, or configure GEMINI/GROQ keys first.",
+        }
+
+    limit = max(1, min(int(limit), 200))
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT id, headline, full_body, pillar_id, micro_tags FROM articles "
+        "WHERE ai_processed=1 AND COALESCE(reprocessed,0)=0 ORDER BY id ASC LIMIT ?",
+        (limit,)
+    ).fetchall()
+
+    if not rows:
+        conn.close()
+        return {"reprocessed": 0, "remaining": 0, "ai": providers["primary"],
+                "note": "nothing pending — all rows already reprocessed"}
+
+    batch_input = [{
+        "title": r["headline"],
+        "body": r["full_body"],
+        "fallback_category": PILLARS.get(r["pillar_id"], PILLARS[3])["slug"],
+    } for r in rows]
+
+    processed = await process_batch(batch_input, concurrency=AI_CONCURRENCY)
+
+    done = 0
+    for r, result in zip(rows, processed):
+        try:
+            new_pid = SLUG_TO_PILLAR.get(result["category"], r["pillar_id"])
+            existing_tags = json.loads(r["micro_tags"] or "[]")
+            all_tags = list(dict.fromkeys(result["topic_tags"] + existing_tags))[:10]
+            conn.execute("""
+                UPDATE articles SET
+                    headline=?, summary_60=?, full_body=?, source_summary=?,
+                    when_info=?, where_info=?, pillar_id=?, micro_tags=?,
+                    is_trending=?, sentiment=?, ai_processed=1, reprocessed=1
+                WHERE id=?
+            """, (
+                result["refined_title"], result["summary"], result["full_body"],
+                result["summary"], result.get("when_info", ""),
+                result.get("where_info", "Not specified"), new_pid,
+                json.dumps(all_tags), 1 if result["is_trending"] else 0,
+                result["sentiment"], r["id"],
+            ))
+            done += 1
+        except Exception as e:
+            log.warning("[REPROCESS] update failed for id %s: %s", r["id"], e)
+
+    conn.commit()
+    remaining = conn.execute(
+        "SELECT COUNT(*) c FROM articles WHERE ai_processed=1 AND COALESCE(reprocessed,0)=0"
+    ).fetchone()["c"]
+
+    # Content changed — refresh story threads so headlines/tags re-cluster.
+    try:
+        link_stories(conn)
+    except Exception as e:
+        log.warning("[REPROCESS] relink failed: %s", e)
+
+    conn.close()
+    log.info("[REPROCESS] %d rows reprocessed, %d remaining", done, remaining)
+    return {"reprocessed": done, "remaining": remaining, "ai": providers["primary"]}
+
+
+@app.post("/admin/relink")
+async def admin_relink(x_admin_token: str = Header("")):
+    """Recompute all story threads on demand."""
+    _check_admin(x_admin_token)
+    conn = get_db()
+    threads = link_stories(conn)
+    conn.close()
+    return {"threads": threads, "window_days": STORY_WINDOW_DAYS}
+
+
+@app.get("/story/{article_id}")
+async def get_story(article_id: int):
+    """Return the chronological story thread ("string") an article belongs to."""
+    conn = get_db()
+    art = conn.execute("SELECT story_id FROM articles WHERE id=?", (article_id,)).fetchone()
+    if not art:
+        conn.close()
+        raise HTTPException(404, "Article not found")
+
+    sid = (art["story_id"] or 0) if "story_id" in art.keys() else 0
+    if not sid:
+        conn.close()
+        return {"story_id": 0, "count": 0, "thread": []}
+
+    rows = conn.execute(
+        "SELECT * FROM articles WHERE story_id=? AND ai_processed=1 "
+        "ORDER BY published_at ASC, id ASC",
+        (sid,)
+    ).fetchall()
+    conn.close()
+
+    thread = []
+    for r in rows:
+        d = article_row_to_dict(r)
+        thread.append({
+            "id": d["id"],
+            "headline": d.get("headline", ""),
+            "summary": d.get("summary_60", ""),
+            "published_at": d.get("published_at", ""),
+            "pillar_slug": d.get("pillar_slug", ""),
+            "pillar_name": d.get("pillar_name", ""),
+            "pillar_color": d.get("pillar_color", "#1E88E5"),
+            "image_url": d.get("image_url", ""),
+            "source": "SherrByte News",
+            "is_current": d["id"] == article_id,
+        })
+
+    return {"story_id": sid, "count": len(thread), "thread": thread}
 
 
 @app.get("/health")
