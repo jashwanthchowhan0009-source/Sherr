@@ -14,6 +14,7 @@ import logging
 from contextlib import asynccontextmanager
 from functools import lru_cache
 
+from app.sherr import admin
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -89,7 +90,7 @@ app.include_router(live.router)
 app.include_router(activity.router)
 # MVP-compatibility routes (flat /login, /feed, /interact, …) for the v5 frontend.
 app.include_router(compat.router)
-
+app.include_router(admin.router, prefix="/admin", tags=["Admin Maintenance"])
 
 # ─── Static taxonomy + health ─────────────────────────────────────────────────
 @lru_cache(maxsize=1)
