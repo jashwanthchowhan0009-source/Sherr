@@ -1831,50 +1831,162 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 
 
 /* ═══════════════════════════════════
-   ONBOARDING SCREEN (v21 style)
+   ONBOARDING / LANDING (Palantir-pattern hero + numbered sections)
+   Uses OG SherrByte fonts: var(--fd) display, var(--f) body.
 ═══════════════════════════════════ */
 #ob-screen {
   position: absolute; inset: 0; z-index: 5000;
-  background: radial-gradient(ellipse at 40% 30%, #011A7D 0%, #02153F 60%, #020b1a 100%);
-  display: flex; flex-direction: column;
-  overflow-y: auto; overscroll-behavior: contain;
-  /* This hero is always a dark background, so pin the text tokens light —
-     otherwise light mode turns the brand/title/labels dark and unreadable. */
+  background: #05070d;
+  overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain;
+  scroll-behavior: smooth;
+  /* Always-dark hero — pin text tokens light so light mode stays readable. */
   --t1: #ffffff;
-  --t2: rgba(255,255,255,0.62);
+  --t2: rgba(255,255,255,0.64);
   --t3: rgba(255,255,255,0.45);
 }
 #ob-screen.gone { display: none; }
-.ob-top {
-  padding: 52px 24px 0;
-  display: flex; align-items: center; gap: 10px;
+
+/* ── Sticky top nav (brand left · Get Started + menu right) ── */
+.ob-nav {
+  position: sticky; top: 0; z-index: 40;
+  display: flex; align-items: center; gap: 12px;
+  padding: max(14px, env(safe-area-inset-top)) 20px 14px;
+  background: linear-gradient(to bottom, rgba(5,7,13,0.78) 55%, rgba(5,7,13,0));
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  transition: background 0.3s ease;
 }
-.ob-top-logo {
-  width: 32px; height: 32px; border-radius: 10px; overflow: hidden;
-  background: #000;
-  border: 1px solid rgba(255,255,255,0.08);
-  display: flex; align-items: center; justify-content: center;
+.ob-nav.solid { background: rgba(5,7,13,0.92); border-bottom: 1px solid rgba(255,255,255,0.07); }
+.ob-nav-brand { display: flex; align-items: center; gap: 10px; flex: 1; }
+.ob-nav-logo {
+  width: 30px; height: 30px; border-radius: 9px; overflow: hidden; background: #000;
+  border: 1px solid rgba(255,255,255,0.10); display: flex; align-items: center; justify-content: center;
 }
-.ob-top-logo img { width: 100%; height: 100%; object-fit: contain; }
-.ob-top-brand { font-family: var(--fd); font-size: 1.1rem; font-weight: 700; color: var(--t1); }
-.ob-top-brand span { color: #0EB7D6; }
-.ob-content { flex: 1; padding: 24px 24px 0; max-width: 440px; margin: 0 auto; width: 100%; }
+.ob-nav-logo img { width: 100%; height: 100%; object-fit: contain; }
+.ob-nav-name { font-family: var(--fd); font-size: 1.06rem; font-weight: 700; letter-spacing: -0.3px; color: var(--t1); }
+.ob-nav-name span { color: #0EB7D6; }
+.ob-nav-cta {
+  padding: 9px 20px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.55);
+  background: transparent; color: var(--t1); font-family: var(--fd); font-size: 0.82rem; font-weight: 700;
+  cursor: pointer; transition: background 0.18s, color 0.18s;
+}
+.ob-nav-cta:hover { background: #fff; color: #05070d; }
+
+.ob-content { padding: 0; max-width: none; margin: 0; width: 100%; }
 .ob-step { display: none; }
 .ob-step.active { display: block; }
 
-/* Auth step */
-.ob-eyebrow { font-size: 0.6rem; font-weight: 700; letter-spacing: 2.5px; text-transform: uppercase; color: #0EB7D6; margin-bottom: 10px; opacity: 0.85; }
-.ob-big-title { font-family: var(--fd); font-size: clamp(2rem,8vw,2.8rem); font-weight: 800; line-height: 1.05; margin-bottom: 10px; letter-spacing: -1px; color: var(--t1); }
+/* ── Full-bleed hero (video/image, big headline, scroll cue) ── */
+.ob-hero {
+  position: relative; min-height: 100svh; margin-top: -74px;
+  display: flex; flex-direction: column; justify-content: center;
+  padding: 96px 24px 120px; overflow: hidden;
+}
+.ob-hero-media { position: absolute; inset: 0; z-index: 0; }
+/* Brand-navy gradient sits UNDER the media, so a failed image degrades cleanly. */
+.ob-hero-media::before {
+  content: ''; position: absolute; inset: 0;
+  background: radial-gradient(ellipse at 60% 20%, #0a2a6e 0%, #06153b 55%, #05070d 100%);
+}
+.ob-hero-media img, .ob-hero-media video {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
+}
+.ob-hero-scrim {
+  position: absolute; inset: 0; z-index: 1;
+  background:
+    linear-gradient(to bottom, rgba(5,7,13,0.30) 0%, rgba(5,7,13,0.10) 35%, rgba(5,7,13,0.72) 82%, #05070d 100%),
+    linear-gradient(to right, rgba(5,7,13,0.55), rgba(5,7,13,0.05));
+}
+.ob-hero-inner { position: relative; z-index: 2; max-width: 1100px; margin: 0 auto; width: 100%; }
+.ob-eyebrow {
+  font-family: var(--fd); font-size: 0.66rem; font-weight: 700; letter-spacing: 3px;
+  text-transform: uppercase; color: #0EB7D6; margin-bottom: 16px;
+}
+.ob-hero-title {
+  font-family: var(--fd); font-weight: 800;
+  font-size: clamp(2.9rem, 11vw, 6rem); line-height: 0.98; letter-spacing: -2px;
+  color: var(--t1); margin-bottom: 22px;
+}
+.ob-hero-title span { color: rgba(255,255,255,0.42); }
+.ob-hero-sub {
+  font-family: var(--f); font-size: clamp(0.98rem, 2.4vw, 1.28rem); font-weight: 400;
+  color: var(--t2); line-height: 1.5; max-width: 560px; margin-bottom: 34px;
+}
+.ob-hero-btns { display: flex; gap: 12px; flex-wrap: wrap; }
+.ob-hero-btn {
+  padding: 15px 30px; border-radius: 12px; font-family: var(--fd);
+  font-size: 0.94rem; font-weight: 700; cursor: pointer; border: 1px solid transparent;
+  transition: transform 0.15s, background 0.18s, border-color 0.18s;
+}
+.ob-hero-btn:active { transform: scale(0.97); }
+.ob-hero-btn.solid { background: #fff; color: #05070d; }
+.ob-hero-btn.solid:hover { background: #0EB7D6; }
+.ob-hero-btn.ghost { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.30); color: var(--t1); }
+.ob-hero-btn.ghost:hover { background: rgba(255,255,255,0.14); }
+.ob-scrollcue {
+  position: absolute; bottom: 26px; left: 50%; transform: translateX(-50%); z-index: 2;
+  display: flex; flex-direction: column; align-items: center; gap: 7px;
+  font-family: var(--fd); font-size: 0.66rem; font-weight: 600; letter-spacing: 1.5px;
+  text-transform: uppercase; color: var(--t3);
+}
+.ob-scrollcue i { animation: obBob 1.8s ease-in-out infinite; }
+@keyframes obBob { 0%,100% { transform: translateY(0); opacity: 0.5; } 50% { transform: translateY(6px); opacity: 1; } }
+
+/* ── Numbered feature sections (Palantir /0.1 pattern) ── */
+.ob-feat {
+  position: relative; padding: 68px 24px; overflow: hidden;
+  border-top: 1px solid rgba(255,255,255,0.08);
+}
+.ob-feat-media { position: absolute; inset: 0; z-index: 0; }
+.ob-feat-media::before {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(135deg, #0a1f4a 0%, #06102b 60%, #05070d 100%);
+}
+.ob-feat-media img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0.5; }
+.ob-feat-scrim {
+  position: absolute; inset: 0; z-index: 1;
+  background: linear-gradient(to right, #05070d 8%, rgba(5,7,13,0.72) 45%, rgba(5,7,13,0.35) 100%);
+}
+.ob-feat-inner {
+  position: relative; z-index: 2; max-width: 1100px; margin: 0 auto; width: 100%;
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 20px;
+}
+.ob-feat-num {
+  font-family: var(--fd); font-size: 0.9rem; font-weight: 600; color: var(--t3);
+  padding-top: 14px; flex-shrink: 0; letter-spacing: 0.5px;
+}
+.ob-feat-body { flex: 1; }
+.ob-feat-name {
+  font-family: var(--fd); font-weight: 800; letter-spacing: -1.5px;
+  font-size: clamp(2.6rem, 9vw, 4.4rem); line-height: 1; color: var(--t1); margin-bottom: 14px;
+}
+.ob-feat-desc { font-family: var(--f); font-size: clamp(0.98rem, 2.4vw, 1.22rem); color: var(--t2); line-height: 1.5; max-width: 520px; }
+
+/* ── Final CTA / auth section ── */
+.ob-cta { position: relative; padding: 74px 24px 40px; border-top: 1px solid rgba(255,255,255,0.08); }
+.ob-cta-inner { max-width: 480px; margin: 0 auto; width: 100%; }
+.ob-big-title { font-family: var(--fd); font-size: clamp(2.1rem,8vw,3rem); font-weight: 800; line-height: 1.03; margin-bottom: 12px; letter-spacing: -1.5px; color: var(--t1); }
 .ob-big-title span { color: #0EB7D6; }
-.ob-subtitle { font-size: 0.82rem; color: var(--t2); margin-bottom: 24px; line-height: 1.65; }
+.ob-subtitle { font-family: var(--f); font-size: 0.92rem; color: var(--t2); margin-bottom: 24px; line-height: 1.6; }
+
+/* Topics step keeps its own comfortable column */
+#ob-step-topics { padding: 24px 24px 0; max-width: 480px; margin: 0 auto; }
 
 .ob-auth-card {
-  background: rgba(0,20,60,0.6);
+  background: rgba(10,18,42,0.72);
   backdrop-filter: blur(24px) saturate(180%);
   -webkit-backdrop-filter: blur(24px) saturate(180%);
-  border: 1px solid rgba(0,62,145,0.3);
+  border: 1px solid rgba(255,255,255,0.10);
   border-radius: 22px; padding: 22px; margin-bottom: 16px;
 }
+
+/* Landing footer */
+.ob-foot {
+  padding: 30px 24px calc(34px + env(safe-area-inset-bottom));
+  border-top: 1px solid rgba(255,255,255,0.08);
+  display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap;
+}
+.ob-foot-brand { font-family: var(--fd); font-size: 0.72rem; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--t3); }
+.ob-foot-sub { font-family: var(--f); font-size: 0.72rem; color: var(--t3); }
 .ob-tabs { display: flex; background: rgba(0,0,0,0.3); border-radius: 14px; padding: 3px; margin-bottom: 20px; }
 .ob-tab {
   flex: 1; padding: 9px; border: none; background: transparent;
@@ -2587,20 +2699,98 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 
 <!-- ════════ ONBOARDING ════════ -->
 <div id="ob-screen">
-  <div class="ob-top">
-    <div class="ob-top-logo"><img src="tiger-logo.png" alt="" onerror="this.outerHTML='⚡'"></div>
-    <div class="ob-top-brand">Sherr<span>Byte</span></div>
-  </div>
+  <header class="ob-nav" id="ob-nav">
+    <div class="ob-nav-brand">
+      <div class="ob-nav-logo"><img src="tiger-logo.png" alt="" onerror="this.outerHTML='⚡'"></div>
+      <div class="ob-nav-name">Sherr<span>Byte</span></div>
+    </div>
+    <button class="ob-nav-cta" onclick="obGoAuth()">Get Started</button>
+  </header>
   <div class="ob-content">
 
-    <!-- Step 1: Auth -->
+    <!-- Step 1: Landing + Auth -->
     <div class="ob-step active" id="ob-step-auth">
-      <div style="margin-top:22px">
-        <div class="ob-eyebrow">News Intelligence</div>
+
+      <!-- Hero -->
+      <section class="ob-hero">
+        <div class="ob-hero-media">
+          <video autoplay muted loop playsinline
+                 poster="https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=1600&q=80">
+            <source src="https://assets.mixkit.co/videos/preview/mixkit-earth-rotating-in-space-1740-large.mp4" type="video/mp4">
+          </video>
+        </div>
+        <div class="ob-hero-scrim"></div>
+        <div class="ob-hero-inner">
+          <div class="ob-eyebrow">News Intelligence</div>
+          <h1 class="ob-hero-title">Your feed,<br><span>your rules.</span></h1>
+          <p class="ob-hero-sub">Real-time news intelligence for every decision — personalised stories, market pulse, and the world's flashpoints, in one calm feed.</p>
+          <div class="ob-hero-btns">
+            <button class="ob-hero-btn solid" onclick="obGoAuth()">Get Started →</button>
+            <button class="ob-hero-btn ghost" onclick="obGuest()">Just browse</button>
+          </div>
+        </div>
+        <div class="ob-scrollcue" onclick="document.querySelector('.ob-feat')?.scrollIntoView({behavior:'smooth'})">
+          <span>Scroll to Explore</span>
+          <i class="fa-solid fa-chevron-down"></i>
+        </div>
+      </section>
+
+      <!-- Numbered feature sections -->
+      <section class="ob-feat">
+        <div class="ob-feat-media"><img loading="lazy" src="https://images.unsplash.com/photo-1504711434969-e33886168f5c?auto=format&fit=crop&w=1400&q=80" alt=""></div>
+        <div class="ob-feat-scrim"></div>
+        <div class="ob-feat-inner">
+          <div class="ob-feat-num">/0.1</div>
+          <div class="ob-feat-body">
+            <div class="ob-feat-name">Feed</div>
+            <p class="ob-feat-desc">A personalised stream that learns what matters to you — the signal, never the noise.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="ob-feat">
+        <div class="ob-feat-media"><img loading="lazy" src="https://images.unsplash.com/photo-1495020689067-958852a7765e?auto=format&fit=crop&w=1400&q=80" alt=""></div>
+        <div class="ob-feat-scrim"></div>
+        <div class="ob-feat-inner">
+          <div class="ob-feat-num">/0.2</div>
+          <div class="ob-feat-body">
+            <div class="ob-feat-name">Reader</div>
+            <p class="ob-feat-desc">Full articles, TL;DR summaries, and the key points — read deeply or catch up in seconds.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="ob-feat">
+        <div class="ob-feat-media"><img loading="lazy" src="https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1400&q=80" alt=""></div>
+        <div class="ob-feat-scrim"></div>
+        <div class="ob-feat-inner">
+          <div class="ob-feat-num">/0.3</div>
+          <div class="ob-feat-body">
+            <div class="ob-feat-name">Bytes</div>
+            <p class="ob-feat-desc">Bite-sized cards to swipe through the day's stories — the world at a glance.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="ob-feat">
+        <div class="ob-feat-media"><img loading="lazy" src="https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?auto=format&fit=crop&w=1400&q=80" alt=""></div>
+        <div class="ob-feat-scrim"></div>
+        <div class="ob-feat-inner">
+          <div class="ob-feat-num">/0.4</div>
+          <div class="ob-feat-body">
+            <div class="ob-feat-name">Explore</div>
+            <p class="ob-feat-desc">Markets, weather, and the topics shaping the world — discover beyond your feed.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Final CTA / auth -->
+      <section class="ob-cta" id="ob-auth-anchor">
+       <div class="ob-cta-inner">
+        <div class="ob-eyebrow">Get Started</div>
         <div class="ob-big-title">Your feed,<br><span>your rules.</span></div>
         <div class="ob-subtitle">Sign in or create an account to start your personalised news experience.</div>
-      </div>
-      <div class="ob-auth-card">
+        <div class="ob-auth-card">
         <div class="ob-tabs">
           <button class="ob-tab active" id="ob-tab-login" onclick="obSwitchTab('login')">Sign In</button>
           <button class="ob-tab" id="ob-tab-reg" onclick="obSwitchTab('register')">Create Account</button>
@@ -2632,11 +2822,17 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
           <button class="ob-btn-primary" id="ob-rbtn" onclick="obStep1()">Continue →</button>
         </div>
       </div>
-      <div class="ob-guest-link tap" onclick="obGuest()"
-           style="text-align:center;margin-top:16px;font-size:0.84rem;color:var(--t2);cursor:pointer">
-        Maybe later — just browse →
-      </div>
-    </div>
+        <div class="ob-guest-link tap" onclick="obGuest()"
+             style="text-align:center;margin-top:16px;font-size:0.84rem;color:var(--t2);cursor:pointer">
+          Maybe later — just browse →
+        </div>
+       </div><!-- /ob-cta-inner -->
+      </section>
+      <footer class="ob-foot">
+        <span class="ob-foot-brand">SherrByte</span>
+        <span class="ob-foot-sub">News intelligence for everyone</span>
+      </footer>
+    </div><!-- /ob-step-auth -->
 
     <!-- Step 2: Topics -->
     <div class="ob-step" id="ob-step-topics">
@@ -6672,6 +6868,20 @@ function obGuest() {
   }, GUEST_NUDGE_MS);
 }
 
+/* Smooth-scroll the landing to the sign-in/register card. */
+function obGoAuth() {
+  document.getElementById('ob-auth-anchor')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+/* Solidify the sticky nav once the hero scrolls away. */
+(function () {
+  var scr = document.getElementById('ob-screen');
+  if (!scr) return;
+  scr.addEventListener('scroll', function () {
+    var nav = document.getElementById('ob-nav');
+    if (nav) nav.classList.toggle('solid', scr.scrollTop > 60);
+  }, { passive: true });
+})();
+
 function obSwitchTab(t) {
   const isL = t === 'login';
   document.getElementById('ob-login-form').style.display = isL ? '' : 'none';
@@ -6774,6 +6984,7 @@ function obStep1() {
   obSD = { email, password: pass, name, username: uname };
   document.getElementById('ob-step-auth').classList.remove('active');
   document.getElementById('ob-step-topics').classList.add('active');
+  var _obs = document.getElementById('ob-screen'); if (_obs) _obs.scrollTop = 0;
   obPopulateTopics();
 }
 
