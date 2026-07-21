@@ -30,9 +30,9 @@ services:
     # an external uptime pinger (UptimeRobot) hitting "/" every 5 min, plus the
     # in-app cold-start retry as a safety net. Upgrade to `starter` for always-on.
     plan: free
-    rootDir: sherrbyte
-    dockerfilePath: ./Dockerfile
-    dockerContext: .
+   # rootDir: sherrbyte
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT               
     healthCheckPath: /health
     autoDeploy: true
     envVars:
