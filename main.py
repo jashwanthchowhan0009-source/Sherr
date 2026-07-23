@@ -1600,9 +1600,53 @@ async def admin_rescope(x_admin_token: str = Header("")):
     return {"rescoped": len(rows), "distribution": counts}
 
 
+def _live_thread_ids(conn, article_id: int, window_days: int = STORY_WINDOW_DAYS,
+                     limit: int = 8) -> list:
+    """On-demand thread: find same-category articles that share ≥2 significant
+    terms with this one, so the "String" works even before link_stories has run.
+    Returns article ids (current first, strongest matches next)."""
+    base = conn.execute(
+        "SELECT id, headline, micro_tags, pillar_id FROM articles "
+        "WHERE id=? AND ai_processed=1", (article_id,)
+    ).fetchone()
+    if not base:
+        return []
+    try:
+        base_tags = json.loads(base["micro_tags"] or "[]")
+    except Exception:
+        base_tags = []
+    base_terms = _story_terms(base["headline"], base_tags)
+    if len(base_terms) < 2:
+        return []
+
+    cands = conn.execute(
+        "SELECT id, headline, micro_tags FROM articles "
+        "WHERE ai_processed=1 AND pillar_id=? AND id!=? "
+        "AND published_at >= datetime('now', ?)",
+        (base["pillar_id"], article_id, f"-{int(window_days)} days")
+    ).fetchall()
+
+    scored = []
+    for c in cands:
+        try:
+            tags = json.loads(c["micro_tags"] or "[]")
+        except Exception:
+            tags = []
+        shared = len(base_terms & _story_terms(c["headline"], tags))
+        if shared >= 2:
+            scored.append((shared, c["id"]))
+    if not scored:
+        return []
+    scored.sort(key=lambda x: (-x[0], x[1]))
+    return [article_id] + [cid for _, cid in scored[:limit]]
+
+
 @app.get("/story/{article_id}")
 async def get_story(article_id: int):
-    """Return the chronological story thread ("string") an article belongs to."""
+    """Return the chronological story thread ("string") an article belongs to.
+
+    Prefers a precomputed thread (story_id from link_stories); if none exists
+    yet, computes a matching thread live so the feature works immediately."""
     conn = get_db()
     art = conn.execute("SELECT story_id FROM articles WHERE id=?", (article_id,)).fetchone()
     if not art:
@@ -1610,15 +1654,24 @@ async def get_story(article_id: int):
         raise HTTPException(404, "Article not found")
 
     sid = (art["story_id"] or 0) if "story_id" in art.keys() else 0
-    if not sid:
-        conn.close()
-        return {"story_id": 0, "count": 0, "thread": []}
-
-    rows = conn.execute(
-        "SELECT * FROM articles WHERE story_id=? AND ai_processed=1 "
-        "ORDER BY published_at ASC, id ASC",
-        (sid,)
-    ).fetchall()
+    if sid:
+        rows = conn.execute(
+            "SELECT * FROM articles WHERE story_id=? AND ai_processed=1 "
+            "ORDER BY published_at ASC, id ASC",
+            (sid,)
+        ).fetchall()
+    else:
+        # No precomputed thread — build one on the fly.
+        ids = _live_thread_ids(conn, article_id)
+        if len(ids) < 2:
+            conn.close()
+            return {"story_id": 0, "count": 0, "thread": []}
+        placeholders = ",".join("?" for _ in ids)
+        rows = conn.execute(
+            f"SELECT * FROM articles WHERE id IN ({placeholders}) AND ai_processed=1 "
+            "ORDER BY published_at ASC, id ASC",
+            ids
+        ).fetchall()
     conn.close()
 
     thread = []
