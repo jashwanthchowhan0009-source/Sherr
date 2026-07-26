@@ -40,6 +40,15 @@ async def _ingest_job():
         log.error("ingest cycle failed: %s", e, exc_info=True)
 
 
+async def _detectors_job():
+    """Nightly pattern-detector pass (emergence, temporal correlation)."""
+    from app.workers.detectors import run as run_detectors
+    try:
+        log.info("detectors: %s", await run_detectors())
+    except Exception as e:
+        log.error("detectors job failed: %s", e, exc_info=True)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await db.connect()
@@ -51,9 +60,12 @@ async def lifespan(app: FastAPI):
         _scheduler = AsyncIOScheduler()
         _scheduler.add_job(_ingest_job, "interval",
                            minutes=settings.collect_interval_min, id="ingest")
+        # Detectors are heavy + materialized, so run once nightly (02:00 UTC).
+        _scheduler.add_job(_detectors_job, "cron", hour=2, id="detectors")
         _scheduler.start()
         asyncio.create_task(_ingest_job())  # kick one cycle on boot
-        log.info("Scheduler started: ingest every %d min", settings.collect_interval_min)
+        log.info("Scheduler started: ingest every %d min, detectors nightly @02:00",
+                 settings.collect_interval_min)
 
     log.info("AI providers: %s", provider_status())
     log.info("%s v%s ready (env=%s)", settings.app_name, settings.app_version, settings.env)
