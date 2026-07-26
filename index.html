@@ -1516,9 +1516,9 @@ header {
 nav {
   position: absolute; bottom: max(16px, env(safe-area-inset-bottom));
   left: 50%; transform: translateX(-50%);
-  width: calc(100% - 30px); max-width: 358px;
-  height: 64px;
-  display: flex; align-items: center; justify-content: space-around;
+  width: calc(100% - 24px); max-width: 430px;
+  height: 62px;
+  display: flex; align-items: center; gap: 8px;
   z-index: 600;
 
   /* frosted liquid-glass pill */
@@ -1531,30 +1531,100 @@ nav {
     0 16px 44px rgba(0,0,0,0.38),
     inset 0 1px 1px rgba(255,255,255,0.24),
     inset 0 -1px 1px rgba(0,0,0,0.12);
-  padding: 0 10px;
+  padding: 0 8px;
 }
 
+/* Tab row grows to fill; the Scan button is pinned outside it (always right). */
+.nb-tabs { display: flex; align-items: center; gap: 2px; flex: 1 1 auto; min-width: 0; }
+
 .nb {
-  display: flex; align-items: center; justify-content: center;
-  padding: 0; cursor: pointer; flex: 1;
-  transition: all 0.25s var(--spring); position: relative;
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+  flex: 1 1 auto; min-width: 0;
+  height: 46px; padding: 0 10px; border-radius: 999px;
+  cursor: pointer; position: relative; overflow: hidden;
+  transition: flex-grow .32s var(--spring), background .28s var(--snap), box-shadow .28s var(--snap);
 }
 .nb-icon {
-  min-width: 47px; height: 47px; padding: 0 13px; border-radius: 999px;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 1.26rem; color: rgba(255,255,255,0.6);
-  transition: background .28s var(--snap), color .28s var(--snap), box-shadow .28s var(--snap), padding .28s var(--snap);
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  color: rgba(255,255,255,0.62);
+  transition: color .28s var(--snap);
 }
-.nb-icon i { font-size: 1.26rem; }
-.nb-lbl { display: none; }
-/* Active = an elongated frosted pill behind the icon — slick iOS glass. */
-.nb.on .nb-icon {
-  padding: 0 24px;
-  background: rgba(255,255,255,0.15);
-  color: #fff;
-  box-shadow: inset 0 0 0 0.5px rgba(255,255,255,0.30), 0 2px 10px rgba(0,0,0,0.18);
+.nb-icon i { font-size: 1.24rem; }
+.nb-lbl {
+  display: inline-block; font-family: var(--fd); font-size: 0.78rem; font-weight: 700;
+  color: rgba(255,255,255,0.62); white-space: nowrap; overflow: hidden;
+  max-width: 90px; opacity: 1;
+  transition: max-width .32s var(--spring), opacity .24s var(--snap), margin .32s var(--spring);
 }
-.nb.on .nb-icon i { filter: none; }
+/* Active = frosted pill with icon + label; icon tints white. */
+.nb.on { background: rgba(255,255,255,0.16);
+  box-shadow: inset 0 0 0 0.5px rgba(255,255,255,0.30), 0 2px 10px rgba(0,0,0,0.18); }
+.nb.on .nb-icon, .nb.on .nb-lbl { color: #fff; }
+
+/* Compact (scrolled): inactive tabs collapse their labels sideways to icon-only;
+   the active tab keeps its label and takes the freed space. Scan stays put. */
+nav.compact .nb:not(.on) { flex: 0 0 auto; }
+nav.compact .nb:not(.on) .nb-lbl { max-width: 0; opacity: 0; margin-left: -7px; }
+nav.compact .nb.on { flex: 1 1 auto; }
+
+/* Pinned "Scan" primary action — the SPRIE engine, always visible on the right. */
+.nb-scan {
+  flex: 0 0 auto; width: 46px; height: 46px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+  color: #fff; font-size: 1.05rem;
+  background: linear-gradient(135deg, #4F6BD4 0%, #8E24AA 100%);
+  box-shadow: 0 6px 16px -4px rgba(79,107,212,0.6),
+    inset 0 1.5px 1px rgba(255,255,255,0.5), inset 0 -2px 5px -2px rgba(0,0,0,0.4);
+  transition: transform .16s var(--spring), box-shadow .28s;
+}
+.nb-scan:active { transform: scale(0.9); }
+.nb-scan.on { box-shadow: 0 0 0 3px rgba(142,36,170,0.4), 0 6px 18px -4px rgba(142,36,170,0.75),
+    inset 0 1.5px 1px rgba(255,255,255,0.5); }
+[data-theme="light"] .nb-icon, [data-theme="light"] .nb-lbl { color: rgba(60,60,67,0.6); }
+[data-theme="light"] .nb.on .nb-icon, [data-theme="light"] .nb.on .nb-lbl { color: var(--t1); }
+
+/* ═══════════ SPRIE — engine output section ═══════════ */
+.sprie-wrap { padding: calc(var(--hh) + 14px) 16px calc(var(--nh) + 30px); max-width: 640px; margin: 0 auto; }
+.sprie-head { margin-bottom: 18px; }
+.sprie-badge { display: inline-flex; align-items: center; gap: 7px;
+  font: 800 0.64rem/1 var(--fd); letter-spacing: 0.18em; text-transform: uppercase;
+  color: #fff; padding: 6px 12px; border-radius: 999px;
+  background: linear-gradient(135deg, #4F6BD4, #8E24AA);
+  box-shadow: 0 6px 16px -6px rgba(142,36,170,0.7); }
+.sprie-badge i { font-size: 0.7rem; }
+.sprie-title { font: 800 1.5rem/1.18 var(--fd); color: var(--t1); letter-spacing: -0.02em; margin: 14px 0 6px; }
+.sprie-sub { font: 500 0.82rem/1.5 var(--f); color: var(--t3); margin: 0 0 16px; }
+.sprie-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.sprie-chip { font: 700 0.76rem/1 var(--fd); color: var(--t2); cursor: pointer;
+  padding: 8px 14px; border-radius: 999px; background: var(--bgcard);
+  border: 1px solid var(--line2); transition: all 0.15s var(--spring); }
+.sprie-chip.on { color: #fff; background: linear-gradient(135deg, #4F6BD4, #8E24AA); border-color: transparent; }
+.sprie-refresh { margin-left: auto; width: 38px; height: 38px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+  background: var(--bgcard); border: 1px solid var(--line2); color: var(--t2); }
+.sprie-refresh:active { transform: rotate(180deg); }
+.sprie-list { display: flex; flex-direction: column; gap: 12px; }
+.sprie-loading, .sprie-empty { text-align: center; color: var(--t3); font: 500 0.86rem/1.6 var(--f); padding: 40px 20px; }
+.sprie-card { border-radius: 18px; overflow: hidden;
+  background: linear-gradient(178deg, #16161a, #0d0d10); border: 1px solid rgba(255,255,255,0.06);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 14px 30px -22px rgba(0,0,0,0.85); }
+[data-theme="light"] .sprie-card { background: linear-gradient(178deg,#fff,#eef1f6); border-color: rgba(0,0,0,0.07); }
+.sprie-card-top { display: flex; align-items: center; gap: 10px; padding: 13px 15px 0; }
+.sprie-type { font: 800 0.6rem/1 var(--fd); letter-spacing: 0.1em; text-transform: uppercase;
+  padding: 5px 10px; border-radius: 999px; }
+.sprie-type-temporal_correlation { color: #A855F7; background: rgba(168,85,247,0.15); }
+.sprie-type-emergence { color: #22C55E; background: rgba(34,197,94,0.15); }
+.sprie-score { margin-left: auto; font: 700 0.66rem/1 var(--fd); color: var(--t3); }
+.sprie-ents { padding: 10px 15px 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.sprie-ent { font: 600 0.72rem/1 var(--f); color: var(--t1); padding: 5px 10px; border-radius: 8px;
+  background: rgba(255,255,255,0.06); }
+[data-theme="light"] .sprie-ent { background: rgba(0,0,0,0.05); }
+.sprie-arrow { color: var(--t3); font-size: 0.7rem; align-self: center; }
+.sprie-why { padding: 10px 15px 0; font: 500 0.82rem/1.55 var(--f); color: var(--t2); }
+.sprie-raw { margin: 12px 15px 15px; padding: 12px; border-radius: 12px; overflow-x: auto;
+  background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.05);
+  font: 500 0.7rem/1.5 ui-monospace, "SF Mono", Menlo, monospace; color: #9ad0ff; white-space: pre; }
+[data-theme="light"] .sprie-raw { background: rgba(0,0,0,0.04); color: #1f5fbf; border-color: rgba(0,0,0,0.06); }
 
 /* ─── Bytes — one structured card per screen (vertical snap) ─── */
 #v-bytes { inset: 0; }
@@ -3801,22 +3871,46 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   </div>
 </div>
 
+<!-- ════════ SPRIE — Sherr Pattern Recognition Intelligence Engine ════════ -->
+<div id="v-sprie" class="view" style="overflow-y:scroll;">
+  <div class="sprie-wrap">
+    <div class="sprie-head">
+      <div class="sprie-badge"><i class="fa-solid fa-satellite-dish"></i> SPRIE</div>
+      <h2 class="sprie-title">Sherr Pattern Recognition<br>Intelligence Engine</h2>
+      <p class="sprie-sub">Raw pattern output — cross-domain signals the engine has connected.</p>
+      <div class="sprie-controls">
+        <button class="sprie-chip on" data-t="" onclick="loadPatterns('')">All</button>
+        <button class="sprie-chip" data-t="emergence" onclick="loadPatterns('emergence')">Emergence</button>
+        <button class="sprie-chip" data-t="temporal_correlation" onclick="loadPatterns('temporal_correlation')">Temporal</button>
+        <button class="sprie-refresh tap" onclick="loadPatterns(spriePatternType)" aria-label="Refresh"><i class="fa-solid fa-rotate"></i></button>
+      </div>
+    </div>
+    <div id="sprie-list" class="sprie-list"></div>
+  </div>
+</div>
+
 <nav>
-  <div class="nb on" id="nb-home" onclick="navTo('home')">
-    <div class="nb-icon"><i class="fa-solid fa-house"></i></div>
-    <span class="nb-lbl">Home</span>
+  <div class="nb-tabs" id="nb-tabs">
+    <div class="nb on" id="nb-home" onclick="navTo('home')">
+      <div class="nb-icon"><i class="fa-solid fa-house"></i></div>
+      <span class="nb-lbl">Home</span>
+    </div>
+    <div class="nb" id="nb-explore" onclick="navTo('explore')">
+      <div class="nb-icon"><i class="fa-solid fa-compass"></i></div>
+      <span class="nb-lbl">Explore</span>
+    </div>
+    <div class="nb" id="nb-bytes" onclick="navTo('bytes')">
+      <div class="nb-icon"><i class="fa-solid fa-bolt"></i></div>
+      <span class="nb-lbl">Bytes</span>
+    </div>
+    <div class="nb" id="nb-profile" onclick="navTo('profile')">
+      <div class="nb-icon"><i class="fa-solid fa-user"></i></div>
+      <span class="nb-lbl">Profile</span>
+    </div>
   </div>
-  <div class="nb" id="nb-explore" onclick="navTo('explore')">
-    <div class="nb-icon"><i class="fa-solid fa-compass"></i></div>
-    <span class="nb-lbl">Explore</span>
-  </div>
-  <div class="nb" id="nb-bytes" onclick="navTo('bytes')">
-    <div class="nb-icon"><i class="fa-solid fa-bolt"></i></div>
-    <span class="nb-lbl">Bytes</span>
-  </div>
-  <div class="nb" id="nb-profile" onclick="navTo('profile')">
-    <div class="nb-icon"><i class="fa-solid fa-user"></i></div>
-    <span class="nb-lbl">Profile</span>
+  <!-- Pinned primary action — always visible on the right (the SPRIE engine "scan"). -->
+  <div class="nb-scan tap" id="nb-scan" onclick="navTo('sprie')" aria-label="Sherr Engine">
+    <i class="fa-solid fa-satellite-dish"></i>
   </div>
 </nav>
 
@@ -6280,8 +6374,48 @@ async function saveProfile() {
 }
 
 // ── NAV ──
-const VIEW_MAP = { home:'v-home', explore:'v-explore', bytes:'v-bytes', profile:'v-profile', bookmarks:'v-bookmarks', notifs:'v-notifs', feed:'v-feed' };
-const NB_MAP   = { home:'nb-home', explore:'nb-explore', bytes:'nb-bytes', profile:'nb-profile' };
+// ── SPRIE — Sherr Pattern Recognition Intelligence Engine (raw output) ──
+let spriePatternType = '';
+async function loadPatterns(type) {
+  spriePatternType = type || '';
+  document.querySelectorAll('.sprie-chip').forEach(c =>
+    c.classList.toggle('on', (c.getAttribute('data-t') || '') === spriePatternType));
+  const list = document.getElementById('sprie-list');
+  if (!list) return;
+  list.innerHTML = '<div class="sprie-loading"><i class="fa-solid fa-satellite-dish"></i> Scanning patterns…</div>';
+  try {
+    const q = spriePatternType ? ('?type=' + encodeURIComponent(spriePatternType)) : '';
+    const data = await api('/patterns' + q);
+    const items = data.patterns || [];
+    list.innerHTML = items.length
+      ? items.map(renderPatternRaw).join('')
+      : '<div class="sprie-empty">No patterns detected yet.</div>';
+  } catch (e) {
+    list.innerHTML = '<div class="sprie-empty">Engine unreachable — ' + bEsc(e.message || 'error') + '</div>';
+  }
+}
+function renderPatternRaw(p) {
+  const ents = p.entities || [];
+  const isTemporal = p.type === 'temporal_correlation';
+  const entHtml = ents.map((e, i) =>
+    `<span class="sprie-ent">${bEsc(e)}</span>` +
+    (isTemporal && i < ents.length - 1 ? '<span class="sprie-arrow"><i class="fa-solid fa-arrow-right-long"></i></span>' : '')
+  ).join('');
+  const why = (p.explain_json && p.explain_json.why) ? `<div class="sprie-why">${bEsc(p.explain_json.why)}</div>` : '';
+  const score = (typeof p.score === 'number') ? p.score : 0;
+  return `<div class="sprie-card">
+    <div class="sprie-card-top">
+      <span class="sprie-type sprie-type-${bEsc(p.type || '')}">${bEsc((p.type || '').replace(/_/g, ' '))}</span>
+      <span class="sprie-score">score ${score}</span>
+    </div>
+    <div class="sprie-ents">${entHtml}</div>
+    ${why}
+    <pre class="sprie-raw">${bEsc(JSON.stringify(p, null, 2))}</pre>
+  </div>`;
+}
+
+const VIEW_MAP = { home:'v-home', explore:'v-explore', bytes:'v-bytes', profile:'v-profile', bookmarks:'v-bookmarks', notifs:'v-notifs', feed:'v-feed', sprie:'v-sprie' };
+const NB_MAP   = { home:'nb-home', explore:'nb-explore', bytes:'nb-bytes', profile:'nb-profile', sprie:'nb-scan' };
 let _navReplay = false;   // true while applying a popstate (suppresses re-push)
 
 function navTo(name) {
@@ -6292,6 +6426,7 @@ function navTo(name) {
   document.getElementById(VIEW_MAP[name])?.classList.add('active');
   document.getElementById(NB_MAP[name])?.classList.add('on');
   navEl.classList.remove('hidden');
+  navEl.classList.remove('compact');   // switching tabs re-expands the nav
   lastScrollY = 0;
 
   const hBrand  = document.getElementById('h-brand');
@@ -6306,6 +6441,9 @@ function navTo(name) {
     hBrand.style.display='none'; hPage.style.display='block'; hPage.textContent='FEED Pulse';
   } else if (name==='bytes') {
     hBrand.style.display='none'; hPage.style.display='block'; hPage.textContent='Bytes';
+  } else if (name==='sprie') {
+    hBrand.style.display='none'; hPage.style.display='block'; hPage.textContent='SPRIE';
+    loadPatterns(spriePatternType);
   } else if (['profile','bookmarks','notifs'].includes(name)) {
     hBrand.style.display='none'; hPage.style.display='block';
     const lbls = { profile:'Profile', bookmarks:'Bookmarks', notifs:'Notifications' };
@@ -6439,26 +6577,28 @@ function timeAgo(dateStr) {
   } catch(e) { return ''; }
 }
 
-// ── SCROLL HIDE/SHOW NAV ──
+// ── SCROLL → COLLAPSE NAV (Pop-style) ──
+// Scrolling down compacts the bottom nav (inactive tabs collapse to icons, active
+// tab keeps its label, Scan stays pinned) instead of hiding it entirely.
 function handleNavScroll(e) {
   const st = e.target.scrollTop;
-  if (st > lastScrollY + 10) { navEl.classList.add('hidden'); }
-  else if (st < lastScrollY - 10) navEl.classList.remove('hidden');
+  if (st > lastScrollY + 10) { navEl.classList.add('compact'); }
+  else if (st < lastScrollY - 10 || st < 24) navEl.classList.remove('compact');
   lastScrollY = st;
 }
-// Home: hide BOTH the bottom nav and the top category bar when scrolling down;
-// bring them back when scrolling up (only the SherrByte bar stays put).
+// Home: compact the nav + hide the top category bar when scrolling down; restore
+// on scroll up (only the SherrByte bar stays put).
 function handleHomeScroll(e) {
   const st = e.target.scrollTop;
   const chips = document.getElementById('chip-row');
-  if (st < 24) {                          // at the top — always show
-    navEl.classList.remove('hidden');
+  if (st < 24) {                          // at the top — fully expanded
+    navEl.classList.remove('compact');
     if (chips) chips.classList.remove('bar-hidden');
-  } else if (st > lastScrollY + 6) {      // scrolling down (reading) — hide both
-    navEl.classList.add('hidden');
+  } else if (st > lastScrollY + 6) {      // scrolling down — compact nav, hide chips
+    navEl.classList.add('compact');
     if (chips) chips.classList.add('bar-hidden');
-  } else if (st < lastScrollY - 6) {      // scrolling back up — bring both back
-    navEl.classList.remove('hidden');
+  } else if (st < lastScrollY - 6) {      // scrolling back up — expand both
+    navEl.classList.remove('compact');
     if (chips) chips.classList.remove('bar-hidden');
   }
   lastScrollY = st;
