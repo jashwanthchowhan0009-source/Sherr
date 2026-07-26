@@ -52,6 +52,11 @@ COLLECT_INTERVAL_MIN = int(os.getenv("COLLECT_INTERVAL_MIN", "25"))
 # a low-risk default keeps the endpoints usable out of the box for this app.
 ADMIN_TOKEN     = os.getenv("ADMIN_TOKEN", "sherr-admin")
 
+# When set, /patterns proxies to the real Intelligence Engine (sherrbyte/app on
+# Supabase) instead of serving the local sqlite sample seed. Point it at the
+# deployed engine's base URL to switch the app to live pattern output.
+ENGINE_URL      = os.getenv("ENGINE_URL", "").rstrip("/")
+
 # Story-thread ("string") linking window — how far back we cluster related news.
 STORY_WINDOW_DAYS = int(os.getenv("STORY_WINDOW_DAYS", "45"))
 
@@ -1374,7 +1379,23 @@ async def patterns(
     offset: int = Query(0, ge=0),
 ):
     """SPRIE pattern output — the Intelligence Engine's insights, most significant
-    first. Optional ?type=emergence|temporal_correlation."""
+    first. Optional ?type=emergence|temporal_correlation.
+
+    If ENGINE_URL is configured, proxy to the real engine; otherwise serve the
+    local sqlite sample seed (so the app always shows *something*)."""
+    if ENGINE_URL:
+        try:
+            params = {"limit": limit, "offset": offset}
+            if type:
+                params["type"] = type
+            async with httpx.AsyncClient(timeout=20) as client:
+                r = await client.get(f"{ENGINE_URL}/patterns", params=params)
+                if r.status_code == 200:
+                    return r.json()
+                log.warning("engine /patterns HTTP %d — falling back to seed", r.status_code)
+        except Exception as e:
+            log.warning("engine /patterns proxy failed (%s) — falling back to seed", e)
+
     conn = get_db()
     q = "SELECT * FROM insights"
     p = []
