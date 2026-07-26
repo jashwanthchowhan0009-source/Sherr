@@ -490,6 +490,21 @@ CREATE TABLE IF NOT EXISTS bookmarks (
     UNIQUE(user_id, article_id)
 );
 
+-- SPRIE — Sherr Pattern Recognition Intelligence Engine output. Mirrors the
+-- engine's insights schema so the app renders real pattern output. (The full
+-- engine runs on the Postgres stack; this table lets the deployed app show it.)
+CREATE TABLE IF NOT EXISTS insights (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    type TEXT NOT NULL,
+    entities TEXT DEFAULT '[]',
+    domains TEXT DEFAULT '[]',
+    score REAL DEFAULT 0,
+    explain_json TEXT DEFAULT '{}',
+    signature TEXT UNIQUE,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_insights_type ON insights(type, score DESC);
 CREATE INDEX IF NOT EXISTS idx_articles_pillar ON articles(pillar_id);
 CREATE INDEX IF NOT EXISTS idx_articles_published ON articles(published_at DESC);
 CREATE INDEX IF NOT EXISTS idx_articles_title_hash ON articles(title_hash);
@@ -510,6 +525,63 @@ _MIGRATIONS = [
     # Story-thread id ("string" feature) — groups related articles into a
     # chronological thread. 0 = not part of any multi-article thread.
     "ALTER TABLE articles ADD COLUMN story_id INTEGER DEFAULT 0",
+]
+
+
+# Sample SPRIE pattern output (shape matches the real engine's insights.explain_json).
+_SAMPLE_INSIGHTS = [
+    {
+        "type": "temporal_correlation",
+        "entities": ["Monsoon (Mumbai)", "Vegetable prices"],
+        "domains": ["weather", "commodities"],
+        "score": 0.72,
+        "signature": "temporal:monsoon-mumbai:veg-prices:3",
+        "explain_json": {
+            "why": "Historically observed: Monsoon (Mumbai) movements have been "
+                   "followed by Vegetable prices movements about 3 day(s) later "
+                   "(correlation 0.72 over 12 overlapping days, in ≥2 separate "
+                   "periods). This is a detected correlation, not causation, and is "
+                   "not a prediction.",
+            "leader_entity": "Monsoon (Mumbai)", "follower_entity": "Vegetable prices",
+            "lag_days": 3, "r": 0.72, "windows_tested": [0, 1, 2, 3, 7],
+            "observations": 12, "article_count": 34, "source_count": 6,
+            "top_sources": ["open-meteo:rainfall", "yahoo", "The Hindu", "livemint"],
+            "credibility": 0.88, "confidence": 0.72,
+        },
+    },
+    {
+        "type": "temporal_correlation",
+        "entities": ["Crude Oil", "USD/INR"],
+        "domains": ["commodities", "forex"],
+        "score": 0.61,
+        "signature": "temporal:crude:usdinr:1",
+        "explain_json": {
+            "why": "Historically observed: Crude Oil movements have been followed by "
+                   "USD/INR movements about 1 day(s) later (correlation 0.61 over 21 "
+                   "overlapping days, in ≥2 separate periods). Detected correlation, "
+                   "not causation.",
+            "leader_entity": "Crude Oil", "follower_entity": "USD/INR",
+            "lag_days": 1, "r": 0.61, "windows_tested": [0, 1, 2, 3, 7],
+            "observations": 21, "article_count": 18, "source_count": 4,
+            "top_sources": ["yahoo", "Bloomberg", "Reuters"],
+            "credibility": 0.93, "confidence": 0.61,
+        },
+    },
+    {
+        "type": "emergence",
+        "entities": ["Reserve Bank of India", "Fintech lending"],
+        "domains": ["news", "economy"],
+        "score": 7.0,
+        "signature": "emergence:rbi:fintech-lending",
+        "explain_json": {
+            "why": "Reserve Bank of India and Fintech lending co-occurred 7 times in "
+                   "the last 7 days, with no appearances together in the preceding 90 "
+                   "days — a newly emerging connection.",
+            "article_count": 7, "source_count": 5,
+            "top_sources": ["The Hindu", "livemint", "Business Standard", "Reuters"],
+            "credibility": 0.9, "confidence": 0.7,
+        },
+    },
 ]
 
 
@@ -550,6 +622,19 @@ def init_db():
             conn.execute("UPDATE articles SET title_hash=? WHERE id=?", (h, row["id"]))
     except Exception as e:
         log.warning("title_hash backfill skipped: %s", e)
+
+    # Seed a few sample SPRIE insights so the app shows real pattern output
+    # before the full Postgres engine is deployed. Idempotent via signature.
+    try:
+        for ins in _SAMPLE_INSIGHTS:
+            conn.execute(
+                "INSERT OR IGNORE INTO insights (type, entities, domains, score, explain_json, signature) "
+                "VALUES (?,?,?,?,?,?)",
+                (ins["type"], json.dumps(ins["entities"]), json.dumps(ins["domains"]),
+                 ins["score"], json.dumps(ins["explain_json"]), ins["signature"]),
+            )
+    except Exception as e:
+        log.warning("insight seed skipped: %s", e)
 
     conn.commit()
     conn.close()
@@ -1266,6 +1351,52 @@ async def trending_feed(
     ).fetchall()
     conn.close()
     return {"articles": [article_row_to_dict(r) for r in rows]}
+
+
+def insight_row_to_dict(row) -> dict:
+    d = dict(row)
+    for k in ("entities", "domains"):
+        try:
+            d[k] = json.loads(d.get(k) or "[]")
+        except Exception:
+            d[k] = []
+    try:
+        d["explain_json"] = json.loads(d.get("explain_json") or "{}")
+    except Exception:
+        d["explain_json"] = {}
+    return d
+
+
+@app.get("/patterns")
+async def patterns(
+    type: str = Query(""),
+    limit: int = Query(30, le=100),
+    offset: int = Query(0, ge=0),
+):
+    """SPRIE pattern output — the Intelligence Engine's insights, most significant
+    first. Optional ?type=emergence|temporal_correlation."""
+    conn = get_db()
+    q = "SELECT * FROM insights"
+    p = []
+    if type:
+        q += " WHERE type=?"; p.append(type)
+    q += " ORDER BY score DESC, created_at DESC LIMIT ? OFFSET ?"
+    p += [limit, offset]
+    rows = conn.execute(q, p).fetchall()
+    total = conn.execute("SELECT COUNT(*) AS c FROM insights").fetchone()["c"]
+    conn.close()
+    return {"patterns": [insight_row_to_dict(r) for r in rows], "total": total}
+
+
+@app.get("/patterns/type/{ptype}")
+async def patterns_by_type(ptype: str, limit: int = Query(30, le=100)):
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT * FROM insights WHERE type=? ORDER BY score DESC, created_at DESC LIMIT ?",
+        (ptype, limit),
+    ).fetchall()
+    conn.close()
+    return {"patterns": [insight_row_to_dict(r) for r in rows]}
 
 
 @app.get("/article/{article_id}")
