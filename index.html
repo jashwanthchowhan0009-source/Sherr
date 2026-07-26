@@ -180,14 +180,7 @@ html, body {
 }
 
 /* ── White-mode (Light) fixes for the dark-built components ── */
-[data-theme="light"] nav {
-  background: rgba(255,255,255,0.72);
-  border-color: rgba(0,0,0,0.08);
-  box-shadow: 0 12px 36px rgba(0,0,0,0.14), inset 0 1px 1px rgba(255,255,255,0.7);
-}
-[data-theme="light"] .nb-icon { color: rgba(60,60,67,0.55); }
-[data-theme="light"] .nb.on .nb-icon { background: rgba(0,0,0,0.07); color: var(--t1);
-  box-shadow: inset 0 0 0 0.5px rgba(0,0,0,0.08); }
+/* nav is a transparent shell now — its light-theme surface lives on .nb-tabs. */
 [data-theme="light"] .nc-pill { background: rgba(0,0,0,0.04); border-color: rgba(0,0,0,0.10); color: var(--t2); }
 [data-theme="light"] .nc:active { background: rgba(0,0,0,0.03); }
 [data-theme="light"] .h-brand span { color: var(--accent); }
@@ -1513,80 +1506,73 @@ header {
 /* ═══════════════════════════════════
    FLOATING BOTTOM NAV
 ═══════════════════════════════════ */
+/* Transparent positioning shell — the tab group and the Scan orb are two
+   separate glass elements (Pop-style), not one bar. */
 nav {
   position: absolute; bottom: max(16px, env(safe-area-inset-bottom));
   left: 50%; transform: translateX(-50%);
-  width: calc(100% - 14px); max-width: 480px;
-  height: 60px;
-  display: flex; align-items: center; gap: 4px;
+  width: calc(100% - 16px); max-width: 480px;
+  display: flex; align-items: center; gap: 10px;
   z-index: 600;
+}
 
-  /* frosted liquid-glass pill */
+/* The tab group — a frosted glass pill holding the stacked tabs. */
+.nb-tabs {
+  display: flex; align-items: stretch; gap: 2px; flex: 1 1 auto; min-width: 0;
+  padding: 6px; border-radius: 30px;
   background: rgba(255,255,255,0.07);
   backdrop-filter: blur(34px) saturate(180%);
   -webkit-backdrop-filter: blur(34px) saturate(180%);
   border: 1px solid rgba(255,255,255,0.16);
-  border-radius: 999px;
-  box-shadow:
-    0 16px 44px rgba(0,0,0,0.38),
-    inset 0 1px 1px rgba(255,255,255,0.24),
-    inset 0 -1px 1px rgba(0,0,0,0.12);
-  padding: 0 8px;
+  box-shadow: 0 16px 44px rgba(0,0,0,0.38), inset 0 1px 1px rgba(255,255,255,0.24);
+}
+[data-theme="light"] .nb-tabs {
+  background: #fff; border-color: rgba(0,0,0,0.06);
+  box-shadow: 0 16px 40px rgba(20,30,60,0.14), inset 0 1px 1px rgba(255,255,255,0.6);
 }
 
-/* Tab row grows to fill; the Scan button is pinned outside it (always right). */
-.nb-tabs { display: flex; align-items: center; gap: 2px; flex: 1 1 auto; min-width: 0; }
-
+/* Stacked tab: icon on top, small label beneath. */
 .nb {
-  display: flex; align-items: center; justify-content: center; gap: 5px;
-  flex: 1 1 auto; min-width: 0;
-  height: 46px; padding: 0 5px; border-radius: 999px;
-  cursor: pointer; position: relative; overflow: hidden;
-  transition: flex-grow .32s var(--spring), background .28s var(--snap), box-shadow .28s var(--snap);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  flex: 1 1 0; min-width: 0; padding: 7px 4px; border-radius: 20px;
+  cursor: pointer; position: relative;
+  transition: background .26s var(--snap);
 }
-/* Each icon sits in its own soft round "ball". */
 .nb-icon {
-  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
-  width: 30px; height: 30px; border-radius: 50%;
-  color: rgba(255,255,255,0.6); background: rgba(255,255,255,0.08);
-  transition: color .28s var(--snap), background .28s var(--snap);
+  display: flex; align-items: center; justify-content: center;
+  color: rgba(255,255,255,0.62); transition: color .26s var(--snap);
 }
-.nb-icon i { font-size: 0.94rem; }
+.nb-icon i { font-size: 1.15rem; }
 .nb-lbl {
-  display: inline-block; font-family: var(--fd); font-size: 0.66rem; font-weight: 500;
-  color: rgba(255,255,255,0.6); white-space: nowrap; overflow: hidden;
-  max-width: 90px; opacity: 1; letter-spacing: -0.01em;
-  transition: max-width .32s var(--spring), opacity .24s var(--snap), margin .32s var(--spring);
+  font-family: var(--fd); font-size: 0.64rem; font-weight: 500; letter-spacing: -0.01em;
+  color: rgba(255,255,255,0.62); white-space: nowrap; overflow: hidden;
+  max-height: 14px; opacity: 1;
+  transition: max-height .28s var(--snap), opacity .2s var(--snap), margin .28s var(--snap);
 }
-/* Active = brighter ball + light label; no heavy pill. */
-.nb.on { background: rgba(255,255,255,0.08); }
-.nb.on .nb-icon { background: rgba(255,255,255,0.9); color: #1c1c1e; }
-.nb.on .nb-lbl { color: #fff; }
-[data-theme="light"] .nb-icon { background: rgba(0,0,0,0.05); }
-[data-theme="light"] .nb.on .nb-icon { background: #1c1c1e; color: #fff; }
-[data-theme="light"] .nb.on { background: rgba(0,0,0,0.05); }
+/* Active = a soft rounded highlight behind the whole icon+label. */
+.nb.on { background: rgba(255,255,255,0.14); }
+.nb.on .nb-icon, .nb.on .nb-lbl { color: #fff; }
+[data-theme="light"] .nb-icon, [data-theme="light"] .nb-lbl { color: rgba(60,60,67,0.55); }
+[data-theme="light"] .nb.on { background: rgba(0,0,0,0.06); }
+[data-theme="light"] .nb.on .nb-icon, [data-theme="light"] .nb.on .nb-lbl { color: var(--t1); }
 
-/* Compact (scrolled): inactive tabs collapse their labels sideways to icon-only;
-   the active tab keeps its label and takes the freed space. Scan stays put. */
-nav.compact .nb:not(.on) { flex: 0 0 auto; }
-nav.compact .nb:not(.on) .nb-lbl { max-width: 0; opacity: 0; margin-left: -7px; }
-nav.compact .nb.on { flex: 1 1 auto; }
+/* Compact (scrolled): inactive labels tuck away → icon-only; active keeps its
+   label + highlight. */
+nav.compact .nb:not(.on) .nb-lbl { max-height: 0; opacity: 0; margin-top: -3px; }
 
-/* Pinned "Scan" primary action — the SPRIE engine, always visible on the right. */
+/* Scan — a separate glass orb (the SPRIE engine), always on the right. */
 .nb-scan {
-  flex: 0 0 auto; width: 44px; height: 44px; border-radius: 50%;
+  flex: 0 0 auto; width: 56px; height: 56px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center; cursor: pointer;
-  color: #fff; font-size: 1.05rem;
+  color: #fff; font-size: 1.2rem;
   background: linear-gradient(135deg, #4F6BD4 0%, #8E24AA 100%);
-  box-shadow: 0 6px 16px -4px rgba(79,107,212,0.6),
-    inset 0 1.5px 1px rgba(255,255,255,0.5), inset 0 -2px 5px -2px rgba(0,0,0,0.4);
+  box-shadow: 0 10px 24px -6px rgba(79,107,212,0.6),
+    inset 0 1.5px 1px rgba(255,255,255,0.5), inset 0 -2px 6px -2px rgba(0,0,0,0.4);
   transition: transform .16s var(--spring), box-shadow .28s;
 }
 .nb-scan:active { transform: scale(0.9); }
-.nb-scan.on { box-shadow: 0 0 0 3px rgba(142,36,170,0.4), 0 6px 18px -4px rgba(142,36,170,0.75),
+.nb-scan.on { box-shadow: 0 0 0 3px rgba(142,36,170,0.4), 0 10px 26px -6px rgba(142,36,170,0.75),
     inset 0 1.5px 1px rgba(255,255,255,0.5); }
-[data-theme="light"] .nb-icon, [data-theme="light"] .nb-lbl { color: rgba(60,60,67,0.6); }
-[data-theme="light"] .nb.on .nb-icon, [data-theme="light"] .nb.on .nb-lbl { color: var(--t1); }
 
 /* ═══════════ SPRIE — engine output section ═══════════ */
 .sprie-wrap { padding: calc(var(--hh) + 14px) 16px calc(var(--nh) + 30px); max-width: 640px; margin: 0 auto; }
