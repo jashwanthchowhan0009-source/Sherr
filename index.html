@@ -1560,9 +1560,11 @@ nav {
 /* Compact (scrolled): the tab group collapses to just the ACTIVE tab (a small
    pill on the left), inactive tabs disappear entirely, and the Scan orb stays on
    the right — freeing the middle of the screen for the content. */
-nav.compact .nb-tabs { flex: 0 0 auto; }
+/* gap:0 so the collapsed (zero-width) tabs leave no lopsided space around the
+   active pill — it sits symmetrically inside the tab container. */
+nav.compact .nb-tabs { flex: 0 0 auto; gap: 0; }
 nav.compact .nb:not(.on) {
-  flex: 0 0 0; width: 0; padding-left: 0; padding-right: 0; opacity: 0; pointer-events: none;
+  flex: 0 0 0; width: 0; padding-left: 0; padding-right: 0; margin: 0; opacity: 0; pointer-events: none;
 }
 nav.compact .nb.on { flex: 0 0 auto; padding-left: 16px; padding-right: 16px; }
 
@@ -6418,6 +6420,9 @@ let _navReplay = false;   // true while applying a popstate (suppresses re-push)
 function navTo(name) {
   // True when this tab is already the active view (i.e. a re-tap on its nav icon).
   const _reTap = !!document.getElementById(VIEW_MAP[name])?.classList.contains('active');
+  // Was the nav collapsed when tapped? A re-tap of the *minimized* pill should be
+  // an inert click (just re-expand the bar) — only a full-bar re-tap scrolls to top.
+  const _wasCompact = navEl.classList.contains('compact');
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.querySelectorAll('.nb').forEach(b => b.classList.remove('on'));
   document.getElementById(VIEW_MAP[name])?.classList.add('active');
@@ -6452,8 +6457,10 @@ function navTo(name) {
     if (curChip !== 'all' || homeActiveTab !== 'foryou') {
       const allChip = document.querySelector('#chip-row .chip[onclick*="\'all\'"]');
       if (allChip) selectChip(allChip, 'all'); else { curChip='all'; homeActiveTab='foryou'; loadFeed(true); }
+    } else if (_reTap && _wasCompact) {
+      // Re-tap of the minimized pill — inert; the bar just re-expands, page stays put.
     } else if (_reTap) {
-      // Re-tapping Home while already on the All feed pulls fresh articles (like Bytes).
+      // Full-bar re-tap while on the All feed → scroll to top + pull fresh articles.
       document.getElementById('v-home')?.scrollTo({ top: 0, behavior: 'smooth' });
       loadFeed(true);
     } else {
