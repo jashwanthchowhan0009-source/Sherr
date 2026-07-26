@@ -32,6 +32,27 @@ async def _process_one(article_id: str, art: ArticleIn) -> str | None:
             info_id = await persist_info_object(conn, obj)
         await embed_info_object(info_id, obj.headline, obj.summary, obj.topic)
         await connect(info_id)
+
+        # Feed the pattern engine: emit a news Signal for this article. Entity
+        # resolution + incremental co-occurrence happen inside persist_signals.
+        # Best-effort — a signal hiccup must never fail ingestion.
+        try:
+            from app.pipeline.adapters.news import from_info_object
+            from app.pipeline.signals import persist_signals
+            sigs = from_info_object({
+                "id": info_id,
+                "entities": obj.entities,
+                "sentiment": obj.sentiment,
+                "importance": obj.importance,
+                "source_name": obj.source_name,
+                "published_at": obj.published_at,
+                "wwww": obj.wwww,
+            })
+            async with db.acquire() as conn:
+                await persist_signals(conn, sigs)
+        except Exception as e:
+            log.warning("signal emit failed for %s: %s", info_id, e)
+
         return info_id
     except Exception as e:
         log.warning("pipeline failed for article %s: %s", article_id, e)
