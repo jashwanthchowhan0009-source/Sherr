@@ -1619,11 +1619,24 @@ nav.compact .nb.on { flex: 0 0 auto; padding-left: 16px; padding-right: 16px; }
   background: rgba(255,255,255,0.06); }
 [data-theme="light"] .sprie-ent { background: rgba(0,0,0,0.05); }
 .sprie-arrow { color: var(--t3); font-size: 0.7rem; align-self: center; }
-.sprie-why { padding: 10px 15px 0; font: 500 0.82rem/1.55 var(--f); color: var(--t2); }
-.sprie-raw { margin: 12px 15px 15px; padding: 12px; border-radius: 12px; overflow-x: auto;
+.sprie-hl { padding: 10px 15px 0; font: 800 1.02rem/1.3 var(--fd); color: var(--t1); letter-spacing: -0.01em; }
+.sprie-why { padding: 8px 15px 0; font: 500 0.82rem/1.55 var(--f); color: var(--t2); }
+.sprie-meta { padding: 9px 15px 0; font: 700 0.62rem/1 var(--fd); letter-spacing: 0.04em;
+  text-transform: uppercase; color: var(--t3); }
+.sprie-details { margin: 12px 15px 14px; }
+.sprie-details > summary { cursor: pointer; list-style: none; font: 700 0.66rem/1 var(--fd);
+  letter-spacing: 0.06em; text-transform: uppercase; color: var(--t3);
+  display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 999px;
+  background: rgba(255,255,255,0.05); border: 1px solid var(--line2); }
+.sprie-details > summary::-webkit-details-marker { display: none; }
+.sprie-details > summary::before { content: "\f0da"; font-family: "Font Awesome 6 Free"; font-weight: 900; font-size: 0.7rem; }
+.sprie-details[open] > summary::before { content: "\f0d7"; }
+[data-theme="light"] .sprie-details > summary { background: rgba(0,0,0,0.04); }
+.sprie-raw { margin: 10px 0 0; padding: 12px; border-radius: 12px; overflow-x: auto;
   background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.05);
   font: 500 0.7rem/1.5 ui-monospace, "SF Mono", Menlo, monospace; color: #9ad0ff; white-space: pre; }
 [data-theme="light"] .sprie-raw { background: rgba(0,0,0,0.04); color: #1f5fbf; border-color: rgba(0,0,0,0.06); }
+.sprie-note { text-align: center; font: 500 0.72rem/1.5 var(--f); color: var(--t3); padding: 16px 20px 4px; }
 
 /* ─── Bytes — one structured card per screen (vertical snap) ─── */
 #v-bytes { inset: 0; }
@@ -6375,6 +6388,25 @@ async function saveProfile() {
 // ── NAV ──
 // ── SPRIE — Sherr Pattern Recognition Intelligence Engine (raw output) ──
 let spriePatternType = '';
+// Embedded fallback so the section always shows something if the engine isn't
+// reachable yet (backend redeploying / not connected). Matches the seed shape.
+const SPRIE_SAMPLE = [
+  { type: "temporal_correlation", entities: ["Monsoon (Mumbai)", "Vegetable prices"],
+    domains: ["weather", "commodities"], score: 0.72,
+    explain_json: { why: "Historically observed: Monsoon (Mumbai) movements have been followed by Vegetable prices movements about 3 days later (correlation 0.72 over 12 overlapping days, in ≥2 separate periods). Detected correlation, not causation.",
+      leader_entity: "Monsoon (Mumbai)", follower_entity: "Vegetable prices", lag_days: 3, r: 0.72,
+      windows_tested: [0,1,2,3,7], observations: 12, article_count: 34, source_count: 6, confidence: 0.72 } },
+  { type: "temporal_correlation", entities: ["Crude Oil", "USD/INR"],
+    domains: ["commodities", "forex"], score: 0.61,
+    explain_json: { why: "Historically observed: Crude Oil movements have been followed by USD/INR movements about 1 day later (correlation 0.61 over 21 overlapping days). Detected correlation, not causation.",
+      leader_entity: "Crude Oil", follower_entity: "USD/INR", lag_days: 1, r: 0.61,
+      windows_tested: [0,1,2,3,7], observations: 21, article_count: 18, source_count: 4, confidence: 0.61 } },
+  { type: "emergence", entities: ["Reserve Bank of India", "Fintech lending"],
+    domains: ["news", "economy"], score: 7,
+    explain_json: { why: "Reserve Bank of India and Fintech lending co-occurred 7 times in the last 7 days, with no appearances together in the preceding 90 days — a newly emerging connection.",
+      article_count: 7, source_count: 5, confidence: 0.7 } },
+];
+
 async function loadPatterns(type) {
   spriePatternType = type || '';
   document.querySelectorAll('.sprie-chip').forEach(c =>
@@ -6382,34 +6414,68 @@ async function loadPatterns(type) {
   const list = document.getElementById('sprie-list');
   if (!list) return;
   list.innerHTML = '<div class="sprie-loading"><i class="fa-solid fa-satellite-dish"></i> Scanning patterns…</div>';
+  const filt = arr => spriePatternType ? arr.filter(p => p.type === spriePatternType) : arr;
+  const paint = (arr, note) => {
+    list.innerHTML = (arr.length ? arr.map(renderPattern).join('') : '<div class="sprie-empty">No patterns of this type yet.</div>')
+      + (note ? `<div class="sprie-note">${note}</div>` : '');
+  };
   try {
     const q = spriePatternType ? ('?type=' + encodeURIComponent(spriePatternType)) : '';
     const data = await api('/patterns' + q);
     const items = data.patterns || [];
-    list.innerHTML = items.length
-      ? items.map(renderPatternRaw).join('')
-      : '<div class="sprie-empty">No patterns detected yet.</div>';
+    if (items.length) { paint(items); return; }
+    // Endpoint reachable but empty → show sample so the section isn't blank.
+    paint(filt(SPRIE_SAMPLE), 'Showing sample patterns — live engine has no insights yet.');
   } catch (e) {
-    list.innerHTML = '<div class="sprie-empty">Engine unreachable — ' + bEsc(e.message || 'error') + '</div>';
+    // Engine not reachable yet → graceful sample fallback (no scary error).
+    paint(filt(SPRIE_SAMPLE), 'Showing sample patterns — live engine not connected yet.');
   }
 }
-function renderPatternRaw(p) {
+
+// Short human-language title for a pattern (raw JSON lives in the Details expander).
+function patternHeadline(p) {
+  const e = p.explain_json || {};
+  const ents = p.entities || [];
+  if (p.type === 'temporal_correlation') {
+    const lead = e.leader_entity || ents[0] || 'A';
+    const follow = e.follower_entity || ents[1] || 'B';
+    const lag = (e.lag_days != null) ? e.lag_days : '?';
+    return `${lead} moves, then ${follow} follows ~${lag} day${lag === 1 ? '' : 's'} later`;
+  }
+  if (p.type === 'emergence') {
+    return `New connection: ${ents.join(' × ') || 'entities'}`;
+  }
+  return ents.join(' · ') || (p.type || 'pattern');
+}
+
+function renderPattern(p) {
   const ents = p.entities || [];
   const isTemporal = p.type === 'temporal_correlation';
-  const entHtml = ents.map((e, i) =>
-    `<span class="sprie-ent">${bEsc(e)}</span>` +
+  const e = p.explain_json || {};
+  const entHtml = ents.map((x, i) =>
+    `<span class="sprie-ent">${bEsc(x)}</span>` +
     (isTemporal && i < ents.length - 1 ? '<span class="sprie-arrow"><i class="fa-solid fa-arrow-right-long"></i></span>' : '')
   ).join('');
-  const why = (p.explain_json && p.explain_json.why) ? `<div class="sprie-why">${bEsc(p.explain_json.why)}</div>` : '';
-  const score = (typeof p.score === 'number') ? p.score : 0;
+  const conf = (e.confidence != null) ? Math.round(e.confidence * 100) + '%'
+             : (typeof p.score === 'number' ? p.score : '');
+  const why = e.why ? `<div class="sprie-why">${bEsc(e.why)}</div>` : '';
+  const meta = [];
+  if (e.article_count != null) meta.push(`${e.article_count} articles`);
+  if (e.source_count != null) meta.push(`${e.source_count} sources`);
+  if (e.observations != null) meta.push(`${e.observations} obs`);
+  const metaHtml = meta.length ? `<div class="sprie-meta">${meta.map(m => bEsc(m)).join(' · ')}</div>` : '';
   return `<div class="sprie-card">
     <div class="sprie-card-top">
       <span class="sprie-type sprie-type-${bEsc(p.type || '')}">${bEsc((p.type || '').replace(/_/g, ' '))}</span>
-      <span class="sprie-score">score ${score}</span>
+      ${conf !== '' ? `<span class="sprie-score">${bEsc(conf)}</span>` : ''}
     </div>
+    <div class="sprie-hl">${bEsc(patternHeadline(p))}</div>
     <div class="sprie-ents">${entHtml}</div>
     ${why}
-    <pre class="sprie-raw">${bEsc(JSON.stringify(p, null, 2))}</pre>
+    ${metaHtml}
+    <details class="sprie-details"><summary>Raw data</summary>
+      <pre class="sprie-raw">${bEsc(JSON.stringify(p, null, 2))}</pre>
+    </details>
   </div>`;
 }
 
