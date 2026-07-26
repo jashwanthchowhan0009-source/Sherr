@@ -13,6 +13,7 @@ from typing import Iterable
 
 from app.models.signal import Signal
 from app.pipeline.entity_resolver import resolve
+from app.pipeline import cooccurrence
 
 log = logging.getLogger("sherbyte.signals")
 
@@ -41,6 +42,13 @@ async def persist_signal(conn, sig: Signal) -> int:
         sig.sentiment, sig.embedding, sig.source_id, sig.credibility,
         sig.confidence, sig.novelty, sig.ref_id,
     )
+    # Materialize co-occurrence incrementally at ingest (best-effort — the signal
+    # is already persisted, so a co-occurrence hiccup must not lose it).
+    if len(entity_ids) >= 2:
+        try:
+            await cooccurrence.update_for_signal(conn, entity_ids, sig.ts)
+        except Exception as e:
+            log.warning("cooccurrence update failed for signal %s: %s", new_id, e)
     return int(new_id)
 
 
