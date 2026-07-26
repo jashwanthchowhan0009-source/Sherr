@@ -7798,6 +7798,9 @@ async function initBytes(){
   const feed = document.getElementById('bytes-feed');
   feed.addEventListener('scroll', () => {
     if (feed.scrollTop + feed.clientHeight >= feed.scrollHeight - feed.clientHeight * 1.5) loadBytes(false);
+    // Collapse the nav to the active pill once past the first byte (like other
+    // sections), so the card gets the full screen; expand again at the top.
+    navEl.classList.toggle('compact', feed.scrollTop > 24);
   }, { passive: true });
   attachPullToRefresh(feed, () => { bytesRetryCount = 0; loadBytes(true); });   // pull → fresh batch
 }
