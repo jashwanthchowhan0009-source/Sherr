@@ -1535,8 +1535,9 @@ nav {
 .nb {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
   flex: 1 1 0; min-width: 0; padding: 7px 4px; border-radius: 20px;
-  cursor: pointer; position: relative;
-  transition: background .26s var(--snap);
+  cursor: pointer; position: relative; overflow: hidden;
+  transition: background .26s var(--snap), flex-basis .3s var(--snap),
+    padding .3s var(--snap), opacity .22s var(--snap);
 }
 .nb-icon {
   display: flex; align-items: center; justify-content: center;
@@ -1556,13 +1557,18 @@ nav {
 [data-theme="light"] .nb.on { background: rgba(0,0,0,0.06); }
 [data-theme="light"] .nb.on .nb-icon, [data-theme="light"] .nb.on .nb-lbl { color: var(--t1); }
 
-/* Compact (scrolled): inactive labels tuck away → icon-only; active keeps its
-   label + highlight. */
-nav.compact .nb:not(.on) .nb-lbl { max-height: 0; opacity: 0; margin-top: -3px; }
+/* Compact (scrolled): the tab group collapses to just the ACTIVE tab (a small
+   pill on the left), inactive tabs disappear entirely, and the Scan orb stays on
+   the right — freeing the middle of the screen for the content. */
+nav.compact .nb-tabs { flex: 0 0 auto; }
+nav.compact .nb:not(.on) {
+  flex: 0 0 0; width: 0; padding-left: 0; padding-right: 0; opacity: 0; pointer-events: none;
+}
+nav.compact .nb.on { flex: 0 0 auto; padding-left: 16px; padding-right: 16px; }
 
-/* Scan — a separate glass orb (the SPRIE engine), always on the right. */
+/* Scan — a separate glass orb (the SPRIE engine), always pinned right. */
 .nb-scan {
-  flex: 0 0 auto; width: 56px; height: 56px; border-radius: 50%;
+  flex: 0 0 auto; margin-left: auto; width: 56px; height: 56px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center; cursor: pointer;
   color: #fff; font-size: 1.2rem;
   background: linear-gradient(135deg, #4F6BD4 0%, #8E24AA 100%);
