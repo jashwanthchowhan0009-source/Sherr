@@ -18,13 +18,16 @@ log = logging.getLogger("sherbyte.detectors.emergence")
 async def run(conn, *, current_days: int = 7, history_days: int = 90,
               min_count: int = 3) -> int:
     """Detect and persist emergence insights. Returns how many were written."""
+    # Rank by NPMI (association strength beyond chance) over raw count, so hub
+    # entities that co-occur with everything by volume don't dominate.
     candidates = await conn.fetch(
         """
-        SELECT entity_a, entity_b, SUM(count) AS c
+        SELECT entity_a, entity_b, SUM(count) AS c, MAX(npmi) AS npmi
         FROM cooccurrence
         WHERE window_start >= (now() - ($1 || ' days')::interval)::date
         GROUP BY entity_a, entity_b
         HAVING SUM(count) >= $2
+        ORDER BY MAX(npmi) DESC NULLS LAST, SUM(count) DESC
         """,
         str(current_days), min_count,
     )
@@ -58,7 +61,9 @@ async def run(conn, *, current_days: int = 7, history_days: int = 90,
         # corroborate it (a single-source burst is weaker than a multi-source one).
         src = min(stats["source_count"], 3) / 3.0
         confidence = round(min(1.0, (count / 10.0)) * (0.5 + 0.5 * src), 3)
-        explain = {"why": why, **stats, "confidence": confidence}
+        npmi = round(float(r["npmi"]), 3) if r["npmi"] is not None else None
+        explain = {"why": why, "method": "emergence", "npmi": npmi, **stats,
+                   "confidence": confidence}
 
         await write_insight(
             conn, type="emergence", entity_ids=[a, b], domains=domains,
