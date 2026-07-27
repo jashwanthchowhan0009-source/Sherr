@@ -27,9 +27,10 @@ log = logging.getLogger("sherbyte.worker.signals_backfill")
 async def run(limit: int | None = None) -> dict:
     from app.spie.knowledge.adapters.news import from_info_object
     from app.spie.knowledge.signals import persist_signals
+    from app.spie.knowledge.simhash import assign_cluster
 
-    q = ("SELECT id, entities, sentiment, importance, source_name, "
-         "where_info, published_at FROM info_objects "
+    q = ("SELECT id, article_id, headline, body, summary, entities, sentiment, "
+         "importance, source_name, where_info, published_at FROM info_objects "
          "WHERE entities IS NOT NULL ORDER BY published_at DESC")
     if limit is not None:
         q += f" LIMIT {int(limit)}"
@@ -44,6 +45,14 @@ async def run(limit: int | None = None) -> dict:
                     ents = json.loads(ents or "[]")
                 except Exception:
                     ents = []
+            # SimHash story cluster over cleaned text (dedup wire republication).
+            doc_id = r["article_id"] or r["id"]
+            text = f"{r['headline']} {r['body'] or r['summary'] or ''}"
+            cluster_id = None
+            try:
+                cluster_id = await assign_cluster(conn, doc_id, text)
+            except Exception as e:
+                log.warning("simhash cluster assign failed for %s: %s", r["id"], e)
             sigs = from_info_object({
                 "id": str(r["id"]),
                 "entities": ents or [],
@@ -53,6 +62,8 @@ async def run(limit: int | None = None) -> dict:
                 "published_at": r["published_at"],
                 "wwww": {"where": r["where_info"]},
             })
+            for s in sigs:
+                s.cluster_id = cluster_id
             await persist_signals(conn, sigs)
             processed += 1
 
@@ -60,6 +71,8 @@ async def run(limit: int | None = None) -> dict:
     signals = await db.fetchval("SELECT COUNT(*) FROM domain_signals")
     entities = await db.fetchval("SELECT COUNT(*) FROM entities")
     cooc = await db.fetchval("SELECT COUNT(*) FROM cooccurrence")
+    fingerprints = await db.fetchval("SELECT COUNT(*) FROM article_fingerprints")
+    clusters = await db.fetchval("SELECT COUNT(DISTINCT cluster_id) FROM article_fingerprints")
     top_entities = await db.fetch(
         "SELECT canonical_name, mention_count FROM entities "
         "ORDER BY mention_count DESC LIMIT 10"
@@ -79,6 +92,9 @@ async def run(limit: int | None = None) -> dict:
         "domain_signals": int(signals or 0),
         "entities": int(entities or 0),
         "cooccurrence_rows": int(cooc or 0),
+        "fingerprints": int(fingerprints or 0),
+        "story_clusters": int(clusters or 0),
+        "dedup_ratio": round(1 - (int(clusters or 0) / int(fingerprints)), 3) if fingerprints else 0,
         "top_entities": [dict(r) for r in top_entities],
         "top_pairs": [dict(r) for r in top_pairs],
     }

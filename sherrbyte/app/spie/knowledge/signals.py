@@ -34,19 +34,20 @@ async def persist_signal(conn, sig: Signal) -> int:
         """
         INSERT INTO domain_signals
             (entity_ids, domain, ts, location, magnitude, direction, sentiment,
-             embedding, source_id, credibility, confidence, novelty, ref_id)
-        VALUES ($1::uuid[], $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+             embedding, source_id, credibility, confidence, novelty, ref_id, cluster_id)
+        VALUES ($1::uuid[], $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
         RETURNING id
         """,
         entity_ids, sig.domain, sig.ts, sig.location, sig.magnitude, sig.direction,
         sig.sentiment, sig.embedding, sig.source_id, sig.credibility,
-        sig.confidence, sig.novelty, sig.ref_id,
+        sig.confidence, sig.novelty, sig.ref_id, sig.cluster_id,
     )
     # Materialize co-occurrence incrementally at ingest (best-effort — the signal
-    # is already persisted, so a co-occurrence hiccup must not lose it).
+    # is already persisted, so a co-occurrence hiccup must not lose it). Passing the
+    # story cluster makes the count per-cluster (wire dupes don't inflate it).
     if len(entity_ids) >= 2:
         try:
-            await cooccurrence.update_for_signal(conn, entity_ids, sig.ts)
+            await cooccurrence.update_for_signal(conn, entity_ids, sig.ts, sig.cluster_id)
         except Exception as e:
             log.warning("cooccurrence update failed for signal %s: %s", new_id, e)
     return int(new_id)

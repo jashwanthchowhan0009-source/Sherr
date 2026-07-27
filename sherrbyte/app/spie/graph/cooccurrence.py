@@ -62,15 +62,40 @@ _UPSERT = """
 """
 
 
-async def update_for_signal(conn, entity_ids, ts) -> int:
-    """Fold one signal's entity pairs into the daily buckets. Returns pairs written."""
+_EVENT_INSERT = """
+    INSERT INTO cooccurrence_events (entity_a, entity_b, window_start, cluster_id)
+    VALUES ($1, $2, $3, $4)
+    ON CONFLICT DO NOTHING
+    RETURNING 1
+"""
+
+
+async def update_for_signal(conn, entity_ids, ts, cluster_id=None) -> int:
+    """Fold one signal's entity pairs into the daily buckets. Returns pairs counted.
+
+    When a story `cluster_id` is given (news path), a pair-day only counts each
+    cluster ONCE — so the same wire story republished across many outlets does not
+    inflate the count. Without a cluster (other domains), each signal counts.
+    """
     pairs = pairs_from_entities(entity_ids)
     if not pairs:
         return 0
     window = bucket_of(ts)
     at = ts if isinstance(ts, datetime) else datetime.now(timezone.utc)
-    await conn.executemany(_UPSERT, [(a, b, window, at) for a, b in pairs])
-    return len(pairs)
+
+    if cluster_id is None:
+        await conn.executemany(_UPSERT, [(a, b, window, at) for a, b in pairs])
+        return len(pairs)
+
+    # Cluster-deduped: only bump the pair-day count the first time this story
+    # cluster contributes it (the events ledger enforces uniqueness).
+    counted = 0
+    for a, b in pairs:
+        is_new = await conn.fetchval(_EVENT_INSERT, a, b, window, int(cluster_id))
+        if is_new:
+            await conn.execute(_UPSERT, a, b, window, at)
+            counted += 1
+    return counted
 
 
 async def backfill(conn, days: int = 90, limit: Optional[int] = None) -> dict:

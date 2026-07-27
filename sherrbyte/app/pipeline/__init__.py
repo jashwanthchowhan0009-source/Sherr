@@ -39,6 +39,15 @@ async def _process_one(article_id: str, art: ArticleIn) -> str | None:
         try:
             from app.spie.knowledge.adapters.news import from_info_object
             from app.spie.knowledge.signals import persist_signals
+            from app.spie.knowledge.simhash import assign_cluster
+            # SimHash story cluster (dedup wire republication) over cleaned text.
+            text = f"{obj.headline} {getattr(obj, 'body', '') or obj.summary}"
+            cluster_id = None
+            try:
+                async with db.acquire() as conn:
+                    cluster_id = await assign_cluster(conn, article_id, text)
+            except Exception as e:
+                log.warning("simhash cluster assign failed for %s: %s", article_id, e)
             sigs = from_info_object({
                 "id": info_id,
                 "entities": obj.entities,
@@ -48,6 +57,8 @@ async def _process_one(article_id: str, art: ArticleIn) -> str | None:
                 "published_at": obj.published_at,
                 "wwww": obj.wwww,
             })
+            for s in sigs:
+                s.cluster_id = cluster_id
             async with db.acquire() as conn:
                 await persist_signals(conn, sigs)
         except Exception as e:

@@ -34,6 +34,7 @@ class Signal(BaseModel):
     confidence: float = 0.5                  # 0..1 adapter confidence
     novelty: float = 0.0                     # 0..1 (computed at persist if unset)
     ref_id: Optional[str] = None             # provenance back-link
+    cluster_id: Optional[int] = None         # SimHash story cluster (dedup; set at ingest)
 
     # Filled by the persistence layer after entity resolution.
     entity_ids: list[str] = Field(default_factory=list)
