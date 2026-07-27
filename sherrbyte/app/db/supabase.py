@@ -18,15 +18,58 @@ Usage:
 
 from __future__ import annotations
 
+import inspect
+import itertools
 import logging
+import os
 from contextlib import asynccontextmanager
 from typing import Any, Optional
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import asyncpg
 
 from app.config import settings
 
 log = logging.getLogger("sherbyte.db")
+
+
+# Query params that belong to SQLAlchemy's asyncpg dialect or PgBouncer, NOT to
+# raw asyncpg — passing them in the DSN raises "unexpected connection parameter".
+# We strip them (the equivalents are set as real create_pool kwargs below).
+_UNSUPPORTED_QS = {
+    "pgbouncer", "prepared_statement_cache_size", "statement_cache_size",
+    "prepared_statements", "prepare_threshold",
+}
+
+
+def _sanitize_dsn(dsn: str) -> str:
+    """Drop query params raw asyncpg can't parse (pgbouncer / SQLAlchemy-only ones)
+    so a pasted Supabase *pooler* URL connects cleanly. sslmode and the rest are
+    left intact (asyncpg understands them)."""
+    parts = urlsplit(dsn)
+    if not parts.query:
+        return dsn
+    kept = [(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True)
+            if k.lower() not in _UNSUPPORTED_QS]
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(kept), parts.fragment))
+
+
+# Unique prepared-statement names so two pooled backends never collide on a
+# generated name under pgbouncer transaction mode.
+_stmt_counter = itertools.count()
+
+
+def _unique_stmt_name(*_args, **_kwargs) -> str:
+    return f"__sherr_stmt_{os.getpid()}_{next(_stmt_counter)}__"
+
+
+# Only pass prepared_statement_name_func if this asyncpg version accepts it.
+try:
+    _SUPPORTS_STMT_NAME_FUNC = "prepared_statement_name_func" in inspect.signature(
+        asyncpg.connect
+    ).parameters
+except (ValueError, TypeError):
+    _SUPPORTS_STMT_NAME_FUNC = False
 
 
 class Database:
@@ -41,25 +84,36 @@ class Database:
         if not settings.database_url:
             raise RuntimeError("DATABASE_URL is not configured")
 
-        self._pool = await asyncpg.create_pool(
-            dsn=settings.database_url,
+        dsn = _sanitize_dsn(settings.database_url)
+
+        # asyncpg + Supabase's transaction pooler (pgbouncer, port 6543) needs two
+        # things together to be safe:
+        #   1. statement_cache_size=0 — pgbouncer transaction mode doesn't keep the
+        #      same backend across statements, so cached server-side prepared
+        #      statements vanish ("prepared statement does not exist"). Disabling the
+        #      cache makes asyncpg prepare+execute+discard in one round-trip.
+        #   2. unique prepared-statement names — because two pooled backends can
+        #      otherwise pick the same generated name ("prepared statement __asyncpg…
+        #      already exists"). Guarded: only passed if this asyncpg supports it.
+        kwargs = dict(
+            dsn=dsn,
             min_size=settings.db_pool_min,
             max_size=settings.db_pool_max,
             init=self._init_connection,
-            # 60s ceilings so the Supabase pooler doesn't time out during the
-            # heavy initial sync: `timeout` caps connection acquisition + the
-            # handshake, `command_timeout` caps each query.
-            timeout=60.0,
-            command_timeout=60.0,
-            # Supabase's connection pooler (pgbouncer, transaction mode on
-            # port 6543 — the IPv4 endpoint Render needs) does not keep the
-            # same backend across statements, so server-side prepared-statement
-            # caching breaks ("prepared statement does not exist"). Disabling
-            # the cache makes asyncpg prepare+execute+discard within one
-            # protocol round-trip, which is pooler-safe. Harmless on a direct
-            # connection — it only forgoes a minor caching optimisation.
+            timeout=60.0,          # cap connection acquisition + handshake
+            command_timeout=60.0,  # cap each query
             statement_cache_size=0,
         )
+        if _SUPPORTS_STMT_NAME_FUNC:
+            kwargs["prepared_statement_name_func"] = _unique_stmt_name
+
+        try:
+            self._pool = await asyncpg.create_pool(**kwargs)
+        except TypeError:
+            # Older asyncpg without prepared_statement_name_func — retry without it.
+            kwargs.pop("prepared_statement_name_func", None)
+            self._pool = await asyncpg.create_pool(**kwargs)
+
         log.info("Postgres pool ready (min=%d max=%d)",
                  settings.db_pool_min, settings.db_pool_max)
 
