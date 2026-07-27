@@ -37,13 +37,16 @@ async def _daily_series(conn, entity_id, days: int) -> dict:
 async def run(conn, *, days: int = 90, min_cooc: int = 3, min_r: float = 0.5,
               min_overlap: int = 8) -> int:
     """Detect and persist temporal_correlation insights. Returns how many written."""
+    # Candidate pairs come ONLY from co-occurrence (count >= 3), ranked by NPMI so
+    # genuinely associated pairs are tested before hub-inflated ones.
     candidates = await conn.fetch(
         """
-        SELECT entity_a, entity_b, SUM(count) AS c
+        SELECT entity_a, entity_b, SUM(count) AS c, MAX(npmi) AS npmi
         FROM cooccurrence
         WHERE window_start >= (now() - ($1 || ' days')::interval)::date
         GROUP BY entity_a, entity_b
         HAVING SUM(count) >= $2
+        ORDER BY MAX(npmi) DESC NULLS LAST, SUM(count) DESC
         """,
         str(days), min_cooc,
     )
@@ -76,9 +79,10 @@ async def run(conn, *, days: int = 90, min_cooc: int = 3, min_r: float = 0.5,
                f"periods). This is a detected correlation, not causation, and is not "
                f"a prediction.")
         explain = {
-            "why": why,
+            "why": why, "method": "lagged_pearson",
             "leader_entity": str(leader), "follower_entity": str(follower),
             "lag_days": lag, "r": round(rr, 3),
+            "npmi": round(float(r["npmi"]), 3) if r["npmi"] is not None else None,
             "windows_tested": list(LAGS), "observations": n,
             **stats, "confidence": round(abs(rr), 3),
         }

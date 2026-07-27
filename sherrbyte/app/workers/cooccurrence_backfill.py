@@ -25,9 +25,12 @@ from app.spie.graph import cooccurrence
 log = logging.getLogger("sherbyte.worker.cooc_backfill")
 
 
-async def run(days: int = 90, limit: int | None = None) -> dict:
+async def run(days: int = 90, limit: int | None = None, npmi: bool = True) -> dict:
     async with db.acquire() as conn:
-        return await cooccurrence.backfill(conn, days=days, limit=limit)
+        result = await cooccurrence.backfill(conn, days=days, limit=limit)
+        if npmi:
+            result["npmi_pairs"] = await cooccurrence.compute_npmi(conn, days=days)
+        return result
 
 
 async def _main() -> None:
@@ -35,12 +38,13 @@ async def _main() -> None:
     parser.add_argument("--days", type=int, default=90, help="trailing window in days (default 90)")
     parser.add_argument("--limit", type=int, default=None,
                         help="process only the N most-recent signals (additive verify batch)")
+    parser.add_argument("--no-npmi", action="store_true", help="skip the NPMI recompute step")
     args = parser.parse_args()
 
     from app.workers import bootstrap, teardown
     await bootstrap()
     try:
-        result = await run(days=args.days, limit=args.limit)
+        result = await run(days=args.days, limit=args.limit, npmi=not args.no_npmi)
         log.info("backfill complete: %s", result)
         print(result)
     finally:

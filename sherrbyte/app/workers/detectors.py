@@ -15,6 +15,7 @@ import logging
 
 from app.db import db
 from app.spie.discovery import REGISTRY
+from app.spie.graph import cooccurrence
 
 log = logging.getLogger("sherbyte.worker.detectors")
 
@@ -23,6 +24,11 @@ async def run(only: str | None = None) -> dict:
     """Run detectors and return {name: insights_written}."""
     results: dict[str, int] = {}
     async with db.acquire() as conn:
+        # Refresh NPMI first so detector ranking uses current association strengths.
+        try:
+            await cooccurrence.compute_npmi(conn)
+        except Exception as e:
+            log.warning("npmi refresh failed: %s", e)
         for name, fn in REGISTRY.items():
             if only and name != only:
                 continue

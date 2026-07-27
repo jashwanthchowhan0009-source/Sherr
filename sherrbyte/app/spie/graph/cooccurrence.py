@@ -16,11 +16,32 @@ window so it is idempotent; a limited backfill is an additive inspection batch.
 from __future__ import annotations
 
 import logging
+import math
 from datetime import date, datetime, timezone
 from itertools import combinations
 from typing import Optional
 
 log = logging.getLogger("sherbyte.cooc")
+
+
+# ─── NPMI (pure) ──────────────────────────────────────────────────────────────
+def npmi_score(cab: int, ca: int, cb: int, n: int) -> Optional[float]:
+    """Normalized pointwise mutual information of a co-occurring pair, in [-1, 1].
+
+        pmi  = log( p(a,b) / (p(a)·p(b)) ) = log( cab·N / (ca·cb) )
+        npmi = pmi / -log p(a,b)
+
+    cab = stories where a & b co-occur, ca/cb = stories each appears in, N = total
+    stories (all cluster-deduped). +1 = always together, 0 = independent (chance),
+    −1 = never together. None when undefined (no co-occurrence)."""
+    if cab <= 0 or ca <= 0 or cb <= 0 or n <= 0:
+        return None
+    p_ab = cab / n
+    if p_ab >= 1.0:
+        return 1.0                      # co-occur in every story → maximal association
+    pmi = math.log(cab * n / (ca * cb))
+    npmi = pmi / (-math.log(p_ab))
+    return max(-1.0, min(1.0, npmi))
 
 
 # ─── Pure core ────────────────────────────────────────────────────────────────
@@ -139,3 +160,62 @@ async def backfill(conn, days: int = 90, limit: Optional[int] = None) -> dict:
     }
     log.info("cooccurrence backfill: %s", result)
     return result
+
+
+# Count each story once: cluster_id when present, else the signal's own (negated)
+# id so a signal with no cluster is its own unique story.
+_STORY_KEY = "COALESCE(cluster_id, -id)"
+
+
+async def compute_npmi(conn, days: int = 90, min_count: int = 3) -> int:
+    """Materialize the npmi column over the trailing window from cluster-deduped
+    counts. Pairs with fewer than `min_count` co-occurrences are left NULL
+    (rare-pair PMI is unstable). Returns how many pairs were scored."""
+    n = await conn.fetchval(
+        f"SELECT COUNT(DISTINCT {_STORY_KEY}) FROM domain_signals "
+        "WHERE ts >= now() - ($1 || ' days')::interval",
+        str(int(days)),
+    )
+    if not n or n < 2:
+        return 0
+
+    d = str(int(days))
+    # Reset the window first so rare / disappeared pairs end up NULL.
+    await conn.execute(
+        "UPDATE cooccurrence SET npmi = NULL "
+        "WHERE window_start >= (now() - ($1 || ' days')::interval)::date", d,
+    )
+
+    pairs = await conn.fetch(
+        "SELECT entity_a, entity_b, SUM(count) AS cab FROM cooccurrence "
+        "WHERE window_start >= (now() - ($1 || ' days')::interval)::date "
+        "GROUP BY entity_a, entity_b HAVING SUM(count) >= $2",
+        d, min_count,
+    )
+
+    ecache: dict = {}
+
+    async def _ecount(eid) -> int:
+        if eid not in ecache:
+            ecache[eid] = await conn.fetchval(
+                f"SELECT COUNT(DISTINCT {_STORY_KEY}) FROM domain_signals "
+                "WHERE $1 = ANY(entity_ids) AND ts >= now() - ($2 || ' days')::interval",
+                eid, d,
+            ) or 0
+        return ecache[eid]
+
+    scored = 0
+    for p in pairs:
+        a, b, cab = p["entity_a"], p["entity_b"], int(p["cab"])
+        val = npmi_score(cab, await _ecount(a), await _ecount(b), int(n))
+        if val is None:
+            continue
+        await conn.execute(
+            "UPDATE cooccurrence SET npmi = $1 WHERE entity_a = $2 AND entity_b = $3 "
+            "AND window_start >= (now() - ($4 || ' days')::interval)::date",
+            val, a, b, d,
+        )
+        scored += 1
+
+    log.info("npmi: scored %d pairs over %d stories (window %dd)", scored, int(n), days)
+    return scored
