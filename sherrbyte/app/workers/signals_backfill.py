@@ -24,19 +24,43 @@ from app.db import db
 log = logging.getLogger("sherbyte.worker.signals_backfill")
 
 
-async def run(limit: int | None = None) -> dict:
+# Tables derived entirely from articles/info_objects — safe to wipe and rebuild so
+# a re-run is deterministic (no accumulation from a previous partial/duplicate run).
+_DERIVED_TABLES = [
+    "insights", "cooccurrence_events", "cooccurrence", "domain_signals",
+    "article_fingerprints", "entity_aliases", "entities",
+]
+
+
+async def reset_derived(conn) -> None:
+    """Clear all derived tables + restart the cluster sequence, so signals_backfill
+    is idempotent (a clean re-run reproduces the same graph, never doubles it)."""
+    await conn.execute("TRUNCATE " + ", ".join(_DERIVED_TABLES) + " RESTART IDENTITY CASCADE")
+    await conn.execute("ALTER SEQUENCE IF EXISTS article_cluster_seq RESTART WITH 1")
+
+
+async def run(limit: int | None = None, reset: bool = True) -> dict:
     from app.spie.knowledge.adapters.news import from_info_object
     from app.spie.knowledge.signals import persist_signals
+    from app.spie.knowledge.entity_resolver import seed_aliases
     from app.spie.knowledge.simhash import assign_cluster
 
-    q = ("SELECT id, article_id, headline, body, summary, entities, sentiment, "
-         "importance, source_name, where_info, published_at FROM info_objects "
-         "WHERE entities IS NOT NULL ORDER BY published_at DESC")
+    # Fingerprint on the RAW article body (articles.body) — the AI-touched
+    # info_objects.body diverges per outlet and would hide wire duplicates.
+    q = ("SELECT io.id, io.article_id, io.headline, "
+         "COALESCE(a.body, io.body, io.summary, '') AS raw_body, "
+         "io.entities, io.sentiment, io.importance, io.source_name, "
+         "io.where_info, io.published_at "
+         "FROM info_objects io LEFT JOIN articles a ON a.id = io.article_id "
+         "WHERE io.entities IS NOT NULL ORDER BY io.published_at DESC")
     if limit is not None:
         q += f" LIMIT {int(limit)}"
 
     processed = 0
     async with db.acquire() as conn:
+        if reset:
+            await reset_derived(conn)
+            await seed_aliases(conn)          # re-seed curated aliases after wipe
         rows = await conn.fetch(q)
         for r in rows:
             ents = r["entities"]
@@ -45,9 +69,9 @@ async def run(limit: int | None = None) -> dict:
                     ents = json.loads(ents or "[]")
                 except Exception:
                     ents = []
-            # SimHash story cluster over cleaned text (dedup wire republication).
+            # SimHash story cluster over the RAW body (dedup wire republication).
             doc_id = r["article_id"] or r["id"]
-            text = f"{r['headline']} {r['body'] or r['summary'] or ''}"
+            text = f"{r['headline']} {r['raw_body']}"
             cluster_id = None
             try:
                 cluster_id = await assign_cluster(conn, doc_id, text)
@@ -94,7 +118,8 @@ async def run(limit: int | None = None) -> dict:
         "cooccurrence_rows": int(cooc or 0),
         "fingerprints": int(fingerprints or 0),
         "story_clusters": int(clusters or 0),
-        "dedup_ratio": round(1 - (int(clusters or 0) / int(fingerprints)), 3) if fingerprints else 0,
+        # articles per unique story: 1.0 = no duplicates, > 1.0 = wire dupes collapsed.
+        "dedup_ratio": round(int(fingerprints) / int(clusters), 3) if clusters else 0.0,
         "top_entities": [dict(r) for r in top_entities],
         "top_pairs": [dict(r) for r in top_pairs],
     }
@@ -104,12 +129,14 @@ async def _main() -> None:
     parser = argparse.ArgumentParser(description="Backfill domain_signals from info_objects.")
     parser.add_argument("--limit", type=int, default=None,
                         help="process only the N most-recent info_objects")
+    parser.add_argument("--no-reset", action="store_true",
+                        help="append to existing derived tables instead of the default clean reset")
     args = parser.parse_args()
 
     from app.workers import bootstrap, teardown
     await bootstrap()
     try:
-        result = await run(limit=args.limit)
+        result = await run(limit=args.limit, reset=not args.no_reset)
         log.info("signals backfill: %s", result)
         print(json.dumps(result, indent=2, default=str))
     finally:

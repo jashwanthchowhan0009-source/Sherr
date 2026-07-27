@@ -126,6 +126,47 @@ def _build_seed_lookup() -> dict:
 SEED_LOOKUP = _build_seed_lookup()
 
 
+# ─── Junk-mention filter (keeps the entity graph clean) ───────────────────────
+# NER types that are never graph entities — dropped regardless of the surface form.
+_DROP_TYPES = {"DATE", "TIME", "ORDINAL", "CARDINAL", "PERCENT", "MONEY", "QUANTITY"}
+
+# Function words / headline furniture that leak in as Title-Case sentence starts
+# ("The", "This", "But") or section labels ("Comments", "Read", "Exclusive").
+_STOP_ENTITIES = set((
+    "the a an and or but so if of to in on for with at by from as is are was were "
+    "be been being it its this that these those he she they them his her their our "
+    "your you we i not no yes new now then here there when what which who whom how "
+    "why will would can could may might must just very also more most other some "
+    "such only than into out up down over under after before about above below "
+    "comments read watch live breaking exclusive update video photos opinion "
+    "analysis report alert news views share follow subscribe advertisement"
+).split())
+
+_WEEKDAYS = {"monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"}
+_MONTHS = {"january", "february", "march", "april", "may", "june", "july", "august",
+           "september", "october", "november", "december",
+           "jan", "feb", "mar", "apr", "jun", "jul", "aug", "sep", "sept", "oct", "nov", "dec"}
+
+
+def is_valid_mention(name: str, type: str = "MISC") -> bool:
+    """True if a mention should enter the entity graph. Drops temporal/numeric NER
+    types, function-word junk, headline tags, weekday/month names, and ≤2-char tokens.
+    Pure and deterministic (applied post-normalization)."""
+    if not name or not name.strip():
+        return False
+    if (type or "").strip().upper() in _DROP_TYPES:
+        return False
+    norm = normalize_name(name)
+    if not norm or len(norm) <= 2:            # empty or ≤2 chars (e.g. "AI", "UN")
+        return False
+    tokens = norm.split(" ")
+    # Reject if every token is a stopword / weekday / month ("the", "the this", "monday").
+    junk = _STOP_ENTITIES | _WEEKDAYS | _MONTHS
+    if all(t in junk for t in tokens):
+        return False
+    return True
+
+
 def resolve_key(name: str, type: str = "MISC") -> tuple[str, str, str]:
     """Pure resolution: return (norm_key, coarse_type, canonical_display).
 
@@ -152,6 +193,8 @@ async def resolve(conn, name: str, type: str = "MISC", *, create: bool = True) -
     Concurrency-safe via ON CONFLICT. Returns None for empty mentions (or when
     create=False and the entity does not exist yet).
     """
+    if not is_valid_mention(name, type):      # drop dates/numbers/stopwords/tags
+        return None
     norm_key, ctype, display = resolve_key(name, type)
     if not norm_key:
         return None

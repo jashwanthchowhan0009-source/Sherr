@@ -75,3 +75,13 @@ def test_hamming_uses_signed_values_correctly():
     u1 = simhash64(_WIRE)
     u2 = simhash64(_WIRE_REPUB)
     assert hamming(to_unsigned(to_signed(u1)), to_unsigned(to_signed(u2))) == hamming(u1, u2)
+
+
+def test_identical_body_same_cluster_guarantee():
+    # "Insert the same body twice via the backfill path" → identical SimHash →
+    # Hamming 0 ≤ threshold, so assign_cluster() must merge them into one cluster.
+    body = ("Reserve Bank of India kept the repo rate unchanged at 6.5 percent on "
+            "Friday, the central bank's monetary policy committee said.")
+    a, b = simhash64(body), simhash64(body)
+    assert a == b
+    assert hamming(a, b) == 0 <= HAMMING_THRESHOLD
