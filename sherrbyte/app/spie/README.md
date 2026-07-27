@@ -40,6 +40,21 @@ evidence counts (article_count / observations), sources (source_count /
 top_sources), confidence}`. This is a hard requirement on every current and
 future detector, surfaced directly in the app (SPRIE section).
 
+## Reference docs & tier rules
+
+- **`docs/SPIE_RESEARCH.md`** — the algorithm survey + tier decisions (V1 / V1.1 /
+  V2 / V3) + the rejected-alternatives decision record. **Consult it before
+  designing any new detector or component.**
+- **`docs/SHERRBYTE_CTO_MASTER.md`** — prior master doc (add when available).
+
+Build rules from the research doc (hard constraints):
+- **Do NOT build anything marked V2 or V3** unless explicitly asked.
+- **Never build anything from the "Rejected" table** (Neo4j day-one, Kafka,
+  Elasticsearch, Airflow, LDA, Apriori, forecasting products, ontology/RDF,
+  microservices, SimRank, coreference-before-sentence-extraction, …).
+- Current build order (all V1 / V1.1, explicitly requested): SimHash dedup →
+  NPMI → volume-anomaly detector → decision-engine rules.
+
 ## Rules
 
 - No infrastructure beyond Postgres + Redis + APScheduler.
