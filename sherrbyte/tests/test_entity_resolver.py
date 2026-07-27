@@ -98,3 +98,35 @@ def test_seed_lookup_is_populated():
     # Guards against a seed table that silently failed to build.
     assert "rbi" in SEED_LOOKUP and SEED_LOOKUP["rbi"][0] == "reserve bank of india"
     assert "tamo" in SEED_LOOKUP
+
+
+# ─── is_valid_mention (junk-entity filter, BUG-1 fix) ─────────────────────────
+from app.spie.knowledge.entity_resolver import is_valid_mention
+
+
+def test_filter_rejects_function_words_and_tags():
+    for junk in ["The", "This", "But", "After", "And", "Now", "That",
+                 "Comments", "Read", "EXCLUSIVE", "WATCH", "LIVE", "BREAKING"]:
+        assert not is_valid_mention(junk, "MISC"), junk
+
+
+def test_filter_rejects_dates_weekdays_months_and_short():
+    assert not is_valid_mention("July 2026", "DATE")      # temporal NER type
+    assert not is_valid_mention("Monday", "MISC")          # weekday
+    assert not is_valid_mention("July", "MISC")            # month
+    assert not is_valid_mention("2026", "CARDINAL")        # number type
+    assert not is_valid_mention("AI", "MISC")              # <= 2 chars
+
+
+def test_filter_keeps_real_entities():
+    for good, t in [("Reserve Bank of India", "ORG"), ("Narendra Modi", "PERSON"),
+                    ("Mumbai", "GPE"), ("Tata Motors", "ORG"), ("Nifty 50", "MISC"),
+                    ("RBI", "ORG"), ("ISRO", "ORG")]:
+        assert is_valid_mention(good, t), good
+
+
+def test_filter_on_realistic_headline_mentions():
+    # Naive extraction of "Exclusive: Modi Meets Adani In Mumbai On Monday, Nifty Jumps"
+    raw = ["Exclusive", "Modi", "Adani", "In", "Mumbai", "On", "Monday", "Nifty"]
+    kept = [m for m in raw if is_valid_mention(m, "MISC")]
+    assert kept == ["Modi", "Adani", "Mumbai", "Nifty"]
