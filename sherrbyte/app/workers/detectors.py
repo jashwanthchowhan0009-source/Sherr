@@ -16,8 +16,12 @@ import logging
 from app.db import db
 from app.spie.discovery import REGISTRY
 from app.spie.graph import cooccurrence
+from app.spie.decision import rules as decision_rules
 
 log = logging.getLogger("sherbyte.worker.detectors")
+
+# All runnable jobs: discovery detectors + the decision-engine chain evaluator.
+_CHAIN = "cross_domain_chain"
 
 
 async def run(only: str | None = None) -> dict:
@@ -37,12 +41,19 @@ async def run(only: str | None = None) -> dict:
             except Exception as e:
                 log.error("detector %s failed: %s", name, e, exc_info=True)
                 results[name] = -1
+        # Decision Engine: cross-domain chain rules.
+        if not only or only == _CHAIN:
+            try:
+                results[_CHAIN] = await decision_rules.run(conn)
+            except Exception as e:
+                log.error("decision rules failed: %s", e, exc_info=True)
+                results[_CHAIN] = -1
     return results
 
 
 async def _main() -> None:
     parser = argparse.ArgumentParser(description="Run Intelligence Engine detectors.")
-    parser.add_argument("--only", choices=sorted(REGISTRY), default=None,
+    parser.add_argument("--only", choices=sorted(list(REGISTRY) + [_CHAIN]), default=None,
                         help="run a single detector instead of all")
     args = parser.parse_args()
 
