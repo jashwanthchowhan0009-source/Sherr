@@ -8,7 +8,7 @@ Postgres, not here.
 
 from datetime import date, datetime, timezone
 
-from app.pipeline.cooccurrence import pairs_from_entities, bucket_of
+from app.spie.graph.cooccurrence import pairs_from_entities, bucket_of
 
 
 # ─── pairs_from_entities ──────────────────────────────────────────────────────

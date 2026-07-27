@@ -6,7 +6,7 @@ downstream co-occurrence/correlation counts depend on. The async DB paths
 (resolve/backfill against Postgres) are exercised by integration tests, not here.
 """
 
-from app.pipeline.entity_resolver import (
+from app.spie.knowledge.entity_resolver import (
     normalize_name,
     coarse_type,
     resolve_key,

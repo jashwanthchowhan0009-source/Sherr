@@ -12,8 +12,8 @@ from datetime import datetime, timezone
 from typing import Any
 
 from app.models.signal import Signal, SignalEntity
-from app.pipeline.adapters.base import direction, sentiment_to_float, clamp
-from app.pipeline.adapters.credibility import score as credibility_score
+from app.spie.knowledge.adapters.base import direction, sentiment_to_float, clamp
+from app.spie.knowledge.adapters.credibility import score as credibility_score
 
 
 def _get(obj: Any, key: str, default=None):

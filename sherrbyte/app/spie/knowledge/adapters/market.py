@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 from app.models.signal import Signal, SignalEntity
-from app.pipeline.adapters.base import direction, clamp
+from app.spie.knowledge.adapters.base import direction, clamp
 
 # Market/data feeds are mechanical, not editorial — high, fixed reliability.
 _MARKET_CREDIBILITY = 0.90

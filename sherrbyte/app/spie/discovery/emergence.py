@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import logging
 
-from app.detectors.base import write_insight, names_for, domains_for, source_stats
+from app.spie.discovery.base import write_insight, names_for, domains_for, source_stats
 
 log = logging.getLogger("sherbyte.detectors.emergence")
 

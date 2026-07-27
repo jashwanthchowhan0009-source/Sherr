@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from app.models.signal import Signal, SignalEntity
-from app.pipeline.adapters.base import direction, clamp
+from app.spie.knowledge.adapters.base import direction, clamp
 
 _WEATHER_CREDIBILITY = 0.85
 

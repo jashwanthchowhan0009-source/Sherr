@@ -9,7 +9,7 @@ materialized co-occurrence table (never brute-forced over all pairs):
     temporal_correlation — leading-indicator pairs (lag-window correlation)
 """
 
-from app.detectors import emergence, temporal
+from app.spie.discovery import emergence, temporal
 
 REGISTRY = {
     "emergence": emergence.run,

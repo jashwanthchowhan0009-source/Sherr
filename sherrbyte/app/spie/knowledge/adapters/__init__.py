@@ -5,7 +5,7 @@ The engine's core rule: adding a new source = writing one adapter here; no engin
 or detector code changes. Every adapter returns a list[Signal] and touches no DB.
 """
 
-from app.pipeline.adapters import news, market, weather
+from app.spie.knowledge.adapters import news, market, weather
 
 # Domain → callable(raw, **kw) -> list[Signal]. The persistence layer / workers
 # look adapters up here rather than importing each module directly.
