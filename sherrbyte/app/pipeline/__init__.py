@@ -37,8 +37,8 @@ async def _process_one(article_id: str, art: ArticleIn) -> str | None:
         # resolution + incremental co-occurrence happen inside persist_signals.
         # Best-effort — a signal hiccup must never fail ingestion.
         try:
-            from app.pipeline.adapters.news import from_info_object
-            from app.pipeline.signals import persist_signals
+            from app.spie.knowledge.adapters.news import from_info_object
+            from app.spie.knowledge.signals import persist_signals
             sigs = from_info_object({
                 "id": info_id,
                 "entities": obj.entities,

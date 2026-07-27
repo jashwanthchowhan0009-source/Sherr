@@ -20,7 +20,7 @@ import asyncio
 import logging
 
 from app.db import db
-from app.pipeline import cooccurrence
+from app.spie.graph import cooccurrence
 
 log = logging.getLogger("sherbyte.worker.cooc_backfill")
 

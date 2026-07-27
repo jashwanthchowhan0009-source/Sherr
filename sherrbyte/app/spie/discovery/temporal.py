@@ -12,8 +12,8 @@ from __future__ import annotations
 
 import logging
 
-from app.detectors.base import write_insight, names_for, domains_for, source_stats
-from app.detectors.correlation_math import best_lag_correlation, two_period_consistent
+from app.spie.discovery.base import write_insight, names_for, domains_for, source_stats
+from app.spie.discovery.correlation_math import best_lag_correlation, two_period_consistent
 
 log = logging.getLogger("sherbyte.detectors.temporal")
 

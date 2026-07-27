@@ -12,8 +12,8 @@ import logging
 from typing import Iterable
 
 from app.models.signal import Signal
-from app.pipeline.entity_resolver import resolve
-from app.pipeline import cooccurrence
+from app.spie.knowledge.entity_resolver import resolve
+from app.spie.graph import cooccurrence
 
 log = logging.getLogger("sherbyte.signals")
 

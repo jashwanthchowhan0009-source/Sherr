@@ -8,7 +8,7 @@ two-period consistency guard — including the canonical leading-indicator scena
 
 from datetime import date, timedelta
 
-from app.detectors.correlation_math import (
+from app.spie.discovery.correlation_math import (
     pearson, aligned_at_lag, best_lag_correlation, two_period_consistent,
 )
 

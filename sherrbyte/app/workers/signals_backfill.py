@@ -25,8 +25,8 @@ log = logging.getLogger("sherbyte.worker.signals_backfill")
 
 
 async def run(limit: int | None = None) -> dict:
-    from app.pipeline.adapters.news import from_info_object
-    from app.pipeline.signals import persist_signals
+    from app.spie.knowledge.adapters.news import from_info_object
+    from app.spie.knowledge.signals import persist_signals
 
     q = ("SELECT id, entities, sentiment, importance, source_name, "
          "where_info, published_at FROM info_objects "

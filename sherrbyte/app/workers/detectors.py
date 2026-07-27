@@ -14,7 +14,7 @@ import asyncio
 import logging
 
 from app.db import db
-from app.detectors import REGISTRY
+from app.spie.discovery import REGISTRY
 
 log = logging.getLogger("sherbyte.worker.detectors")
 

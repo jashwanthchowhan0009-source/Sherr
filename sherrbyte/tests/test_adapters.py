@@ -7,9 +7,9 @@ out correct for each domain. Entity resolution + persistence are integration-tes
 against Postgres, not here.
 """
 
-from app.pipeline.adapters.base import direction, sentiment_to_float, clamp
-from app.pipeline.adapters.credibility import score as cred
-from app.pipeline.adapters import news, market, weather
+from app.spie.knowledge.adapters.base import direction, sentiment_to_float, clamp
+from app.spie.knowledge.adapters.credibility import score as cred
+from app.spie.knowledge.adapters import news, market, weather
 
 
 # ─── base helpers ─────────────────────────────────────────────────────────────
