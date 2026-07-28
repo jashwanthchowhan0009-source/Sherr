@@ -77,3 +77,41 @@ def test_reraises_when_no_factory_given():
 
     with pytest.raises(Exception):
         asyncio.run(persist_signals(Dead(), [_Sig()]))
+
+
+# ─── update_cooccurrence flag (WAN round-trip bottleneck) ────────────────────
+def test_update_cooccurrence_flag_controls_inline_writes(monkeypatch):
+    """Inline co-occurrence costs round-trips per entity PAIR (~45/article). The
+    bulk backfill turns it off and lets cooccurrence_backfill rebuild in one pass."""
+    from app.spie.knowledge import signals as signals_mod
+
+    calls = {"n": 0}
+
+    async def _fake_update(*a, **k):
+        calls["n"] += 1
+        return 0
+
+    async def _fake_resolve(conn, ents):
+        return ["a", "b", "c"]          # 3 entities → 3 pairs
+
+    monkeypatch.setattr(signals_mod.cooccurrence, "update_for_signal", _fake_update)
+    monkeypatch.setattr(signals_mod, "resolve_many", _fake_resolve)
+
+    class Conn:
+        async def fetchval(self, *a, **k):
+            return 1
+
+    def _sig():
+        s = _Sig()
+        s.entity_ids = None             # force resolution path
+        s.entities = []
+        return s
+
+    calls["n"] = 0
+    n = asyncio.run(signals_mod.persist_signals(
+        Conn(), [_sig(), _sig(), _sig()], update_cooccurrence=False))
+    assert n == 3 and calls["n"] == 0   # nothing written inline
+
+    calls["n"] = 0
+    n = asyncio.run(signals_mod.persist_signals(Conn(), [_sig(), _sig(), _sig()]))
+    assert n == 3 and calls["n"] == 3   # default stays on for live ingest

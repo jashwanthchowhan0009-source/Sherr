@@ -83,11 +83,14 @@ _UPSERT = """
 """
 
 
-_EVENT_INSERT = """
+# One statement for the whole signal: insert every (pair, day, cluster) event and
+# return only the rows that were genuinely new. Two round-trips per SIGNAL instead
+# of two per PAIR — the difference between a fast backfill and a WAN-bound crawl.
+_EVENT_INSERT_MANY = """
     INSERT INTO cooccurrence_events (entity_a, entity_b, window_start, cluster_id)
-    VALUES ($1, $2, $3, $4)
+    SELECT * FROM unnest($1::uuid[], $2::uuid[], $3::date[], $4::bigint[])
     ON CONFLICT DO NOTHING
-    RETURNING 1
+    RETURNING entity_a, entity_b
 """
 
 
@@ -109,14 +112,20 @@ async def update_for_signal(conn, entity_ids, ts, cluster_id=None) -> int:
         return len(pairs)
 
     # Cluster-deduped: only bump the pair-day count the first time this story
-    # cluster contributes it (the events ledger enforces uniqueness).
-    counted = 0
-    for a, b in pairs:
-        is_new = await conn.fetchval(_EVENT_INSERT, a, b, window, int(cluster_id))
-        if is_new:
-            await conn.execute(_UPSERT, a, b, window, at)
-            counted += 1
-    return counted
+    # cluster contributes it (the events ledger enforces uniqueness). Batched:
+    # one INSERT for all pairs, then one executemany for the ones that were new.
+    cid = int(cluster_id)
+    new_rows = await conn.fetch(
+        _EVENT_INSERT_MANY,
+        [a for a, _ in pairs], [b for _, b in pairs],
+        [window] * len(pairs), [cid] * len(pairs),
+    )
+    if not new_rows:
+        return 0
+    await conn.executemany(
+        _UPSERT, [(r["entity_a"], r["entity_b"], window, at) for r in new_rows]
+    )
+    return len(new_rows)
 
 
 async def backfill(conn, days: int = 90, limit: Optional[int] = None) -> dict:
@@ -134,7 +143,9 @@ async def backfill(conn, days: int = 90, limit: Optional[int] = None) -> dict:
         )
 
     q = (
-        "SELECT entity_ids, ts FROM domain_signals "
+        # cluster_id is essential: without it every wire copy of the same story
+        # counts again and the SimHash dedup is silently lost in these counts.
+        "SELECT entity_ids, ts, cluster_id FROM domain_signals "
         "WHERE ts >= now() - ($1 || ' days')::interval "
         "AND COALESCE(array_length(entity_ids, 1), 0) >= 2 "
         "ORDER BY ts DESC"
@@ -147,7 +158,7 @@ async def backfill(conn, days: int = 90, limit: Optional[int] = None) -> dict:
     rows = await conn.fetch(q, *args)
     signals = pairs = 0
     for r in rows:
-        n = await update_for_signal(conn, r["entity_ids"], r["ts"])
+        n = await update_for_signal(conn, r["entity_ids"], r["ts"], r["cluster_id"])
         if n:
             signals += 1
             pairs += n
