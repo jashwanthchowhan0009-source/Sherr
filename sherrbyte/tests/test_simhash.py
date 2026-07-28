@@ -85,3 +85,54 @@ def test_identical_body_same_cluster_guarantee():
     a, b = simhash64(body), simhash64(body)
     assert a == b
     assert hamming(a, b) == 0 <= HAMMING_THRESHOLD
+
+
+# ─── banded index (batch backfill path) ───────────────────────────────────────
+import random
+
+from app.spie.knowledge.simhash import SimHashIndex
+
+
+def _full_scan(stored, sh):
+    best, bh = None, HAMMING_THRESHOLD + 1
+    for fp, cid in stored:
+        h = hamming(sh, fp)
+        if h <= HAMMING_THRESHOLD and h < bh:
+            bh, best = h, cid
+    return best
+
+
+def test_banded_index_matches_full_scan():
+    """Pigeonhole guarantee: with 4×16-bit bands, any pair within Hamming 3 shares
+    at least one exact band — so the index must return exactly what a full scan does."""
+    random.seed(42)
+    idx, stored = SimHashIndex(), []
+    for cid in range(1, 301):
+        fp = random.getrandbits(64)
+        stored.append((fp, cid))
+        idx.add(fp, cid)
+
+    # exact duplicates
+    for fp, _ in stored[:40]:
+        assert idx.find(fp) == _full_scan(stored, fp)
+
+    # near-duplicates (1-3 flipped bits) and clearly-different (8 flipped bits)
+    for fp, _ in stored[:40]:
+        for nbits in (1, 2, 3, 8):
+            v = fp
+            for b in random.sample(range(64), nbits):
+                v ^= (1 << b)
+            assert idx.find(v) == _full_scan(stored, v), f"{nbits}-bit flip mismatch"
+
+    # random probes
+    for _ in range(200):
+        p = random.getrandbits(64)
+        assert idx.find(p) == _full_scan(stored, p)
+
+
+def test_index_add_grows_and_finds_new_entries():
+    idx = SimHashIndex()
+    assert idx.find(12345) is None          # empty index
+    idx.add(12345, 7)
+    assert idx.find(12345) == 7             # exact hit
+    assert idx.size == 1

@@ -73,8 +73,59 @@ def to_unsigned(s: int) -> int:
     return s + (1 << 64) if s < 0 else s
 
 
+class SimHashIndex:
+    """In-memory banded fingerprint index — for batch runs (full backfill).
+
+    Manku's banding/pigeonhole trick: split the 64-bit fingerprint into 4 bands of
+    16 bits. Two fingerprints within Hamming distance 3 must agree exactly on at
+    least one band (3 differing bits can touch at most 3 bands), so candidates are
+    looked up by band instead of scanning everything. This keeps a full backfill
+    linear instead of quadratic, and — unlike a scan cap — never misses a match.
+    """
+
+    _BANDS = 4
+    _BAND_BITS = 16
+    _BAND_MASK = (1 << 16) - 1
+
+    def __init__(self) -> None:
+        self._bands: list[dict] = [dict() for _ in range(self._BANDS)]
+        self.size = 0
+
+    def _keys(self, sh: int) -> list[int]:
+        return [(sh >> (i * self._BAND_BITS)) & self._BAND_MASK for i in range(self._BANDS)]
+
+    def add(self, sh: int, cluster_id: int) -> None:
+        for i, key in enumerate(self._keys(sh)):
+            self._bands[i].setdefault(key, []).append((sh, int(cluster_id)))
+        self.size += 1
+
+    def find(self, sh: int) -> Optional[int]:
+        """cluster_id of the nearest fingerprint within the threshold, else None."""
+        best_cid, best_h = None, HAMMING_THRESHOLD + 1
+        seen: set = set()
+        for i, key in enumerate(self._keys(sh)):
+            for cand_sh, cid in self._bands[i].get(key, ()):
+                if cand_sh in seen:
+                    continue
+                seen.add(cand_sh)
+                h = hamming(sh, cand_sh)
+                if h <= HAMMING_THRESHOLD and h < best_h:
+                    best_h, best_cid = h, cid
+        return best_cid
+
+    @classmethod
+    async def load(cls, conn) -> "SimHashIndex":
+        """Build the index once from every stored fingerprint (one query)."""
+        idx = cls()
+        rows = await conn.fetch("SELECT simhash, cluster_id FROM article_fingerprints")
+        for r in rows:
+            idx.add(to_unsigned(r["simhash"]), r["cluster_id"])
+        log.info("simhash index loaded: %d fingerprints", idx.size)
+        return idx
+
+
 async def assign_cluster(conn, doc_id, text: str, *, window_days: int = 3,
-                         scan_limit: int = 4000) -> int:
+                         scan_limit: int = 4000, index: "SimHashIndex | None" = None) -> int:
     """Fingerprint `text`, join the nearest recent story cluster (Hamming <= 3) or
     open a new one; upsert into article_fingerprints. Returns the cluster_id.
 
@@ -83,17 +134,22 @@ async def assign_cluster(conn, doc_id, text: str, *, window_days: int = 3,
     the Manku permutation index is a later scale optimization, not needed now.
     """
     sh = simhash64(text)
-    rows = await conn.fetch(
-        "SELECT simhash, cluster_id FROM article_fingerprints "
-        "WHERE created_at >= now() - ($1 || ' days')::interval "
-        "ORDER BY created_at DESC LIMIT $2",
-        str(int(window_days)), int(scan_limit),
-    )
-    best_cid, best_h = None, HAMMING_THRESHOLD + 1
-    for r in rows:
-        h = hamming(sh, to_unsigned(r["simhash"]))
-        if h <= HAMMING_THRESHOLD and h < best_h:
-            best_h, best_cid = h, r["cluster_id"]
+    if index is not None:
+        # Batch path (full backfill): one in-memory banded lookup, no per-doc query.
+        best_cid = index.find(sh)
+    else:
+        # Streaming path (live ingest): scan recent fingerprints.
+        rows = await conn.fetch(
+            "SELECT simhash, cluster_id FROM article_fingerprints "
+            "WHERE created_at >= now() - ($1 || ' days')::interval "
+            "ORDER BY created_at DESC LIMIT $2",
+            str(int(window_days)), int(scan_limit),
+        )
+        best_cid, best_h = None, HAMMING_THRESHOLD + 1
+        for r in rows:
+            h = hamming(sh, to_unsigned(r["simhash"]))
+            if h <= HAMMING_THRESHOLD and h < best_h:
+                best_h, best_cid = h, r["cluster_id"]
 
     if best_cid is None:
         best_cid = await conn.fetchval("SELECT nextval('article_cluster_seq')")
@@ -105,4 +161,6 @@ async def assign_cluster(conn, doc_id, text: str, *, window_days: int = 3,
         "cluster_id = EXCLUDED.cluster_id",
         doc_id, to_signed(sh), int(best_cid),
     )
+    if index is not None:
+        index.add(sh, best_cid)      # keep the batch index current
     return int(best_cid)
