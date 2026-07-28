@@ -87,3 +87,32 @@ def test_confidence_weights_and_bias_from_rule():
     # a heavier weight on one condition raises it
     heavier = chain_confidence({"2": 2.0}, ev)
     assert heavier > base
+
+
+# ─── JSONB decoding (regression: 'str' object has no attribute 'get') ─────────
+import json as _json
+
+from app.spie.decision.rules import _as_json
+
+
+def test_as_json_handles_asyncpg_string_jsonb():
+    """asyncpg returns JSONB as str unless a codec is registered — the live run
+    crashed on `c.get(...)` because conditions_json was a string."""
+    conds = [{"domain": "weather", "direction": 1}, {"domain": "news", "direction": -1}]
+    assert _as_json(conds, []) == conds                       # already parsed
+    assert _as_json(_json.dumps(conds), []) == conds          # the crash case
+    assert _as_json(_json.dumps(_json.dumps(conds)), []) == conds   # double-encoded
+    assert _as_json(_json.dumps(conds).encode(), []) == conds       # bytes
+
+
+def test_as_json_falls_back_on_junk():
+    assert _as_json(None, []) == []
+    assert _as_json("not json", []) == []
+    assert _as_json(42, {}) == {}
+
+
+def test_conditions_parse_then_extract_domains():
+    conds = _as_json(_json.dumps([{"domain": "forex", "direction": 1},
+                                  {"domain": "metals", "direction": 1}]), [])
+    domains = sorted({c["domain"] for c in conds if isinstance(c, dict) and c.get("domain")})
+    assert domains == ["forex", "metals"]

@@ -14,12 +14,34 @@ Async:
 
 from __future__ import annotations
 
+import json
 import logging
 import math
 
 from app.spie.discovery.base import write_insight, names_for
 
 log = logging.getLogger("sherbyte.decision")
+
+
+def _as_json(value, default):
+    """Normalize a JSONB column into a Python object.
+
+    asyncpg hands JSONB back as a `str` unless a json codec is registered, and a
+    seeded value can itself be a JSON *string* (double-encoded). Decode until we
+    get a real list/dict, then fall back to `default`."""
+    for _ in range(2):                     # at most one extra unwrap
+        if isinstance(value, (list, dict)):
+            return value
+        if isinstance(value, (bytes, bytearray)):
+            value = value.decode("utf-8", "replace")
+        if isinstance(value, str):
+            try:
+                value = json.loads(value)
+            except Exception:
+                return default
+        else:
+            break
+    return value if isinstance(value, (list, dict)) else default
 
 
 # ─── Pure matching + scoring ──────────────────────────────────────────────────
@@ -89,10 +111,19 @@ async def run(conn, *, default_window_hours: int = 72) -> int:
 
     written = 0
     for rule in rules:
-        conds = rule["conditions_json"] or []
+        # asyncpg returns JSONB as a str unless a codec is registered, and a seed
+        # can store it as a JSON string — parse defensively either way.
+        conds = _as_json(rule["conditions_json"], [])
+        if not isinstance(conds, list) or not conds:
+            log.warning("rule %s: conditions_json is not a list (%s) — skipped",
+                        rule["name"], type(conds).__name__)
+            continue
+        conds = [c for c in conds if isinstance(c, dict)]
         if not conds:
             continue
-        weights = rule["weights_json"] or {}
+        weights = _as_json(rule["weights_json"], {})
+        if not isinstance(weights, dict):
+            weights = {}
         window = int(rule["window_hours"] or default_window_hours)
         domains = list({c["domain"] for c in conds if c.get("domain")})
         if not domains:

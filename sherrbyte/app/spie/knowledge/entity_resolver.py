@@ -280,15 +280,104 @@ async def _record_alias(conn, surface: str, ctype_entity_id) -> None:
 
 
 async def resolve_many(conn, mentions: Iterable) -> list[str]:
-    """Resolve a batch of mentions. Each item is a str, a (name, type) tuple, or an
-    object/dict with .name/.type (e.g. the understander's Entity). Order preserved;
-    empty mentions dropped."""
-    out: list[str] = []
+    """Resolve a batch of mentions in a FIXED number of queries (4), instead of
+    ~4 round-trips per mention — this is what keeps a full backfill from crawling.
+
+    Each item is a str, a (name, type) tuple, or an object/dict with .name/.type.
+    Order is preserved; junk and empty mentions are dropped.
+    """
+    # 1) Pure pass: filter + normalize (no I/O).
+    keyed: list[tuple[str, str, str, str]] = []      # (surface, norm_key, ctype, display)
     for m in mentions:
         name, mtype = _unpack_mention(m)
-        eid = await resolve(conn, name, mtype)
-        if eid:
-            out.append(eid)
+        if not is_valid_mention(name, mtype):
+            continue
+        nk, ct, disp = resolve_key(name, mtype)
+        if nk:
+            keyed.append((name, nk, ct, disp))
+    if not keyed:
+        return []
+
+    # 2) One lookup for every known surface form / seeded synonym.
+    norm_keys = list({k[1] for k in keyed})
+    rows = await conn.fetch(
+        """
+        SELECT ea.norm_alias, e.type, ea.entity_id
+        FROM entity_aliases ea JOIN entities e ON e.id = ea.entity_id
+        WHERE ea.norm_alias = ANY($1::text[])
+        """,
+        norm_keys,
+    )
+    found: dict[tuple[str, str], Any] = {(r["norm_alias"], r["type"]): r["entity_id"] for r in rows}
+
+    # 3) One upsert for everything still unknown (dedup within the batch first).
+    missing: dict[tuple[str, str], str] = {}
+    for _surface, nk, ct, disp in keyed:
+        if (nk, ct) not in found:
+            missing.setdefault((nk, ct), disp or nk)
+    if missing:
+        keys = list(missing)
+        new_rows = await conn.fetch(
+            """
+            INSERT INTO entities (canonical_name, type, norm_key, mention_count)
+            SELECT * FROM unnest($1::text[], $2::text[], $3::text[], $4::int[])
+            ON CONFLICT (norm_key, type)
+            DO UPDATE SET mention_count = entities.mention_count + 1, updated_at = now()
+            RETURNING id, norm_key, type
+            """,
+            [missing[k] for k in keys],          # canonical_name
+            [k[1] for k in keys],                 # type
+            [k[0] for k in keys],                 # norm_key
+            [1] * len(keys),                      # initial mention_count
+        )
+        for r in new_rows:
+            found[(r["norm_key"], r["type"])] = r["id"]
+
+    # 4) Bump mention_count for the ones that already existed (single UPDATE).
+    existing_counts: dict[Any, int] = {}
+    for _surface, nk, ct, _disp in keyed:
+        eid = found.get((nk, ct))
+        if eid is not None and (nk, ct) not in missing:
+            existing_counts[eid] = existing_counts.get(eid, 0) + 1
+    if existing_counts:
+        ids = list(existing_counts)
+        await conn.execute(
+            """
+            UPDATE entities e SET mention_count = e.mention_count + c.n, updated_at = now()
+            FROM (SELECT unnest($1::uuid[]) AS id, unnest($2::int[]) AS n) c
+            WHERE e.id = c.id
+            """,
+            ids, [existing_counts[i] for i in ids],
+        )
+
+    # 5) One batched alias insert so future runs hit step 2 directly.
+    alias_rows = {}
+    for surface, nk, ct, _disp in keyed:
+        eid = found.get((nk, ct))
+        if eid is not None:
+            alias_rows[(nk, eid)] = surface.strip()
+    if alias_rows:
+        pairs = list(alias_rows)
+        await conn.execute(
+            """
+            INSERT INTO entity_aliases (alias, norm_alias, entity_id, source)
+            SELECT * FROM unnest($1::text[], $2::text[], $3::uuid[], $4::text[])
+            ON CONFLICT (norm_alias, entity_id) DO NOTHING
+            """,
+            [alias_rows[p] for p in pairs],       # alias (surface form)
+            [p[0] for p in pairs],                # norm_alias
+            [p[1] for p in pairs],                # entity_id
+            ["auto"] * len(pairs),
+        )
+
+    # Preserve input order, drop duplicates.
+    out: list[str] = []
+    for _surface, nk, ct, _disp in keyed:
+        eid = found.get((nk, ct))
+        if eid is not None:
+            s = str(eid)
+            if s not in out:
+                out.append(s)
     return out
 
 
