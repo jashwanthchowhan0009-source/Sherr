@@ -39,7 +39,7 @@ async def reset_derived(conn) -> None:
     await conn.execute("ALTER SEQUENCE IF EXISTS article_cluster_seq RESTART WITH 1")
 
 
-async def run(limit: int | None = None, reset: bool = True) -> dict:
+async def run(limit: int | None = None, reset: bool = True, batch_size: int = 25) -> dict:
     from app.spie.knowledge.adapters.news import from_info_object
     from app.spie.knowledge.signals import persist_signals
     from app.spie.knowledge.entity_resolver import (
@@ -67,7 +67,8 @@ async def run(limit: int | None = None, reset: bool = True) -> dict:
     if limit is not None:
         q += f" LIMIT {int(limit)}"
 
-    processed = 0
+    # Setup (reset + seed + index load + row fetch) on its own short-lived
+    # connection — never held across the processing loop.
     async with db.acquire() as conn:
         if reset:
             await reset_derived(conn)
@@ -77,48 +78,67 @@ async def run(limit: int | None = None, reset: bool = True) -> dict:
         # scan cap starts silently missing merges past ~4000 fingerprints.
         index = await SimHashIndex.load(conn)
         rows = await conn.fetch(q)
-        for r in rows:
-            ents = r["entities"]
-            if isinstance(ents, str):
-                try:
-                    ents = json.loads(ents or "[]")
-                except Exception:
-                    ents = []
-            # Stored info_objects.entities predate the junk filter, so filter them
-            # HERE too — not only inside resolve() — so junk never reaches the
-            # adapter/signal at all (defense in depth).
-            ents = [e for e in (ents or [])
-                    if is_valid_mention(
-                        (e.get("name") or e.get("canonical") or "") if isinstance(e, dict)
-                        else getattr(e, "name", ""),
-                        (e.get("type", "MISC") if isinstance(e, dict)
-                         else getattr(e, "type", "MISC")))]
 
-            # SimHash story cluster over the RAW body (dedup wire republication).
-            doc_id = r["article_id"] or r["id"]
-            if int(r["a_body_len"] or 0) > 0:
-                raw_body_hits += 1
-            else:
-                raw_body_missing += 1
-            text = f"{r['headline']} {r['raw_body']}"
-            cluster_id = None
-            try:
-                cluster_id = await assign_cluster(conn, doc_id, text, index=index)
-            except Exception as e:
-                log.warning("simhash cluster assign failed for %s: %s", r["id"], e)
-            sigs = from_info_object({
-                "id": str(r["id"]),
-                "entities": ents or [],
-                "sentiment": r["sentiment"],
-                "importance": r["importance"] or 0.0,
-                "source_name": r["source_name"],
-                "published_at": r["published_at"],
-                "wwww": {"where": r["where_info"]},
-            })
-            for s in sigs:
-                s.cluster_id = cluster_id
-            await persist_signals(conn, sigs)
-            processed += 1
+    processed = 0
+    failed = 0
+    # Process in batches, each on a FRESH connection. Holding one connection for
+    # the whole corpus is what produced "connection has been released back to the
+    # pool" — long-lived connections hit the pool/command timeout (and pgbouncer
+    # transaction mode recycles the backend underneath). The SimHash index is
+    # in-memory, so it carries across batches untouched.
+    for start in range(0, len(rows), batch_size):
+        chunk = rows[start:start + batch_size]
+        try:
+            async with db.acquire() as conn:
+                for r in chunk:
+                    ents = r["entities"]
+                    if isinstance(ents, str):
+                        try:
+                            ents = json.loads(ents or "[]")
+                        except Exception:
+                            ents = []
+                    # Stored info_objects.entities predate the junk filter, so filter
+                    # them HERE too — not only inside resolve() — so junk never
+                    # reaches the adapter/signal at all (defense in depth).
+                    ents = [e for e in (ents or [])
+                            if is_valid_mention(
+                                (e.get("name") or e.get("canonical") or "") if isinstance(e, dict)
+                                else getattr(e, "name", ""),
+                                (e.get("type", "MISC") if isinstance(e, dict)
+                                 else getattr(e, "type", "MISC")))]
+
+                    # SimHash story cluster over the RAW body (dedup republication).
+                    doc_id = r["article_id"] or r["id"]
+                    if int(r["a_body_len"] or 0) > 0:
+                        raw_body_hits += 1
+                    else:
+                        raw_body_missing += 1
+                    text = f"{r['headline']} {r['raw_body']}"
+                    cluster_id = None
+                    try:
+                        cluster_id = await assign_cluster(conn, doc_id, text, index=index)
+                    except Exception as e:
+                        log.warning("simhash cluster assign failed for %s: %s", r["id"], e)
+                    sigs = from_info_object({
+                        "id": str(r["id"]),
+                        "entities": ents or [],
+                        "sentiment": r["sentiment"],
+                        "importance": r["importance"] or 0.0,
+                        "source_name": r["source_name"],
+                        "published_at": r["published_at"],
+                        "wwww": {"where": r["where_info"]},
+                    })
+                    for s in sigs:
+                        s.cluster_id = cluster_id
+                    await persist_signals(conn, sigs, conn_factory=db.acquire)
+                    processed += 1
+        except Exception as e:
+            # A dropped/recycled connection kills only its batch; the run continues
+            # on a fresh one instead of aborting the whole backfill.
+            failed += len(chunk)
+            log.warning("batch at offset %d failed (%s) — continuing", start, e)
+        if start and start % (batch_size * 10) == 0:
+            log.info("signals_backfill: %d/%d processed", processed, len(rows))
 
     stats = filter_stats()
 
@@ -151,7 +171,10 @@ async def run(limit: int | None = None, reset: bool = True) -> dict:
         # entities_filtered_out is 0 on real news data, the deployed code is stale.
         "resolver_build": RESOLVER_BUILD,
         "info_objects_eligible": int(eligible or 0),
-        "coverage_complete": (limit is None and processed >= int(eligible or 0)),
+        "coverage_complete": (limit is None and failed == 0
+                              and processed >= int(eligible or 0)),
+        "rows_failed": failed,
+        "batch_size": batch_size,
         "mentions_checked": stats["checked"],
         "entities_filtered_out": stats["filtered_out"],
         "raw_body_from_articles": raw_body_hits,
@@ -176,12 +199,15 @@ async def _main() -> None:
                         help="process only the N most-recent info_objects")
     parser.add_argument("--no-reset", action="store_true",
                         help="append to existing derived tables instead of the default clean reset")
+    parser.add_argument("--batch-size", type=int, default=25,
+                        help="rows per DB connection (default 25); lower if the pooler drops connections")
     args = parser.parse_args()
 
     from app.workers import bootstrap, teardown
     await bootstrap()
     try:
-        result = await run(limit=args.limit, reset=not args.no_reset)
+        result = await run(limit=args.limit, reset=not args.no_reset,
+                           batch_size=max(1, args.batch_size))
         log.info("signals backfill: %s", result)
         print(json.dumps(result, indent=2, default=str))
     finally:

@@ -50,13 +50,39 @@ async def persist_signal(conn, sig: Signal) -> int:
     return int(new_id)
 
 
-async def persist_signals(conn, sigs: Iterable[Signal]) -> int:
-    """Persist a batch of signals. Returns how many rows were written."""
+def _is_connection_error(exc: Exception) -> bool:
+    """A dead/recycled connection (pooler released it, backend went away) — the
+    caller must retry on a FRESH connection, not on this one."""
+    msg = str(exc).lower()
+    return any(s in msg for s in (
+        "released back to the pool", "connection is closed", "connection was closed",
+        "connection has been closed", "terminating connection", "server closed the connection",
+        "connection reset", "interfaceerror",
+    ))
+
+
+async def persist_signals(conn, sigs: Iterable[Signal], *, conn_factory=None) -> int:
+    """Persist a batch of signals. Returns how many rows were written.
+
+    A per-signal failure is logged and skipped. If the CONNECTION itself died, the
+    remaining signals are retried on a fresh one when `conn_factory` is given
+    (an async context manager factory, e.g. `db.acquire`); otherwise the error is
+    re-raised so the caller can rebuild the connection.
+    """
     n = 0
-    for sig in sigs:
+    pending = list(sigs)
+    while pending:
+        sig = pending.pop(0)
         try:
             await persist_signal(conn, sig)
             n += 1
         except Exception as e:
+            if _is_connection_error(e):
+                if conn_factory is None:
+                    raise
+                log.warning("connection lost mid-batch (%s) — retrying on a fresh one", e)
+                pending.insert(0, sig)          # retry this signal too
+                async with conn_factory() as fresh:
+                    return n + await persist_signals(fresh, pending, conn_factory=None)
             log.warning("signal persist failed (%s): %s", sig.domain, e)
     return n
