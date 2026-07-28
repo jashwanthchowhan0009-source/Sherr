@@ -148,23 +148,47 @@ _MONTHS = {"january", "february", "march", "april", "may", "june", "july", "augu
            "jan", "feb", "mar", "apr", "jun", "jul", "aug", "sep", "sept", "oct", "nov", "dec"}
 
 
+# Build marker + live counters, so a run can PROVE which code is executing and how
+# many mentions the filter actually rejected (see backfill summary).
+RESOLVER_BUILD = "entity_resolver+is_valid_mention/2026-07-27"
+_STATS = {"checked": 0, "filtered_out": 0}
+
+
+def filter_stats() -> dict:
+    return dict(_STATS)
+
+
+def reset_filter_stats() -> None:
+    _STATS["checked"] = 0
+    _STATS["filtered_out"] = 0
+
+
 def is_valid_mention(name: str, type: str = "MISC") -> bool:
     """True if a mention should enter the entity graph. Drops temporal/numeric NER
     types, function-word junk, headline tags, weekday/month names, and ≤2-char tokens.
-    Pure and deterministic (applied post-normalization)."""
+    Pure and deterministic (applied post-normalization); counts every decision."""
+    _STATS["checked"] += 1
+
+    def _reject() -> bool:
+        _STATS["filtered_out"] += 1
+        return False
+
     if not name or not name.strip():
-        return False
+        return _reject()
     if (type or "").strip().upper() in _DROP_TYPES:
-        return False
+        return _reject()
     norm = normalize_name(name)
     if not norm or len(norm) <= 2:            # empty or ≤2 chars (e.g. "AI", "UN")
-        return False
+        return _reject()
     tokens = norm.split(" ")
     # Reject if every token is a stopword / weekday / month ("the", "the this", "monday").
     junk = _STOP_ENTITIES | _WEEKDAYS | _MONTHS
     if all(t in junk for t in tokens):
-        return False
+        return _reject()
     return True
+
+
+log.info("SPIE resolver loaded: %s", RESOLVER_BUILD)
 
 
 def resolve_key(name: str, type: str = "MISC") -> tuple[str, str, str]:

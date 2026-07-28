@@ -42,13 +42,24 @@ async def reset_derived(conn) -> None:
 async def run(limit: int | None = None, reset: bool = True) -> dict:
     from app.spie.knowledge.adapters.news import from_info_object
     from app.spie.knowledge.signals import persist_signals
-    from app.spie.knowledge.entity_resolver import seed_aliases
+    from app.spie.knowledge.entity_resolver import (
+        seed_aliases, is_valid_mention, filter_stats, reset_filter_stats,
+        RESOLVER_BUILD,
+    )
     from app.spie.knowledge.simhash import assign_cluster
+
+    # Prove which code is running (if this marker is missing from the logs/summary,
+    # the deployed image is stale and no amount of re-running will change the data).
+    log.info("signals_backfill using %s", RESOLVER_BUILD)
+    reset_filter_stats()
+    raw_body_hits = 0      # rows whose text came from articles.body (the raw source)
+    raw_body_missing = 0   # rows that fell back to info_objects.body/summary
 
     # Fingerprint on the RAW article body (articles.body) — the AI-touched
     # info_objects.body diverges per outlet and would hide wire duplicates.
     q = ("SELECT io.id, io.article_id, io.headline, "
          "COALESCE(a.body, io.body, io.summary, '') AS raw_body, "
+         "COALESCE(length(a.body), 0) AS a_body_len, "
          "io.entities, io.sentiment, io.importance, io.source_name, "
          "io.where_info, io.published_at "
          "FROM info_objects io LEFT JOIN articles a ON a.id = io.article_id "
@@ -69,8 +80,22 @@ async def run(limit: int | None = None, reset: bool = True) -> dict:
                     ents = json.loads(ents or "[]")
                 except Exception:
                     ents = []
+            # Stored info_objects.entities predate the junk filter, so filter them
+            # HERE too — not only inside resolve() — so junk never reaches the
+            # adapter/signal at all (defense in depth).
+            ents = [e for e in (ents or [])
+                    if is_valid_mention(
+                        (e.get("name") or e.get("canonical") or "") if isinstance(e, dict)
+                        else getattr(e, "name", ""),
+                        (e.get("type", "MISC") if isinstance(e, dict)
+                         else getattr(e, "type", "MISC")))]
+
             # SimHash story cluster over the RAW body (dedup wire republication).
             doc_id = r["article_id"] or r["id"]
+            if int(r["a_body_len"] or 0) > 0:
+                raw_body_hits += 1
+            else:
+                raw_body_missing += 1
             text = f"{r['headline']} {r['raw_body']}"
             cluster_id = None
             try:
@@ -90,6 +115,8 @@ async def run(limit: int | None = None, reset: bool = True) -> dict:
                 s.cluster_id = cluster_id
             await persist_signals(conn, sigs)
             processed += 1
+
+    stats = filter_stats()
 
     # Summary — what got built, and the strongest entities / pairs so far.
     signals = await db.fetchval("SELECT COUNT(*) FROM domain_signals")
@@ -112,6 +139,14 @@ async def run(limit: int | None = None, reset: bool = True) -> dict:
         """
     )
     return {
+        # Build + filter proof. If resolver_build is missing/old, or
+        # entities_filtered_out is 0 on real news data, the deployed code is stale.
+        "resolver_build": RESOLVER_BUILD,
+        "mentions_checked": stats["checked"],
+        "entities_filtered_out": stats["filtered_out"],
+        "raw_body_from_articles": raw_body_hits,
+        "raw_body_fallback": raw_body_missing,
+        "reset_ran": reset,
         "info_objects_processed": processed,
         "domain_signals": int(signals or 0),
         "entities": int(entities or 0),

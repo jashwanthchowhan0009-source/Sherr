@@ -130,3 +130,29 @@ def test_filter_on_realistic_headline_mentions():
     raw = ["Exclusive", "Modi", "Adani", "In", "Mumbai", "On", "Monday", "Nifty"]
     kept = [m for m in raw if is_valid_mention(m, "MISC")]
     assert kept == ["Modi", "Adani", "Mumbai", "Nifty"]
+
+
+# ─── filter counters (prove the filter actually ran) ──────────────────────────
+from app.spie.knowledge.entity_resolver import (
+    filter_stats, reset_filter_stats, RESOLVER_BUILD,
+)
+
+
+def test_filter_counts_rejections():
+    """The backfill reports entities_filtered_out from these counters; if it's 0
+    on real news data, the filter isn't in the executing code path."""
+    reset_filter_stats()
+    stored = [  # shape of info_objects.entities (pre-filter junk included)
+        {"name": "The", "type": "MISC"}, {"name": "Monday", "type": "MISC"},
+        {"name": "EXCLUSIVE", "type": "MISC"}, {"name": "July 2026", "type": "DATE"},
+        {"name": "Reserve Bank of India", "type": "ORG"},
+        {"name": "Mumbai", "type": "GPE"}, {"name": "Narendra Modi", "type": "PERSON"},
+    ]
+    kept = [e for e in stored if is_valid_mention(e["name"], e["type"])]
+    assert [e["name"] for e in kept] == ["Reserve Bank of India", "Mumbai", "Narendra Modi"]
+    s = filter_stats()
+    assert s["checked"] == 7 and s["filtered_out"] == 4
+
+
+def test_resolver_build_marker_present():
+    assert RESOLVER_BUILD.startswith("entity_resolver+is_valid_mention")
