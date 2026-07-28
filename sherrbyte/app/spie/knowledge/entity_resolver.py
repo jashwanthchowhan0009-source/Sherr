@@ -104,6 +104,11 @@ _SEED: list[dict] = [
     {"canonical": "Adani Group", "type": "ORG", "aliases": ["Adani"]},
     {"canonical": "Nifty 50", "type": "MISC", "aliases": ["Nifty", "Nifty50"]},
     {"canonical": "Sensex", "type": "MISC", "aliases": ["BSE Sensex"]},
+    # Names built entirely from ordinary words need a seed so the junk filter
+    # keeps them (a seeded entity is always valid).
+    {"canonical": "Manchester City", "type": "ORG", "aliases": ["Man City"]},
+    {"canonical": "Manchester United", "type": "ORG", "aliases": ["Man United", "Man Utd"]},
+    {"canonical": "World Bank", "type": "ORG", "aliases": []},
 ]
 
 
@@ -142,6 +147,28 @@ _STOP_ENTITIES = set((
     "analysis report alert news views share follow subscribe advertisement"
 ).split())
 
+# Generic common nouns that arrive Title-Cased in headlines and get mistaken for
+# entities ("Man", "Day", "World"). A mention is dropped only when EVERY token is
+# generic, so real names keep working: "Man City", "World Bank", "New York Times",
+# "Times of India" all survive because at least one token isn't in this set.
+# Deliberately excludes words that are real standalone entities in our domain
+# (Congress, Nifty, Sensex, …) — those must never be filtered.
+_COMMON_NOUNS = set((
+    "man men woman women people person child children boy girl family friend "
+    "day days week month year years time times hour minute moment today tomorrow "
+    "world country state city town village area region place home house room "
+    "life death health money price prices cost market business company deal "
+    "work job case study report story news article video photo image picture "
+    "way thing things part point side kind type number group team member "
+    "power law rule order plan project program service system process "
+    "brand new old big small good bad best worst first last next "
+    "top show film movie series season episode game match play song book "
+    "star fan fans sun moon water fire air spider "
+    "head hand eye face body mind heart voice word words name names "
+    "end start begin change move win loss lead call talk meet visit "
+    "high low long short full free real true false right left"
+).split())
+
 _WEEKDAYS = {"monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"}
 _MONTHS = {"january", "february", "march", "april", "may", "june", "july", "august",
            "september", "october", "november", "december",
@@ -150,7 +177,7 @@ _MONTHS = {"january", "february", "march", "april", "may", "june", "july", "augu
 
 # Build marker + live counters, so a run can PROVE which code is executing and how
 # many mentions the filter actually rejected (see backfill summary).
-RESOLVER_BUILD = "entity_resolver+is_valid_mention/2026-07-27"
+RESOLVER_BUILD = "entity_resolver+common_noun_filter/2026-07-28"
 _STATS = {"checked": 0, "filtered_out": 0}
 
 
@@ -180,9 +207,23 @@ def is_valid_mention(name: str, type: str = "MISC") -> bool:
     norm = normalize_name(name)
     if not norm or len(norm) <= 2:            # empty or ≤2 chars (e.g. "AI", "UN")
         return _reject()
+    # A curated seed entity is real by definition — never filtered, even if every
+    # token is an ordinary word ("Man City" → Manchester City).
+    if norm in SEED_LOOKUP:
+        return True
+
+    # A hyphenated compound of capitalised parts is a proper name by construction
+    # ("Spider-Man", "Coca-Cola", "Jean-Pierre") — keep it even though its parts
+    # are ordinary words on their own.
+    if re.search(r"[A-Za-z][-'’][A-Za-z]", name.strip()):
+        return True
+
     tokens = norm.split(" ")
-    # Reject if every token is a stopword / weekday / month ("the", "the this", "monday").
-    junk = _STOP_ENTITIES | _WEEKDAYS | _MONTHS
+    # Reject when EVERY token is generic — a stopword, weekday, month, or common
+    # noun. Catches "the", "Monday", "Man", and titles built entirely from common
+    # words ("Brand New Day"), while keeping any name carrying at least one
+    # distinctive token ("Man City", "World Bank", "Times of India").
+    junk = _STOP_ENTITIES | _WEEKDAYS | _MONTHS | _COMMON_NOUNS
     if all(t in junk for t in tokens):
         return _reject()
     return True

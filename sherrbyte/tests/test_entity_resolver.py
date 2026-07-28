@@ -156,3 +156,31 @@ def test_filter_counts_rejections():
 
 def test_resolver_build_marker_present():
     assert RESOLVER_BUILD.startswith("entity_resolver+is_valid_mention")
+
+
+# ─── common-noun / compound-name quality (junk from the live run) ─────────────
+def test_rejects_generic_common_nouns():
+    """Live emergence insights surfaced "Man", "Spider", "Brand New Day"."""
+    for junk in ["Man", "Woman", "People", "Day", "Year", "World", "Time", "Star",
+                 "Spider", "Show", "Game", "Movie", "Story", "Team", "City", "Home",
+                 "Brand New Day", "The Day"]:
+        assert not is_valid_mention(junk, "MISC"), junk
+
+
+def test_keeps_names_with_a_distinctive_token():
+    # Dropped only when EVERY token is generic, so real names survive.
+    for good in ["Times of India", "New York Times", "Star Wars", "Tom Holland",
+                 "Apple Watch", "Rohit Sharma", "Iran", "Bihar", "Mumbai"]:
+        assert is_valid_mention(good, "MISC"), good
+
+
+def test_keeps_hyphenated_compounds():
+    # "Spider-Man" is a proper name even though both parts are ordinary words.
+    for good in ["Spider-Man", "Coca-Cola", "Jean-Pierre Dubois"]:
+        assert is_valid_mention(good, "MISC"), good
+
+
+def test_seeded_entities_are_never_filtered():
+    # Curated seeds win over the blocklist ("Man City" → Manchester City).
+    for good in ["Man City", "Manchester United", "World Bank"]:
+        assert is_valid_mention(good, "MISC"), good
