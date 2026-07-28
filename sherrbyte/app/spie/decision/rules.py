@@ -44,6 +44,47 @@ def _as_json(value, default):
     return value if isinstance(value, (list, dict)) else default
 
 
+def normalize_conditions(raw) -> list[dict]:
+    """Turn whatever `conditions_json` holds into a clean list of condition dicts.
+
+    Tolerates every shape we've actually seen or could see from the DB/seeds:
+      • a real list of dicts                        → used as-is
+      • the whole value as a JSON string (asyncpg)  → decoded, then per element
+      • a single condition dict (not wrapped)       → wrapped into a list
+      • an element that is a JSON string            → decoded to a dict
+      • an element that is a bare domain name       → {"domain": <name>, "direction": 0}
+        (direction 0 = wildcard, so a bare domain means "any signal in this domain")
+      • anything else                               → dropped
+
+    Guarantees every returned element is a dict, so `.get()` / `c["domain"]` at the
+    call site can never raise AttributeError.
+    """
+    parsed = _as_json(raw, [])
+    if isinstance(parsed, dict):            # a single unwrapped condition
+        parsed = [parsed]
+    if not isinstance(parsed, list):
+        return []
+
+    out: list[dict] = []
+    for c in parsed:
+        if isinstance(c, (bytes, bytearray)):
+            c = c.decode("utf-8", "replace")
+        if isinstance(c, str):
+            s = c.strip()
+            if not s:
+                continue
+            decoded = _as_json(s, None)     # element may itself be JSON
+            if isinstance(decoded, dict):
+                c = decoded
+            else:
+                # A bare domain name, e.g. ["weather", "news"].
+                c = {"domain": s, "direction": 0}
+        if isinstance(c, dict):
+            if c.get("domain"):
+                out.append(c)
+    return out
+
+
 # ─── Pure matching + scoring ──────────────────────────────────────────────────
 def direction_matches(cond_dir: int, sig_dir: int, strict: bool = False) -> bool:
     """A condition direction of 0 is a WILDCARD (any signal direction) unless the
@@ -113,20 +154,19 @@ async def run(conn, *, default_window_hours: int = 72) -> int:
     for rule in rules:
         # asyncpg returns JSONB as a str unless a codec is registered, and a seed
         # can store it as a JSON string — parse defensively either way.
-        conds = _as_json(rule["conditions_json"], [])
-        if not isinstance(conds, list) or not conds:
-            log.warning("rule %s: conditions_json is not a list (%s) — skipped",
-                        rule["name"], type(conds).__name__)
-            continue
-        conds = [c for c in conds if isinstance(c, dict)]
+        conds = normalize_conditions(rule["conditions_json"])
         if not conds:
+            log.warning("rule %s: no usable conditions in conditions_json (%r) — skipped",
+                        rule["name"], rule["conditions_json"])
             continue
         weights = _as_json(rule["weights_json"], {})
         if not isinstance(weights, dict):
             weights = {}
         window = int(rule["window_hours"] or default_window_hours)
+        # Every element is a dict by construction here, so .get() is always safe.
         domains = list({c["domain"] for c in conds if c.get("domain")})
         if not domains:
+            log.warning("rule %s: conditions carry no domain — skipped", rule["name"])
             continue
 
         sigs = await conn.fetch(
