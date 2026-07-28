@@ -171,8 +171,11 @@ def extract_entities(text: str) -> list[Entity]:
             seen.add(key)
             out.append(Entity(name=ent.text.strip(), type=ent.label_, canonical=ent.text.strip()))
         return out[:15]
-    # Regex fallback: runs of Capitalized Words.
-    candidates = re.findall(r"\b([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})\b", text)
+    # Regex fallback: runs of Capitalized Words. Internal hyphens and apostrophes
+    # are part of the token ("Spider-Man", "Coca-Cola", "O'Brien") — without this
+    # the match stopped at the hyphen and emitted "Spider" + "Man" as two entities.
+    _WORD = r"[A-Z][a-zA-Z]*(?:[-'’][A-Za-z]+)*"
+    candidates = re.findall(rf"\b({_WORD}(?:\s+{_WORD}){{0,3}})\b", text)
     seen, out = set(), []
     for c in candidates:
         key = c.lower()
