@@ -130,7 +130,11 @@ async def run(limit: int | None = None, reset: bool = True, batch_size: int = 25
                     })
                     for s in sigs:
                         s.cluster_id = cluster_id
-                    await persist_signals(conn, sigs, conn_factory=db.acquire)
+                    # Skip inline co-occurrence: it costs round-trips per entity
+                    # PAIR (~45 pairs/article) over the WAN. cooccurrence_backfill
+                    # rebuilds the whole window in one pass right after this run.
+                    await persist_signals(conn, sigs, conn_factory=db.acquire,
+                                          update_cooccurrence=False)
                     processed += 1
         except Exception as e:
             # A dropped/recycled connection kills only its batch; the run continues

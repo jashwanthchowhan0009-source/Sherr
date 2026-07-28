@@ -24,8 +24,13 @@ async def _resolve_entity_ids(conn, sig: Signal) -> list[str]:
     return await resolve_many(conn, sig.entities)
 
 
-async def persist_signal(conn, sig: Signal) -> int:
-    """Resolve entities and insert one signal. Returns the new domain_signals id."""
+async def persist_signal(conn, sig: Signal, *, update_cooccurrence: bool = True) -> int:
+    """Resolve entities and insert one signal. Returns the new domain_signals id.
+
+    `update_cooccurrence=False` skips the inline co-occurrence write — used by the
+    bulk backfill, where cooccurrence_backfill rebuilds the whole window in one
+    pass instead of paying per-pair round-trips on every signal.
+    """
     entity_ids = sig.entity_ids or await _resolve_entity_ids(conn, sig)
     new_id = await conn.fetchval(
         """
@@ -42,7 +47,7 @@ async def persist_signal(conn, sig: Signal) -> int:
     # Materialize co-occurrence incrementally at ingest (best-effort — the signal
     # is already persisted, so a co-occurrence hiccup must not lose it). Passing the
     # story cluster makes the count per-cluster (wire dupes don't inflate it).
-    if len(entity_ids) >= 2:
+    if update_cooccurrence and len(entity_ids) >= 2:
         try:
             await cooccurrence.update_for_signal(conn, entity_ids, sig.ts, sig.cluster_id)
         except Exception as e:
@@ -61,20 +66,24 @@ def _is_connection_error(exc: Exception) -> bool:
     ))
 
 
-async def persist_signals(conn, sigs: Iterable[Signal], *, conn_factory=None) -> int:
+async def persist_signals(conn, sigs: Iterable[Signal], *, conn_factory=None,
+                          update_cooccurrence: bool = True) -> int:
     """Persist a batch of signals. Returns how many rows were written.
 
     A per-signal failure is logged and skipped. If the CONNECTION itself died, the
     remaining signals are retried on a fresh one when `conn_factory` is given
     (an async context manager factory, e.g. `db.acquire`); otherwise the error is
     re-raised so the caller can rebuild the connection.
+
+    `update_cooccurrence=False` skips the inline co-occurrence writes (bulk backfill
+    path — cooccurrence_backfill rebuilds them in one pass afterwards).
     """
     n = 0
     pending = list(sigs)
     while pending:
         sig = pending.pop(0)
         try:
-            await persist_signal(conn, sig)
+            await persist_signal(conn, sig, update_cooccurrence=update_cooccurrence)
             n += 1
         except Exception as e:
             if _is_connection_error(e):
@@ -83,6 +92,8 @@ async def persist_signals(conn, sigs: Iterable[Signal], *, conn_factory=None) ->
                 log.warning("connection lost mid-batch (%s) — retrying on a fresh one", e)
                 pending.insert(0, sig)          # retry this signal too
                 async with conn_factory() as fresh:
-                    return n + await persist_signals(fresh, pending, conn_factory=None)
+                    return n + await persist_signals(
+                        fresh, pending, conn_factory=None,
+                        update_cooccurrence=update_cooccurrence)
             log.warning("signal persist failed (%s): %s", sig.domain, e)
     return n
