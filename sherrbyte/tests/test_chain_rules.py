@@ -116,3 +116,52 @@ def test_conditions_parse_then_extract_domains():
                                   {"domain": "metals", "direction": 1}]), [])
     domains = sorted({c["domain"] for c in conds if isinstance(c, dict) and c.get("domain")})
     assert domains == ["forex", "metals"]
+
+
+# ─── condition normalization (line-97 AttributeError, all shapes) ─────────────
+from app.spie.decision.rules import normalize_conditions
+
+_CONDS = [{"domain": "weather", "direction": 1}, {"domain": "news", "direction": -1}]
+
+
+def _domains(raw):
+    """The exact call-site expression that used to raise AttributeError."""
+    return sorted({c["domain"] for c in normalize_conditions(raw) if c.get("domain")})
+
+
+def test_normalize_parsed_and_encoded_forms():
+    assert normalize_conditions(_CONDS) == _CONDS
+    assert normalize_conditions(_json.dumps(_CONDS)) == _CONDS              # asyncpg str
+    assert normalize_conditions(_json.dumps(_json.dumps(_CONDS))) == _CONDS  # double-encoded
+    assert normalize_conditions(_json.dumps(_CONDS).encode()) == _CONDS      # bytes
+    # a single unwrapped condition dict
+    assert normalize_conditions({"domain": "forex", "direction": 1}) == [
+        {"domain": "forex", "direction": 1}]
+
+
+def test_normalize_string_elements():
+    # Bare domain names → wildcard-direction conditions (previously dropped silently).
+    assert normalize_conditions(["weather", "news"]) == [
+        {"domain": "weather", "direction": 0}, {"domain": "news", "direction": 0}]
+    # An element that is itself a JSON string.
+    assert normalize_conditions([_json.dumps({"domain": "metals", "direction": 1})]) == [
+        {"domain": "metals", "direction": 1}]
+    # Mixed dict + string elements.
+    assert _domains([{"domain": "forex", "direction": 1}, "metals"]) == ["forex", "metals"]
+
+
+def test_normalize_drops_unusable_and_never_raises():
+    assert normalize_conditions(None) == []
+    assert normalize_conditions("not json") == []
+    assert normalize_conditions(42) == []
+    assert normalize_conditions(["", "   "]) == []
+    assert normalize_conditions([{"direction": 1}]) == []       # no domain
+    # The call-site expression must be safe for every shape.
+    for shape in (_CONDS, _json.dumps(_CONDS), ["weather"], None, 42, [123, "news"]):
+        _domains(shape)
+
+
+def test_every_normalized_element_is_a_dict():
+    for shape in (_CONDS, _json.dumps(_CONDS), ["weather", "news"], [123, "news"],
+                  {"domain": "forex"}):
+        assert all(isinstance(c, dict) for c in normalize_conditions(shape))
