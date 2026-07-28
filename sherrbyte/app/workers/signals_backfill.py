@@ -46,7 +46,7 @@ async def run(limit: int | None = None, reset: bool = True) -> dict:
         seed_aliases, is_valid_mention, filter_stats, reset_filter_stats,
         RESOLVER_BUILD,
     )
-    from app.spie.knowledge.simhash import assign_cluster
+    from app.spie.knowledge.simhash import assign_cluster, SimHashIndex
 
     # Prove which code is running (if this marker is missing from the logs/summary,
     # the deployed image is stale and no amount of re-running will change the data).
@@ -72,6 +72,10 @@ async def run(limit: int | None = None, reset: bool = True) -> dict:
         if reset:
             await reset_derived(conn)
             await seed_aliases(conn)          # re-seed curated aliases after wipe
+        # Batch dedup index: one load, banded in-memory lookups. Without this a
+        # full backfill re-queries thousands of fingerprints per article AND the
+        # scan cap starts silently missing merges past ~4000 fingerprints.
+        index = await SimHashIndex.load(conn)
         rows = await conn.fetch(q)
         for r in rows:
             ents = r["entities"]
@@ -99,7 +103,7 @@ async def run(limit: int | None = None, reset: bool = True) -> dict:
             text = f"{r['headline']} {r['raw_body']}"
             cluster_id = None
             try:
-                cluster_id = await assign_cluster(conn, doc_id, text)
+                cluster_id = await assign_cluster(conn, doc_id, text, index=index)
             except Exception as e:
                 log.warning("simhash cluster assign failed for %s: %s", r["id"], e)
             sigs = from_info_object({
