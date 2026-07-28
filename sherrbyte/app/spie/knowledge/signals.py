@@ -12,19 +12,16 @@ import logging
 from typing import Iterable
 
 from app.models.signal import Signal
-from app.spie.knowledge.entity_resolver import resolve
+from app.spie.knowledge.entity_resolver import resolve_many
 from app.spie.graph import cooccurrence
 
 log = logging.getLogger("sherbyte.signals")
 
 
 async def _resolve_entity_ids(conn, sig: Signal) -> list[str]:
-    ids: list[str] = []
-    for e in sig.entities:
-        eid = await resolve(conn, e.name, e.type)
-        if eid and eid not in ids:
-            ids.append(eid)
-    return ids
+    # Batched: one fixed set of queries for the whole signal's mentions, not one
+    # round-trip each (per-mention resolution is what made the full backfill crawl).
+    return await resolve_many(conn, sig.entities)
 
 
 async def persist_signal(conn, sig: Signal) -> int:

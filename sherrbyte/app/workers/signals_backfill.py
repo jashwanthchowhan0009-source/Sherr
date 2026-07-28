@@ -142,10 +142,16 @@ async def run(limit: int | None = None, reset: bool = True) -> dict:
         ORDER BY n DESC LIMIT 10
         """
     )
+    # Coverage: did this run cover the whole corpus, or stop early / hit --limit?
+    eligible = await db.fetchval(
+        "SELECT COUNT(*) FROM info_objects WHERE entities IS NOT NULL"
+    )
     return {
         # Build + filter proof. If resolver_build is missing/old, or
         # entities_filtered_out is 0 on real news data, the deployed code is stale.
         "resolver_build": RESOLVER_BUILD,
+        "info_objects_eligible": int(eligible or 0),
+        "coverage_complete": (limit is None and processed >= int(eligible or 0)),
         "mentions_checked": stats["checked"],
         "entities_filtered_out": stats["filtered_out"],
         "raw_body_from_articles": raw_body_hits,
