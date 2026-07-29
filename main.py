@@ -495,7 +495,7 @@ CREATE TABLE IF NOT EXISTS bookmarks (
     UNIQUE(user_id, article_id)
 );
 
--- SPRIE — Sherr Pattern Recognition Intelligence Engine output. Mirrors the
+-- SPIE — SherrByte Pattern Intelligence Engine output. Mirrors the
 -- engine's insights schema so the app renders real pattern output. (The full
 -- engine runs on the Postgres stack; this table lets the deployed app show it.)
 CREATE TABLE IF NOT EXISTS insights (
@@ -533,7 +533,7 @@ _MIGRATIONS = [
 ]
 
 
-# Sample SPRIE pattern output (shape matches the real engine's insights.explain_json).
+# Sample SPIE pattern output (shape matches the real engine's insights.explain_json).
 _SAMPLE_INSIGHTS = [
     {
         "type": "temporal_correlation",
@@ -628,7 +628,7 @@ def init_db():
     except Exception as e:
         log.warning("title_hash backfill skipped: %s", e)
 
-    # Seed a few sample SPRIE insights so the app shows real pattern output
+    # Seed a few sample SPIE insights so the app shows real pattern output
     # before the full Postgres engine is deployed. Idempotent via signature.
     try:
         for ins in _SAMPLE_INSIGHTS:
@@ -1378,11 +1378,14 @@ async def patterns(
     limit: int = Query(30, le=100),
     offset: int = Query(0, ge=0),
 ):
-    """SPRIE pattern output — the Intelligence Engine's insights, most significant
+    """SPIE pattern output — the Intelligence Engine's insights, most significant
     first. Optional ?type=emergence|temporal_correlation.
 
-    If ENGINE_URL is configured, proxy to the real engine; otherwise serve the
-    local sqlite sample seed (so the app always shows *something*)."""
+    Every response carries `source` so the app never has to guess what it is showing:
+      "engine"      — real insights from the SPIE Postgres engine (the only good state)
+      "unavailable" — ENGINE_URL set but the engine failed; NO fake data substituted
+      "seed"        — local sqlite demo rows, only when no engine is configured
+    """
     if ENGINE_URL:
         try:
             params = {"limit": limit, "offset": offset}
@@ -1391,10 +1394,18 @@ async def patterns(
             async with httpx.AsyncClient(timeout=20) as client:
                 r = await client.get(f"{ENGINE_URL}/patterns", params=params)
                 if r.status_code == 200:
-                    return r.json()
-                log.warning("engine /patterns HTTP %d — falling back to seed", r.status_code)
+                    data = r.json()
+                    data["source"] = "engine"
+                    return data
+                log.warning("engine /patterns HTTP %d", r.status_code)
+                detail = f"engine returned HTTP {r.status_code}"
         except Exception as e:
-            log.warning("engine /patterns proxy failed (%s) — falling back to seed", e)
+            log.warning("engine /patterns proxy failed: %s", e)
+            detail = str(e)
+        # An engine IS configured but is not answering. Never paper over that with
+        # demo rows — the caller must be able to tell real from fake.
+        return {"patterns": [], "total": 0, "source": "unavailable",
+                "engine_url": ENGINE_URL, "detail": detail}
 
     conn = get_db()
     q = "SELECT * FROM insights"
@@ -1406,7 +1417,9 @@ async def patterns(
     rows = conn.execute(q, p).fetchall()
     total = conn.execute("SELECT COUNT(*) AS c FROM insights").fetchone()["c"]
     conn.close()
-    return {"patterns": [insight_row_to_dict(r) for r in rows], "total": total}
+    return {"patterns": [insight_row_to_dict(r) for r in rows], "total": total,
+            "source": "seed",
+            "detail": "No ENGINE_URL configured — these are local demo rows, not live insights."}
 
 
 @app.get("/patterns/type/{ptype}")

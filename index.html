@@ -1568,7 +1568,7 @@ nav.compact .nb:not(.on) {
 }
 nav.compact .nb.on { flex: 0 0 auto; padding-left: 16px; padding-right: 16px; }
 
-/* Scan — a separate glass orb (the SPRIE engine), always pinned right. */
+/* Scan — a separate glass orb (the SPIE engine), always pinned right. */
 .nb-scan {
   flex: 0 0 auto; margin-left: auto; width: 56px; height: 56px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center; cursor: pointer;
@@ -1582,63 +1582,70 @@ nav.compact .nb.on { flex: 0 0 auto; padding-left: 16px; padding-right: 16px; }
 .nb-scan.on { box-shadow: 0 0 0 3px rgba(142,36,170,0.4), 0 10px 26px -6px rgba(142,36,170,0.75),
     inset 0 1.5px 1px rgba(255,255,255,0.5); }
 
-/* ═══════════ SPRIE — engine output section ═══════════ */
-.sprie-wrap { padding: calc(var(--hh) + 14px) 16px calc(var(--nh) + 30px); max-width: 640px; margin: 0 auto; }
-.sprie-head { margin-bottom: 18px; }
-.sprie-badge { display: inline-flex; align-items: center; gap: 7px;
+/* ═══════════ SPIE — engine output section ═══════════ */
+.spie-wrap { padding: calc(var(--hh) + 14px) 16px calc(var(--nh) + 30px); max-width: 640px; margin: 0 auto; }
+.spie-head { margin-bottom: 18px; }
+.spie-badge { display: inline-flex; align-items: center; gap: 7px;
   font: 800 0.64rem/1 var(--fd); letter-spacing: 0.18em; text-transform: uppercase;
   color: #fff; padding: 6px 12px; border-radius: 999px;
   background: linear-gradient(135deg, #4F6BD4, #8E24AA);
   box-shadow: 0 6px 16px -6px rgba(142,36,170,0.7); }
-.sprie-badge i { font-size: 0.7rem; }
-.sprie-title { font: 800 1.5rem/1.18 var(--fd); color: var(--t1); letter-spacing: -0.02em; margin: 14px 0 6px; }
-.sprie-sub { font: 500 0.82rem/1.5 var(--f); color: var(--t3); margin: 0 0 16px; }
-.sprie-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.sprie-chip { font: 700 0.76rem/1 var(--fd); color: var(--t2); cursor: pointer;
+.spie-badge i { font-size: 0.7rem; }
+.spie-title { font: 800 1.5rem/1.18 var(--fd); color: var(--t1); letter-spacing: -0.02em; margin: 14px 0 6px; }
+.spie-sub { font: 500 0.82rem/1.5 var(--f); color: var(--t3); margin: 0 0 16px; }
+.spie-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.spie-chip { font: 700 0.76rem/1 var(--fd); color: var(--t2); cursor: pointer;
   padding: 8px 14px; border-radius: 999px; background: var(--bgcard);
   border: 1px solid var(--line2); transition: all 0.15s var(--spring); }
-.sprie-chip.on { color: #fff; background: linear-gradient(135deg, #4F6BD4, #8E24AA); border-color: transparent; }
-.sprie-refresh { margin-left: auto; width: 38px; height: 38px; border-radius: 50%;
+.spie-chip.on { color: #fff; background: linear-gradient(135deg, #4F6BD4, #8E24AA); border-color: transparent; }
+.spie-refresh { margin-left: auto; width: 38px; height: 38px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center; cursor: pointer;
   background: var(--bgcard); border: 1px solid var(--line2); color: var(--t2); }
-.sprie-refresh:active { transform: rotate(180deg); }
-.sprie-list { display: flex; flex-direction: column; gap: 12px; }
-.sprie-loading, .sprie-empty { text-align: center; color: var(--t3); font: 500 0.86rem/1.6 var(--f); padding: 40px 20px; }
-.sprie-card { border-radius: 18px; overflow: hidden;
+.spie-refresh:active { transform: rotate(180deg); }
+.spie-list { display: flex; flex-direction: column; gap: 12px; }
+.spie-loading, .spie-empty { text-align: center; color: var(--t3); font: 500 0.86rem/1.6 var(--f); padding: 40px 20px; }
+.spie-card { border-radius: 18px; overflow: hidden;
   background: linear-gradient(178deg, #16161a, #0d0d10); border: 1px solid rgba(255,255,255,0.06);
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 14px 30px -22px rgba(0,0,0,0.85); }
-[data-theme="light"] .sprie-card { background: linear-gradient(178deg,#fff,#eef1f6); border-color: rgba(0,0,0,0.07); }
-.sprie-card-top { display: flex; align-items: center; gap: 10px; padding: 13px 15px 0; }
-.sprie-type { font: 800 0.6rem/1 var(--fd); letter-spacing: 0.1em; text-transform: uppercase;
+[data-theme="light"] .spie-card { background: linear-gradient(178deg,#fff,#eef1f6); border-color: rgba(0,0,0,0.07); }
+.spie-card-top { display: flex; align-items: center; gap: 10px; padding: 13px 15px 0; }
+.spie-type { font: 800 0.6rem/1 var(--fd); letter-spacing: 0.1em; text-transform: uppercase;
   padding: 5px 10px; border-radius: 999px; }
-.sprie-type-temporal_correlation { color: #A855F7; background: rgba(168,85,247,0.15); }
-.sprie-type-emergence { color: #22C55E; background: rgba(34,197,94,0.15); }
-.sprie-score { margin-left: auto; font: 700 0.66rem/1 var(--fd); color: var(--t3); }
-.sprie-ents { padding: 10px 15px 0; display: flex; flex-wrap: wrap; gap: 6px; }
-.sprie-ent { font: 600 0.72rem/1 var(--f); color: var(--t1); padding: 5px 10px; border-radius: 8px;
+.spie-type-temporal_correlation { color: #A855F7; background: rgba(168,85,247,0.15); }
+.spie-type-emergence { color: #22C55E; background: rgba(34,197,94,0.15); }
+.spie-score { margin-left: auto; font: 700 0.66rem/1 var(--fd); color: var(--t3); }
+.spie-ents { padding: 10px 15px 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.spie-ent { font: 600 0.72rem/1 var(--f); color: var(--t1); padding: 5px 10px; border-radius: 8px;
   background: rgba(255,255,255,0.06); }
-[data-theme="light"] .sprie-ent { background: rgba(0,0,0,0.05); }
-.sprie-arrow { color: var(--t3); font-size: 0.7rem; align-self: center; }
-.sprie-hl { padding: 10px 15px 0; font: 800 1.02rem/1.3 var(--fd); color: var(--t1); letter-spacing: -0.01em; }
-.sprie-why { padding: 8px 15px 0; font: 500 0.82rem/1.55 var(--f); color: var(--t2); }
-.sprie-meta { padding: 9px 15px 0; font: 700 0.62rem/1 var(--fd); letter-spacing: 0.04em;
+[data-theme="light"] .spie-ent { background: rgba(0,0,0,0.05); }
+.spie-arrow { color: var(--t3); font-size: 0.7rem; align-self: center; }
+.spie-hl { padding: 10px 15px 0; font: 800 1.02rem/1.3 var(--fd); color: var(--t1); letter-spacing: -0.01em; }
+.spie-why { padding: 8px 15px 0; font: 500 0.82rem/1.55 var(--f); color: var(--t2); }
+.spie-meta { padding: 9px 15px 0; font: 700 0.62rem/1 var(--fd); letter-spacing: 0.04em;
   text-transform: uppercase; color: var(--t3); }
-.sprie-details { margin: 12px 15px 14px; }
-.sprie-details > summary { cursor: pointer; list-style: none; font: 700 0.66rem/1 var(--fd);
+.spie-details { margin: 12px 15px 14px; }
+.spie-details > summary { cursor: pointer; list-style: none; font: 700 0.66rem/1 var(--fd);
   letter-spacing: 0.06em; text-transform: uppercase; color: var(--t3);
   display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 999px;
   background: rgba(255,255,255,0.05); border: 1px solid var(--line2); }
-.sprie-details > summary::-webkit-details-marker { display: none; }
-.sprie-details > summary::before { content: "\f0da"; font-family: "Font Awesome 6 Free"; font-weight: 900; font-size: 0.7rem; }
-.sprie-details[open] > summary::before { content: "\f0d7"; }
-[data-theme="light"] .sprie-details > summary { background: rgba(0,0,0,0.04); }
-.sprie-raw { margin: 10px 0 0; padding: 12px; border-radius: 12px; overflow-x: auto;
+.spie-details > summary::-webkit-details-marker { display: none; }
+.spie-details > summary::before { content: "\f0da"; font-family: "Font Awesome 6 Free"; font-weight: 900; font-size: 0.7rem; }
+.spie-details[open] > summary::before { content: "\f0d7"; }
+[data-theme="light"] .spie-details > summary { background: rgba(0,0,0,0.04); }
+.spie-raw { margin: 10px 0 0; padding: 12px; border-radius: 12px; overflow-x: auto;
   background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.05);
   font: 500 0.7rem/1.5 ui-monospace, "SF Mono", Menlo, monospace; color: #9ad0ff; white-space: pre; }
-[data-theme="light"] .sprie-raw { background: rgba(0,0,0,0.04); color: #1f5fbf; border-color: rgba(0,0,0,0.06); }
-.sprie-note { text-align: center; font: 500 0.72rem/1.5 var(--f); color: var(--t3); padding: 16px 20px 4px; }
-.sprie-count { font: 700 0.62rem/1 var(--fd); letter-spacing: 0.12em; text-transform: uppercase;
+[data-theme="light"] .spie-raw { background: rgba(0,0,0,0.04); color: #1f5fbf; border-color: rgba(0,0,0,0.06); }
+.spie-note { text-align: center; font: 500 0.72rem/1.5 var(--f); color: var(--t3); padding: 16px 20px 4px; }
+.spie-count { font: 700 0.62rem/1 var(--fd); letter-spacing: 0.12em; text-transform: uppercase;
   color: var(--t3); padding: 0 2px 2px; }
+/* Loud provenance banner — sample/broken states must never look like live data. */
+.spie-banner { font: 700 0.68rem/1.45 var(--fd); padding: 10px 13px; border-radius: 12px;
+  margin-bottom: 4px; }
+.spie-banner.is-sample { color: #EAB308; background: rgba(234,179,8,0.12);
+  border: 1px solid rgba(234,179,8,0.28); }
+.spie-banner.is-error { color: #EF4444; background: rgba(239,68,68,0.12);
+  border: 1px solid rgba(239,68,68,0.28); }
 
 /* ─── Bytes — one structured card per screen (vertical snap) ─── */
 #v-bytes { inset: 0; }
@@ -3885,21 +3892,21 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   </div>
 </div>
 
-<!-- ════════ SPRIE — Sherr Pattern Recognition Intelligence Engine ════════ -->
-<div id="v-sprie" class="view" style="overflow-y:scroll;">
-  <div class="sprie-wrap">
-    <div class="sprie-head">
-      <div class="sprie-badge"><i class="fa-solid fa-satellite-dish"></i> SPRIE</div>
-      <h2 class="sprie-title">Sherr Pattern Recognition<br>Intelligence Engine</h2>
-      <p class="sprie-sub">Raw pattern output — cross-domain signals the engine has connected.</p>
-      <div class="sprie-controls">
-        <button class="sprie-chip on" data-t="" onclick="loadPatterns('')">All</button>
-        <button class="sprie-chip" data-t="emergence" onclick="loadPatterns('emergence')">Emergence</button>
-        <button class="sprie-chip" data-t="temporal_correlation" onclick="loadPatterns('temporal_correlation')">Temporal</button>
-        <button class="sprie-refresh tap" onclick="loadPatterns(spriePatternType)" aria-label="Refresh"><i class="fa-solid fa-rotate"></i></button>
+<!-- ════════ SPIE — SherrByte Pattern Intelligence Engine ════════ -->
+<div id="v-spie" class="view" style="overflow-y:scroll;">
+  <div class="spie-wrap">
+    <div class="spie-head">
+      <div class="spie-badge"><i class="fa-solid fa-satellite-dish"></i> SPIE</div>
+      <h2 class="spie-title">SherrByte Pattern<br>Intelligence Engine</h2>
+      <p class="spie-sub">Raw pattern output — cross-domain signals the engine has connected.</p>
+      <div class="spie-controls">
+        <button class="spie-chip on" data-t="" onclick="loadPatterns('')">All</button>
+        <button class="spie-chip" data-t="emergence" onclick="loadPatterns('emergence')">Emergence</button>
+        <button class="spie-chip" data-t="temporal_correlation" onclick="loadPatterns('temporal_correlation')">Temporal</button>
+        <button class="spie-refresh tap" onclick="loadPatterns(spiePatternType)" aria-label="Refresh"><i class="fa-solid fa-rotate"></i></button>
       </div>
     </div>
-    <div id="sprie-list" class="sprie-list"></div>
+    <div id="spie-list" class="spie-list"></div>
   </div>
 </div>
 
@@ -3922,8 +3929,8 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
       <span class="nb-lbl">Profile</span>
     </div>
   </div>
-  <!-- Pinned primary action — always visible on the right (the SPRIE engine "scan"). -->
-  <div class="nb-scan tap" id="nb-scan" onclick="navTo('sprie')" aria-label="Sherr Engine">
+  <!-- Pinned primary action — always visible on the right (the SPIE engine "scan"). -->
+  <div class="nb-scan tap" id="nb-scan" onclick="navTo('spie')" aria-label="Sherr Engine">
     <i class="fa-solid fa-satellite-dish"></i>
   </div>
 </nav>
@@ -6388,11 +6395,11 @@ async function saveProfile() {
 }
 
 // ── NAV ──
-// ── SPRIE — Sherr Pattern Recognition Intelligence Engine (raw output) ──
-let spriePatternType = '';
+// ── SPIE — SherrByte Pattern Intelligence Engine (raw output) ──
+let spiePatternType = '';
 // Embedded fallback so the section always shows something if the engine isn't
 // reachable yet (backend redeploying / not connected). Matches the seed shape.
-const SPRIE_SAMPLE = [
+const SPIE_SAMPLE = [
   { type: "temporal_correlation", entities: ["Monsoon (Mumbai)", "Vegetable prices"],
     domains: ["weather", "commodities"], score: 0.72,
     explain_json: { why: "Historically observed: Monsoon (Mumbai) movements have been followed by Vegetable prices movements about 3 days later (correlation 0.72 over 12 overlapping days, in ≥2 separate periods). Detected correlation, not causation.",
@@ -6410,33 +6417,47 @@ const SPRIE_SAMPLE = [
 ];
 
 async function loadPatterns(type) {
-  spriePatternType = type || '';
-  document.querySelectorAll('.sprie-chip').forEach(c =>
-    c.classList.toggle('on', (c.getAttribute('data-t') || '') === spriePatternType));
-  const list = document.getElementById('sprie-list');
+  spiePatternType = type || '';
+  document.querySelectorAll('.spie-chip').forEach(c =>
+    c.classList.toggle('on', (c.getAttribute('data-t') || '') === spiePatternType));
+  const list = document.getElementById('spie-list');
   if (!list) return;
-  list.innerHTML = '<div class="sprie-loading"><i class="fa-solid fa-satellite-dish"></i> Scanning patterns…</div>';
-  const filt = arr => spriePatternType ? arr.filter(p => p.type === spriePatternType) : arr;
-  const paint = (arr, note) => {
-    // A small set is a normal state, not an error — label the count so 5 real
-    // patterns read as "5 detected" rather than looking like a half-loaded page.
+  list.innerHTML = '<div class="spie-loading"><i class="fa-solid fa-satellite-dish"></i> Scanning patterns…</div>';
+  const filt = arr => spiePatternType ? arr.filter(p => p.type === spiePatternType) : arr;
+  // banner: null (real data), or {cls, text} shown ABOVE the cards so demo/broken
+  // states are never mistaken for live intelligence.
+  const paint = (arr, banner) => {
     const head = arr.length
-      ? `<div class="sprie-count">${arr.length} pattern${arr.length === 1 ? '' : 's'} detected</div>`
+      ? `<div class="spie-count">${arr.length} pattern${arr.length === 1 ? '' : 's'} detected</div>`
       : '';
-    list.innerHTML = head
-      + (arr.length ? arr.map(renderPattern).join('') : '<div class="sprie-empty">No patterns of this type yet.</div>')
-      + (note ? `<div class="sprie-note">${note}</div>` : '');
+    list.innerHTML = (banner ? `<div class="spie-banner ${banner.cls}">${bEsc(banner.text)}</div>` : '')
+      + head
+      + (arr.length ? arr.map(renderPattern).join('')
+                    : '<div class="spie-empty">No patterns of this type yet.</div>');
   };
   try {
-    const q = spriePatternType ? ('?type=' + encodeURIComponent(spriePatternType)) : '';
+    const q = spiePatternType ? ('?type=' + encodeURIComponent(spiePatternType)) : '';
     const data = await api('/patterns' + q);
     const items = data.patterns || [];
-    if (items.length) { paint(items); return; }
-    // Endpoint reachable but empty → show sample so the section isn't blank.
-    paint(filt(SPRIE_SAMPLE), 'Showing sample patterns — live engine has no insights yet.');
+    const src = data.source || 'engine';
+
+    if (src === 'engine') {
+      // Real engine — show exactly what it returned, including "none yet".
+      paint(items, null);
+      return;
+    }
+    if (src === 'unavailable') {
+      // Engine configured but not answering. Say so; do NOT substitute demo rows.
+      paint([], { cls: 'is-error',
+                  text: 'Engine unreachable — no live insights. ' + (data.detail || '') });
+      return;
+    }
+    // src === 'seed' (or unknown): local demo rows. Show them, clearly labelled.
+    paint(items.length ? items : filt(SPIE_SAMPLE),
+          { cls: 'is-sample',
+            text: 'SAMPLE DATA — not live. Set ENGINE_URL to connect the SPIE engine.' });
   } catch (e) {
-    // Engine not reachable yet → graceful sample fallback (no scary error).
-    paint(filt(SPRIE_SAMPLE), 'Showing sample patterns — live engine not connected yet.');
+    paint([], { cls: 'is-error', text: 'Could not reach the API — ' + bEsc(e.message || 'error') });
   }
 }
 
@@ -6461,34 +6482,34 @@ function renderPattern(p) {
   const isTemporal = p.type === 'temporal_correlation';
   const e = p.explain_json || {};
   const entHtml = ents.map((x, i) =>
-    `<span class="sprie-ent">${bEsc(x)}</span>` +
-    (isTemporal && i < ents.length - 1 ? '<span class="sprie-arrow"><i class="fa-solid fa-arrow-right-long"></i></span>' : '')
+    `<span class="spie-ent">${bEsc(x)}</span>` +
+    (isTemporal && i < ents.length - 1 ? '<span class="spie-arrow"><i class="fa-solid fa-arrow-right-long"></i></span>' : '')
   ).join('');
   const conf = (e.confidence != null) ? Math.round(e.confidence * 100) + '%'
              : (typeof p.score === 'number' ? p.score : '');
-  const why = e.why ? `<div class="sprie-why">${bEsc(e.why)}</div>` : '';
+  const why = e.why ? `<div class="spie-why">${bEsc(e.why)}</div>` : '';
   const meta = [];
   if (e.article_count != null) meta.push(`${e.article_count} articles`);
   if (e.source_count != null) meta.push(`${e.source_count} sources`);
   if (e.observations != null) meta.push(`${e.observations} obs`);
-  const metaHtml = meta.length ? `<div class="sprie-meta">${meta.map(m => bEsc(m)).join(' · ')}</div>` : '';
-  return `<div class="sprie-card">
-    <div class="sprie-card-top">
-      <span class="sprie-type sprie-type-${bEsc(p.type || '')}">${bEsc((p.type || '').replace(/_/g, ' '))}</span>
-      ${conf !== '' ? `<span class="sprie-score">${bEsc(conf)}</span>` : ''}
+  const metaHtml = meta.length ? `<div class="spie-meta">${meta.map(m => bEsc(m)).join(' · ')}</div>` : '';
+  return `<div class="spie-card">
+    <div class="spie-card-top">
+      <span class="spie-type spie-type-${bEsc(p.type || '')}">${bEsc((p.type || '').replace(/_/g, ' '))}</span>
+      ${conf !== '' ? `<span class="spie-score">${bEsc(conf)}</span>` : ''}
     </div>
-    <div class="sprie-hl">${bEsc(patternHeadline(p))}</div>
-    <div class="sprie-ents">${entHtml}</div>
+    <div class="spie-hl">${bEsc(patternHeadline(p))}</div>
+    <div class="spie-ents">${entHtml}</div>
     ${why}
     ${metaHtml}
-    <details class="sprie-details"><summary>Raw data</summary>
-      <pre class="sprie-raw">${bEsc(JSON.stringify(p, null, 2))}</pre>
+    <details class="spie-details"><summary>Raw data</summary>
+      <pre class="spie-raw">${bEsc(JSON.stringify(p, null, 2))}</pre>
     </details>
   </div>`;
 }
 
-const VIEW_MAP = { home:'v-home', explore:'v-explore', bytes:'v-bytes', profile:'v-profile', bookmarks:'v-bookmarks', notifs:'v-notifs', feed:'v-feed', sprie:'v-sprie' };
-const NB_MAP   = { home:'nb-home', explore:'nb-explore', bytes:'nb-bytes', profile:'nb-profile', sprie:'nb-scan' };
+const VIEW_MAP = { home:'v-home', explore:'v-explore', bytes:'v-bytes', profile:'v-profile', bookmarks:'v-bookmarks', notifs:'v-notifs', feed:'v-feed', spie:'v-spie' };
+const NB_MAP   = { home:'nb-home', explore:'nb-explore', bytes:'nb-bytes', profile:'nb-profile', spie:'nb-scan' };
 let _navReplay = false;   // true while applying a popstate (suppresses re-push)
 
 function navTo(name) {
@@ -6517,9 +6538,9 @@ function navTo(name) {
     hBrand.style.display='none'; hPage.style.display='block'; hPage.textContent='FEED Pulse';
   } else if (name==='bytes') {
     hBrand.style.display='none'; hPage.style.display='block'; hPage.textContent='Bytes';
-  } else if (name==='sprie') {
-    hBrand.style.display='none'; hPage.style.display='block'; hPage.textContent='SPRIE';
-    loadPatterns(spriePatternType);
+  } else if (name==='spie') {
+    hBrand.style.display='none'; hPage.style.display='block'; hPage.textContent='SPIE';
+    loadPatterns(spiePatternType);
   } else if (['profile','bookmarks','notifs'].includes(name)) {
     hBrand.style.display='none'; hPage.style.display='block';
     const lbls = { profile:'Profile', bookmarks:'Bookmarks', notifs:'Notifications' };
