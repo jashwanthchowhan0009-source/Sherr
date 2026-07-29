@@ -26,20 +26,28 @@ log = logging.getLogger("sherbyte.worker.signals_backfill")
 
 # Tables derived entirely from articles/info_objects — safe to wipe and rebuild so
 # a re-run is deterministic (no accumulation from a previous partial/duplicate run).
+# Tables this worker rebuilds from articles/info_objects. `insights` is NOT here:
+# it is DETECTOR output and the user-visible product. A crashed signals backfill
+# must never destroy it (the detectors rewrite their own rows via signature).
 _DERIVED_TABLES = [
-    "insights", "cooccurrence_events", "cooccurrence", "domain_signals",
+    "cooccurrence_events", "cooccurrence", "domain_signals",
     "article_fingerprints", "entity_aliases", "entities",
 ]
 
 
 async def reset_derived(conn) -> None:
-    """Clear all derived tables + restart the cluster sequence, so signals_backfill
-    is idempotent (a clean re-run reproduces the same graph, never doubles it)."""
+    """Clear the signal-derived tables + restart the cluster sequence.
+
+    DESTRUCTIVE and never automatic — only runs behind an explicit --reset (or the
+    standalone `python -m app.workers.reset_spie`). A backfill that crashes halfway
+    on a flaky pooler previously wiped the graph (and insights) on every attempt.
+    """
+    log.warning("reset_derived: TRUNCATE %s", ", ".join(_DERIVED_TABLES))
     await conn.execute("TRUNCATE " + ", ".join(_DERIVED_TABLES) + " RESTART IDENTITY CASCADE")
     await conn.execute("ALTER SEQUENCE IF EXISTS article_cluster_seq RESTART WITH 1")
 
 
-async def run(limit: int | None = None, reset: bool = True, batch_size: int = 25) -> dict:
+async def run(limit: int | None = None, reset: bool = False, batch_size: int = 25) -> dict:
     from app.spie.knowledge.adapters.news import from_info_object
     from app.spie.knowledge.signals import persist_signals
     from app.spie.knowledge.entity_resolver import (
@@ -57,13 +65,19 @@ async def run(limit: int | None = None, reset: bool = True, batch_size: int = 25
 
     # Fingerprint on the RAW article body (articles.body) — the AI-touched
     # info_objects.body diverges per outlet and would hide wire duplicates.
+    # RESUMABLE: skip info_objects that already produced a signal. Without a reset
+    # this makes a re-run continue where a crashed one stopped instead of
+    # duplicating signals — the behaviour needed on a flaky free-tier pooler.
     q = ("SELECT io.id, io.article_id, io.headline, "
          "COALESCE(a.body, io.body, io.summary, '') AS raw_body, "
          "COALESCE(length(a.body), 0) AS a_body_len, "
          "io.entities, io.sentiment, io.importance, io.source_name, "
          "io.where_info, io.published_at "
          "FROM info_objects io LEFT JOIN articles a ON a.id = io.article_id "
-         "WHERE io.entities IS NOT NULL ORDER BY io.published_at DESC")
+         "WHERE io.entities IS NOT NULL "
+         "AND NOT EXISTS (SELECT 1 FROM domain_signals ds "
+         "                WHERE ds.ref_id = io.id::text AND ds.domain = 'news') "
+         "ORDER BY io.published_at DESC")
     if limit is not None:
         q += f" LIMIT {int(limit)}"
 
@@ -166,24 +180,32 @@ async def run(limit: int | None = None, reset: bool = True, batch_size: int = 25
         ORDER BY n DESC LIMIT 10
         """
     )
-    # Coverage: did this run cover the whole corpus, or stop early / hit --limit?
+    # Coverage: is anything still un-backfilled? Counted with the same predicate the
+    # worker selects on, so it stays correct across resumed (non-reset) runs.
     eligible = await db.fetchval(
         "SELECT COUNT(*) FROM info_objects WHERE entities IS NOT NULL"
+    )
+    remaining = await db.fetchval(
+        "SELECT COUNT(*) FROM info_objects io WHERE io.entities IS NOT NULL "
+        "AND NOT EXISTS (SELECT 1 FROM domain_signals ds "
+        "                WHERE ds.ref_id = io.id::text AND ds.domain = 'news')"
     )
     return {
         # Build + filter proof. If resolver_build is missing/old, or
         # entities_filtered_out is 0 on real news data, the deployed code is stale.
         "resolver_build": RESOLVER_BUILD,
         "info_objects_eligible": int(eligible or 0),
-        "coverage_complete": (limit is None and failed == 0
-                              and processed >= int(eligible or 0)),
+        "info_objects_remaining": int(remaining or 0),
+        # True once every eligible info_object has a signal — survives resumed runs
+        # (re-run until this is true; each run picks up where the last stopped).
+        "coverage_complete": (int(remaining or 0) == 0 and failed == 0),
         "rows_failed": failed,
+        "reset_ran": reset,
         "batch_size": batch_size,
         "mentions_checked": stats["checked"],
         "entities_filtered_out": stats["filtered_out"],
         "raw_body_from_articles": raw_body_hits,
         "raw_body_fallback": raw_body_missing,
-        "reset_ran": reset,
         "info_objects_processed": processed,
         "domain_signals": int(signals or 0),
         "entities": int(entities or 0),
@@ -201,8 +223,13 @@ async def _main() -> None:
     parser = argparse.ArgumentParser(description="Backfill domain_signals from info_objects.")
     parser.add_argument("--limit", type=int, default=None,
                         help="process only the N most-recent info_objects")
+    parser.add_argument("--reset", action="store_true",
+                        help="DESTRUCTIVE: TRUNCATE the signal-derived tables first "
+                             "(entities, aliases, fingerprints, domain_signals, cooccurrence). "
+                             "Off by default so a crashed run never wipes the graph. "
+                             "Never touches insights.")
     parser.add_argument("--no-reset", action="store_true",
-                        help="append to existing derived tables instead of the default clean reset")
+                        help="(deprecated, now the default) kept so existing scripts keep working")
     parser.add_argument("--batch-size", type=int, default=25,
                         help="rows per DB connection (default 25); lower if the pooler drops connections")
     args = parser.parse_args()
@@ -210,7 +237,8 @@ async def _main() -> None:
     from app.workers import bootstrap, teardown
     await bootstrap()
     try:
-        result = await run(limit=args.limit, reset=not args.no_reset,
+        result = await run(limit=args.limit,
+                           reset=(args.reset and not args.no_reset),
                            batch_size=max(1, args.batch_size))
         log.info("signals backfill: %s", result)
         print(json.dumps(result, indent=2, default=str))
