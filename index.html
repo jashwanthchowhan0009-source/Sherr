@@ -1637,6 +1637,8 @@ nav.compact .nb.on { flex: 0 0 auto; padding-left: 16px; padding-right: 16px; }
   font: 500 0.7rem/1.5 ui-monospace, "SF Mono", Menlo, monospace; color: #9ad0ff; white-space: pre; }
 [data-theme="light"] .sprie-raw { background: rgba(0,0,0,0.04); color: #1f5fbf; border-color: rgba(0,0,0,0.06); }
 .sprie-note { text-align: center; font: 500 0.72rem/1.5 var(--f); color: var(--t3); padding: 16px 20px 4px; }
+.sprie-count { font: 700 0.62rem/1 var(--fd); letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--t3); padding: 0 2px 2px; }
 
 /* ─── Bytes — one structured card per screen (vertical snap) ─── */
 #v-bytes { inset: 0; }
@@ -6416,7 +6418,13 @@ async function loadPatterns(type) {
   list.innerHTML = '<div class="sprie-loading"><i class="fa-solid fa-satellite-dish"></i> Scanning patterns…</div>';
   const filt = arr => spriePatternType ? arr.filter(p => p.type === spriePatternType) : arr;
   const paint = (arr, note) => {
-    list.innerHTML = (arr.length ? arr.map(renderPattern).join('') : '<div class="sprie-empty">No patterns of this type yet.</div>')
+    // A small set is a normal state, not an error — label the count so 5 real
+    // patterns read as "5 detected" rather than looking like a half-loaded page.
+    const head = arr.length
+      ? `<div class="sprie-count">${arr.length} pattern${arr.length === 1 ? '' : 's'} detected</div>`
+      : '';
+    list.innerHTML = head
+      + (arr.length ? arr.map(renderPattern).join('') : '<div class="sprie-empty">No patterns of this type yet.</div>')
       + (note ? `<div class="sprie-note">${note}</div>` : '');
   };
   try {

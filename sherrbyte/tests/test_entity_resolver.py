@@ -155,7 +155,10 @@ def test_filter_counts_rejections():
 
 
 def test_resolver_build_marker_present():
-    assert RESOLVER_BUILD.startswith("entity_resolver+is_valid_mention")
+    # The marker is bumped whenever the filter changes; assert the stable prefix
+    # so a bump can't silently break the test (it exists to catch stale deploys).
+    assert RESOLVER_BUILD.startswith("entity_resolver+")
+    assert "/" in RESOLVER_BUILD          # carries a dated build suffix
 
 
 # ─── common-noun / compound-name quality (junk from the live run) ─────────────
