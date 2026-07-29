@@ -52,10 +52,96 @@ COLLECT_INTERVAL_MIN = int(os.getenv("COLLECT_INTERVAL_MIN", "25"))
 # a low-risk default keeps the endpoints usable out of the box for this app.
 ADMIN_TOKEN     = os.getenv("ADMIN_TOKEN", "sherr-admin")
 
-# When set, /patterns proxies to the real Intelligence Engine (sherrbyte/app on
-# Supabase) instead of serving the local sqlite sample seed. Point it at the
-# deployed engine's base URL to switch the app to live pattern output.
+# Optional: proxy /patterns to a SEPARATE engine deployment. Not needed in the
+# single-service setup — there, DATABASE_URL below is what matters.
 ENGINE_URL      = os.getenv("ENGINE_URL", "").rstrip("/")
+
+# The SPIE engine's Postgres (Supabase). The workers (app.workers.*) write insights
+# here; this app reads them here. This — not ENGINE_URL — is what makes /patterns
+# return real insights in the single-service deployment.
+SPIE_DATABASE_URL = (os.getenv("SPIE_DATABASE_URL") or os.getenv("DATABASE_URL") or "").strip()
+_spie_pool = None
+
+
+def _sanitize_pg_dsn(dsn: str) -> str:
+    """Strip query params raw asyncpg rejects (pgbouncer / SQLAlchemy-only ones) so
+    a pasted Supabase *pooler* URL connects cleanly."""
+    from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+    drop = {"pgbouncer", "prepared_statement_cache_size", "statement_cache_size",
+            "prepared_statements", "prepare_threshold"}
+    p = urlsplit(dsn)
+    if not p.query:
+        return dsn
+    kept = [(k, v) for k, v in parse_qsl(p.query, keep_blank_values=True)
+            if k.lower() not in drop]
+    return urlunsplit((p.scheme, p.netloc, p.path, urlencode(kept), p.fragment))
+
+
+async def get_spie_pool():
+    """Lazy asyncpg pool for the engine's Postgres. Returns None if unconfigured
+    or unreachable (caller then reports source='unavailable', never fake data)."""
+    global _spie_pool
+    if _spie_pool is not None or not SPIE_DATABASE_URL:
+        return _spie_pool
+    try:
+        import asyncpg
+        _spie_pool = await asyncpg.create_pool(
+            dsn=_sanitize_pg_dsn(SPIE_DATABASE_URL),
+            min_size=1, max_size=4, timeout=20.0, command_timeout=20.0,
+            statement_cache_size=0,      # Supabase transaction pooler safety
+        )
+        log.info("SPIE Postgres pool ready (insights source)")
+    except Exception as e:
+        log.warning("SPIE Postgres unavailable: %s", e)
+        _spie_pool = None
+    return _spie_pool
+
+
+async def _spie_patterns(type: str, limit: int, offset: int) -> Optional[dict]:
+    """Read real insights from the engine's Postgres, resolving entity ids to
+    canonical names. Returns None when the DB isn't usable."""
+    pool = await get_spie_pool()
+    if pool is None:
+        return None
+    try:
+        async with pool.acquire() as conn:
+            if type:
+                rows = await conn.fetch(
+                    "SELECT * FROM insights WHERE type=$1 "
+                    "ORDER BY score DESC, created_at DESC LIMIT $2 OFFSET $3",
+                    type, limit, offset)
+            else:
+                rows = await conn.fetch(
+                    "SELECT * FROM insights ORDER BY score DESC, created_at DESC "
+                    "LIMIT $1 OFFSET $2", limit, offset)
+            total = await conn.fetchval("SELECT COUNT(*) FROM insights")
+
+            out = [dict(r) for r in rows]
+            ids = {str(i) for d in out for i in (d.get("entity_ids") or [])}
+            names = {}
+            if ids:
+                erows = await conn.fetch(
+                    "SELECT id, canonical_name FROM entities WHERE id = ANY($1::uuid[])",
+                    list(ids))
+                names = {str(r["id"]): r["canonical_name"] for r in erows}
+
+        for d in out:
+            eids = [str(i) for i in (d.get("entity_ids") or [])]
+            d["entity_ids"] = eids
+            d["entities"] = [names.get(i, i) for i in eids]
+            d["id"] = str(d.get("id"))
+            ej = d.get("explain_json")
+            if isinstance(ej, (str, bytes)):
+                try:
+                    d["explain_json"] = json.loads(ej)
+                except Exception:
+                    d["explain_json"] = {}
+            if d.get("created_at") is not None:
+                d["created_at"] = str(d["created_at"])
+        return {"patterns": out, "total": int(total or 0), "source": "engine"}
+    except Exception as e:
+        log.warning("SPIE insights query failed: %s", e)
+        return None
 
 # Story-thread ("string") linking window — how far back we cluster related news.
 STORY_WINDOW_DAYS = int(os.getenv("STORY_WINDOW_DAYS", "45"))
@@ -1381,11 +1467,25 @@ async def patterns(
     """SPIE pattern output — the Intelligence Engine's insights, most significant
     first. Optional ?type=emergence|temporal_correlation.
 
-    Every response carries `source` so the app never has to guess what it is showing:
-      "engine"      — real insights from the SPIE Postgres engine (the only good state)
-      "unavailable" — ENGINE_URL set but the engine failed; NO fake data substituted
-      "seed"        — local sqlite demo rows, only when no engine is configured
+    Resolution order:
+      1. The engine's Postgres (DATABASE_URL / SPIE_DATABASE_URL) — the workers write
+         insights there and this app reads them from the same DB. Single-service
+         deployments need nothing else; ENGINE_URL is NOT required.
+      2. ENGINE_URL — only for a separate engine deployment.
+      3. Local sqlite demo rows — clearly labelled, never a silent substitute.
+
+    Every response carries `source`: "engine" | "unavailable" | "seed".
     """
+    # 1. Same-service path: read the real insights straight from Supabase.
+    if SPIE_DATABASE_URL:
+        data = await _spie_patterns(type, limit, offset)
+        if data is not None:
+            return data
+        if not ENGINE_URL:
+            return {"patterns": [], "total": 0, "source": "unavailable",
+                    "detail": "Configured Postgres (DATABASE_URL) is not reachable "
+                              "or has no insights table yet."}
+
     if ENGINE_URL:
         try:
             params = {"limit": limit, "offset": offset}

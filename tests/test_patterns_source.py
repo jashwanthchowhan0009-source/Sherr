@@ -33,3 +33,31 @@ def test_no_sprie_naming_remains():
     for f in ["main.py", "index.html"]:
         text = (SRC.parent / f).read_text()
         assert not re.search(r"SPRIE|sprie", text), f"SPRIE naming still in {f}"
+
+
+# ─── single-service wiring: /patterns reads Supabase directly ────────────────
+def test_postgres_is_tried_before_engine_url():
+    """One Render service runs both the app and the engine against the same
+    Supabase, so /patterns must read insights from the DB directly — ENGINE_URL
+    is only for a separate engine deployment."""
+    assert CODE.index("if SPIE_DATABASE_URL:") < CODE.index("if ENGINE_URL:")
+
+
+def test_spie_db_url_falls_back_to_database_url():
+    assert 'os.getenv("SPIE_DATABASE_URL") or os.getenv("DATABASE_URL")' in CODE
+
+
+def test_pooler_safety_on_the_read_pool():
+    """Supabase transaction pooler: no server-side prepared-statement cache, and
+    pgbouncer-only query params stripped from the DSN."""
+    assert "statement_cache_size=0" in CODE
+    assert "_sanitize_pg_dsn" in CODE
+
+
+def test_unreachable_db_reports_unavailable_not_seed():
+    assert "Configured Postgres (DATABASE_URL) is not reachable" in CODE
+
+
+def test_asyncpg_is_declared_for_the_app_service():
+    reqs = (SRC.parent / "requirements.txt").read_text()
+    assert "asyncpg" in reqs
