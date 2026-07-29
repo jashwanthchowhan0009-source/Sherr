@@ -40,6 +40,16 @@ async def _ingest_job():
         log.error("ingest cycle failed: %s", e, exc_info=True)
 
 
+async def _market_signals_job():
+    """Write each instrument's daily move into domain_signals. Must run BEFORE the
+    detectors so news↔market joins have market data to work with."""
+    from app.workers.market_signals import run as run_market
+    try:
+        log.info("market signals: %s", await run_market())
+    except Exception as e:
+        log.error("market signals job failed: %s", e, exc_info=True)
+
+
 async def _detectors_job():
     """Nightly pattern-detector pass (emergence, temporal correlation)."""
     from app.workers.detectors import run as run_detectors
@@ -60,6 +70,9 @@ async def lifespan(app: FastAPI):
         _scheduler = AsyncIOScheduler()
         _scheduler.add_job(_ingest_job, "interval",
                            minutes=settings.collect_interval_min, id="ingest")
+        # Market moves: a few times a day so intraday moves are captured near the
+        # close of the major sessions (and always before the nightly detectors).
+        _scheduler.add_job(_market_signals_job, "cron", hour="1,7,13,19", id="market_signals")
         # Detectors are heavy + materialized, so run once nightly (02:00 UTC).
         _scheduler.add_job(_detectors_job, "cron", hour=2, id="detectors")
         _scheduler.start()

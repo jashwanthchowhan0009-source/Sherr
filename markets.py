@@ -305,6 +305,25 @@ async def fetch_commodities() -> dict:
     return result
 
 
+async def fetch_rates() -> dict:
+    """Government bond yields. The 'Bond Yields' card had no data source at all —
+    /markets never returned a `rates` bucket, so it could only ever show a dash.
+    Yahoo publishes these as index symbols (^TNX = US 10Y yield, in percent)."""
+    cached = _cget("rates")
+    if cached:
+        return cached
+    async with httpx.AsyncClient() as client:
+        data = await _yahoo(client, ["^TNX", "^FVX", "^TYX", "^IRX"])
+    result = {
+        "US10Y": data.get("^TNX", {}),
+        "US5Y":  data.get("^FVX", {}),
+        "US30Y": data.get("^TYX", {}),
+        "US13W": data.get("^IRX", {}),
+    }
+    _cset("rates", result, 120)
+    return result
+
+
 async def fetch_energy_stocks() -> dict:
     """Major international energy companies."""
     cached = _cget("energy_stocks")
@@ -327,9 +346,9 @@ async def fetch_energy_stocks() -> dict:
 @router.get("/markets")
 async def markets_all(spark: bool = False):
     """All markets in one call. Fetches each asset class in parallel."""
-    stocks, crypto, metals, forex, comm, energy = await asyncio.gather(
+    stocks, crypto, metals, forex, comm, energy, rates = await asyncio.gather(
         fetch_stocks(spark), fetch_crypto(), fetch_metals(), fetch_forex(),
-        fetch_commodities(), fetch_energy_stocks(),
+        fetch_commodities(), fetch_energy_stocks(), fetch_rates(),
         return_exceptions=True,
     )
     _safe = lambda v: v if isinstance(v, dict) else {}
@@ -340,6 +359,7 @@ async def markets_all(spark: bool = False):
         "forex":         _safe(forex),
         "commodities":   _safe(comm),
         "energy_stocks": _safe(energy),
+        "rates":         _safe(rates),
         "timestamp":     int(time.time()),
         "providers": {
             "stocks_primary": "finnhub" if FINNHUB_KEY else "yahoo",
@@ -373,6 +393,11 @@ async def markets_forex():
 @router.get("/markets/commodities")
 async def markets_commodities():
     return await fetch_commodities()
+
+
+@router.get("/markets/rates")
+async def markets_rates():
+    return await fetch_rates()
 
 
 @router.get("/markets/energy")
