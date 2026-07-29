@@ -8,3 +8,6 @@ pydantic==2.7.1
 python-multipart==0.0.9
 aiofiles==23.2.1
 gunicorn==23.0.0
+# Read the SPIE engine's insights straight from Supabase (same DB the workers
+# write to). Without this /patterns can only see the local sqlite demo rows.
+asyncpg==0.29.0
