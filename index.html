@@ -1593,11 +1593,18 @@ nav.compact .nb.on { flex: 0 0 auto; padding-left: 16px; padding-right: 16px; }
 .spie-badge i { font-size: 0.7rem; }
 .spie-title { font: 800 1.5rem/1.18 var(--fd); color: var(--t1); letter-spacing: -0.02em; margin: 14px 0 6px; }
 .spie-sub { font: 500 0.82rem/1.5 var(--f); color: var(--t3); margin: 0 0 16px; }
-.spie-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.spie-chip { font: 700 0.76rem/1 var(--fd); color: var(--t2); cursor: pointer;
-  padding: 8px 14px; border-radius: 999px; background: var(--bgcard);
-  border: 1px solid var(--line2); transition: all 0.15s var(--spring); }
-.spie-chip.on { color: #fff; background: linear-gradient(135deg, #4F6BD4, #8E24AA); border-color: transparent; }
+.spie-controls { display: flex; align-items: flex-start; gap: 8px; }
+/* Horizontally scrollable so every type stays reachable on a phone. */
+.spie-chips { display: flex; gap: 8px; flex: 1; overflow-x: auto; padding-bottom: 2px;
+  scrollbar-width: none; }
+.spie-chips::-webkit-scrollbar { display: none; }
+.spie-chip { font: 700 0.74rem/1 var(--fd); color: var(--t2); cursor: pointer;
+  padding: 8px 13px; border-radius: 999px; background: var(--bgcard); white-space: nowrap;
+  border: 1px solid var(--line2); transition: all 0.15s var(--spring);
+  display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.spie-chip i { font-size: 0.72rem; opacity: 0.8; }
+.spie-chip.on { color: #fff; border-color: transparent;
+  background: linear-gradient(135deg, var(--tc, #4F6BD4), color-mix(in srgb, var(--tc, #8E24AA) 70%, #8E24AA)); }
 .spie-refresh { margin-left: auto; width: 38px; height: 38px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center; cursor: pointer;
   background: var(--bgcard); border: 1px solid var(--line2); color: var(--t2); }
@@ -1613,6 +1620,32 @@ nav.compact .nb.on { flex: 0 0 auto; padding-left: 16px; padding-right: 16px; }
   padding: 5px 10px; border-radius: 999px; }
 .spie-type-temporal_correlation { color: #A855F7; background: rgba(168,85,247,0.15); }
 .spie-type-emergence { color: #22C55E; background: rgba(34,197,94,0.15); }
+.spie-type-market_reaction { color: #22C55E; background: rgba(34,197,94,0.15); }
+.spie-type-volume_anomaly { color: #EAB308; background: rgba(234,179,8,0.15); }
+.spie-type-cross_domain_chain { color: #64D2FF; background: rgba(100,210,255,0.15); }
+
+/* ── Market Reaction hero ── */
+.spie-card.is-hero { border-color: rgba(34,197,94,0.22);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 14px 34px -22px rgba(34,197,94,0.45); }
+.spie-move { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  margin: 12px 15px 0; padding: 12px 14px; border-radius: 14px;
+  background: rgba(255,255,255,0.04); border: 1px solid var(--line2); }
+[data-theme="light"] .spie-move { background: rgba(0,0,0,0.03); }
+.spie-move-inst { font: 800 0.92rem/1 var(--fd); color: var(--t1); }
+.spie-move-pct { font: 800 1.35rem/1 var(--fd); letter-spacing: -0.02em; }
+.spie-move.is-up .spie-move-pct { color: #22C55E; }
+.spie-move.is-down .spie-move-pct { color: #EF4444; }
+.spie-move-pct i { font-size: 0.9rem; }
+.spie-move-seq { font: 600 0.68rem/1.3 var(--f); color: var(--t3); width: 100%; }
+.spie-heads { margin: 10px 15px 0; display: flex; flex-direction: column; gap: 6px; }
+/* NB: distinct from .spie-head (the section header) — same-name classes collided. */
+.spie-headline { font: 500 0.76rem/1.4 var(--f); color: var(--t2);
+  display: flex; gap: 8px; align-items: flex-start; }
+.spie-headline i { color: var(--t3); font-size: 0.72rem; margin-top: 3px; flex-shrink: 0; }
+/* ── Empty state (shown, never hidden) ── */
+.spie-empty-t { font: 700 0.86rem/1.4 var(--fd); color: var(--t2); }
+.spie-empty-h { font: 500 0.76rem/1.5 var(--f); color: var(--t3); margin-top: 6px;
+  max-width: 34ch; margin-inline: auto; }
 .spie-score { margin-left: auto; font: 700 0.66rem/1 var(--fd); color: var(--t3); }
 .spie-ents { padding: 10px 15px 0; display: flex; flex-wrap: wrap; gap: 6px; }
 .spie-ent { font: 600 0.72rem/1 var(--f); color: var(--t1); padding: 5px 10px; border-radius: 8px;
@@ -3897,12 +3930,11 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   <div class="spie-wrap">
     <div class="spie-head">
       <div class="spie-badge"><i class="fa-solid fa-satellite-dish"></i> SPIE</div>
-      <h2 class="spie-title">SherrByte Pattern<br>Intelligence Engine</h2>
-      <p class="spie-sub">Raw pattern output — cross-domain signals the engine has connected.</p>
+      <h2 class="spie-title">SPIE — Pattern<br>Intelligence</h2>
+      <p class="spie-sub">Connections the engine has observed across news and markets.</p>
       <div class="spie-controls">
-        <button class="spie-chip on" data-t="" onclick="loadPatterns('')">All</button>
-        <button class="spie-chip" data-t="emergence" onclick="loadPatterns('emergence')">Emergence</button>
-        <button class="spie-chip" data-t="temporal_correlation" onclick="loadPatterns('temporal_correlation')">Temporal</button>
+        <!-- chips are rendered from SPIE_TYPES so no insight type is ever hidden -->
+        <div class="spie-chips" id="spie-chips"></div>
         <button class="spie-refresh tap" onclick="loadPatterns(spiePatternType)" aria-label="Refresh"><i class="fa-solid fa-rotate"></i></button>
       </div>
     </div>
@@ -6423,6 +6455,7 @@ async function loadPatterns(type) {
   const list = document.getElementById('spie-list');
   if (!list) return;
   list.innerHTML = '<div class="spie-loading"><i class="fa-solid fa-satellite-dish"></i> Scanning patterns…</div>';
+  renderSpieChips();
   const filt = arr => spiePatternType ? arr.filter(p => p.type === spiePatternType) : arr;
   // banner: null (real data), or {cls, text} shown ABOVE the cards so demo/broken
   // states are never mistaken for live intelligence.
@@ -6430,10 +6463,18 @@ async function loadPatterns(type) {
     const head = arr.length
       ? `<div class="spie-count">${arr.length} pattern${arr.length === 1 ? '' : 's'} detected</div>`
       : '';
+    // Empty is a real state, not a hidden one: name the type and say what it needs.
+    const empty = () => {
+      const label = SPIE_TYPE_LABEL[spiePatternType] || 'patterns';
+      const hint = SPIE_EMPTY_HINT[spiePatternType] || '';
+      return `<div class="spie-empty">
+        <div class="spie-empty-t">No ${bEsc(label.toLowerCase())} insights yet</div>
+        ${hint ? `<div class="spie-empty-h">${bEsc(hint)}</div>` : ''}
+      </div>`;
+    };
     list.innerHTML = (banner ? `<div class="spie-banner ${banner.cls}">${bEsc(banner.text)}</div>` : '')
       + head
-      + (arr.length ? arr.map(renderPattern).join('')
-                    : '<div class="spie-empty">No patterns of this type yet.</div>');
+      + (arr.length ? arr.map(renderPattern).join('') : empty());
   };
   try {
     const q = spiePatternType ? ('?type=' + encodeURIComponent(spiePatternType)) : '';
@@ -6462,9 +6503,51 @@ async function loadPatterns(type) {
 }
 
 // Short human-language title for a pattern (raw JSON lives in the Details expander).
+// Type registry — label, colour and badge for every insight type the engine emits.
+// Types with no data yet still get a chip and an empty state (never hidden).
+const SPIE_TYPES = [
+  { key: '',                     label: 'All',             icon: 'fa-layer-group' },
+  { key: 'market_reaction',      label: 'Market Reaction', icon: 'fa-chart-line',      color: '#22C55E' },
+  { key: 'emergence',            label: 'Emergence',       icon: 'fa-diagram-project', color: '#22C55E' },
+  { key: 'temporal_correlation', label: 'Temporal',        icon: 'fa-timeline',        color: '#A855F7' },
+  { key: 'volume_anomaly',       label: 'Anomaly',         icon: 'fa-bolt',            color: '#EAB308' },
+  { key: 'cross_domain_chain',   label: 'Chain',           icon: 'fa-link',            color: '#64D2FF' },
+];
+const SPIE_TYPE_LABEL = Object.fromEntries(SPIE_TYPES.map(t => [t.key, t.label]));
+const SPIE_EMPTY_HINT = {
+  market_reaction:      'Needs a few days of market history plus related news in the same window.',
+  temporal_correlation: 'Needs several weeks of daily signals before a lag can be established.',
+  volume_anomaly:       'Appears when an entity’s story volume spikes above its own baseline.',
+  cross_domain_chain:   'Fires when signals from different domains line up on a shared entity.',
+  emergence:            'Appears when two entities start co-occurring for the first time.',
+};
+
+// Chips are built from the registry so every type is always reachable — a type
+// with no data shows its own empty state rather than disappearing from the UI.
+function renderSpieChips() {
+  const wrap = document.getElementById('spie-chips');
+  if (!wrap) return;
+  wrap.innerHTML = SPIE_TYPES.map(t => {
+    const on = (t.key || '') === (spiePatternType || '');
+    const style = (t.color && on) ? ` style="--tc:${t.color}"` : '';
+    return `<button class="spie-chip${on ? ' on' : ''}"${style} data-t="${t.key}"
+      onclick="loadPatterns('${t.key}')"><i class="fa-solid ${t.icon}"></i> ${t.label}</button>`;
+  }).join('');
+  // Keep the selected type visible — the chip row scrolls horizontally.
+  const active = wrap.querySelector('.spie-chip.on');
+  if (active && active.scrollIntoView) {
+    active.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
+  }
+}
+
 function patternHeadline(p) {
   const e = p.explain_json || {};
   const ents = p.entities || [];
+  if (p.type === 'market_reaction') {
+    const pct = (e.move_pct != null) ? Math.abs(e.move_pct).toFixed(2) + '%' : '';
+    const dir = e.direction > 0 ? 'rose' : e.direction < 0 ? 'fell' : 'moved';
+    return `${e.instrument || ents[0] || 'Instrument'} ${dir} ${pct}`.trim();
+  }
   if (p.type === 'temporal_correlation') {
     const lead = e.leader_entity || ents[0] || 'A';
     const follow = e.follower_entity || ents[1] || 'B';
@@ -6473,6 +6556,12 @@ function patternHeadline(p) {
   }
   if (p.type === 'emergence') {
     return `New connection: ${ents.join(' × ') || 'entities'}`;
+  }
+  if (p.type === 'volume_anomaly') {
+    return `Unusual story volume: ${ents[0] || 'entity'}`;
+  }
+  if (p.type === 'cross_domain_chain') {
+    return `Cross-domain chain: ${ents.join(' × ') || 'entities'}`;
   }
   return ents.join(' · ') || (p.type || 'pattern');
 }
@@ -6493,13 +6582,36 @@ function renderPattern(p) {
   if (e.source_count != null) meta.push(`${e.source_count} sources`);
   if (e.observations != null) meta.push(`${e.observations} obs`);
   const metaHtml = meta.length ? `<div class="spie-meta">${meta.map(m => bEsc(m)).join(' · ')}</div>` : '';
-  return `<div class="spie-card">
+  const label = SPIE_TYPE_LABEL[p.type] || (p.type || '').replace(/_/g, ' ');
+  const isMarket = p.type === 'market_reaction';
+
+  // Market Reaction is the hero: the instrument's move leads, then the related
+  // headlines that preceded (or followed) it.
+  let hero = '';
+  if (isMarket) {
+    const up = (e.direction || 0) >= 0;
+    const pct = (e.move_pct != null) ? Math.abs(e.move_pct).toFixed(2) + '%' : '—';
+    const seq = e.sequence === 'move_then_news' ? 'news followed the move'
+                                                : 'news preceded the move';
+    const heads = (e.related_news_headlines || []).slice(0, 3);
+    hero = `
+      <div class="spie-move ${up ? 'is-up' : 'is-down'}">
+        <div class="spie-move-inst">${bEsc(e.instrument || (p.entities || [])[0] || '')}</div>
+        <div class="spie-move-pct"><i class="fa-solid fa-arrow-${up ? 'up' : 'down'}"></i> ${bEsc(pct)}</div>
+        <div class="spie-move-seq">${bEsc(seq)}</div>
+      </div>
+      ${heads.length ? `<div class="spie-heads">${heads.map(h =>
+          `<div class="spie-headline"><i class="fa-regular fa-newspaper"></i> ${bEsc(h)}</div>`).join('')}</div>` : ''}`;
+  }
+
+  return `<div class="spie-card${isMarket ? ' is-hero' : ''}">
     <div class="spie-card-top">
-      <span class="spie-type spie-type-${bEsc(p.type || '')}">${bEsc((p.type || '').replace(/_/g, ' '))}</span>
+      <span class="spie-type spie-type-${bEsc(p.type || '')}">${bEsc(label)}</span>
       ${conf !== '' ? `<span class="spie-score">${bEsc(conf)}</span>` : ''}
     </div>
     <div class="spie-hl">${bEsc(patternHeadline(p))}</div>
-    <div class="spie-ents">${entHtml}</div>
+    ${hero}
+    ${isMarket ? '' : `<div class="spie-ents">${entHtml}</div>`}
     ${why}
     ${metaHtml}
     <details class="spie-details"><summary>Raw data</summary>
