@@ -22,6 +22,7 @@ log = logging.getLogger("sherbyte.worker.detectors")
 
 # All runnable jobs: discovery detectors + the decision-engine chain evaluator.
 _CHAIN = "cross_domain_chain"
+_REASONED = "reasoned"
 
 
 async def run(only: str | None = None) -> dict:
@@ -48,12 +49,20 @@ async def run(only: str | None = None) -> dict:
             except Exception as e:
                 log.error("decision rules failed: %s", e, exc_info=True)
                 results[_CHAIN] = -1
+        # Reasoning Engine — runs LAST so it can reason over everything above.
+        if not only or only == _REASONED:
+            try:
+                from app.spie.reasoning import engine as reasoning_engine
+                results[_REASONED] = await reasoning_engine.run(conn)
+            except Exception as e:
+                log.error("reasoning engine failed: %s", e, exc_info=True)
+                results[_REASONED] = -1
     return results
 
 
 async def _main() -> None:
     parser = argparse.ArgumentParser(description="Run Intelligence Engine detectors.")
-    parser.add_argument("--only", choices=sorted(list(REGISTRY) + [_CHAIN]), default=None,
+    parser.add_argument("--only", choices=sorted(list(REGISTRY) + [_CHAIN, _REASONED]), default=None,
                         help="run a single detector instead of all")
     args = parser.parse_args()
 
