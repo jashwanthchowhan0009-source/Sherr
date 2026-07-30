@@ -13,7 +13,8 @@ domain="news" story clusters. Two directions, both reported the same way:
 day is ordinary for crude and extraordinary for USD/INR.
 
 "Related" news = clusters whose entities co-occur with the instrument's entity in
-the materialized cooccurrence graph, plus anything mapped through entity_ticker_map.
+the materialized cooccurrence graph, plus this instrument's seeded keyword links
+from instrument_keywords (knowledge/instrument_map.py).
 
 LANGUAGE RULE (hard): output says the news *preceded* or *coincided with* the move.
 Never "caused", never "will move". This is detection of an observed sequence, not
@@ -26,8 +27,12 @@ import logging
 
 from app.spie.discovery.base import write_insight, names_for
 from app.spie.discovery.anomaly_math import ewma, mad, mad_zscore
+from app.spie.knowledge import instrument_map
 
 log = logging.getLogger("sherbyte.detectors.market_reaction")
+
+# Funnel from the last run(), surfaced by workers/detectors.py.
+LAST_RUN: dict = {}
 
 # One story = its SimHash cluster, else the signal's own (negated) id.
 _STORY_KEY = "COALESCE(cluster_id, -id)"
@@ -48,9 +53,19 @@ def relation_phrase(mode: str) -> str:
             else "followed the move")
 
 
-async def _related_entity_ids(conn, instrument_eid, days: int, limit: int = 40) -> list:
+async def _related_entity_ids(conn, instrument_eid, days: int, limit: int = 40, *,
+                              instrument: str | None = None) -> list:
     """Entities related to the instrument: co-occurrence partners (ranked by NPMI,
-    the association-beyond-chance measure) plus any entity_ticker_map links."""
+    the association-beyond-chance measure) plus this instrument's seeded
+    instrument_keywords links.
+
+    The seeded half was previously read from entity_ticker_map with no scoping at
+    all — every mapped entity was appended to every instrument's related list, so
+    the moment that table had rows, news about anything would have counted as
+    related to everything. Links are now per-instrument (see
+    knowledge/instrument_map.py), which is also the only shape that can express
+    "Iran relates to crude but not to Bitcoin".
+    """
     rows = await conn.fetch(
         """
         SELECT CASE WHEN entity_a = $1 THEN entity_b ELSE entity_a END AS eid,
@@ -66,12 +81,12 @@ async def _related_entity_ids(conn, instrument_eid, days: int, limit: int = 40) 
     )
     related = [r["eid"] for r in rows]
 
-    mapped = await conn.fetch(
-        "SELECT entity_id FROM entity_ticker_map WHERE entity_id IS NOT NULL "
-        "AND entity_id <> $1", instrument_eid)
-    for m in mapped:
-        if m["entity_id"] not in related:
-            related.append(m["entity_id"])
+    if instrument:
+        seen = {str(instrument_eid)} | {str(r) for r in related}
+        for m in await instrument_map.related_entity_ids(conn, instrument):
+            if str(m) not in seen:
+                seen.add(str(m))
+                related.append(m)
     return related
 
 
@@ -102,6 +117,13 @@ async def run(conn, *, history_days: int = 60, lookback_hours: int = 48,
     Returns 0 until there is both market history (>= min_history days per
     instrument) and related news in the window — that is a data state, not a fault.
     """
+    global LAST_RUN
+    # Idempotent; keeps a fresh deploy from silently having no instrument links.
+    try:
+        await instrument_map.sync_seeds(conn)
+    except Exception as e:
+        log.warning("instrument_map seed sync failed: %s", e)
+
     instruments = await conn.fetch(
         """
         SELECT DISTINCT unnest(entity_ids) AS eid
@@ -111,6 +133,9 @@ async def run(conn, *, history_days: int = 60, lookback_hours: int = 48,
         str(int(history_days)),
     )
 
+    stats = {"instruments": len(instruments), "with_enough_history": 0,
+             "significant_moves": 0, "with_related_entities": 0,
+             "with_related_news": 0, "insights_written": 0}
     written = 0
     for inst in instruments:
         eid = inst["eid"]
@@ -129,6 +154,7 @@ async def run(conn, *, history_days: int = 60, lookback_hours: int = 48,
         )
         if len(rows) < min_history + 1:
             continue
+        stats["with_enough_history"] += 1
 
         history = [float(r["v"] or 0.0) for r in rows[:-1]]
         latest = rows[-1]
@@ -144,9 +170,15 @@ async def run(conn, *, history_days: int = 60, lookback_hours: int = 48,
 
         direction = 1 if move > 0 else -1
         day = latest["d"]
-        related = await _related_entity_ids(conn, eid, history_days)
+        stats["significant_moves"] += 1
+        # Name first: the seeded keyword links are keyed on the instrument's
+        # display name, so it is needed to build the related set.
+        instrument = (await names_for(conn, [eid]))[0]
+        related = await _related_entity_ids(conn, eid, history_days,
+                                            instrument=instrument)
         if not related:
             continue
+        stats["with_related_entities"] += 1
 
         # A) news BEFORE the move, and B) news AFTER it.
         before = await _news_window(
@@ -161,11 +193,11 @@ async def run(conn, *, history_days: int = 60, lookback_hours: int = 48,
         mode, hits = ("news_then_move", before) if len(before) >= len(after) else \
                      ("move_then_news", after)
         clusters = {h["cluster_id"] for h in hits if h["cluster_id"] is not None}
+        if hits:
+            stats["with_related_news"] += 1
         if len(clusters) < min_clusters:
             continue
 
-        names = await names_for(conn, [eid])
-        instrument = names[0]
         headlines = [h["headline"] for h in hits if h["headline"]][:5]
         sources = sorted({h["source_id"] for h in hits if h["source_id"]})
         window_h = lookback_hours if mode == "news_then_move" else forward_hours
@@ -206,5 +238,32 @@ async def run(conn, *, history_days: int = 60, lookback_hours: int = 48,
         )
         written += 1
 
-    log.info("market_reaction: %d insights", written)
+    stats["insights_written"] = written
+    stats["diagnosis"] = _diagnose(stats, min_history, min_clusters)
+    LAST_RUN = stats
+    log.info("market_reaction funnel: %s", stats)
     return written
+
+
+def _diagnose(s: dict, min_history: int, min_clusters: int) -> str:
+    """Name the stage the funnel stopped at. A detector returning 0 with no
+    explanation is indistinguishable from a broken one."""
+    if s["insights_written"]:
+        return f"{s['insights_written']} insight(s) written"
+    if not s["instruments"]:
+        return "no market signals — run `python -m app.workers.market_signals`"
+    if not s["with_enough_history"]:
+        return (f"{s['instruments']} instruments present but none has {min_history + 1} "
+                f"days of history yet; the MAD baseline cannot be computed until then")
+    if not s["significant_moves"]:
+        return (f"{s['with_enough_history']} instruments have history, none moved "
+                f"unusually vs its own baseline in this window")
+    if not s["with_related_entities"]:
+        return ("significant moves found but no instrument has linked entities — "
+                "instrument_keywords empty or unresolved; run "
+                "`python -m app.workers.instrument_map --report`")
+    if not s["with_related_news"]:
+        return (f"{s['with_related_entities']} move(s) have linked entities but no "
+                f"news about those entities landed in the window — genuine no-overlap")
+    return (f"news found, but fewer than {min_clusters} distinct story clusters — "
+            f"below the corroboration floor, so nothing was written")

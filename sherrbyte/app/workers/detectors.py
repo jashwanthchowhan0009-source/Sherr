@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import logging
 
 from app.db import db
@@ -25,8 +26,14 @@ _CHAIN = "cross_domain_chain"
 _REASONED = "reasoned"
 
 
-async def run(only: str | None = None) -> dict:
-    """Run detectors and return {name: insights_written}."""
+async def run(only: str | None = None, *, diagnostics: bool = False) -> dict:
+    """Run detectors and return {name: insights_written}.
+
+    With diagnostics=True the result also carries `_funnels`: for the two
+    news↔market detectors, the stage-by-stage counts behind their number. A count
+    of 0 is often correct (no unusual move, or no news overlap in the window) and
+    the funnel is what tells those apart from a wiring fault.
+    """
     results: dict[str, int] = {}
     async with db.acquire() as conn:
         # Refresh NPMI first so detector ranking uses current association strengths.
@@ -57,21 +64,44 @@ async def run(only: str | None = None) -> dict:
             except Exception as e:
                 log.error("reasoning engine failed: %s", e, exc_info=True)
                 results[_REASONED] = -1
+
+    if diagnostics:
+        results["_funnels"] = _funnels()
     return results
+
+
+def _funnels() -> dict:
+    """Stage-by-stage counts from the detectors that can legitimately return 0."""
+    out: dict = {}
+    try:
+        from app.spie.discovery.market_reaction import LAST_RUN as mr
+        if mr:
+            out["market_reaction"] = mr
+    except Exception:
+        pass
+    try:
+        from app.spie.reasoning.engine import LAST_RUN as re_
+        if re_:
+            out["reasoned"] = re_
+    except Exception:
+        pass
+    return out
 
 
 async def _main() -> None:
     parser = argparse.ArgumentParser(description="Run Intelligence Engine detectors.")
     parser.add_argument("--only", choices=sorted(list(REGISTRY) + [_CHAIN, _REASONED]), default=None,
                         help="run a single detector instead of all")
+    parser.add_argument("--diagnostics", action="store_true",
+                        help="also print the news<->market funnels behind each count")
     args = parser.parse_args()
 
     from app.workers import bootstrap, teardown
     await bootstrap()
     try:
-        result = await run(only=args.only)
+        result = await run(only=args.only, diagnostics=args.diagnostics)
         log.info("detectors complete: %s", result)
-        print(result)
+        print(json.dumps(result, indent=2, default=str))
     finally:
         await teardown()
 
