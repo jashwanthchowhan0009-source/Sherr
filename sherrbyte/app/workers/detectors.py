@@ -85,6 +85,12 @@ def _funnels() -> dict:
             out["reasoned"] = re_
     except Exception:
         pass
+    try:
+        from app.spie.discovery.emergence import LAST_RUN as em
+        if em:
+            out["emergence"] = em
+    except Exception:
+        pass
     return out
 
 
