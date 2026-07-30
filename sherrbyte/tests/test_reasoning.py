@@ -8,7 +8,12 @@ Two guarantees matter most and are asserted hard:
 
 import pytest
 
-from app.spie.reasoning.confidence import WEIGHTS, components, score
+from datetime import date, timedelta
+
+from app.spie.reasoning.confidence import WEIGHTS, components, evaluate, score
+from app.spie.reasoning.methods import (
+    LAGS, MIN_ABS_R, MIN_BUCKETS, best_lag, degree_centrality, pagerank, spearman,
+)
 from app.spie.reasoning.narrative import (
     build_narrative, confidence_word, move_words, signed_pct,
     violates_language_rules, FORBIDDEN,
@@ -102,9 +107,11 @@ def test_forbidden_list_covers_the_stated_rules():
         assert any(must in f for f in FORBIDDEN), must
 
 
-# ─── confidence formula ───────────────────────────────────────────────────────
-def test_weights_sum_to_one():
-    assert abs(sum(WEIGHTS.values()) - 1.0) < 1e-9
+# ─── M5: log-odds evidence combination ───────────────────────────────────────
+def test_weights_live_in_config_and_cover_every_factor():
+    for f in ["source_diversity", "npmi_strength", "lag_evidence",
+              "historical_consistency", "cross_market"]:
+        assert f in WEIGHTS
 
 
 def test_components_are_normalised():
@@ -127,10 +134,128 @@ def test_more_evidence_raises_confidence():
     weak = score(source_count=1, npmi_values=[0.1], similar_count=0,
                  followed_count=0, co_moving=0)
     strong = score(source_count=6, npmi_values=[0.8], similar_count=4,
-                   followed_count=4, co_moving=3)
+                   followed_count=4, co_moving=3,
+                   lag_result={"passed": True, "rho": 0.7, "lag": 2})
     assert 0.0 <= weak < strong <= 1.0
 
 
 def test_cross_market_breadth_contributes():
     base = dict(source_count=4, npmi_values=[0.5], similar_count=3, followed_count=2)
     assert score(**base, co_moving=3) > score(**base, co_moving=0)
+
+
+def test_breakdown_explains_every_factor():
+    """The card must be able to show WHY the confidence is what it is."""
+    res = evaluate(source_count=6, npmi_values=[0.7], similar_count=3,
+                   followed_count=2, co_moving=2,
+                   lag_result={"passed": True, "rho": 0.6, "lag": 1})
+    names = [b["factor"] for b in res["breakdown"]]
+    assert set(names) == set(WEIGHTS)
+    for b in res["breakdown"]:
+        assert 0.0 <= b["strength"] <= 1.0
+        assert "detail" in b and b["detail"]
+    assert 0.0 <= res["confidence"] <= 1.0
+
+
+def test_lag_evidence_raises_confidence_when_guards_pass():
+    base = dict(source_count=5, npmi_values=[0.6], similar_count=3,
+                followed_count=2, co_moving=1)
+    failed = score(**base, lag_result={"passed": False, "reason": "only 3 buckets"})
+    passed = score(**base, lag_result={"passed": True, "rho": 0.8, "lag": 2})
+    assert passed > failed
+
+
+# ─── M2: lagged Spearman ─────────────────────────────────────────────────────
+def _series(start, values):
+    return {start + timedelta(days=i): v for i, v in enumerate(values)}
+
+
+def test_spearman_is_rank_based_and_outlier_robust():
+    xs = [1, 2, 3, 4, 5]
+    ys = [2, 4, 6, 8, 1000]          # monotonic but with a wild outlier
+    assert round(spearman(xs, ys), 6) == 1.0     # rank correlation is unaffected
+
+
+def test_best_lag_finds_a_news_lead():
+    start = date(2026, 1, 1)
+    news = _series(start, [1, 5, 1, 1, 6, 1, 1, 7, 1, 1, 5, 1, 1, 6])
+    # market repeats the same shape two days later
+    market = _series(start + timedelta(days=2), [1, 5, 1, 1, 6, 1, 1, 7, 1, 1, 5, 1, 1, 6])
+    res = best_lag(news, market)
+    assert res["lag"] == 2
+    assert abs(res["rho"]) >= 0.5
+
+
+def test_best_lag_reports_why_it_failed_rather_than_hiding_it():
+    start = date(2026, 1, 1)
+    short_news = _series(start, [1, 2, 3])
+    short_mkt = _series(start, [1, 2, 3])
+    res = best_lag(short_news, short_mkt)
+    assert res["passed"] is False
+    assert res["reason"]              # a stated reason, never a silent zero
+
+
+def test_lags_are_the_reference_set():
+    assert LAGS == (0, 1, 2, 3, 7)
+    assert MIN_BUCKETS == 8 and MIN_ABS_R == 0.5
+
+
+# ─── M4: centrality ──────────────────────────────────────────────────────────
+def test_pagerank_ranks_the_hub_highest():
+    edges = [("hub", "a"), ("hub", "b"), ("hub", "c"), ("a", "b")]
+    ranks = pagerank(edges)
+    assert max(ranks, key=ranks.get) == "hub"
+    # ranks are rounded to 4 dp, so allow for that rounding in the sum
+    assert abs(sum(ranks.values()) - 1.0) < 1e-3
+
+
+def test_pagerank_weights_matter():
+    strong = pagerank([("x", "y", 5.0), ("x", "z", 0.1)])
+    assert strong["y"] > strong["z"]
+
+
+def test_degree_centrality_is_normalised():
+    d = degree_centrality([("a", "b"), ("b", "c")])
+    assert all(0.0 <= v <= 2.0 for v in d.values())
+    assert d["b"] > d["a"]
+
+
+# ─── M5 calibration (no factor may swamp the sum) ────────────────────────────
+def test_confidence_is_monotone_in_evidence():
+    ladder = [
+        score(source_count=0, npmi_values=[], similar_count=0, followed_count=0, co_moving=0),
+        score(source_count=1, npmi_values=[0.1], similar_count=0, followed_count=0, co_moving=0),
+        score(source_count=6, npmi_values=[], similar_count=0, followed_count=0, co_moving=0),
+        score(source_count=4, npmi_values=[0.5], similar_count=3, followed_count=2,
+              co_moving=1, lag_result={"passed": True, "rho": 0.55, "lag": 1}),
+        score(source_count=6, npmi_values=[0.8], similar_count=4, followed_count=4,
+              co_moving=3, lag_result={"passed": True, "rho": 0.8, "lag": 2}),
+    ]
+    assert ladder == sorted(ladder), ladder
+
+
+def test_one_saturated_factor_cannot_reach_certainty():
+    """Six sources with no other evidence must not read as a confident insight."""
+    only_sources = score(source_count=6, npmi_values=[], similar_count=0,
+                         followed_count=0, co_moving=0)
+    assert only_sources < 0.60
+
+
+def test_strongest_possible_case_is_high_but_never_100pct():
+    best = score(source_count=6, npmi_values=[1.0], similar_count=5, followed_count=5,
+                 co_moving=3, lag_result={"passed": True, "rho": 1.0, "lag": 1})
+    assert 0.70 < best < 0.95
+
+
+def test_all_neutral_evidence_returns_the_prior():
+    from app.spie.reasoning.methods import combine_log_odds
+    res = combine_log_odds([{"name": "a", "strength": 0.5, "weight": 1},
+                            {"name": "b", "strength": 0.5, "weight": 1}], prior=0.25)
+    assert abs(res["confidence"] - 0.25) < 1e-6
+
+
+def test_no_single_factor_dominates_the_breakdown():
+    res = evaluate(source_count=6, npmi_values=[0.9], similar_count=4, followed_count=4,
+                   co_moving=3, lag_result={"passed": True, "rho": 0.9, "lag": 2})
+    assert max(abs(b["contribution"]) for b in res["breakdown"]) < 1.0
+    assert abs(sum(b["weight"] for b in res["breakdown"]) - 1.0) < 1e-2
