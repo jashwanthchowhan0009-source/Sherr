@@ -23,8 +23,12 @@ CREATE TABLE IF NOT EXISTS expected_pairs (
 
 INSERT INTO expected_pairs (norm_a, norm_b, reason) VALUES
     ('fifa',      'world cup',              'the tournament and its governing body'),
+    ('fifa',      'uefa',                   'the two governing bodies of the same sport'),
+    ('uefa',      'world cup',              'confederation and tournament, definitionally linked'),
+    ('champions league', 'uefa',            'the competition and its organiser'),
     ('argentina', 'fifa',                   'perennial participant, not a new link'),
     ('argentina', 'world cup',              'perennial participant, not a new link'),
+    ('lionel messi', 'world cup',           'the sport''s most-covered player'),
     ('covid',     'fauci',                  'defining public role during the pandemic'),
     ('covid 19',  'fauci',                  'defining public role during the pandemic'),
     ('apple',     'iphone',                 'the company and its flagship product'),
