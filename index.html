@@ -6722,7 +6722,7 @@ function renderReasoned(p) {
   // constructed one names exactly which fields were representative.
   let demo = '';
   if (e.demo) {
-    const real = e.demo_basis === 'real_data_widened_window';
+    const real = e.demo_basis !== 'constructed_example';
     demo = `<div class="spie-demo ${real ? 'is-real' : 'is-example'}">
       <span class="spie-demo-tag">Demo · ${real ? 'real data' : 'example'}</span>
       <span class="spie-demo-n">${bEsc(e.demo_note || '')}</span>

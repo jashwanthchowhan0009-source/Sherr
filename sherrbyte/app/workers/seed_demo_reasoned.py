@@ -56,7 +56,7 @@ _SIG = "demo_reasoned"
 
 # Tier A relaxations. Wide enough to find a real connection on a young corpus,
 # and each one is reported in the output so the operator knows what was loosened.
-TIER_A = {"window_hours": 24 * 14, "z_threshold": 1.0, "min_history": 1,
+TIER_A = {"window_hours": 24 * 90, "z_threshold": 1.0, "min_history": 1,
           "cooc_days": 365, "history_days": 365}
 
 # Tier B fallback scenario. Used ONLY for fields the database cannot supply, and
@@ -87,33 +87,88 @@ def _tag(reasoned: dict, *, basis: str, note: str, fields: list[str]) -> dict:
 
 
 # ─── TIER A — the real engine, widened ────────────────────────────────────────
+async def _focals_without_baseline(conn, limit: int = 8) -> list[dict]:
+    """Real market moves as focals, WITHOUT the MAD-significance test.
+
+    significant_market_moves() needs >= min_history + 1 daily buckets to compute a
+    baseline, so on a corpus with one day of market data it returns nothing no
+    matter how wide the news window is — the failure is upstream of the news
+    lookup, and widening the window cannot reach it.
+
+    These focals carry the real instrument, the real move and the real timestamp;
+    the only thing missing is a z-score, because "unusual for this instrument" is
+    not computable yet. z stays None so nothing downstream can claim significance
+    that was never established.
+    """
+    rows = await conn.fetch(
+        """
+        SELECT unnest(entity_ids) AS eid, AVG(magnitude * direction) AS v,
+               MAX(source_id) AS source_id, MAX(ts) AS at,
+               (MAX(ts) AT TIME ZONE 'UTC')::date AS day
+        FROM domain_signals WHERE domain = 'market'
+        GROUP BY 1
+        ORDER BY ABS(AVG(magnitude * direction)) DESC
+        LIMIT $1
+        """, int(limit))
+    focals = []
+    for r in rows:
+        if not r["v"]:
+            continue
+        v = float(r["v"])
+        focals.append({"type": "market_move", "entity_id": r["eid"],
+                       "asset_class": engine.asset_class_of(r["source_id"]),
+                       "move_pct": round(v, 3), "direction": 1 if v > 0 else -1,
+                       "z": None, "at": r["at"], "day": r["day"]})
+    return focals
+
+
 async def tier_a(conn, limit: int) -> list[dict]:
-    """Run the genuine reasoning path with relaxed thresholds."""
-    focals = await engine.significant_market_moves(
-        conn, history_days=TIER_A["history_days"],
-        z_threshold=TIER_A["z_threshold"], min_history=TIER_A["min_history"])
-    log.info("tier A: %d focal candidate(s)", len(focals))
+    """Run the genuine reasoning path with relaxed thresholds.
+
+    Two passes. The first uses the engine's own significance test. If that finds
+    nothing — the normal case before market history accrues — the second falls back
+    to real moves without a baseline, which is disclosed separately on the card.
+    """
+    days = TIER_A["window_hours"] // 24
+    passes = [
+        ("real_data_widened_window",
+         await engine.significant_market_moves(
+             conn, history_days=TIER_A["history_days"],
+             z_threshold=TIER_A["z_threshold"], min_history=TIER_A["min_history"]),
+         (f"Every value here is a real row from the database, and the narrative is "
+          f"the engine's own. The news link window was widened to {days} days "
+          f"(live default is 72h) so a connection could form before market history "
+          f"has accrued.")),
+        ("real_data_no_baseline", None,
+         (f"Every value here is a real row from the database, and the narrative is "
+          f"the engine's own. Two allowances were made: the news link window was "
+          f"widened to {days} days, and the move was NOT tested for significance — "
+          f"that needs several days of history per instrument, which the corpus "
+          f"does not have yet.")),
+    ]
 
     out: list[dict] = []
-    for focal in focals:
-        try:
-            r = await engine.reason_focal(conn, focal,
-                                          window_hours=TIER_A["window_hours"],
-                                          cooc_days=TIER_A["cooc_days"])
-        except Exception as e:
-            log.warning("tier A reasoning failed for %s: %s", focal.get("entity_id"), e)
-            continue
-        if not r:
-            continue
-        days = TIER_A["window_hours"] // 24
-        out.append({"focal": focal, "reasoned": _tag(
-            r, basis="real_data_widened_window",
-            note=(f"Every value here is a real row from the database. The news link "
-                  f"window was widened to {days} days (live default is 72h) so a "
-                  f"connection could form before market history has accrued."),
-            fields=[])})
-        if len(out) >= limit:
+    for basis, focals, note in passes:
+        if out:
             break
+        if focals is None:
+            focals = await _focals_without_baseline(conn)
+        log.info("tier A [%s]: %d focal candidate(s)", basis, len(focals))
+        for focal in focals:
+            try:
+                r = await engine.reason_focal(conn, focal,
+                                              window_hours=TIER_A["window_hours"],
+                                              cooc_days=TIER_A["cooc_days"])
+            except Exception as e:
+                log.warning("tier A reasoning failed for %s: %s",
+                            focal.get("entity_id"), e)
+                continue
+            if not r:
+                continue
+            out.append({"focal": focal,
+                        "reasoned": _tag(r, basis=basis, note=note, fields=[])})
+            if len(out) >= limit:
+                break
     return out
 
 

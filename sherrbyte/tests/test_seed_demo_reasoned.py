@@ -137,6 +137,51 @@ def test_confidence_breakdown_is_present_and_complete():
                        "historical_consistency", "cross_market"}
 
 
+# ─── tier A must survive a corpus with one day of market data ─────────────────
+class OneDayConn:
+    """One daily bucket of market data — too few for a MAD baseline."""
+
+    async def fetch(self, q, *a):
+        if "ORDER BY ABS" in q and "LIMIT $1" in q:
+            return [{"eid": "e1", "v": 2.87, "source_id": "yahoo:commodities",
+                     "at": "2026-07-30", "day": "2026-07-30"}]
+        return []
+
+    async def fetchrow(self, q, *a):
+        return None
+
+
+def test_focals_are_buildable_without_a_baseline():
+    """significant_market_moves() needs 2+ daily buckets, so on one day of data it
+    returns nothing and no news window can rescue it. The fallback builds focals
+    from the real moves instead."""
+    focals = asyncio.run(seeder._focals_without_baseline(OneDayConn()))
+    assert len(focals) == 1
+    assert focals[0]["move_pct"] == 2.87
+    assert focals[0]["direction"] == 1
+    assert focals[0]["asset_class"] == "commodities"
+
+
+def test_baseline_free_focal_never_claims_significance():
+    """z is what makes a move 'unusual for this instrument'. It was not computed,
+    so it must stay None rather than being defaulted to a number."""
+    focals = asyncio.run(seeder._focals_without_baseline(OneDayConn()))
+    assert focals[0]["z"] is None
+
+
+def test_tier_a_window_is_widened_to_the_agreed_span():
+    assert seeder.TIER_A["window_hours"] == 24 * 90
+
+
+def test_no_baseline_basis_is_disclosed_distinctly():
+    """A card whose significance was never tested must not carry the same
+    disclosure as one that passed the test."""
+    tagged = seeder._tag({}, basis="real_data_no_baseline",
+                         note="n", fields=[])
+    assert tagged["demo_basis"] == "real_data_no_baseline"
+    assert tagged["demo_basis"] != "real_data_widened_window"
+
+
 def test_methods_list_excludes_methods_that_did_not_run():
     """M2 (lag) and M3 (historical echo) did not produce evidence, so claiming them
     would overstate what the card rests on."""
