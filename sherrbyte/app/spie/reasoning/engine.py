@@ -23,6 +23,7 @@ import logging
 from app.spie.discovery.base import write_insight, names_for
 from app.spie.discovery.anomaly_math import ewma, mad, mad_zscore
 from app.spie.reasoning import confidence as conf_mod
+from app.spie.reasoning import methods as M
 from app.spie.reasoning.narrative import build_narrative, violates_language_rules
 
 log = logging.getLogger("sherbyte.reasoning")
@@ -136,8 +137,61 @@ async def _news_link(conn, entity_ids: list, at, window_hours: int) -> list[dict
              "source_count": int(r["source_count"] or 0)} for r in rows]
 
 
+async def _daily_news_series(conn, entity_ids: list, days: int) -> dict:
+    """M2 input — daily count of distinct news STORIES touching these entities."""
+    if not entity_ids:
+        return {}
+    rows = await conn.fetch(
+        f"""
+        SELECT (ts AT TIME ZONE 'UTC')::date AS d,
+               COUNT(DISTINCT {_STORY_KEY}) AS c
+        FROM domain_signals
+        WHERE domain='news' AND entity_ids && $1::uuid[]
+          AND ts >= now() - ($2 || ' days')::interval
+        GROUP BY 1
+        """,
+        entity_ids, str(int(days)))
+    return {r["d"]: float(r["c"] or 0) for r in rows}
+
+
+async def _daily_market_series(conn, eid, days: int) -> dict:
+    """M2 input — the instrument's daily absolute move."""
+    rows = await conn.fetch(
+        """
+        SELECT (ts AT TIME ZONE 'UTC')::date AS d, AVG(ABS(magnitude)) AS v
+        FROM domain_signals
+        WHERE domain='market' AND $1 = ANY(entity_ids)
+          AND ts >= now() - ($2 || ' days')::interval
+        GROUP BY 1
+        """,
+        eid, str(int(days)))
+    return {r["d"]: float(r["v"] or 0.0) for r in rows}
+
+
+async def _centrality(conn, focal_eid, connected: list, days: int) -> dict:
+    """M4 — PageRank over the focal's connected sub-graph, weighted by NPMI, so
+    'which of these entities is central' is answered structurally, not by count."""
+    ids = [focal_eid] + [c["entity_id"] for c in connected]
+    if len(ids) < 2:
+        return {}
+    rows = await conn.fetch(
+        """
+        SELECT entity_a, entity_b, MAX(npmi) AS npmi
+        FROM cooccurrence
+        WHERE entity_a = ANY($1::uuid[]) AND entity_b = ANY($1::uuid[])
+          AND window_start >= (now() - ($2 || ' days')::interval)::date
+        GROUP BY entity_a, entity_b
+        """,
+        ids, str(int(days)))
+    edges = [(str(r["entity_a"]), str(r["entity_b"]),
+              float(r["npmi"]) if r["npmi"] is not None else 0.1) for r in rows]
+    if not edges:
+        return {}
+    return M.pagerank(edges)
+
+
 async def _cross_market(conn, focal_eid, entity_ids: list, at,
-                        window_hours: int) -> list[dict]:
+                        window_hours: int, m6_threshold: float = 1.5) -> list[dict]:
     """Step 4 — OTHER instruments (any asset class) that also moved in the window and
     share news entities with the focal. This is the multi-asset payoff."""
     rows = await conn.fetch(
@@ -156,8 +210,8 @@ async def _cross_market(conn, focal_eid, entity_ids: list, at,
     for r in rows:
         if r["eid"] == focal_eid or not r["v"]:
             continue
-        # Shared driver: this instrument must itself be connected to the focal's
-        # news entities (co-occurrence), not merely moving at the same time.
+        # M7 requires a SHARED DRIVER, not mere simultaneity: the co-mover must
+        # itself be connected (M1) to the focal's news entities.
         shared = await conn.fetchval(
             """
             SELECT COUNT(*) FROM cooccurrence
@@ -167,8 +221,24 @@ async def _cross_market(conn, focal_eid, entity_ids: list, at,
             r["eid"], entity_ids) if entity_ids else 0
         if not shared:
             continue
-        name = (await names_for(conn, [r["eid"]]))[0]
+        # ...and its own move must be significant by M6 against its own baseline,
+        # so routine noise never counts as convergence.
+        hist_rows = await conn.fetch(
+            """
+            SELECT (ts AT TIME ZONE 'UTC')::date AS d, AVG(magnitude * direction) AS v
+            FROM domain_signals
+            WHERE domain='market' AND $1 = ANY(entity_ids)
+              AND ts >= now() - interval '60 days'
+            GROUP BY 1 ORDER BY d
+            """,
+            r["eid"])
+        hist = [abs(float(h["v"] or 0.0)) for h in hist_rows[:-1]]
         v = float(r["v"])
+        if len(hist) >= 4:
+            z = mad_zscore(abs(v), ewma(hist, 0.3), mad(hist))
+            if z < m6_threshold:
+                continue
+        name = (await names_for(conn, [r["eid"]]))[0]
         out.append({"instrument": name, "asset_class": asset_class_of(r["source_id"]),
                     "move_pct": round(v, 3), "direction": 1 if v > 0 else -1,
                     "shared_entities": int(shared)})
@@ -251,6 +321,16 @@ async def reason_focal(conn, focal: dict, *, window_hours: int = 48,
     historical = await _historical_echo(
         conn, [l["cluster_id"] for l in news_link], eid, focal["direction"])
 
+    # M2 — did news actually PRECEDE the move, and at what lag? Only over the
+    # M1-linked entities, with the reference's guards (>=8 buckets, >=2 periods,
+    # |rho| >= 0.5). A failure is reported, not hidden.
+    lag_result = M.best_lag(
+        await _daily_news_series(conn, news_entity_ids, cooc_days),
+        await _daily_market_series(conn, eid, cooc_days))
+
+    # M4 — structural centrality within the connected sub-graph.
+    ranks = await _centrality(conn, eid, connected, cooc_days)
+
     articles = sum(l["article_count"] for l in news_link)
     sources = max((l["source_count"] for l in news_link), default=0)
 
@@ -259,18 +339,12 @@ async def reason_focal(conn, focal: dict, *, window_hours: int = 48,
     for l in news_link:
         l["entities"] = top_names
 
-    conf_parts = conf_mod.components(
-        source_count=sources,
-        npmi_values=[c["npmi"] for c in connected if c["npmi"] is not None],
+    npmi_values = [c["npmi"] for c in connected if c["npmi"] is not None]
+    m5 = conf_mod.evaluate(
+        source_count=sources, npmi_values=npmi_values,
         similar_count=historical["similar_count"],
         followed_count=historical["followed_direction"],
-        co_moving=len(cross_market))
-    conf = conf_mod.score(
-        source_count=sources,
-        npmi_values=[c["npmi"] for c in connected if c["npmi"] is not None],
-        similar_count=historical["similar_count"],
-        followed_count=historical["followed_direction"],
-        co_moving=len(cross_market))
+        co_moving=len(cross_market), lag_result=lag_result)
 
     reasoned = {
         "focal": {"type": "market_move", "instrument": instrument,
@@ -278,13 +352,18 @@ async def reason_focal(conn, focal: dict, *, window_hours: int = 48,
                   "direction": focal["direction"], "z": focal.get("z")},
         "window_hours": window_hours,
         "news_link": news_link,
-        "connected": [{"entity": c["entity"], "npmi": c["npmi"]} for c in connected[:6]],
+        "connected": [{"entity": c["entity"], "npmi": c["npmi"],
+                       "centrality": ranks.get(str(c["entity_id"]))}
+                      for c in connected[:6]],
         "cross_market": cross_market,
         "historical": historical,
+        "lag": lag_result,
         "evidence": {"sources": sources, "articles": articles,
                      "clusters": len(news_link)},
-        "confidence": conf,
-        "confidence_components": conf_parts,
+        "confidence": m5["confidence"],
+        "confidence_breakdown": m5["breakdown"],
+        "confidence_log_odds": m5["log_odds"],
+        "methods": ["M1", "M2", "M3", "M4", "M5", "M6", "M7"],
         "method": "reasoning_engine/deterministic+template",
     }
     reasoned["narrative"] = build_narrative(reasoned)

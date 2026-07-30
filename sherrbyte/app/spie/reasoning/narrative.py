@@ -94,10 +94,23 @@ def build_narrative(r: dict) -> str:
         parts.append(f"This coverage also aligns with {movers} — a pattern observed "
                      f"across {n} market{'' if n == 1 else 's'}.")
 
+    # 3b. LAG EVIDENCE (M2) — only stated when the guards actually passed.
+    lag = r.get("lag") or {}
+    if lag.get("passed"):
+        d = int(lag.get("lag") or 0)
+        when = "the same day" if d == 0 else f"about {d} day{'' if d == 1 else 's'} ahead"
+        parts.append(f"Across {lag.get('buckets')} days of history, coverage of these "
+                     f"entities has moved {when} of this instrument "
+                     f"(rank correlation {lag.get('rho')}).")
+
     # 4. CONNECTED ENTITIES
     connected = r.get("connected") or []
     if connected:
-        parts.append(f"Connected to: {_join([c.get('entity') for c in connected], 4)}.")
+        # M4 — name the structurally central entity when centrality is available.
+        ranked = [c for c in connected if c.get("centrality") is not None]
+        central = max(ranked, key=lambda c: c["centrality"])["entity"] if ranked else None
+        line = f"Connected to: {_join([c.get('entity') for c in connected], 4)}"
+        parts.append(f"{line} (most central: {central})." if central else f"{line}.")
 
     # 5. HISTORICAL ECHO — stated honestly, including thin history
     hist = r.get("historical") or {}
