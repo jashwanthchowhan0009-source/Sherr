@@ -43,6 +43,19 @@ def confidence_word(conf: float) -> str:
     return "low"
 
 
+# Beyond this the window is called out as wide in the card itself.
+WIDE_WINDOW_HOURS = 48
+
+
+def window_phrase(hours: int) -> str:
+    """'36h' but '3 days' — 168h is technically correct and humanly useless."""
+    hours = int(hours or 0)
+    if hours >= 48 and hours % 24 == 0:
+        d = hours // 24
+        return f"{d} day{'' if d == 1 else 's'}"
+    return f"{hours}h"
+
+
 def _join(items: list[str], limit: int = 3) -> str:
     """Human list: 'a, b and c' (capped)."""
     items = [i for i in items if i][:limit]
@@ -79,11 +92,18 @@ def build_narrative(r: dict) -> str:
         articles = sum(int(l.get("article_count") or 0) for l in links)
         sources = max((int(l.get("source_count") or 0) for l in links), default=0)
         topics = _join([t for l in links for t in (l.get("entities") or [])])
-        window = r.get("window_hours", 24)
+        window = int(r.get("window_hours", 24) or 24)
         parts.append(
-            f"In the preceding {window}h, {articles} article{'' if articles == 1 else 's'} "
+            f"In the preceding {window_phrase(window)}, "
+            f"{articles} article{'' if articles == 1 else 's'} "
             f"across {sources} source{'' if sources == 1 else 's'} covered "
             f"{topics or 'related entities'}.")
+        # A wide window finds more overlap but says less about sequence. Disclose it
+        # in the card rather than letting "preceding 7 days" read as tight timing.
+        if window > WIDE_WINDOW_HOURS:
+            parts.append(f"That is a wide window — proximity over "
+                         f"{window_phrase(window)} is weaker evidence of sequence "
+                         f"than a same-day link.")
 
     # 3. CROSS-MARKET (the multi-asset payoff)
     cross = r.get("cross_market") or []

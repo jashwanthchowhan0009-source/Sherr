@@ -1623,6 +1623,40 @@ nav.compact .nb.on { flex: 0 0 auto; padding-left: 16px; padding-right: 16px; }
 .spie-type-market_reaction { color: #22C55E; background: rgba(34,197,94,0.15); }
 .spie-type-volume_anomaly { color: #EAB308; background: rgba(234,179,8,0.15); }
 .spie-type-cross_domain_chain { color: #64D2FF; background: rgba(100,210,255,0.15); }
+.spie-type-reasoned { color: #F59E0B; background: rgba(245,158,11,0.15); }
+
+/* ── Market Intelligence (reasoned) hero ── */
+.spie-card.is-reasoned { border-color: rgba(245,158,11,0.26);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 16px 38px -22px rgba(245,158,11,0.5); }
+.spie-sec { margin: 14px 15px 0; padding-top: 12px; border-top: 1px solid var(--line2); }
+.spie-sec-h { font: 800 0.58rem/1 var(--fd); letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--t3); margin-bottom: 8px; }
+.spie-note { font: 500 0.76rem/1.5 var(--f); color: var(--t2); margin-top: 6px; }
+.spie-note.is-muted { color: var(--t3); font-size: 0.72rem; }
+.spie-note.is-strong { color: var(--t1); font-weight: 600; }
+/* Cross-market rows — one line per co-moving instrument. */
+.spie-cross { display: flex; flex-direction: column; gap: 6px; }
+.spie-cross-row { display: flex; align-items: baseline; gap: 8px;
+  font: 600 0.78rem/1.3 var(--f); color: var(--t2); }
+.spie-cross-i { color: var(--t1); font-weight: 700; }
+.spie-cross-p { font: 800 0.82rem/1 var(--fd); }
+.spie-cross-p.is-up { color: #22C55E; }
+.spie-cross-p.is-down { color: #EF4444; }
+.spie-cross-c { margin-left: auto; font: 600 0.66rem/1 var(--fd); color: var(--t3);
+  text-transform: uppercase; letter-spacing: 0.06em; }
+.spie-sec .spie-ents { padding: 0; }
+.spie-ent.is-central { background: rgba(245,158,11,0.16); color: var(--t1); }
+.spie-ent.is-central i { color: #F59E0B; font-size: 0.62rem; }
+.spie-ent em { font-style: normal; opacity: 0.55; margin-left: 5px; font-size: 0.66rem; }
+/* Confidence breakdown — every factor's contribution, so the % is auditable. */
+.spie-bd { display: flex; flex-direction: column; gap: 5px; margin-top: 8px; }
+.spie-bd-row { display: grid; grid-template-columns: 8.5em 1fr; gap: 4px 8px; align-items: center; }
+.spie-bd-n { font: 700 0.66rem/1.2 var(--fd); color: var(--t2); text-transform: capitalize; }
+.spie-bd-bar { height: 5px; border-radius: 999px; background: rgba(255,255,255,0.08); overflow: hidden; }
+[data-theme="light"] .spie-bd-bar { background: rgba(0,0,0,0.08); }
+.spie-bd-bar i { display: block; height: 100%; border-radius: 999px;
+  background: linear-gradient(90deg, #F59E0B, #F97316); }
+.spie-bd-d { grid-column: 2; font: 500 0.66rem/1.3 var(--f); color: var(--t3); }
 
 /* ── Market Reaction hero ── */
 .spie-card.is-hero { border-color: rgba(34,197,94,0.22);
@@ -6459,7 +6493,12 @@ async function loadPatterns(type) {
   const filt = arr => spiePatternType ? arr.filter(p => p.type === spiePatternType) : arr;
   // banner: null (real data), or {cls, text} shown ABOVE the cards so demo/broken
   // states are never mistaken for live intelligence.
-  const paint = (arr, banner) => {
+  // Reasoned cards lead: they carry evidence about market moves, while emergence
+  // is a bare co-occurrence observation. Within each group the API's order stands.
+  const rank = p => (p.type === 'reasoned' ? 0 : p.type === 'market_reaction' ? 1 : 2);
+  const order = arr => arr.slice().sort((a, b) => rank(a) - rank(b));
+  const paint = (raw, banner) => {
+    const arr = order(raw);
     const head = arr.length
       ? `<div class="spie-count">${arr.length} pattern${arr.length === 1 ? '' : 's'} detected</div>`
       : '';
@@ -6507,6 +6546,7 @@ async function loadPatterns(type) {
 // Types with no data yet still get a chip and an empty state (never hidden).
 const SPIE_TYPES = [
   { key: '',                     label: 'All',             icon: 'fa-layer-group' },
+  { key: 'reasoned',             label: 'Market Intelligence', icon: 'fa-brain',       color: '#F59E0B' },
   { key: 'market_reaction',      label: 'Market Reaction', icon: 'fa-chart-line',      color: '#22C55E' },
   { key: 'emergence',            label: 'Emergence',       icon: 'fa-diagram-project', color: '#22C55E' },
   { key: 'temporal_correlation', label: 'Temporal',        icon: 'fa-timeline',        color: '#A855F7' },
@@ -6515,6 +6555,9 @@ const SPIE_TYPES = [
 ];
 const SPIE_TYPE_LABEL = Object.fromEntries(SPIE_TYPES.map(t => [t.key, t.label]));
 const SPIE_EMPTY_HINT = {
+  // Honest monitoring state — the engine is running and found nothing worth
+  // reporting. Never dressed up as a result.
+  reasoned:             'Monitoring — no significant market-linked events in the current window.',
   market_reaction:      'Needs a few days of market history plus related news in the same window.',
   temporal_correlation: 'Needs several weeks of daily signals before a lag can be established.',
   volume_anomaly:       'Appears when an entity’s story volume spikes above its own baseline.',
@@ -6543,6 +6586,12 @@ function renderSpieChips() {
 function patternHeadline(p) {
   const e = p.explain_json || {};
   const ents = p.entities || [];
+  if (p.type === 'reasoned') {
+    const f = e.focal || {};
+    const pct = (f.move_pct != null) ? Math.abs(f.move_pct).toFixed(2) + '%' : '';
+    const dir = f.direction > 0 ? 'rose' : f.direction < 0 ? 'fell' : 'moved';
+    return `${f.instrument || ents[0] || 'Instrument'} ${dir} ${pct}`.trim();
+  }
   if (p.type === 'market_reaction') {
     const pct = (e.move_pct != null) ? Math.abs(e.move_pct).toFixed(2) + '%' : '';
     const dir = e.direction > 0 ? 'rose' : e.direction < 0 ? 'fell' : 'moved';
@@ -6566,6 +6615,107 @@ function patternHeadline(p) {
   return ents.join(' · ') || (p.type || 'pattern');
 }
 
+// ── Market Intelligence (reasoned) card ──────────────────────────────────────
+// Six sections, each fed by one of the engine's methods. A section with no data
+// is OMITTED rather than padded — a thin window must produce a short card, never
+// a full-looking one built from nothing.
+function spieSection(title, body) {
+  return body ? `<div class="spie-sec"><div class="spie-sec-h">${bEsc(title)}</div>${body}</div>` : '';
+}
+
+function renderReasoned(p) {
+  const e = p.explain_json || {};
+  const f = e.focal || {};
+  const up = (f.direction || 0) >= 0;
+  const pct = (f.move_pct != null) ? Math.abs(f.move_pct).toFixed(2) + '%' : '—';
+  const cls = f.asset_class ? ` · ${f.asset_class}` : '';
+
+  // 1. THE MOVE
+  const move = `
+    <div class="spie-move ${up ? 'is-up' : 'is-down'}">
+      <div class="spie-move-inst">${bEsc((f.instrument || '') + cls)}</div>
+      <div class="spie-move-pct"><i class="fa-solid fa-arrow-${up ? 'up' : 'down'}"></i> ${bEsc(pct)}</div>
+      ${f.z != null ? `<div class="spie-move-seq">unusual for this instrument (z ${bEsc(f.z)} vs its own baseline)</div>` : ''}
+    </div>`;
+
+  // 2. THE NEWS BEHIND IT (+ the M2 lag finding, only when its guards passed)
+  const links = e.news_link || [];
+  const heads = links.map(l => l.cluster_headline).filter(Boolean).slice(0, 4);
+  const win = e.window_hours;
+  const winTxt = (win >= 48 && win % 24 === 0) ? `${win / 24} days` : `${win}h`;
+  const lag = e.lag || {};
+  let newsBody = '';
+  if (links.length) {
+    newsBody = heads.length
+      ? `<div class="spie-heads">${heads.map(h =>
+          `<div class="spie-headline"><i class="fa-regular fa-newspaper"></i> ${bEsc(h)}</div>`).join('')}</div>`
+      : '';
+    if (win != null) newsBody += `<div class="spie-note">Window: preceding ${bEsc(winTxt)}</div>`;
+    if (lag.passed) {
+      const d = lag.lag || 0;
+      newsBody += `<div class="spie-note is-strong">Coverage moved ${d === 0 ? 'the same day as' : `about ${d} day${d === 1 ? '' : 's'} ahead of`} this instrument · rank correlation ${bEsc(lag.rho)} over ${bEsc(lag.buckets)} days</div>`;
+    } else if (lag.reason) {
+      // A failed lag test is reported, not hidden — silence would read as a pass.
+      newsBody += `<div class="spie-note is-muted">No lead-lag evidence: ${bEsc(lag.reason)}</div>`;
+    }
+  }
+
+  // 3. CROSS-MARKET
+  const cross = e.cross_market || [];
+  const crossBody = cross.length ? `<div class="spie-cross">${cross.map(c => {
+    const cu = (c.direction || 0) >= 0;
+    return `<div class="spie-cross-row"><span class="spie-cross-i">${bEsc(c.instrument || '')}</span>
+      <span class="spie-cross-p ${cu ? 'is-up' : 'is-down'}">${cu ? '+' : '-'}${bEsc(Math.abs(c.move_pct || 0).toFixed(2))}%</span>
+      <span class="spie-cross-c">${bEsc(c.asset_class || '')}</span></div>`;
+  }).join('')}</div>` : '';
+
+  // 4. CONNECTED ENTITIES — the structurally central one is marked (M4).
+  const conn = e.connected || [];
+  let connBody = '';
+  if (conn.length) {
+    const ranked = conn.filter(c => c.centrality != null);
+    const top = ranked.length
+      ? ranked.reduce((a, b) => (b.centrality > a.centrality ? b : a)).entity : null;
+    connBody = `<div class="spie-ents">${conn.map(c =>
+      `<span class="spie-ent${c.entity === top ? ' is-central' : ''}">${
+        c.entity === top ? '<i class="fa-solid fa-star"></i> ' : ''}${bEsc(c.entity || '')}${
+        c.npmi != null ? `<em>${bEsc(c.npmi)}</em>` : ''}</span>`).join('')}</div>`;
+    if (top) connBody += `<div class="spie-note is-muted">Most central: ${bEsc(top)}</div>`;
+  }
+
+  // 5. HISTORICAL ECHO — thin history is stated as thin, never rounded up.
+  const h = e.historical || {};
+  const sim = h.similar_count || 0;
+  const echoBody = `<div class="spie-note">${bEsc(
+      sim >= 2 ? `Similar coverage preceded a same-direction move ${h.followed_direction || 0} of the last ${sim} times.`
+    : sim === 1 ? 'Limited history: one prior similar cluster on record.'
+                : 'No comparable prior coverage on record yet.')}</div>`;
+
+  // 6. EVIDENCE + CONFIDENCE — the M5 breakdown, so the number is auditable.
+  const ev = e.evidence || {};
+  const bd = e.confidence_breakdown || [];
+  const confPct = Math.round((e.confidence || 0) * 100);
+  const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+  const evBody = `
+    <div class="spie-note">${bEsc([plural(ev.articles || 0, 'article', 'articles'),
+                                   plural(ev.sources || 0, 'source', 'sources'),
+                                   plural(ev.clusters || 0, 'story', 'stories')].join(' · '))}</div>
+    ${bd.length ? `<div class="spie-bd">${bd.map(b => `
+      <div class="spie-bd-row">
+        <span class="spie-bd-n">${bEsc((b.factor || '').replace(/_/g, ' '))}</span>
+        <span class="spie-bd-bar"><i style="width:${Math.round(Math.max(0, Math.min(1, b.strength || 0)) * 100)}%"></i></span>
+        <span class="spie-bd-d">${bEsc(b.detail || '')}</span>
+      </div>`).join('')}</div>` : ''}
+    <div class="spie-note is-muted">Confidence ${confPct}% — how well-evidenced this reasoning is, not a forecast.</div>`;
+
+  return move
+    + spieSection('The news behind it', newsBody)
+    + spieSection('Cross-market', crossBody)
+    + spieSection('Connected entities', connBody)
+    + spieSection('Historical echo', echoBody)
+    + spieSection('Evidence & confidence', evBody);
+}
+
 function renderPattern(p) {
   const ents = p.entities || [];
   const isTemporal = p.type === 'temporal_correlation';
@@ -6584,11 +6734,14 @@ function renderPattern(p) {
   const metaHtml = meta.length ? `<div class="spie-meta">${meta.map(m => bEsc(m)).join(' · ')}</div>` : '';
   const label = SPIE_TYPE_LABEL[p.type] || (p.type || '').replace(/_/g, ' ');
   const isMarket = p.type === 'market_reaction';
+  const isReasoned = p.type === 'reasoned';
 
   // Market Reaction is the hero: the instrument's move leads, then the related
   // headlines that preceded (or followed) it.
   let hero = '';
-  if (isMarket) {
+  if (isReasoned) {
+    hero = renderReasoned(p);
+  } else if (isMarket) {
     const up = (e.direction || 0) >= 0;
     const pct = (e.move_pct != null) ? Math.abs(e.move_pct).toFixed(2) + '%' : '—';
     const seq = e.sequence === 'move_then_news' ? 'news followed the move'
@@ -6604,16 +6757,16 @@ function renderPattern(p) {
           `<div class="spie-headline"><i class="fa-regular fa-newspaper"></i> ${bEsc(h)}</div>`).join('')}</div>` : ''}`;
   }
 
-  return `<div class="spie-card${isMarket ? ' is-hero' : ''}">
+  return `<div class="spie-card${isMarket ? ' is-hero' : ''}${isReasoned ? ' is-reasoned' : ''}">
     <div class="spie-card-top">
       <span class="spie-type spie-type-${bEsc(p.type || '')}">${bEsc(label)}</span>
       ${conf !== '' ? `<span class="spie-score">${bEsc(conf)}</span>` : ''}
     </div>
     <div class="spie-hl">${bEsc(patternHeadline(p))}</div>
     ${hero}
-    ${isMarket ? '' : `<div class="spie-ents">${entHtml}</div>`}
+    ${(isMarket || isReasoned) ? '' : `<div class="spie-ents">${entHtml}</div>`}
     ${why}
-    ${metaHtml}
+    ${isReasoned ? '' : metaHtml}
     <details class="spie-details"><summary>Raw data</summary>
       <pre class="spie-raw">${bEsc(JSON.stringify(p, null, 2))}</pre>
     </details>

@@ -94,6 +94,13 @@ class Settings(BaseSettings):
     story_link_threshold: float = Field(0.78, alias="STORY_LINK_THRESHOLD")
     story_link_window_hours: int = Field(72, alias="STORY_LINK_WINDOW_HOURS")
 
+    # SPIE reasoning — how far back the news↔market link looks.
+    # 48h is the tight, defensible window. Widening it finds more overlap but
+    # weakens the temporal claim, so the narrative states the window it used and
+    # adds an explicit caveat above 48h. The M2 lag test is unaffected — that is
+    # the real "did news precede this" check and has its own guards.
+    spie_news_window_hours: int = Field(72, alias="SPIE_NEWS_WINDOW_HOURS")
+
     # Recommender — score = α·content + β·collab + γ·freshness
     rec_alpha: float = Field(0.5, alias="REC_ALPHA")   # content weight
     rec_beta: float = Field(0.3, alias="REC_BETA")     # collaborative weight
