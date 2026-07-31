@@ -1,4 +1,4 @@
--- 015_npmi.sql — NPMI edge weighting for co-occurrence (SPIE Graph Engine, Task 3).
+-- 015_npmi.sql — NPMI edge weighting for co-occurrence (Sherr-I Graph Engine, Task 3).
 --
 -- Raw co-occurrence count over-rewards hub entities (e.g. "Modi" co-occurs with
 -- everything by sheer volume). NPMI (normalized pointwise mutual information) asks

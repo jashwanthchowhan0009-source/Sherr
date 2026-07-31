@@ -1,7 +1,7 @@
 """
 Part C: the news↔market detector's pure logic + the language rule.
 
-The language rule is a product/legal constraint, not a style preference: SPIE
+The language rule is a product/legal constraint, not a style preference: Sherr-I
 reports an OBSERVED SEQUENCE. It must never claim causation ("caused", "because
 of") or make a forecast ("will", "expect", "predict").
 """

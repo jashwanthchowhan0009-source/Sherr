@@ -1,5 +1,5 @@
 """
-Unit tests for discovery/anomaly_math (SPIE Task 4) — pure, DB-free.
+Unit tests for discovery/anomaly_math (Sherr-I Task 4) — pure, DB-free.
 
 Verifies median / EWMA / MAD and the robust MAD z-score, plus the end-to-end
 spike scenario the volume-anomaly detector relies on (a quiet entity that suddenly

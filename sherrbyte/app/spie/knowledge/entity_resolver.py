@@ -258,7 +258,7 @@ def is_valid_mention(name: str, type: str = "MISC") -> bool:
     return True
 
 
-log.info("SPIE resolver loaded: %s", RESOLVER_BUILD)
+log.info("Sherr-I resolver loaded: %s", RESOLVER_BUILD)
 
 
 def resolve_key(name: str, type: str = "MISC") -> tuple[str, str, str]:

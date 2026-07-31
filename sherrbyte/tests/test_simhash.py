@@ -1,5 +1,5 @@
 """
-Unit tests for the pure core of knowledge/simhash (SPIE Task 2).
+Unit tests for the pure core of knowledge/simhash (Sherr-I Task 2).
 
 DB-free. Verifies shingling, 64-bit SimHash stability, the Hamming-distance
 operating point (near-duplicate wire copies ≤ 3, distinct stories ≫ 3), and the

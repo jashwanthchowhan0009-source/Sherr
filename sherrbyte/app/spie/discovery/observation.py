@@ -40,7 +40,9 @@ from app.spie.reasoning.narrative import (
 
 log = logging.getLogger("sherbyte.detectors.observation")
 
-_STORY_KEY = "COALESCE(cluster_id, -id)"
+# QUALIFIED with the ds alias: every query using this joins info_objects, which
+# also has an "id" column, and an unqualified -id is ambiguous in Postgres.
+_STORY_KEY = "COALESCE(ds.cluster_id, -ds.id)"
 
 # A z-score below this many baseline points is reported as provisional; below
 # MIN_BUCKETS_FOR_Z it is not computed at all and ranking falls back to raw % change.

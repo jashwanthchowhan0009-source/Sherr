@@ -1,8 +1,8 @@
 """
-reasoning/methods.py — the M1–M7 mathematical methods (SPIE Reasoning Engine).
+reasoning/methods.py — the M1–M7 mathematical methods (Sherr-I Reasoning Engine).
 
 Pure, deterministic, stdlib-only — every method here is unit-testable without a DB.
-Reference: docs/SPIE_REASONING_MATH.md. Only M1–M7 are implemented; anything the
+Reference: docs/SHERR_I_REASONING_MATH.md. Only M1–M7 are implemented; anything the
 reference marks V2/V3/DEFERRED is deliberately absent.
 
   M1 NPMI                    association beyond chance (see graph/cooccurrence)

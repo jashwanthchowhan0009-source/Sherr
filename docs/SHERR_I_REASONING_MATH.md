@@ -1,7 +1,7 @@
-# SPIE Reasoning Engine — Mathematical Methods (M1–M7)
+# Sherr-I Reasoning Engine — Mathematical Methods (M1–M7)
 ## Authoritative reference for `app/spie/reasoning/`
 
-> **Provenance note.** The original `SPIE_REASONING_MATH.md` attachment did not arrive in
+> **Provenance note.** The original `SHERR_I_REASONING_MATH.md` attachment did not arrive in
 > the working session. This document is **transcribed from the specification as stated in
 > the task prompt**, and reconciled line-by-line against the shipped implementation so the
 > two cannot drift. If the original file is later supplied, replace this file with it and
@@ -134,7 +134,7 @@ narrative as *"(most central: X)"*.
 ## M5 — Log-odds evidence combination
 
 **Question it answers:** how well-evidenced is this reasoning? (Not: how likely is a future
-move — there is no forecast anywhere in SPIE.)
+move — there is no forecast anywhere in Sherr-I.)
 
 ```
 logit(confidence) = logit(prior) + Σ wᵢ · ( logit(squash(strengthᵢ)) − logit(0.5) )

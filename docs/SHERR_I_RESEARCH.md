@@ -1,4 +1,4 @@
-# SherrByte Intelligence Processing Engine (SPIE)
+# SherrByte Intelligence Processing Engine (Sherr-I)
 ## Engineering Research Document v1.0
 
 *Role: Principal Research Scientist / Chief Architect review. Scope: proven algorithms only — nothing invented, nothing speculative. Every recommendation is tiered (V1 = now, V1.1 = weeks, V2 = post-funding, V3 = scale) and grounded in the existing stack: FastAPI · Supabase Postgres + pgvector · Redis Streams · Gemini→Groq cascade.*
@@ -16,7 +16,7 @@
 
 ## 1. Free & low-cost data sources (curated, India-first)
 
-Not exhaustive — *curated for what strengthens SPIE's actual positioning* (external market/narrative intelligence, India-native). Each entry: what it provides / free limits / why it matters / tier.
+Not exhaustive — *curated for what strengthens Sherr-I's actual positioning* (external market/narrative intelligence, India-native). Each entry: what it provides / free limits / why it matters / tier.
 
 ### Tier V1 — plug in now (adapter each, ~1 day each)
 | Source | Provides | Free limits | Why it matters |
@@ -45,11 +45,11 @@ Not exhaustive — *curated for what strengthens SPIE's actual positioning* (ext
 
 ## 2. Algorithm survey
 
-Format per entry: **Purpose · Complexity · Where it fits in SPIE · Verdict (tier + why)**. Industry-standard citations noted where the pedigree is the argument.
+Format per entry: **Purpose · Complexity · Where it fits in Sherr-I · Verdict (tier + why)**. Industry-standard citations noted where the pedigree is the argument.
 
 ### 2.1 Graph theory
 
-| Algorithm | Purpose | Complexity | SPIE fit | Verdict |
+| Algorithm | Purpose | Complexity | Sherr-I fit | Verdict |
 |---|---|---|---|---|
 | **BFS/DFS** | Traversal, reachability, k-hop neighborhoods | O(V+E) | Entity exploration ("what's near RBI"), path evidence for chains | **V1** — recursive CTE, hop-capped at 2–3, fan-out capped on hubs |
 | **Connected Components** | Find isolated subgraphs | O(V+E) | Story clustering sanity check; orphan entity detection | **V1** — trivial in SQL over cooccurrence |
@@ -68,7 +68,7 @@ Format per entry: **Purpose · Complexity · Where it fits in SPIE · Verdict (t
 
 ### 2.2 Information retrieval
 
-| Algorithm | Purpose | SPIE fit | Verdict |
+| Algorithm | Purpose | Sherr-I fit | Verdict |
 |---|---|---|---|
 | **BM25** | Lexical ranking (the 30-year IR workhorse; default in Elasticsearch/Lucene) | Keyword search over articles | **V1** — Postgres FTS (`ts_rank_cd` is BM25-adjacent) or `pg_search` extension; do NOT add Elasticsearch |
 | **TF-IDF** | Term weighting | Keyphrase extraction input | V1 internally; superseded by BM25 for ranking |
@@ -79,7 +79,7 @@ Format per entry: **Purpose · Complexity · Where it fits in SPIE · Verdict (t
 
 ### 2.3 Pattern discovery
 
-| Algorithm | Purpose | SPIE fit | Verdict |
+| Algorithm | Purpose | Sherr-I fit | Verdict |
 |---|---|---|---|
 | **Co-occurrence analysis + PMI/NPMI** | Association strength discounting popular entities | Core edge weighting — PMI upgrade stops "Modi co-occurs with everything" noise | **V1.1** — add `npmi` column to cooccurrence; one UPDATE query |
 | **FP-Growth** | Frequent itemset mining without candidate explosion (superseded Apriori ~2000) | Recurring entity *sets* (not just pairs): {RBI, NPCI, UPI} as a motif | **V2** — mlxtend batch job; pairs suffice for V1 demos |
@@ -101,7 +101,7 @@ Covered by 2.1 for structure. Additions: **Independent Cascade / Linear Threshol
 
 ### 2.6 Recommendation systems
 
-| Approach | SPIE fit | Verdict |
+| Approach | Sherr-I fit | Verdict |
 |---|---|---|
 | **Content-based (embedding similarity + interest profile)** | Feed personalization | **✅ Have it** — formalize: user vector = EWMA of read-article embeddings |
 | **Item-item collaborative filtering** (Amazon 2003 — the classic) | "Readers of X read Y" | **V1.1** — precomputed item-item cosine on interaction matrix, nightly; works at your DAU |
@@ -142,7 +142,7 @@ Covered by 2.1 for structure. Additions: **Independent Cascade / Linear Threshol
 
 ---
 
-## 3. SPIE layered architecture
+## 3. Sherr-I layered architecture
 
 Eight layers; each: purpose · algorithms · tables · failure cases · scaling trigger. (Layers 1–3 largely shipped — listed for completeness and gaps.)
 

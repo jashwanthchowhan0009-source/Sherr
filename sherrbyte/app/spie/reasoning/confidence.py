@@ -1,8 +1,8 @@
 """
-reasoning/confidence.py — M5 evidence combination (SPIE Reasoning Engine).
+reasoning/confidence.py — M5 evidence combination (Sherr-I Reasoning Engine).
 
 Confidence answers "how well-evidenced is this reasoning?", NOT "how likely is a
-future move" — there is no forecast anywhere in SPIE.
+future move" — there is no forecast anywhere in Sherr-I.
 
 M5 combines independent evidence in LOG-ODDS space rather than averaging:
 

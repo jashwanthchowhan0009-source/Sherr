@@ -1,5 +1,5 @@
 """
-knowledge/simhash.py — near-duplicate detection via 64-bit SimHash (SPIE Task 2).
+knowledge/simhash.py — near-duplicate detection via 64-bit SimHash (Sherr-I Task 2).
 
 Manku, Jain & Das Sarma (WWW 2007) operating point: 64-bit fingerprint over text
 shingles; two docs with Hamming distance <= 3 are treated as the same story.

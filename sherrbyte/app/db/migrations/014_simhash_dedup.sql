@@ -1,4 +1,4 @@
--- 014_simhash_dedup.sql — near-duplicate story clustering (SPIE Knowledge Engine, Task 2).
+-- 014_simhash_dedup.sql — near-duplicate story clustering (Sherr-I Knowledge Engine, Task 2).
 --
 -- The same wire story (PTI/ANI) republished across 20-30 outlets would otherwise
 -- inflate every count — fake bursts, corrupt co-occurrence. We fingerprint each

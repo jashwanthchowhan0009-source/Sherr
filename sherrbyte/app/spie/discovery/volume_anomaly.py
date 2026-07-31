@@ -1,5 +1,5 @@
 """
-discovery/volume_anomaly.py — per-entity volume spike detector (SPIE Task 4).
+discovery/volume_anomaly.py — per-entity volume spike detector (Sherr-I Task 4).
 
 Signal: an entity's daily story volume jumps far above its own recent baseline.
 Method: daily *cluster* counts (SimHash-deduped, so wire republication doesn't

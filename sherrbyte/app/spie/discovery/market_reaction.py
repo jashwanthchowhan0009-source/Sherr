@@ -1,7 +1,7 @@
 """
-discovery/market_reaction.py — news ↔ market linkage (SPIE Part C).
+discovery/market_reaction.py — news ↔ market linkage (Sherr-I Part C).
 
-Joins the two signal streams SPIE now has: domain="market" moves (Part B) and
+Joins the two signal streams Sherr-I now has: domain="market" moves (Part B) and
 domain="news" story clusters. Two directions, both reported the same way:
 
   A. news → move : a significant market move, with related news in the preceding
@@ -35,7 +35,9 @@ log = logging.getLogger("sherbyte.detectors.market_reaction")
 LAST_RUN: dict = {}
 
 # One story = its SimHash cluster, else the signal's own (negated) id.
-_STORY_KEY = "COALESCE(cluster_id, -id)"
+# QUALIFIED with the ds alias: every query using this joins info_objects, which
+# also has an "id" column, and an unqualified -id is ambiguous in Postgres.
+_STORY_KEY = "COALESCE(ds.cluster_id, -ds.id)"
 
 
 def move_phrase(direction: int, pct: float) -> str:

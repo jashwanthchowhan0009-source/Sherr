@@ -56,10 +56,10 @@ ADMIN_TOKEN     = os.getenv("ADMIN_TOKEN", "sherr-admin")
 # single-service setup — there, DATABASE_URL below is what matters.
 ENGINE_URL      = os.getenv("ENGINE_URL", "").rstrip("/")
 
-# The SPIE engine's Postgres (Supabase). The workers (app.workers.*) write insights
+# The Sherr-I engine's Postgres (Supabase). The workers (app.workers.*) write insights
 # here; this app reads them here. This — not ENGINE_URL — is what makes /patterns
 # return real insights in the single-service deployment.
-SPIE_DATABASE_URL = (os.getenv("SPIE_DATABASE_URL") or os.getenv("DATABASE_URL") or "").strip()
+SHERR_I_DATABASE_URL = (os.getenv("SHERR_I_DATABASE_URL") or os.getenv("DATABASE_URL") or "").strip()
 _spie_pool = None
 
 
@@ -81,18 +81,18 @@ async def get_spie_pool():
     """Lazy asyncpg pool for the engine's Postgres. Returns None if unconfigured
     or unreachable (caller then reports source='unavailable', never fake data)."""
     global _spie_pool
-    if _spie_pool is not None or not SPIE_DATABASE_URL:
+    if _spie_pool is not None or not SHERR_I_DATABASE_URL:
         return _spie_pool
     try:
         import asyncpg
         _spie_pool = await asyncpg.create_pool(
-            dsn=_sanitize_pg_dsn(SPIE_DATABASE_URL),
+            dsn=_sanitize_pg_dsn(SHERR_I_DATABASE_URL),
             min_size=1, max_size=4, timeout=20.0, command_timeout=20.0,
             statement_cache_size=0,      # Supabase transaction pooler safety
         )
-        log.info("SPIE Postgres pool ready (insights source)")
+        log.info("Sherr-I Postgres pool ready (insights source)")
     except Exception as e:
-        log.warning("SPIE Postgres unavailable: %s", e)
+        log.warning("Sherr-I Postgres unavailable: %s", e)
         _spie_pool = None
     return _spie_pool
 
@@ -140,7 +140,7 @@ async def _spie_patterns(type: str, limit: int, offset: int) -> Optional[dict]:
                 d["created_at"] = str(d["created_at"])
         return {"patterns": out, "total": int(total or 0), "source": "engine"}
     except Exception as e:
-        log.warning("SPIE insights query failed: %s", e)
+        log.warning("Sherr-I insights query failed: %s", e)
         return None
 
 # Story-thread ("string") linking window — how far back we cluster related news.
@@ -581,7 +581,7 @@ CREATE TABLE IF NOT EXISTS bookmarks (
     UNIQUE(user_id, article_id)
 );
 
--- SPIE — SherrByte Pattern Intelligence Engine output. Mirrors the
+-- Sherr-I — SherrByte Pattern Intelligence Engine output. Mirrors the
 -- engine's insights schema so the app renders real pattern output. (The full
 -- engine runs on the Postgres stack; this table lets the deployed app show it.)
 CREATE TABLE IF NOT EXISTS insights (
@@ -619,7 +619,7 @@ _MIGRATIONS = [
 ]
 
 
-# Sample SPIE pattern output (shape matches the real engine's insights.explain_json).
+# Sample Sherr-I pattern output (shape matches the real engine's insights.explain_json).
 _SAMPLE_INSIGHTS = [
     {
         "type": "temporal_correlation",
@@ -714,7 +714,7 @@ def init_db():
     except Exception as e:
         log.warning("title_hash backfill skipped: %s", e)
 
-    # Seed a few sample SPIE insights so the app shows real pattern output
+    # Seed a few sample Sherr-I insights so the app shows real pattern output
     # before the full Postgres engine is deployed. Idempotent via signature.
     try:
         for ins in _SAMPLE_INSIGHTS:
@@ -1464,11 +1464,11 @@ async def patterns(
     limit: int = Query(30, le=100),
     offset: int = Query(0, ge=0),
 ):
-    """SPIE pattern output — the Intelligence Engine's insights, most significant
+    """Sherr-I pattern output — the Intelligence Engine's insights, most significant
     first. Optional ?type=emergence|temporal_correlation.
 
     Resolution order:
-      1. The engine's Postgres (DATABASE_URL / SPIE_DATABASE_URL) — the workers write
+      1. The engine's Postgres (DATABASE_URL / SHERR_I_DATABASE_URL) — the workers write
          insights there and this app reads them from the same DB. Single-service
          deployments need nothing else; ENGINE_URL is NOT required.
       2. ENGINE_URL — only for a separate engine deployment.
@@ -1477,7 +1477,7 @@ async def patterns(
     Every response carries `source`: "engine" | "unavailable" | "seed".
     """
     # 1. Same-service path: read the real insights straight from Supabase.
-    if SPIE_DATABASE_URL:
+    if SHERR_I_DATABASE_URL:
         data = await _spie_patterns(type, limit, offset)
         if data is not None:
             return data

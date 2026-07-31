@@ -1,5 +1,5 @@
 """
-reasoning — the SPIE Reasoning Engine.
+reasoning — the Sherr-I Reasoning Engine.
 
 Reusable and domain-neutral: it reasons over signals, not over any particular asset
 or business. Given a focal signal (a significant market move in ANY asset class, or a

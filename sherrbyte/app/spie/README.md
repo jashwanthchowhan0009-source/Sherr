@@ -1,6 +1,6 @@
-# SPIE — SherrByte Pattern Intelligence Engine
+# Sherr-I — SherrByte Pattern Intelligence Engine
 
-SPIE is **five engines + one platform property**. This package is *organization*,
+Sherr-I is **five engines + one platform property**. This package is *organization*,
 not a rewrite — all existing code and **all database tables keep their names**;
 modules were moved into the engine they belong to.
 
@@ -42,7 +42,7 @@ future detector, surfaced directly in the app (SPRIE section).
 
 ## Reference docs & tier rules
 
-- **`docs/SPIE_RESEARCH.md`** — the algorithm survey + tier decisions (V1 / V1.1 /
+- **`docs/SHERR_I_RESEARCH.md`** — the algorithm survey + tier decisions (V1 / V1.1 /
   V2 / V3) + the rejected-alternatives decision record. **Consult it before
   designing any new detector or component.**
 - **`docs/SHERRBYTE_CTO_MASTER.md`** — prior master doc (add when available).
