@@ -90,7 +90,7 @@ def _join(items: list[str], limit: int = 3) -> str:
     return ", ".join(items[:-1]) + " and " + items[-1]
 
 
-def build_narrative(r: dict) -> str:
+def build_narrative(r: dict, *, concise: bool = False) -> str:
     """Assemble the reasoned narrative from a reasoned_insight dict.
 
     Only sections with real data contribute a sentence — a thin window produces a
@@ -115,7 +115,10 @@ def build_narrative(r: dict) -> str:
     if links:
         articles = sum(int(l.get("article_count") or 0) for l in links)
         sources = max((int(l.get("source_count") or 0) for l in links), default=0)
-        topics = _join([t for l in links for t in (l.get("entities") or [])])
+        # Every link carries the same connected-entity list, so flattening without
+        # dedup repeats names ("covered Reliance, Nifty and Reliance").
+        topics = _join(list(dict.fromkeys(
+            t for l in links for t in (l.get("entities") or []))))
         window = int(r.get("window_hours", 24) or 24)
         parts.append(
             f"In the preceding {window_phrase(window)}, "
@@ -139,7 +142,10 @@ def build_narrative(r: dict) -> str:
                      f"across {n} market{'' if n == 1 else 's'}.")
 
     # 3b. LAG EVIDENCE (M2) — only stated when the guards actually passed.
-    lag = r.get("lag") or {}
+    # Concise mode is for Tier 1 observation cards, which by definition have no
+    # history: the lag, connected-entity and historical sentences would all be
+    # "nothing to report", so they are dropped rather than padded.
+    lag = {} if concise else (r.get("lag") or {})
     if lag.get("passed"):
         d = int(lag.get("lag") or 0)
         when = "the same day" if d == 0 else f"about {d} day{'' if d == 1 else 's'} ahead"
@@ -148,7 +154,7 @@ def build_narrative(r: dict) -> str:
                      f"(rank correlation {lag.get('rho')}).")
 
     # 4. CONNECTED ENTITIES
-    connected = r.get("connected") or []
+    connected = [] if concise else (r.get("connected") or [])
     if connected:
         # M4 — name the structurally central entity when centrality is available.
         ranked = [c for c in connected if c.get("centrality") is not None]
@@ -157,9 +163,11 @@ def build_narrative(r: dict) -> str:
         parts.append(f"{line} (most central: {central})." if central else f"{line}.")
 
     # 5. HISTORICAL ECHO — stated honestly, including thin history
-    hist = r.get("historical") or {}
+    hist = {} if concise else (r.get("historical") or {})
     sim = int(hist.get("similar_count") or 0)
-    if sim >= 2:
+    if concise:
+        pass
+    elif sim >= 2:
         parts.append(f"Similar coverage preceded a same-direction move "
                      f"{int(hist.get('followed_direction') or 0)} of the last {sim} times.")
     elif sim == 1:

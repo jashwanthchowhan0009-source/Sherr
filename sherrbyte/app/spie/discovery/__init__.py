@@ -10,15 +10,22 @@ materialized co-occurrence table (never brute-forced over all pairs):
     volume_anomaly       — per-entity daily story-volume spike (EWMA + MAD z-score)
     market_reaction      — news ↔ market: an unusual instrument move with related
                            news in the preceding (or following) window
+    observation          — TIER 1: today's top movers with news context, no history
+                           required (see observation.py)
 """
 
-from app.spie.discovery import emergence, temporal, volume_anomaly, market_reaction
+from app.spie.discovery import (
+    emergence, observation, temporal, volume_anomaly, market_reaction)
 
 REGISTRY = {
+    # Tier 1 runs first: it needs only today's data, so it is the one detector
+    # guaranteed to have something to say on a young corpus.
+    "observation": observation.run,
     "emergence": emergence.run,
     "temporal_correlation": temporal.run,
     "volume_anomaly": volume_anomaly.run,
     "market_reaction": market_reaction.run,
 }
 
-__all__ = ["emergence", "temporal", "volume_anomaly", "market_reaction", "REGISTRY"]
+__all__ = ["emergence", "observation", "temporal", "volume_anomaly",
+           "market_reaction", "REGISTRY"]
