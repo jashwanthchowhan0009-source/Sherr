@@ -1,5 +1,5 @@
 """
-workers/reset_spie.py — explicit, standalone reset of the SPIE derived tables.
+workers/reset_spie.py — explicit, standalone reset of the Sherr-I derived tables.
 
 Resetting is DESTRUCTIVE, so it lives in its own command instead of being a side
 effect of a backfill: a backfill that crashes half-way (flaky pooler) must never
@@ -63,7 +63,7 @@ async def run(confirm: bool = False, with_insights: bool = False) -> dict:
 
 async def _main() -> None:
     parser = argparse.ArgumentParser(
-        description="Reset the SPIE derived tables (destructive; explicit by design).")
+        description="Reset the Sherr-I derived tables (destructive; explicit by design).")
     parser.add_argument("--yes", action="store_true",
                         help="actually perform the reset (without it this is a dry run)")
     parser.add_argument("--with-insights", action="store_true",

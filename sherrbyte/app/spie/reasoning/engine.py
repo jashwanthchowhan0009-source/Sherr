@@ -1,5 +1,5 @@
 """
-reasoning/engine.py — the SPIE Reasoning Engine.
+reasoning/engine.py — the Sherr-I Reasoning Engine.
 
 Turns a focal signal into REASONED intelligence with evidence, using only data the
 app already has (domain_signals, cooccurrence+npmi, info_objects embeddings, SimHash
@@ -32,7 +32,11 @@ from app.spie.reasoning.narrative import (
 log = logging.getLogger("sherbyte.reasoning")
 
 # One story = its SimHash cluster, else the signal's own (negated) id.
-_STORY_KEY = "COALESCE(cluster_id, -id)"
+# QUALIFIED with the ds alias: every query using this joins info_objects, which
+# also has an "id" column, and an unqualified -id is ambiguous in Postgres.
+_STORY_KEY = "COALESCE(ds.cluster_id, -ds.id)"
+# Unqualified variant for single-table queries (no join, no ambiguity).
+_STORY_KEY_PLAIN = "COALESCE(cluster_id, -id)"
 
 
 def asset_class_of(source_id: str | None) -> str:
@@ -176,7 +180,7 @@ async def _daily_news_series(conn, entity_ids: list, days: int) -> dict:
     rows = await conn.fetch(
         f"""
         SELECT (ts AT TIME ZONE 'UTC')::date AS d,
-               COUNT(DISTINCT {_STORY_KEY}) AS c
+               COUNT(DISTINCT {_STORY_KEY_PLAIN}) AS c
         FROM domain_signals
         WHERE domain='news' AND entity_ids && $1::uuid[]
           AND ts >= now() - ($2 || ' days')::interval
@@ -449,7 +453,7 @@ async def run(conn, *, window_hours: int | None = None,
     min_history = int(getattr(settings, "spie_min_history", 1) or 1)
     # Seeded instrument↔keyword links are what let news reach an instrument at all;
     # sync is idempotent, so keeping it here means a fresh deploy is never one
-    # forgotten manual step away from an empty SPIE tab.
+    # forgotten manual step away from an empty Sherr-I tab.
     try:
         await instrument_map.sync_seeds(conn)
     except Exception as e:

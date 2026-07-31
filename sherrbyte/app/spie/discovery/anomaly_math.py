@@ -1,5 +1,5 @@
 """
-discovery/anomaly_math.py — robust anomaly primitives (SPIE Task 4).
+discovery/anomaly_math.py — robust anomaly primitives (Sherr-I Task 4).
 
 Pure, stdlib-only, unit-testable. News volume is heavy-tailed, so deviation is
 measured with the **Median Absolute Deviation (MAD)**, not the standard deviation

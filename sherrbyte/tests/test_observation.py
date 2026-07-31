@@ -135,7 +135,7 @@ def test_observation_is_in_the_detector_registry():
 
 
 def test_observation_runs_before_the_history_dependent_detectors():
-    """Ordering matters for the SPIE tab: Tier 1 is the one detector guaranteed to
+    """Ordering matters for the Sherr-I tab: Tier 1 is the one detector guaranteed to
     have something to say on a young corpus."""
     from app.spie.discovery import REGISTRY
     assert list(REGISTRY)[0] == "observation"

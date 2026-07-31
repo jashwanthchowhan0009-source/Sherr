@@ -1,5 +1,5 @@
 """
-workers/market_signals.py — write daily market moves into domain_signals (SPIE Part B).
+workers/market_signals.py — write daily market moves into domain_signals (Sherr-I Part B).
 
 Until now domain_signals held only news. Without market signals there is nothing for
 a news↔market detector to join against, so this is the prerequisite for Part C.

@@ -1,5 +1,5 @@
 """
-Unit tests for the pure npmi_score (SPIE Graph Engine, Task 3).
+Unit tests for the pure npmi_score (Sherr-I Graph Engine, Task 3).
 
 NPMI = PMI / -log p(a,b), computed from cluster-deduped counts. Verifies the
 canonical anchors (independent ≈ 0, perfect = 1, negative < 0) and — the whole

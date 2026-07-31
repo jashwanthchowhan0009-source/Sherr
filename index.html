@@ -1568,7 +1568,7 @@ nav.compact .nb:not(.on) {
 }
 nav.compact .nb.on { flex: 0 0 auto; padding-left: 16px; padding-right: 16px; }
 
-/* Scan — a separate glass orb (the SPIE engine), always pinned right. */
+/* Scan — a separate glass orb (the Sherr-I engine), always pinned right. */
 .nb-scan {
   flex: 0 0 auto; margin-left: auto; width: 56px; height: 56px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center; cursor: pointer;
@@ -1582,7 +1582,7 @@ nav.compact .nb.on { flex: 0 0 auto; padding-left: 16px; padding-right: 16px; }
 .nb-scan.on { box-shadow: 0 0 0 3px rgba(142,36,170,0.4), 0 10px 26px -6px rgba(142,36,170,0.75),
     inset 0 1.5px 1px rgba(255,255,255,0.5); }
 
-/* ═══════════ SPIE — engine output section ═══════════ */
+/* ═══════════ Sherr-I — engine output section ═══════════ */
 .spie-wrap { padding: calc(var(--hh) + 14px) 16px calc(var(--nh) + 30px); max-width: 640px; margin: 0 auto; }
 .spie-head { margin-bottom: 18px; }
 .spie-badge { display: inline-flex; align-items: center; gap: 7px;
@@ -3987,15 +3987,15 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   </div>
 </div>
 
-<!-- ════════ SPIE — SherrByte Pattern Intelligence Engine ════════ -->
+<!-- ════════ Sherr-I — SherrByte Pattern Intelligence Engine ════════ -->
 <div id="v-spie" class="view" style="overflow-y:scroll;">
   <div class="spie-wrap">
     <div class="spie-head">
-      <div class="spie-badge"><i class="fa-solid fa-satellite-dish"></i> SPIE</div>
-      <h2 class="spie-title">SPIE — Pattern<br>Intelligence</h2>
+      <div class="spie-badge"><i class="fa-solid fa-satellite-dish"></i> Sherr-I</div>
+      <h2 class="spie-title">Sherr-I — Pattern<br>Intelligence</h2>
       <p class="spie-sub">Connections the engine has observed across news and markets.</p>
       <div class="spie-controls">
-        <!-- chips are rendered from SPIE_TYPES so no insight type is ever hidden -->
+        <!-- chips are rendered from SHERR_I_TYPES so no insight type is ever hidden -->
         <div class="spie-chips" id="spie-chips"></div>
         <button class="spie-refresh tap" onclick="loadPatterns(spiePatternType)" aria-label="Refresh"><i class="fa-solid fa-rotate"></i></button>
       </div>
@@ -4023,7 +4023,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
       <span class="nb-lbl">Profile</span>
     </div>
   </div>
-  <!-- Pinned primary action — always visible on the right (the SPIE engine "scan"). -->
+  <!-- Pinned primary action — always visible on the right (the Sherr-I engine "scan"). -->
   <div class="nb-scan tap" id="nb-scan" onclick="navTo('spie')" aria-label="Sherr Engine">
     <i class="fa-solid fa-satellite-dish"></i>
   </div>
@@ -6489,11 +6489,11 @@ async function saveProfile() {
 }
 
 // ── NAV ──
-// ── SPIE — SherrByte Pattern Intelligence Engine (raw output) ──
+// ── Sherr-I — SherrByte Pattern Intelligence Engine (raw output) ──
 let spiePatternType = '';
 // Embedded fallback so the section always shows something if the engine isn't
 // reachable yet (backend redeploying / not connected). Matches the seed shape.
-const SPIE_SAMPLE = [
+const SHERR_I_SAMPLE = [
   { type: "temporal_correlation", entities: ["Monsoon (Mumbai)", "Vegetable prices"],
     domains: ["weather", "commodities"], score: 0.72,
     explain_json: { why: "Historically observed: Monsoon (Mumbai) movements have been followed by Vegetable prices movements about 3 days later (correlation 0.72 over 12 overlapping days, in ≥2 separate periods). Detected correlation, not causation.",
@@ -6533,8 +6533,8 @@ async function loadPatterns(type) {
       : '';
     // Empty is a real state, not a hidden one: name the type and say what it needs.
     const empty = () => {
-      const label = SPIE_TYPE_LABEL[spiePatternType] || 'patterns';
-      const hint = SPIE_EMPTY_HINT[spiePatternType] || '';
+      const label = SHERR_I_TYPE_LABEL[spiePatternType] || 'patterns';
+      const hint = SHERR_I_EMPTY_HINT[spiePatternType] || '';
       return `<div class="spie-empty">
         <div class="spie-empty-t">No ${bEsc(label.toLowerCase())} insights yet</div>
         ${hint ? `<div class="spie-empty-h">${bEsc(hint)}</div>` : ''}
@@ -6562,9 +6562,9 @@ async function loadPatterns(type) {
       return;
     }
     // src === 'seed' (or unknown): local demo rows. Show them, clearly labelled.
-    paint(items.length ? items : filt(SPIE_SAMPLE),
+    paint(items.length ? items : filt(SHERR_I_SAMPLE),
           { cls: 'is-sample',
-            text: 'SAMPLE DATA — not live. Set ENGINE_URL to connect the SPIE engine.' });
+            text: 'SAMPLE DATA — not live. Set ENGINE_URL to connect the Sherr-I engine.' });
   } catch (e) {
     paint([], { cls: 'is-error', text: 'Could not reach the API — ' + bEsc(e.message || 'error') });
   }
@@ -6573,7 +6573,7 @@ async function loadPatterns(type) {
 // Short human-language title for a pattern (raw JSON lives in the Details expander).
 // Type registry — label, colour and badge for every insight type the engine emits.
 // Types with no data yet still get a chip and an empty state (never hidden).
-const SPIE_TYPES = [
+const SHERR_I_TYPES = [
   { key: '',                     label: 'All',             icon: 'fa-layer-group' },
   { key: 'reasoned',             label: 'Market Intelligence', icon: 'fa-brain',       color: '#F59E0B' },
   { key: 'observation',          label: 'Observation',     icon: 'fa-eye',             color: '#38BDF8' },
@@ -6583,8 +6583,8 @@ const SPIE_TYPES = [
   { key: 'volume_anomaly',       label: 'Anomaly',         icon: 'fa-bolt',            color: '#EAB308' },
   { key: 'cross_domain_chain',   label: 'Chain',           icon: 'fa-link',            color: '#64D2FF' },
 ];
-const SPIE_TYPE_LABEL = Object.fromEntries(SPIE_TYPES.map(t => [t.key, t.label]));
-const SPIE_EMPTY_HINT = {
+const SHERR_I_TYPE_LABEL = Object.fromEntries(SHERR_I_TYPES.map(t => [t.key, t.label]));
+const SHERR_I_EMPTY_HINT = {
   // Honest monitoring state — the engine is running and found nothing worth
   // reporting. Never dressed up as a result.
   reasoned:             'Monitoring — no significant market-linked events in the current window.',
@@ -6601,7 +6601,7 @@ const SPIE_EMPTY_HINT = {
 function renderSpieChips() {
   const wrap = document.getElementById('spie-chips');
   if (!wrap) return;
-  wrap.innerHTML = SPIE_TYPES.map(t => {
+  wrap.innerHTML = SHERR_I_TYPES.map(t => {
     const on = (t.key || '') === (spiePatternType || '');
     const style = (t.color && on) ? ` style="--tc:${t.color}"` : '';
     return `<button class="spie-chip${on ? ' on' : ''}"${style} data-t="${t.key}"
@@ -6799,7 +6799,7 @@ function renderPattern(p) {
   if (e.source_count != null) meta.push(`${e.source_count} sources`);
   if (e.observations != null) meta.push(`${e.observations} obs`);
   const metaHtml = meta.length ? `<div class="spie-meta">${meta.map(m => bEsc(m)).join(' · ')}</div>` : '';
-  const label = SPIE_TYPE_LABEL[p.type] || (p.type || '').replace(/_/g, ' ');
+  const label = SHERR_I_TYPE_LABEL[p.type] || (p.type || '').replace(/_/g, ' ');
   const isMarket = p.type === 'market_reaction';
   const isReasoned = p.type === 'reasoned' || p.type === 'observation';
 
@@ -6871,7 +6871,7 @@ function navTo(name) {
   } else if (name==='bytes') {
     hBrand.style.display='none'; hPage.style.display='block'; hPage.textContent='Bytes';
   } else if (name==='spie') {
-    hBrand.style.display='none'; hPage.style.display='block'; hPage.textContent='SPIE';
+    hBrand.style.display='none'; hPage.style.display='block'; hPage.textContent='Sherr-I';
     loadPatterns(spiePatternType);
   } else if (['profile','bookmarks','notifs'].includes(name)) {
     hBrand.style.display='none'; hPage.style.display='block';

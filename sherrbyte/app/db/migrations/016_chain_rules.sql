@@ -1,4 +1,4 @@
--- 016_chain_rules.sql — Decision Engine: cross-domain chains as data (SPIE Task 5).
+-- 016_chain_rules.sql — Decision Engine: cross-domain chains as data (Sherr-I Task 5).
 --
 -- A "chain" is a rule: a list of conditions across different domains that must all
 -- match within a time window while sharing a canonical entity (post entity-resolution).

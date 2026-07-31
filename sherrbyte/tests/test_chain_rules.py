@@ -1,5 +1,5 @@
 """
-Unit tests for the pure core of decision/rules (SPIE Task 5) — DB-free.
+Unit tests for the pure core of decision/rules (Sherr-I Task 5) — DB-free.
 
 Covers direction wildcard semantics, single-condition matching, full-chain matching
 with canonical entity overlap, and the log-odds (sigmoid) confidence aggregation.

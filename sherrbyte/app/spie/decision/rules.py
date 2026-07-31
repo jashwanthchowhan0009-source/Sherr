@@ -1,5 +1,5 @@
 """
-decision/rules.py — cross-domain chain evaluation (SPIE Decision Engine, Task 5).
+decision/rules.py — cross-domain chain evaluation (Sherr-I Decision Engine, Task 5).
 
 Rules live in the chain_rules table (rules-as-data, weights-as-data). A chain fires
 for an anchor entity when signals matching EVERY condition exist within the window
