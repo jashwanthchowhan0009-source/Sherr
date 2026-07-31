@@ -1666,6 +1666,21 @@ nav.compact .nb.on { flex: 0 0 auto; padding-left: 16px; padding-right: 16px; }
   text-transform: uppercase; color: #F59E0B; }
 .spie-demo.is-example .spie-demo-tag { color: #EF4444; }
 .spie-demo-n { font: 500 0.7rem/1.45 var(--f); color: var(--t3); }
+/* ── "What this means" — the interpretation, given hero weight ── */
+.spie-mean { margin: 12px 15px 0; padding: 13px 14px; border-radius: 14px;
+  background: linear-gradient(160deg, rgba(79,107,212,0.16), rgba(142,36,170,0.12));
+  border: 1px solid rgba(142,36,170,0.28); }
+[data-theme="light"] .spie-mean {
+  background: linear-gradient(160deg, rgba(79,107,212,0.10), rgba(142,36,170,0.07)); }
+.spie-mean-h { font: 800 0.58rem/1 var(--fd); letter-spacing: 0.14em;
+  text-transform: uppercase; color: #A855F7; display: flex; align-items: center; gap: 6px; }
+.spie-mean-h i { font-size: 0.66rem; }
+.spie-mean-t { font: 800 0.95rem/1.3 var(--fd); color: var(--t1); margin-top: 8px;
+  letter-spacing: -0.01em; }
+.spie-mean-b { font: 500 0.82rem/1.6 var(--f); color: var(--t2); margin-top: 6px; }
+/* ── Regulatory footer — present on every reasoned card ── */
+.spie-disc { margin: 14px 15px 0; padding-top: 10px; border-top: 1px solid var(--line2);
+  font: 600 0.64rem/1.45 var(--f); color: var(--t3); }
 
 /* ── Market Reaction hero ── */
 .spie-card.is-hero { border-color: rgba(34,197,94,0.22);
@@ -6729,12 +6744,28 @@ function renderReasoned(p) {
     </div>`;
   }
 
-  return move + demo
+  // WHAT THIS MEANS — the interpretation leads, because evidence without a reading
+  // of it is what made the earlier card answer "so what?" with silence.
+  const ip = e.interpretation || {};
+  const meaning = ip.text ? `
+    <div class="spie-mean">
+      <div class="spie-mean-h"><i class="fa-solid fa-lightbulb"></i> What this means</div>
+      ${ip.title ? `<div class="spie-mean-t">${bEsc(ip.title)}</div>` : ''}
+      <div class="spie-mean-b">${bEsc(ip.text)}</div>
+    </div>` : '';
+
+  // Not decoration: this line is what keeps a described market condition from being
+  // read as a recommendation.
+  const disc = `<div class="spie-disc">${bEsc(e.disclaimer
+    || 'SherrByte provides market intelligence, not investment advice.')}</div>`;
+
+  return move + demo + meaning
     + spieSection('The news behind it', newsBody)
     + spieSection('Cross-market', crossBody)
     + spieSection('Connected entities', connBody)
     + spieSection('Historical echo', echoBody)
-    + spieSection('Evidence & confidence', evBody);
+    + spieSection('Evidence & confidence', evBody)
+    + disc;
 }
 
 function renderPattern(p) {

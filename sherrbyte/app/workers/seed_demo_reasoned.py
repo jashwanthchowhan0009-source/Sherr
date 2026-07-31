@@ -48,7 +48,9 @@ from app.spie.knowledge import instrument_map
 from app.spie.reasoning import confidence as conf_mod
 from app.spie.reasoning import engine
 from app.spie.reasoning import methods as M
-from app.spie.reasoning.narrative import build_narrative, violates_language_rules
+from app.spie.reasoning import interpretation as interp
+from app.spie.reasoning.narrative import (
+    DISCLAIMER, build_narrative, violates_language_rules)
 
 log = logging.getLogger("sherbyte.worker.seed_demo_reasoned")
 
@@ -56,6 +58,17 @@ _SIG = "demo_reasoned"
 
 # Tier A relaxations. Wide enough to find a real connection on a young corpus,
 # and each one is reported in the output so the operator knows what was loosened.
+# The LIVE settings, read from config. Tried first: if the running engine can form a
+# genuine insight, that is what ships and no demo tag is applied.
+def _live() -> dict:
+    from app.config import settings
+    return {"window_hours": int(getattr(settings, "spie_news_window_hours", 72) or 72),
+            "z_threshold": float(getattr(settings, "spie_z_threshold", 1.0) or 1.0),
+            "min_history": int(getattr(settings, "spie_min_history", 1) or 1)}
+
+
+LIVE = _live()
+
 TIER_A = {"window_hours": 24 * 90, "z_threshold": 1.0, "min_history": 1,
           "cooc_days": 365, "history_days": 365}
 
@@ -131,6 +144,11 @@ async def tier_a(conn, limit: int) -> list[dict]:
     """
     days = TIER_A["window_hours"] // 24
     passes = [
+        # Pass 0 — the LIVE settings, unmodified. If this produces anything, the
+        # insight is a genuine engine result and must not be tagged as a demo at all.
+        ("live", await engine.significant_market_moves(
+            conn, z_threshold=LIVE["z_threshold"],
+            min_history=LIVE["min_history"]), ""),
         ("real_data_widened_window",
          await engine.significant_market_moves(
              conn, history_days=TIER_A["history_days"],
@@ -154,10 +172,12 @@ async def tier_a(conn, limit: int) -> list[dict]:
         if focals is None:
             focals = await _focals_without_baseline(conn)
         log.info("tier A [%s]: %d focal candidate(s)", basis, len(focals))
+        # The live pass uses the live news window too — widening it would make the
+        # result something the running engine would not itself produce.
+        window = LIVE["window_hours"] if basis == "live" else TIER_A["window_hours"]
         for focal in focals:
             try:
-                r = await engine.reason_focal(conn, focal,
-                                              window_hours=TIER_A["window_hours"],
+                r = await engine.reason_focal(conn, focal, window_hours=window,
                                               cooc_days=TIER_A["cooc_days"])
             except Exception as e:
                 log.warning("tier A reasoning failed for %s: %s",
@@ -165,8 +185,13 @@ async def tier_a(conn, limit: int) -> list[dict]:
                 continue
             if not r:
                 continue
-            out.append({"focal": focal,
-                        "reasoned": _tag(r, basis=basis, note=note, fields=[])})
+            if basis == "live":
+                # A genuine result. reason_focal already set demo=False; leaving it
+                # untouched is the whole point of this pass.
+                out.append({"focal": focal, "reasoned": r})
+            else:
+                out.append({"focal": focal,
+                            "reasoned": _tag(r, basis=basis, note=note, fields=[])})
             if len(out) >= limit:
                 break
     return out
@@ -350,6 +375,8 @@ async def tier_b(conn) -> dict:
         "method": "reasoning_engine/deterministic+template",
     }
     reasoned["narrative"] = build_narrative(reasoned)
+    interp.attach(reasoned)
+    reasoned["disclaimer"] = DISCLAIMER
 
     note = ("Representative example. It is assembled from real database values "
             "wherever they exist and passed through the same narrative template and "
@@ -398,13 +425,19 @@ async def run(*, limit: int = 3, dry_run: bool = False,
         if not items:
             items = [await tier_b(conn)]
             tier = "B"
+        live = [i for i in items if not i["reasoned"].get("demo")]
 
         # A template change that smuggled in forecast language must not ship in a
         # demo card either — this is exactly what an investor would read.
         for it in items:
-            bad = violates_language_rules(it["reasoned"]["narrative"])
+            r = it["reasoned"]
+            names = ([r["focal"].get("instrument")]
+                     + [c.get("entity") for c in (r.get("connected") or [])]
+                     + [c.get("instrument") for c in (r.get("cross_market") or [])])
+            text = f"{r['narrative']} {(r.get('interpretation') or {}).get('text', '')}"
+            bad = violates_language_rules(text, entity_names=[n for n in names if n])
             if bad:
-                raise RuntimeError(f"narrative violated language rules: {bad}")
+                raise RuntimeError(f"demo insight violated language rules: {bad}")
 
         written = []
         if not dry_run:
@@ -413,6 +446,9 @@ async def run(*, limit: int = 3, dry_run: bool = False,
 
         return {
             "tier": tier,
+            "genuine_insights": len(live),
+            "demo_insights": len(items) - len(live),
+            "demo_free": bool(live),
             "tier_explanation": (
                 "A = real rows from the DB through the real engine, window widened"
                 if tier == "A" else
