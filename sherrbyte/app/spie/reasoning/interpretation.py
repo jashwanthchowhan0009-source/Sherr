@@ -197,7 +197,9 @@ TEMPLATES: dict[str, tuple[str, str]] = {
 # confidence. What confidence measures is how well-evidenced the link to news is. So a
 # weak card still names the shape (that is the reader's "so what") and is explicit that
 # it is not yet established, rather than being replaced by a bland placeholder.
-WEAK_PREFIX = ("On thin evidence so far, and not yet an established pattern: ")
+# Ends as its own sentence: lower-casing the body to splice it in mangled proper
+# nouns ("gold moved without...") since several templates open with the instrument.
+WEAK_PREFIX = "On thin evidence so far, this is not yet an established pattern. "
 
 
 def interpret(r: dict) -> dict:
@@ -235,8 +237,7 @@ def interpret(r: dict) -> dict:
     title, body = TEMPLATES[key]
     text = body.format(**fields)
     if weak and key != "monitoring":
-        # Lower-case the first character so the prefix reads as one sentence.
-        text = WEAK_PREFIX + text[0].lower() + text[1:]
+        text = WEAK_PREFIX + text
     return {"pattern": key, "title": title, "text": text,
             "established": not weak}
 

@@ -144,7 +144,12 @@ _STOP_ENTITIES = set((
     "why will would can could may might must just very also more most other some "
     "such only than into out up down over under after before about above below "
     "comments read watch live breaking exclusive update video photos opinion "
-    "analysis report alert news views share follow subscribe advertisement"
+    "analysis report alert news views share follow subscribe advertisement "
+    # Contraction stems. Stripping the apostrophe splits "Don't" into "don"+"t" and
+    # "We've" into "we"+"ve"; the stem is not a stopword on its own, so without these
+    # the mention survives as an entity.
+    "don doesn didn won wont cant couldn shouldn wouldn isn aren wasn weren "
+    "hasn haven hadn ain ve ll re nt im youre theyre"
 ).split())
 
 # Generic common nouns that arrive Title-Cased in headlines and get mistaken for
@@ -166,7 +171,16 @@ _COMMON_NOUNS = set((
     "star fan fans sun moon water fire air spider "
     "head hand eye face body mind heart voice word words name names "
     "end start begin change move win loss lead call talk meet visit "
-    "high low long short full free real true false right left"
+    "high low long short full free real true false right left "
+    # Number and quantifier words. Headlines Title-Case these constantly ("One
+    # Killed", "Two Held"), and none of them was in either junk set, so "One"
+    # was entering the graph as an entity.
+    "one two three four five six seven eight nine ten eleven twelve "
+    "first second third half quarter dozen hundred thousand million billion "
+    "another every each many much several few lot lots couple "
+    # Bare verbs/adverbs that survive Title-Casing in headline fragments.
+    "says said told get got make made take took give gave come came going "
+    "here there back down over ahead amid despite across"
 ).split())
 
 _WEEKDAYS = {"monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"}
@@ -177,7 +191,7 @@ _MONTHS = {"january", "february", "march", "april", "may", "june", "july", "augu
 
 # Build marker + live counters, so a run can PROVE which code is executing and how
 # many mentions the filter actually rejected (see backfill summary).
-RESOLVER_BUILD = "entity_resolver+common_noun_filter/2026-07-28"
+RESOLVER_BUILD = "entity_resolver+contraction_filter/2026-07-31"
 _STATS = {"checked": 0, "filtered_out": 0}
 
 
@@ -188,6 +202,11 @@ def filter_stats() -> dict:
 def reset_filter_stats() -> None:
     _STATS["checked"] = 0
     _STATS["filtered_out"] = 0
+
+
+# What follows the apostrophe in an English contraction. Never a name fragment, so a
+# match on one of these means the "proper compound" rule must NOT fire.
+_CONTRACTION_TAILS = {"ve", "re", "ll", "st", "nt", "em", "til"}
 
 
 def is_valid_mention(name: str, type: str = "MISC") -> bool:
@@ -213,9 +232,15 @@ def is_valid_mention(name: str, type: str = "MISC") -> bool:
         return True
 
     # A hyphenated compound of capitalised parts is a proper name by construction
-    # ("Spider-Man", "Coca-Cola", "Jean-Pierre") — keep it even though its parts
-    # are ordinary words on their own.
-    if re.search(r"[A-Za-z][-'’][A-Za-z]", name.strip()):
+    # ("Spider-Man", "Coca-Cola", "Jean-Pierre", "O'Brien") — keep it even though its
+    # parts are ordinary words on their own.
+    #
+    # BOTH sides must be >= 2 letters AND the tail must not be a contraction suffix.
+    # Without the length rule it fires on "It's"; without the suffix rule it still
+    # fires on "We've" and "They're", whose tails are two letters. That is exactly
+    # how "It's" ended up in the entity graph as a named entity.
+    m = re.search(r"[A-Za-z]{2,}[-'’]([A-Za-z]{2,})", name.strip())
+    if m and m.group(1).lower() not in _CONTRACTION_TAILS:
         return True
 
     tokens = norm.split(" ")
@@ -224,7 +249,11 @@ def is_valid_mention(name: str, type: str = "MISC") -> bool:
     # words ("Brand New Day"), while keeping any name carrying at least one
     # distinctive token ("Man City", "World Bank", "Times of India").
     junk = _STOP_ENTITIES | _WEEKDAYS | _MONTHS | _COMMON_NOUNS
-    if all(t in junk for t in tokens):
+    # A one-letter token carries no identity. This matters for contractions, where
+    # stripping the apostrophe leaves a stray letter: "It's" → "it s", "Don't" →
+    # "don t". Without this the leftover "s"/"t" counts as a distinctive token and
+    # the whole mention survives.
+    if all(t in junk or len(t) <= 1 for t in tokens):
         return _reject()
     return True
 

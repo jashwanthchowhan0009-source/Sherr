@@ -1624,6 +1624,10 @@ nav.compact .nb.on { flex: 0 0 auto; padding-left: 16px; padding-right: 16px; }
 .spie-type-volume_anomaly { color: #EAB308; background: rgba(234,179,8,0.15); }
 .spie-type-cross_domain_chain { color: #64D2FF; background: rgba(100,210,255,0.15); }
 .spie-type-reasoned { color: #F59E0B; background: rgba(245,158,11,0.15); }
+.spie-type-observation { color: #38BDF8; background: rgba(56,189,248,0.15); }
+.spie-tier { margin: 10px 15px 0; font: 700 0.62rem/1.3 var(--fd); letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--t3); }
+.spie-card.is-observation { border-color: rgba(56,189,248,0.22); }
 
 /* ── Market Intelligence (reasoned) hero ── */
 .spie-card.is-reasoned { border-color: rgba(245,158,11,0.26);
@@ -6519,7 +6523,8 @@ async function loadPatterns(type) {
   // states are never mistaken for live intelligence.
   // Reasoned cards lead: they carry evidence about market moves, while emergence
   // is a bare co-occurrence observation. Within each group the API's order stands.
-  const rank = p => (p.type === 'reasoned' ? 0 : p.type === 'market_reaction' ? 1 : 2);
+  const rank = p => (p.type === 'reasoned' ? 0 : p.type === 'observation' ? 1
+                   : p.type === 'market_reaction' ? 2 : 3);
   const order = arr => arr.slice().sort((a, b) => rank(a) - rank(b));
   const paint = (raw, banner) => {
     const arr = order(raw);
@@ -6571,6 +6576,7 @@ async function loadPatterns(type) {
 const SPIE_TYPES = [
   { key: '',                     label: 'All',             icon: 'fa-layer-group' },
   { key: 'reasoned',             label: 'Market Intelligence', icon: 'fa-brain',       color: '#F59E0B' },
+  { key: 'observation',          label: 'Observation',     icon: 'fa-eye',             color: '#38BDF8' },
   { key: 'market_reaction',      label: 'Market Reaction', icon: 'fa-chart-line',      color: '#22C55E' },
   { key: 'emergence',            label: 'Emergence',       icon: 'fa-diagram-project', color: '#22C55E' },
   { key: 'temporal_correlation', label: 'Temporal',        icon: 'fa-timeline',        color: '#A855F7' },
@@ -6582,6 +6588,7 @@ const SPIE_EMPTY_HINT = {
   // Honest monitoring state — the engine is running and found nothing worth
   // reporting. Never dressed up as a result.
   reasoned:             'Monitoring — no significant market-linked events in the current window.',
+  observation:          'Appears once market signals and related news exist for the same day.',
   market_reaction:      'Needs a few days of market history plus related news in the same window.',
   temporal_correlation: 'Needs several weeks of daily signals before a lag can be established.',
   volume_anomaly:       'Appears when an entity’s story volume spikes above its own baseline.',
@@ -6610,7 +6617,7 @@ function renderSpieChips() {
 function patternHeadline(p) {
   const e = p.explain_json || {};
   const ents = p.entities || [];
-  if (p.type === 'reasoned') {
+  if (p.type === 'reasoned' || p.type === 'observation') {
     const f = e.focal || {};
     const pct = (f.move_pct != null) ? Math.abs(f.move_pct).toFixed(2) + '%' : '';
     const dir = f.direction > 0 ? 'rose' : f.direction < 0 ? 'fell' : 'moved';
@@ -6659,7 +6666,10 @@ function renderReasoned(p) {
     <div class="spie-move ${up ? 'is-up' : 'is-down'}">
       <div class="spie-move-inst">${bEsc((f.instrument || '') + cls)}</div>
       <div class="spie-move-pct"><i class="fa-solid fa-arrow-${up ? 'up' : 'down'}"></i> ${bEsc(pct)}</div>
-      ${f.z != null ? `<div class="spie-move-seq">unusual for this instrument (z ${bEsc(f.z)} vs its own baseline)</div>` : ''}
+      ${f.z != null ? `<div class="spie-move-seq">unusual for this instrument (z ${bEsc(f.z)} vs its own baseline${
+          f.baseline_note ? ' — ' + bEsc(f.baseline_note) : ''})</div>`
+        : (f.ranked_by === 'abs_pct_change'
+           ? `<div class="spie-move-seq">ranked on size of move — not enough history for a baseline yet</div>` : '')}
     </div>`;
 
   // 2. THE NEWS BEHIND IT (+ the M2 lag finding, only when its guards passed)
@@ -6746,6 +6756,11 @@ function renderReasoned(p) {
 
   // WHAT THIS MEANS — the interpretation leads, because evidence without a reading
   // of it is what made the earlier card answer "so what?" with silence.
+  // Tier label: says what this card rests on before the reader forms an impression.
+  const tier = e.tier_label ? `<div class="spie-tier">${bEsc(e.tier_label)}</div>`
+             : (e.tier === 'observation'
+                ? '<div class="spie-tier">Observation — based on today\'s activity</div>'
+                : '<div class="spie-tier">Reasoned — includes historical context</div>');
   const ip = e.interpretation || {};
   const meaning = ip.text ? `
     <div class="spie-mean">
@@ -6759,7 +6774,7 @@ function renderReasoned(p) {
   const disc = `<div class="spie-disc">${bEsc(e.disclaimer
     || 'SherrByte provides market intelligence, not investment advice.')}</div>`;
 
-  return move + demo + meaning
+  return tier + move + demo + meaning
     + spieSection('The news behind it', newsBody)
     + spieSection('Cross-market', crossBody)
     + spieSection('Connected entities', connBody)
@@ -6786,7 +6801,7 @@ function renderPattern(p) {
   const metaHtml = meta.length ? `<div class="spie-meta">${meta.map(m => bEsc(m)).join(' · ')}</div>` : '';
   const label = SPIE_TYPE_LABEL[p.type] || (p.type || '').replace(/_/g, ' ');
   const isMarket = p.type === 'market_reaction';
-  const isReasoned = p.type === 'reasoned';
+  const isReasoned = p.type === 'reasoned' || p.type === 'observation';
 
   // Market Reaction is the hero: the instrument's move leads, then the related
   // headlines that preceded (or followed) it.
@@ -6809,7 +6824,7 @@ function renderPattern(p) {
           `<div class="spie-headline"><i class="fa-regular fa-newspaper"></i> ${bEsc(h)}</div>`).join('')}</div>` : ''}`;
   }
 
-  return `<div class="spie-card${isMarket ? ' is-hero' : ''}${isReasoned ? ' is-reasoned' : ''}">
+  return `<div class="spie-card${isMarket ? ' is-hero' : ''}${p.type === 'reasoned' ? ' is-reasoned' : ''}${p.type === 'observation' ? ' is-observation' : ''}">
     <div class="spie-card-top">
       <span class="spie-type spie-type-${bEsc(p.type || '')}">${bEsc(label)}</span>
       ${conf !== '' ? `<span class="spie-score">${bEsc(conf)}</span>` : ''}
