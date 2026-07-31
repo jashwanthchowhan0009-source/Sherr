@@ -14,12 +14,36 @@ LANGUAGE CONTRACT (enforced by tests):
 
 from __future__ import annotations
 
+import re
+
 # Words that would turn an observation into a causal or forward-looking claim.
 FORBIDDEN = [
     "will ", "causes", "caused", "causing", "predict", "prediction", "forecast",
     "expect", "expected to", "should ", "going to", "likely to", "set to",
     "poised to", "impact on", "due to",
 ]
+
+# Terms that would turn intelligence into INVESTMENT ADVICE. Under SEBI's investment
+# adviser regulations, telling a reader what to do with their money is a regulated
+# activity; describing an observed market condition is not. These are matched on word
+# boundaries so "buyer", "sells", "targeting" in a headline cannot trip the guard,
+# while the bare imperative does.
+FORBIDDEN_ADVICE = [
+    "buy", "sell", "hold", "invest", "invests", "investing", "recommend",
+    "recommends", "recommended", "recommendation", "advice", "advise", "target",
+    "targets", "allocate", "allocation", "portfolio", "position", "entry", "exit",
+    "stop loss", "stoploss", "upside", "downside", "undervalued", "overvalued",
+    "bullish", "bearish", "rally", "correction", "opportunity",
+]
+
+# Any explicit price level reads as a target even without the word.
+PRICE_TARGET_RE = re.compile(
+    r"(?:₹|rs\.?|inr|\$|usd)\s?\d[\d,]*(?:\.\d+)?|\b\d[\d,]*(?:\.\d+)?\s?(?:₹|rs\b|inr\b)",
+    re.IGNORECASE)
+
+# Shown on every card. Not decoration — it is the line that keeps a description of
+# market conditions from being read as a recommendation.
+DISCLAIMER = "SherrByte provides market intelligence, not investment advice."
 
 
 def move_words(direction: int) -> str:
@@ -153,7 +177,25 @@ def build_narrative(r: dict) -> str:
     return " ".join(parts)
 
 
-def violates_language_rules(text: str) -> list[str]:
-    """Return any forbidden phrases present — used by tests and as a runtime guard."""
-    low = (text or "").lower()
-    return [f for f in FORBIDDEN if f in low]
+def violates_language_rules(text: str, entity_names: list[str] | None = None) -> list[str]:
+    """Return any forbidden phrase present — used by tests and as a runtime guard.
+
+    `entity_names` are masked out before scanning. Real-world names collide with the
+    blocklist: the actor Will Smith trips "will ", the retailer Target trips "target",
+    Rally Software trips "rally". Dropping a valid insight because a company is named
+    Target is a silent failure, and the entity name is a quoted fact rather than
+    something the template asserts — so it is excluded from the scan while every word
+    the template itself contributes is still checked.
+    """
+    text = text or ""
+    for name in sorted(entity_names or [], key=len, reverse=True):
+        if name:
+            text = re.sub(re.escape(name), " ", text, flags=re.IGNORECASE)
+    low = text.lower()
+
+    hits = [f for f in FORBIDDEN if f in low]
+    hits += [w for w in FORBIDDEN_ADVICE
+             if re.search(rf"\b{re.escape(w)}\b", low)]
+    if PRICE_TARGET_RE.search(text):
+        hits.append("price target")
+    return hits

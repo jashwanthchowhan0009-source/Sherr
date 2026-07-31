@@ -25,7 +25,9 @@ from app.spie.discovery.anomaly_math import ewma, mad, mad_zscore
 from app.spie.knowledge import instrument_map
 from app.spie.reasoning import confidence as conf_mod
 from app.spie.reasoning import methods as M
-from app.spie.reasoning.narrative import build_narrative, violates_language_rules
+from app.spie.reasoning import interpretation as interp
+from app.spie.reasoning.narrative import (
+    DISCLAIMER, build_narrative, violates_language_rules)
 
 log = logging.getLogger("sherbyte.reasoning")
 
@@ -83,6 +85,10 @@ async def significant_market_moves(conn, *, history_days: int = 60,
             "asset_class": asset_class_of(latest["source_id"]),
             "move_pct": round(move, 3),
             "direction": 1 if move > 0 else -1,
+            # How many prior daily buckets the baseline rests on. A z computed from
+            # one prior observation is a real test but a thin one, and the card says
+            # so rather than letting the number imply more than it should.
+            "baseline_points": len(history),
             "z": round(z, 2), "at": latest["last_ts"], "day": latest["d"],
         })
     return focals
@@ -380,7 +386,11 @@ async def reason_focal(conn, focal: dict, *, window_hours: int = 48,
     reasoned = {
         "focal": {"type": "market_move", "instrument": instrument,
                   "asset_class": focal["asset_class"], "move_pct": focal["move_pct"],
-                  "direction": focal["direction"], "z": focal.get("z")},
+                  "direction": focal["direction"], "z": focal.get("z"),
+                  "baseline_points": focal.get("baseline_points")},
+        # A live insight is explicitly NOT a demo. Stated rather than inferred from
+        # absence, so the card can never show a demo tag by accident.
+        "demo": False,
         "window_hours": window_hours,
         "news_link": news_link,
         "connected": [{"entity": c["entity"], "npmi": c["npmi"],
@@ -398,12 +408,20 @@ async def reason_focal(conn, focal: dict, *, window_hours: int = 48,
         "method": "reasoning_engine/deterministic+template",
     }
     reasoned["narrative"] = build_narrative(reasoned)
+    # WHAT THIS MEANS — the interpretation of the pattern's shape. Deterministic and
+    # template-filled like everything else here.
+    interp.attach(reasoned)
+    reasoned["disclaimer"] = DISCLAIMER
 
-    # Runtime guard: a template change that smuggled in forecast language must not
-    # reach the app.
-    bad = violates_language_rules(reasoned["narrative"])
+    # Runtime guard: a template change that smuggled in forecast language — or any
+    # investment-advice phrasing — must not reach the app. Entity names are excluded
+    # from the scan; a company called Target is a quoted fact, not a price target.
+    names = ([instrument] + [c["entity"] for c in connected]
+             + [c["instrument"] for c in cross_market])
+    checked = f"{reasoned['narrative']} {reasoned['interpretation']['text']}"
+    bad = violates_language_rules(checked, entity_names=names)
     if bad:
-        log.error("narrative violated language rules %s — dropping insight", bad)
+        log.error("reasoned insight violated language rules %s — dropping", bad)
         return None
     return reasoned
 
@@ -413,7 +431,8 @@ async def reason_focal(conn, focal: dict, *, window_hours: int = 48,
 LAST_RUN: dict = {}
 
 
-async def run(conn, *, window_hours: int | None = None, z_threshold: float = 2.0) -> int:
+async def run(conn, *, window_hours: int | None = None,
+              z_threshold: float | None = None) -> int:
     """Reason over recent significant moves in ANY asset class; persist as insights
     of type 'reasoned'. Returns how many were written.
 
@@ -422,9 +441,12 @@ async def run(conn, *, window_hours: int | None = None, z_threshold: float = 2.0
     window" are never confused for each other.
     """
     global LAST_RUN
+    from app.config import settings
     if window_hours is None:
-        from app.config import settings
         window_hours = int(getattr(settings, "spie_news_window_hours", 72) or 72)
+    if z_threshold is None:
+        z_threshold = float(getattr(settings, "spie_z_threshold", 1.0) or 1.0)
+    min_history = int(getattr(settings, "spie_min_history", 1) or 1)
     # Seeded instrument↔keyword links are what let news reach an instrument at all;
     # sync is idempotent, so keeping it here means a fresh deploy is never one
     # forgotten manual step away from an empty SPIE tab.
@@ -433,8 +455,10 @@ async def run(conn, *, window_hours: int | None = None, z_threshold: float = 2.0
     except Exception as e:
         log.warning("instrument_map seed sync failed: %s", e)
 
-    focals = await significant_market_moves(conn, z_threshold=z_threshold)
-    stats = {"window_hours": window_hours,
+    focals = await significant_market_moves(
+        conn, z_threshold=z_threshold, min_history=min_history)
+    stats = {"window_hours": window_hours, "z_threshold": z_threshold,
+             "min_history": min_history,
              "instruments_with_history": 0, "significant_moves": len(focals),
              "with_connected_entities": 0, "with_seeded_links": 0,
              "with_related_news": 0, "insights_written": 0, "errors": 0}

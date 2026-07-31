@@ -100,6 +100,13 @@ class Settings(BaseSettings):
     # adds an explicit caveat above 48h. The M2 lag test is unaffected — that is
     # the real "did news precede this" check and has its own guards.
     spie_news_window_hours: int = Field(72, alias="SPIE_NEWS_WINDOW_HOURS")
+    # Baseline depth before a move can be tested for significance. 1 means "one prior
+    # daily bucket", i.e. two buckets total — the least that permits the test to run
+    # at all. A z-score from a single prior observation is fragile, so the insight
+    # records baseline_points and the card discloses it rather than implying a
+    # well-established baseline.
+    spie_min_history: int = Field(1, alias="SPIE_MIN_HISTORY")
+    spie_z_threshold: float = Field(1.0, alias="SPIE_Z_THRESHOLD")
 
     # Recommender — score = α·content + β·collab + γ·freshness
     rec_alpha: float = Field(0.5, alias="REC_ALPHA")   # content weight
