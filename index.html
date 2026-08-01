@@ -1582,6 +1582,12 @@ nav.compact .nb.on { flex: 0 0 auto; padding-left: 16px; padding-right: 16px; }
 .nb-scan.on { box-shadow: 0 0 0 3px rgba(142,36,170,0.4), 0 10px 26px -6px rgba(142,36,170,0.75),
     inset 0 1.5px 1px rgba(255,255,255,0.5); }
 
+
+/* P0.1 — generated category art. No network fetch, deterministic per article. */
+.gen-art { display:flex; align-items:center; justify-content:center; width:100%;
+  height:100%; min-height:120px; color:rgba(255,255,255,0.92); }
+.gen-art i { font-size:2rem; opacity:0.85; filter:drop-shadow(0 2px 8px rgba(0,0,0,0.4)); }
+
 /* ═══════════ Sherr-I — engine output section ═══════════ */
 .spie-wrap { padding: calc(var(--hh) + 14px) 16px calc(var(--nh) + 30px); max-width: 640px; margin: 0 auto; }
 .spie-head { margin-bottom: 18px; }
@@ -3134,7 +3140,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
       } else {
         list.innerHTML=shown.map(function(a,i){
           var loc=axDetect(a); if(loc) locs.push({idx:i,key:loc});
-          var img=a.image_url?('<img class="ax-card-img" loading="lazy" src="'+a.image_url+'" alt="" onerror="this.style.visibility=\'hidden\'">')
+          var img=ownImage(a.image_url)?('<img class="ax-card-img" loading="lazy" src="'+a.image_url+'" alt="" onerror="this.style.visibility=\'hidden\'">')
                               :('<div class="ax-card-img"></div>');
           var locChip=loc&&AX_LOC[loc]?('<span class="ax-loc"><i class="fa-solid fa-location-dot"></i>'+AX_LOC[loc].l+'</span> · '):'';
           var meta=locChip+((a.source||'Global'))+' · '+(typeof timeAgo==='function'?(timeAgo(a.published_at)||'now'):'now');
@@ -4602,6 +4608,46 @@ function _loadImg(src, cross) {
 // News CDNs rarely send CORS headers (which taints the canvas and blocks PNG
 // export). Route through the free wsrv.nl image proxy, which adds the headers,
 // then fall back to a direct load.
+
+// ─── P0.1 — no publisher-hosted imagery, ever ────────────────────────────────
+// The backend stopped persisting image_url, but a cached payload or an older
+// client could still carry one, so the render path refuses them independently.
+// Only our own hosts are allowed through.
+const OWN_IMAGE_HOSTS = ['sherrbyte', 'sherr-i', 'r2.dev', 'cloudflarestorage.com'];
+function ownImage(url) {
+  if (!url) return '';
+  try {
+    const h = new URL(url, location.href).hostname.toLowerCase();
+    if (h === location.hostname.toLowerCase()) return url;
+    return OWN_IMAGE_HOSTS.some(k => h.includes(k)) ? url : '';
+  } catch (e) { return ''; }
+}
+
+// Deterministic category art: same article always gets the same face, and nothing
+// is fetched. Hash the id, pick the pillar colour, rotate the gradient by the hash.
+const PILLAR_ART = {
+  society:  ['#1E88E5', 'fa-landmark'],      economy: ['#FBC02D', 'fa-briefcase'],
+  tech:     ['#3949AB', 'fa-microchip'],     arts:    ['#E53935', 'fa-masks-theater'],
+  nature:   ['#43A047', 'fa-leaf'],          selfwell:['#FB8C00', 'fa-spa'],
+  sports:   ['#8E24AA', 'fa-medal'],         world:   ['#00897B', 'fa-globe'],
+  ideas:    ['#5E35B1', 'fa-lightbulb'],
+};
+function _artHash(v) {
+  const str = String(v == null ? '' : v);
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return Math.abs(h);
+}
+function heroArt(a, cls) {
+  const [colour, icon] = PILLAR_ART[a && a.category] || PILLAR_ART.tech;
+  const h = _artHash(a && (a.id != null ? a.id : a.title));
+  const angle = h % 360;
+  const shade = 18 + (h % 22);
+  return `<div class="${cls || 'gen-art'}" role="img" aria-label="Category artwork"
+    style="background:linear-gradient(${angle}deg, ${colour} 0%, ${colour}${shade < 26 ? 'AA' : '77'} 55%, #0b0b0f 100%)">
+    <i class="fa-solid ${icon}"></i></div>`;
+}
+
 function _imgCandidates(url) {
   const proxied = 'https://wsrv.nl/?url=' + encodeURIComponent(url) +
                   '&w=1080&h=648&fit=cover&output=jpg&q=82';
@@ -4661,8 +4707,8 @@ async function buildByteCard(a) {
   // hero image area (top ~48% — leaves room for the full summary below)
   const heroH = Math.round(H * 0.48);
   let drew = false;
-  if (a.image_url) {
-    for (const src of _imgCandidates(a.image_url)) {
+  if (ownImage(a.image_url)) {
+    for (const src of _imgCandidates(ownImage(a.image_url))) {
       try { const im = await _loadImg(src, true); _coverDraw(ctx, im, 0, 0, W, heroH); drew = true; break; }
       catch (_) { /* try next candidate, then gradient */ }
     }
@@ -4822,8 +4868,8 @@ function renderContinueCard(article, container) {
   d.className = 'continue-card';
   d.onclick = () => openArticle(article);
   d.innerHTML = `
-    ${article.image_url
-      ? `<img class="continue-img" src="${article.image_url}" loading="lazy" onerror="this.style.background='${CAT_GRADIENTS[article.category]||CAT_GRADIENTS.tech}';this.src=''">`
+    ${ownImage(article.image_url)
+      ? `<img class="continue-img" src="${ownImage(article.image_url)}" loading="lazy" onerror="this.style.background='${CAT_GRADIENTS[article.category]||CAT_GRADIENTS.tech}';this.src=''">`
       : `<div class="continue-img" style="background:${CAT_GRADIENTS[article.category]||CAT_GRADIENTS.tech};display:flex;align-items:center;justify-content:center;font-size:1.5rem">${cc.icon}</div>`
     }
     <div class="continue-info">
@@ -4848,9 +4894,9 @@ function renderHeroCard(rawA, container) {
   d.className = 'hero-card fadein';
   d.onclick = () => openArticle(a);
   d.innerHTML = `
-    ${a.image_url
-      ? `<img class="hero-card-img" src="${a.image_url}" loading="lazy" onerror="this.parentNode.style.background='${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}';this.remove()">`
-      : `<div class="hero-card-img" style="background:${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech};display:flex;align-items:center;justify-content:center;font-size:3rem;opacity:0.6">${cc.icon}</div>`
+    ${ownImage(a.image_url)
+      ? `<img class="hero-card-img" src="${ownImage(a.image_url)}" loading="lazy" onerror="this.parentNode.style.background='${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}';this.remove()">`
+      : heroArt(a, 'hero-card-img gen-art')
     }
     <div class="hero-card-overlay">
       <div class="hero-badge-row">
@@ -4887,9 +4933,9 @@ function renderTrendingStrip(articles, container) {
     c.className = 'trending-card';
     c.onclick = () => openArticle(a);
     c.innerHTML = `
-      ${a.image_url
-        ? `<img class="trending-card-img" src="${a.image_url}" loading="lazy" onerror="this.style.background='${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}';this.src=''">`
-        : `<div class="trending-card-img" style="background:${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech};display:flex;align-items:center;justify-content:center;font-size:1.3rem">${cc.icon}</div>`
+      ${ownImage(a.image_url)
+        ? `<img class="trending-card-img" src="${ownImage(a.image_url)}" loading="lazy" onerror="this.style.background='${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}';this.src=''">`
+        : heroArt(a, 'trending-card-img gen-art')
       }
       <div class="trending-card-info">
         <div class="trending-card-cat" style="color:${cc.hex}">${cc.icon} ${cc.short}</div>
@@ -4923,9 +4969,9 @@ function renderStandardCard(rawA, container) {
   d.dataset.aid = a.id;
   d.onclick = () => openArticle(a);
   d.innerHTML = `
-    ${a.image_url ? `
+    ${ownImage(a.image_url) ? `
       <div class="nc-hero-image" style="width:100%; aspect-ratio:16/9; border-radius:12px; overflow:hidden; margin:0 0 12px;">
-        <img src="${a.image_url}" style="width:100%; height:100%; object-fit:cover;" loading="lazy" onerror="this.parentNode.style.background='${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}';this.remove()">
+        <img src="${ownImage(a.image_url)}" style="width:100%; height:100%; object-fit:cover;" loading="lazy" onerror="this.parentNode.style.background='${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}';this.remove()">
       </div>` : ''
     }
     <div class="nc-acts-row">
@@ -5549,7 +5595,7 @@ function openArticle(rawA) {
       vid.src = a.video_url; vid.controls = true; vid.playsInline = true; vid.preload = 'metadata';
       if (a.image_url) vid.poster = a.image_url;
       aoHero.appendChild(vid);
-    } else if (a.image_url) {
+    } else if (ownImage(a.image_url)) {
       const img = document.createElement('img'); img.id = 'ao-img';
       img.src = a.image_url; img.alt = ''; img.loading = 'lazy';
       img.onerror = () => {
@@ -5745,7 +5791,7 @@ function renderExpHeroSlide() {
   const cc = CATS[a.category] || CATS.tech;
   wrap.innerHTML = `
     <div class="exp-hero tap" onclick='openArticle(${JSON.stringify(a).replace(/'/g,"&#39;")})'>
-      <img src="${a.image_url}" loading="lazy" alt="" onerror="this.parentNode.style.background='${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}';this.remove()">
+      <img src="${ownImage(a.image_url)}" loading="lazy" alt="" onerror="this.parentNode.style.background='${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}';this.remove()">
       <div class="exp-hero-overlay">
         <div class="exp-hero-badge"><span style="color:${cc.hex}">${cc.icon}</span> ${cc.short}</div>
         <div class="exp-hero-title">${a.title}</div>
@@ -5814,8 +5860,8 @@ async function renderExpCatSection(cat, feed, count) {
       const d = document.createElement('div'); d.className = 'exp-rcard tap';
       d.onclick = () => openArticle(a);
       d.innerHTML =
-        `${a.image_url
-          ? `<img src="${a.image_url}" loading="lazy" alt="" onerror="this.parentNode.style.background='${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}';this.remove()">`
+        `${ownImage(a.image_url)
+          ? `<img src="${ownImage(a.image_url)}" loading="lazy" alt="" onerror="this.parentNode.style.background='${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}';this.remove()">`
           : `<div class="exp-rcard-ph" style="background:${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}">${cc.icon}</div>`}
          <div class="exp-rcard-t">${bEsc(a.title)}</div>`;
       row.appendChild(d);
@@ -5838,8 +5884,8 @@ function updateExpGrid(rawArticles, append) {
     d.className = 'exp-card fadein tap' + (i%7===0?' tall':'');
     d.onclick   = () => openArticle(a);
     d.innerHTML = `
-      ${a.image_url
-        ? `<img src="${a.image_url}" loading="lazy" alt="" style="min-height:120px"
+      ${ownImage(a.image_url)
+        ? `<img src="${ownImage(a.image_url)}" loading="lazy" alt="" style="min-height:120px"
              onerror="this.parentNode.style.background='${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}';this.remove()">`
         : `<div style="height:120px;background:${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech};display:flex;align-items:center;justify-content:center;font-size:1.8rem;opacity:0.6">${cc.icon}</div>`
       }
@@ -5961,8 +6007,8 @@ async function renderBM() {
       d.className = 'bm-card fadein tap';
       d.onclick   = (e) => { if (!e.target.closest('.bm-act')) openArticle(a); };
       d.innerHTML = `
-        ${a.image_url
-          ? `<img class="bm-img" src="${a.image_url}" loading="lazy" alt="" onerror="this.style.background='${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}';this.style.display='none'">`
+        ${ownImage(a.image_url)
+          ? `<img class="bm-img" src="${ownImage(a.image_url)}" loading="lazy" alt="" onerror="this.style.background='${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}';this.style.display='none'">`
           : `<div class="bm-img" style="background:${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech};display:flex;align-items:center;justify-content:center;font-size:1.2rem">${cc.icon}</div>`
         }
         <div class="bm-info">
@@ -6343,8 +6389,8 @@ function renderFeedArticles() {
     d.onclick   = () => openArticle(a);
     d.innerHTML = `
       <div class="fac-stripe" style="background:${cc.hex}"></div>
-      ${a.image_url
-        ? `<img class="fac-img" src="${a.image_url}" loading="lazy" alt="" onerror="this.style.background='${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}';this.style.display='none'">`
+      ${ownImage(a.image_url)
+        ? `<img class="fac-img" src="${ownImage(a.image_url)}" loading="lazy" alt="" onerror="this.style.background='${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}';this.style.display='none'">`
         : `<div class="fac-img" style="background:${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech};display:flex;align-items:center;justify-content:center;font-size:1.2rem">${cc.icon}</div>`
       }
       <div class="fac-info">
@@ -8210,8 +8256,8 @@ async function doSearch(q){
     results.forEach(a => {
       const cc = CATS[a.category] || CATS.tech;
       const d = document.createElement('div'); d.className = 'srch-item';
-      d.innerHTML = `${a.image_url
-          ? `<img class="srch-item-img" src="${a.image_url}" loading="lazy" onerror="this.style.display='none'">`
+      d.innerHTML = `${ownImage(a.image_url)
+          ? `<img class="srch-item-img" src="${ownImage(a.image_url)}" loading="lazy" onerror="this.style.display='none'">`
           : `<div class="srch-item-img" style="display:flex;align-items:center;justify-content:center;background:${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}">${cc.icon}</div>`}
         <div><div class="srch-item-t">${bEsc(a.title)}</div>
           <div class="srch-item-s">${cc.short} · ${bEsc(a.source||'')} · ${timeAgo(a.published_at)||''}</div></div>`;
@@ -8280,7 +8326,7 @@ function renderBytes(arts, feed){
     const src = a.source || 'SherrByte';
     el.innerHTML = `
       <div class="byte-card">
-        <div class="byte-media b-open" style="${a.image_url ? `background-image:url('${a.image_url}')` : `background:${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}`}">
+        <div class="byte-media b-open" style="${ownImage(a.image_url) ? `background-image:url('${a.image_url}')` : `background:${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}`}">
           ${a.image_url ? '' : '<i class="fa-regular fa-image byte-media-ico"></i>'}
         </div>
         <div class="byte-body">

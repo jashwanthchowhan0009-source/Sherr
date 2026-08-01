@@ -15,7 +15,7 @@ Fixes vs v4.1:
 Run: python main.py   or   uvicorn main:app --host 0.0.0.0 --port $PORT
 """
 
-import os, json, math, hashlib, asyncio, logging, re, sqlite3
+import os, sys, json, math, hashlib, asyncio, logging, re, sqlite3
 import hmac as hmac_module
 import base64
 from datetime import datetime, timedelta, timezone
@@ -31,6 +31,10 @@ from activity import router as activity_router, init_activity_schema
 from markets  import router as markets_router
 
 from text_utils import clean_html_fragments, title_fingerprint
+# P0.4 — the originality gate. One implementation, loaded via the root shim so the
+# sqlite app does not pull in the sherrbyte package's asyncpg/Supabase dependencies.
+from originality import (
+    MAX_CONTIGUOUS_RUN, MAX_NGRAM_OVERLAP, originality_check)
 from ai_processor import process_batch, available_providers
 
 load_dotenv()
@@ -616,7 +620,27 @@ _MIGRATIONS = [
     # Story-thread id ("string" feature) — groups related articles into a
     # chronological thread. 0 = not part of any multi-article thread.
     "ALTER TABLE articles ADD COLUMN story_id INTEGER DEFAULT 0",
+    # ── P0 originality gate ───────────────────────────────────────────────────
+    # The publisher's headline, kept for the originality diff and never rendered.
+    # `headline` is OURS; if rewriting fails the row is parked, not backfilled from
+    # here — a source headline must never reach the feed by fallback.
+    "ALTER TABLE articles ADD COLUMN source_headline TEXT DEFAULT ''",
+    # published | pending_rewrite | blocked_originality. Only 'published' is served.
+    "ALTER TABLE articles ADD COLUMN status TEXT DEFAULT 'published'",
+    # The audit trail: the metrics the gate computed, stored whether it passed or not.
+    "ALTER TABLE articles ADD COLUMN originality_json TEXT DEFAULT ''",
+    "ALTER TABLE articles ADD COLUMN originality_overlap REAL DEFAULT -1",
+    "ALTER TABLE articles ADD COLUMN originality_run INTEGER DEFAULT -1",
+    "ALTER TABLE articles ADD COLUMN originality_checked_at TEXT DEFAULT ''",
 ]
+
+# Publisher image URLs are never persisted again (P0.1). Existing rows are scrubbed
+# on boot: a hotlinked hero is both a copyright exposure and a referrer leak, and
+# leaving old rows intact would keep serving them.
+_IMAGE_SCRUB = (
+    "UPDATE articles SET image_url = \'\' "
+    "WHERE image_url <> \'\' AND image_url NOT LIKE \'%sherrbyte%\'"
+)
 
 
 # Sample Sherr-I pattern output (shape matches the real engine's insights.explain_json).
@@ -690,6 +714,15 @@ def init_db():
             conn.execute(stmt)
         except sqlite3.OperationalError:
             pass  # Column already exists — fine
+    # P0.1 backfill: null out every publisher-hosted hero already on disk. Idempotent,
+    # and cheap enough to run on every boot — the alternative is a one-shot script
+    # somebody forgets to run before a deploy.
+    try:
+        scrubbed = conn.execute(_IMAGE_SCRUB).rowcount
+        if scrubbed:
+            log.info("P0.1 scrubbed %d hotlinked publisher images", scrubbed)
+    except sqlite3.OperationalError as e:
+        log.warning("image scrub skipped: %s", e)
     conn.commit()
 
     # Seed topics table
@@ -806,7 +839,9 @@ async def fetch_feed_async(feed_url: str, source_name: str, client: httpx.AsyncC
                 "where_info": "Not specified",
                 "what_info": title,
                 "how_info": "",
-                "image_url": img,
+                # P0.1: publisher images are never stored. The card renders
+                # deterministic category art keyed on the article id instead.
+                "image_url": "",
                 "source_name": source_name,
                 "pillar_id": pid,
                 "micro_tags": json.dumps(tags),
@@ -870,7 +905,8 @@ async def collect_newsapi() -> list[dict]:
                         "where_info": "Not specified",
                         "what_info": title,
                         "how_info": "",
-                        "image_url": a.get("urlToImage") or "",
+                        "image_url": "",   # P0.1 — never hotlink the publisher
+
                         "source_name": (a.get("source") or {}).get("name", "NewsAPI"),
                         "pillar_id": pid,
                         "micro_tags": json.dumps(tags),
@@ -954,7 +990,7 @@ async def run_ai_batch(conn):
                 UPDATE articles SET
                     headline=?, summary_60=?, full_body=?, source_summary=?,
                     when_info=?, where_info=?, pillar_id=?, micro_tags=?,
-                    is_trending=?, sentiment=?, ai_processed=1, reprocessed=1
+                    is_trending=?, sentiment=?, ai_processed=1 AND status='published', reprocessed=1
                 WHERE id=?
             """, (
                 result["refined_title"],
@@ -1014,7 +1050,7 @@ def link_stories(conn, window_days: int = STORY_WINDOW_DAYS) -> int:
     """
     rows = conn.execute(
         "SELECT id, headline, micro_tags, pillar_id FROM articles "
-        "WHERE ai_processed=1 AND published_at >= datetime('now', ?) "
+        "WHERE ai_processed=1 AND status='published' AND published_at >= datetime('now', ?) "
         "ORDER BY id ASC",
         (f"-{int(window_days)} days",)
     ).fetchall()
@@ -1372,7 +1408,7 @@ async def get_feed(
 
     if has_p:
         await asyncio.get_event_loop().run_in_executor(None, compute_feed_for_user, uid)
-        q = "SELECT a.*, f.score FROM articles a JOIN feeds f ON a.id=f.article_id WHERE f.user_id=? AND a.ai_processed=1"
+        q = "SELECT a.*, f.score FROM articles a JOIN feeds f ON a.id=f.article_id WHERE f.user_id=? AND a.ai_processed=1 AND a.status='published'"
         p = [uid]
         sc_sql, sc_params = _scope_clause(scope, "a.scope")
         q += sc_sql; p += sc_params
@@ -1383,12 +1419,12 @@ async def get_feed(
         rows = conn.execute(q, p).fetchall()
         if len(rows) < 5:
             rows = conn.execute(
-                "SELECT *, 1.0 as score FROM articles WHERE ai_processed=1 ORDER BY published_at DESC, id DESC LIMIT ? OFFSET ?",
+                "SELECT *, 1.0 as score FROM articles WHERE ai_processed=1 AND status='published' ORDER BY published_at DESC, id DESC LIMIT ? OFFSET ?",
                 (limit + 1, offset)
             ).fetchall()
     else:
         rows = conn.execute(
-            "SELECT *, 1.0 as score FROM articles WHERE ai_processed=1 ORDER BY published_at DESC, id DESC LIMIT ? OFFSET ?",
+            "SELECT *, 1.0 as score FROM articles WHERE ai_processed=1 AND status='published' ORDER BY published_at DESC, id DESC LIMIT ? OFFSET ?",
             (limit + 1, offset)
         ).fetchall()
 
@@ -1410,7 +1446,7 @@ async def explore_feed(
     get_current_user(authorization)
     offset = (page - 1) * limit
     conn = get_db()
-    q = "SELECT * FROM articles WHERE ai_processed=1"
+    q = "SELECT * FROM articles WHERE ai_processed=1 AND status='published'"
     p = []
     if category and not pillar:
         resolved = FRONTEND_SLUG_MAP.get(category.lower())
@@ -1437,7 +1473,7 @@ async def trending_feed(
     get_current_user(authorization)
     conn = get_db()
     rows = conn.execute(
-        "SELECT * FROM articles WHERE is_trending=1 AND ai_processed=1 ORDER BY published_at DESC LIMIT ?",
+        "SELECT * FROM articles WHERE is_trending=1 AND ai_processed=1 AND status='published' ORDER BY published_at DESC LIMIT ?",
         (limit,)
     ).fetchall()
     conn.close()
@@ -1456,6 +1492,47 @@ def insight_row_to_dict(row) -> dict:
     except Exception:
         d["explain_json"] = {}
     return d
+
+
+# ─── P0.5 — originality audit ─────────────────────────────────────────────────
+@app.get("/admin/originality")
+async def admin_originality():
+    """Counts by publish status plus the gate's own metrics.
+
+    This is the launch checklist in one call: `blocked_originality` and
+    `pending_rewrite` must both be zero on the served feed, and `unchecked` tells us
+    how much of the corpus predates the gate and still needs the backfill.
+    """
+    conn = get_db()
+    try:
+        by_status = {r["status"] or "published": r["c"] for r in conn.execute(
+            "SELECT status, COUNT(*) AS c FROM articles GROUP BY status")}
+        checked = conn.execute(
+            "SELECT COUNT(*) AS c, AVG(originality_overlap) AS avg_overlap, "
+            "MAX(originality_overlap) AS max_overlap, MAX(originality_run) AS max_run "
+            "FROM articles WHERE originality_overlap >= 0").fetchone()
+        hotlinked = conn.execute(
+            "SELECT COUNT(*) AS c FROM articles "
+            "WHERE image_url <> '' AND image_url NOT LIKE '%sherrbyte%'").fetchone()["c"]
+        total = conn.execute("SELECT COUNT(*) AS c FROM articles").fetchone()["c"]
+        return {
+            "total": total,
+            "by_status": by_status,
+            "passed": by_status.get("published", 0),
+            "blocked_originality": by_status.get("blocked_originality", 0),
+            "pending_rewrite": by_status.get("pending_rewrite", 0),
+            "checked": checked["c"],
+            "unchecked": total - (checked["c"] or 0),
+            "avg_overlap": round(checked["avg_overlap"], 4) if checked["avg_overlap"] is not None else None,
+            "max_overlap": checked["max_overlap"],
+            "max_contiguous_run": checked["max_run"],
+            # Must be 0. Any non-zero value is a live copyright exposure.
+            "hotlinked_images": hotlinked,
+            "thresholds": {"overlap": MAX_NGRAM_OVERLAP,
+                           "longest_run": MAX_CONTIGUOUS_RUN},
+        }
+    finally:
+        conn.close()
 
 
 @app.get("/patterns")
@@ -1595,7 +1672,7 @@ async def search(q: str = Query(""), authorization: str = Header("")):
     conn = get_db()
     q_like = f"%{q}%"
     rows = conn.execute(
-        "SELECT * FROM articles WHERE (headline LIKE ? OR summary_60 LIKE ?) AND ai_processed=1 "
+        "SELECT * FROM articles WHERE (headline LIKE ? OR summary_60 LIKE ?) AND ai_processed=1 AND status='published' "
         "ORDER BY published_at DESC LIMIT 25",
         (q_like, q_like)
     ).fetchall()
@@ -1766,7 +1843,7 @@ async def admin_reprocess(
     if not ai_up and not force:
         conn = get_db()
         remaining = conn.execute(
-            "SELECT COUNT(*) c FROM articles WHERE ai_processed=1 AND COALESCE(reprocessed,0)=0"
+            "SELECT COUNT(*) c FROM articles WHERE ai_processed=1 AND status='published' AND COALESCE(reprocessed,0)=0"
         ).fetchone()["c"]
         conn.close()
         return {
@@ -1779,7 +1856,7 @@ async def admin_reprocess(
     conn = get_db()
     rows = conn.execute(
         "SELECT id, headline, full_body, pillar_id, micro_tags FROM articles "
-        "WHERE ai_processed=1 AND COALESCE(reprocessed,0)=0 ORDER BY id ASC LIMIT ?",
+        "WHERE ai_processed=1 AND status='published' AND COALESCE(reprocessed,0)=0 ORDER BY id ASC LIMIT ?",
         (limit,)
     ).fetchall()
 
@@ -1806,7 +1883,7 @@ async def admin_reprocess(
                 UPDATE articles SET
                     headline=?, summary_60=?, full_body=?, source_summary=?,
                     when_info=?, where_info=?, pillar_id=?, micro_tags=?,
-                    is_trending=?, sentiment=?, ai_processed=1, reprocessed=1
+                    is_trending=?, sentiment=?, ai_processed=1 AND status='published', reprocessed=1
                 WHERE id=?
             """, (
                 result["refined_title"], result["summary"], result["full_body"],
@@ -1821,7 +1898,7 @@ async def admin_reprocess(
 
     conn.commit()
     remaining = conn.execute(
-        "SELECT COUNT(*) c FROM articles WHERE ai_processed=1 AND COALESCE(reprocessed,0)=0"
+        "SELECT COUNT(*) c FROM articles WHERE ai_processed=1 AND status='published' AND COALESCE(reprocessed,0)=0"
     ).fetchone()["c"]
 
     # Content changed — refresh story threads so headlines/tags re-cluster.
@@ -1872,7 +1949,7 @@ def _live_thread_ids(conn, article_id: int, window_days: int = STORY_WINDOW_DAYS
     Returns article ids (current first, strongest matches next)."""
     base = conn.execute(
         "SELECT id, headline, micro_tags, pillar_id FROM articles "
-        "WHERE id=? AND ai_processed=1", (article_id,)
+        "WHERE id=? AND ai_processed=1 AND status='published'", (article_id,)
     ).fetchone()
     if not base:
         return []
@@ -1886,7 +1963,7 @@ def _live_thread_ids(conn, article_id: int, window_days: int = STORY_WINDOW_DAYS
 
     cands = conn.execute(
         "SELECT id, headline, micro_tags FROM articles "
-        "WHERE ai_processed=1 AND pillar_id=? AND id!=? "
+        "WHERE ai_processed=1 AND status='published' AND pillar_id=? AND id!=? "
         "AND published_at >= datetime('now', ?)",
         (base["pillar_id"], article_id, f"-{int(window_days)} days")
     ).fetchall()
@@ -1921,7 +1998,7 @@ async def get_story(article_id: int):
     sid = (art["story_id"] or 0) if "story_id" in art.keys() else 0
     if sid:
         rows = conn.execute(
-            "SELECT * FROM articles WHERE story_id=? AND ai_processed=1 "
+            "SELECT * FROM articles WHERE story_id=? AND ai_processed=1 AND status='published' "
             "ORDER BY published_at ASC, id ASC",
             (sid,)
         ).fetchall()
@@ -1933,7 +2010,7 @@ async def get_story(article_id: int):
             return {"story_id": 0, "count": 0, "thread": []}
         placeholders = ",".join("?" for _ in ids)
         rows = conn.execute(
-            f"SELECT * FROM articles WHERE id IN ({placeholders}) AND ai_processed=1 "
+            f"SELECT * FROM articles WHERE id IN ({placeholders}) AND ai_processed=1 AND status='published' "
             "ORDER BY published_at ASC, id ASC",
             ids
         ).fetchall()
@@ -1964,7 +2041,7 @@ async def health():
     article_count = conn.execute("SELECT COUNT(*) as c FROM articles").fetchone()["c"]
     user_count = conn.execute("SELECT COUNT(*) as c FROM users").fetchone()["c"]
     trending_count = conn.execute("SELECT COUNT(*) as c FROM articles WHERE is_trending=1").fetchone()["c"]
-    ai_processed = conn.execute("SELECT COUNT(*) as c FROM articles WHERE ai_processed=1").fetchone()["c"]
+    ai_processed = conn.execute("SELECT COUNT(*) as c FROM articles WHERE ai_processed=1 AND status='published'").fetchone()["c"]
     pillar_counts = {}
     for pid in range(1, 10):
         cnt = conn.execute("SELECT COUNT(*) as c FROM articles WHERE pillar_id=?", (pid,)).fetchone()["c"]
