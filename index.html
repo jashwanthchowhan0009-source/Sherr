@@ -6623,7 +6623,11 @@ const SHERR_I_TYPES = [
   { key: '',                     label: 'All',             icon: 'fa-layer-group' },
   { key: 'reasoned',             label: 'Market Intelligence', icon: 'fa-brain',       color: '#F59E0B' },
   { key: 'observation',          label: 'Observation',     icon: 'fa-eye',             color: '#38BDF8' },
-  { key: 'market_reaction',      label: 'Market Reaction', icon: 'fa-chart-line',      color: '#22C55E' },
+  // Hidden pending the market-history backfill: with one daily bucket per instrument
+  // the MAD baseline is not computable, so the tab could only ever show an empty
+  // state. The detector still runs and still writes — this is surfacing only, and
+  // re-enabling is uncommenting this line.
+  // { key: 'market_reaction',   label: 'Market Reaction', icon: 'fa-chart-line',      color: '#22C55E' },
   { key: 'emergence',            label: 'Emergence',       icon: 'fa-diagram-project', color: '#22C55E' },
   { key: 'temporal_correlation', label: 'Temporal',        icon: 'fa-timeline',        color: '#A855F7' },
   { key: 'volume_anomaly',       label: 'Anomaly',         icon: 'fa-bolt',            color: '#EAB308' },
