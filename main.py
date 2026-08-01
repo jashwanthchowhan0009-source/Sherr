@@ -34,7 +34,8 @@ from text_utils import clean_html_fragments, title_fingerprint
 # P0.4 — the originality gate. One implementation, loaded via the root shim so the
 # sqlite app does not pull in the sherrbyte package's asyncpg/Supabase dependencies.
 from originality import (
-    MAX_CONTIGUOUS_RUN, MAX_NGRAM_OVERLAP, originality_check)
+    MAX_CONTIGUOUS_RUN, MAX_NGRAM_OVERLAP, headline_is_original,
+    originality_check)
 from ai_processor import process_batch, available_providers
 
 load_dotenv()
@@ -832,6 +833,11 @@ async def fetch_feed_async(feed_url: str, source_name: str, client: httpx.AsyncC
                 "url": link,
                 "title_hash": title_fingerprint(title),
                 "headline": title,
+                # 0.2: the publisher's headline is kept ONLY for the originality diff.
+                # `headline` is overwritten by our own once the AI pass runs; until then
+                # the row is parked and excluded from the feed.
+                "source_headline": title,
+                "status": "pending_rewrite",
                 "summary_60": clean[:400],
                 "full_body": clean,
                 "source_summary": clean[:200],
@@ -898,6 +904,16 @@ async def collect_newsapi() -> list[dict]:
                         "url": link,
                         "title_hash": title_fingerprint(title),
                         "headline": title,
+                        # 0.2: the publisher's headline is kept ONLY for the originality diff.
+                        # `headline` is overwritten by our own once the AI pass runs; until then
+                        # the row is parked and excluded from the feed.
+                        "source_headline": title,
+                        "status": "pending_rewrite",
+                # 0.2: the publisher's headline is kept ONLY for the originality diff.
+                # `headline` is overwritten by our own once the AI pass runs; until then
+                # the row is parked and excluded from the feed.
+                "source_headline": title,
+                "status": "pending_rewrite",
                         "summary_60": clean[:400],
                         "full_body": clean,
                         "source_summary": (a.get("description") or "")[:200],
@@ -928,15 +944,20 @@ def _insert_with_dedup(conn, article: dict) -> bool:
     ).fetchone()
     if existing:
         return False
+    # Defaults so any caller that predates 0.2 still inserts — and parks, rather than
+    # publishing an unchecked row by omission.
+    article.setdefault("source_headline", article.get("headline", ""))
+    article.setdefault("status", "pending_rewrite")
     try:
         conn.execute("""
             INSERT OR IGNORE INTO articles
-            (url, title_hash, headline, summary_60, full_body, source_summary,
-             when_info, where_info, what_info, how_info, image_url, source_name,
-             pillar_id, micro_tags, scope, published_at)
-            VALUES(:url, :title_hash, :headline, :summary_60, :full_body, :source_summary,
-                   :when_info, :where_info, :what_info, :how_info, :image_url, :source_name,
-                   :pillar_id, :micro_tags, :scope, :published_at)
+            (url, title_hash, headline, source_headline, status, summary_60, full_body,
+             source_summary, when_info, where_info, what_info, how_info, image_url,
+             source_name, pillar_id, micro_tags, scope, published_at)
+            VALUES(:url, :title_hash, :headline, :source_headline, :status, :summary_60,
+                   :full_body, :source_summary, :when_info, :where_info, :what_info,
+                   :how_info, :image_url, :source_name, :pillar_id, :micro_tags, :scope,
+                   :published_at)
         """, article)
         return conn.total_changes > 0
     except Exception as e:
@@ -944,11 +965,30 @@ def _insert_with_dedup(conn, article: dict) -> bool:
         return False
 
 
+def _gate_article(headline: str, body: str, source_headline: str,
+                  source_body: str) -> tuple[str, dict]:
+    """Run both originality gates. Returns (status, audit).
+
+    status is 'published' only when the headline is genuinely ours AND the body clears
+    the overlap gate. Anything else is parked — there is deliberately no path that
+    publishes on a failed check, and no fallback to the publisher's wording.
+    """
+    head_ok, head_m = headline_is_original(headline, source_headline)
+    body_ok, body_m = originality_check(body, source_body)
+    if head_ok and body_ok:
+        status = "published"
+    elif not head_ok:
+        status = "pending_rewrite"
+    else:
+        status = "blocked_originality"
+    return status, {"status": status, "headline": head_m, "body": body_m}
+
+
 async def run_ai_batch(conn):
     """Pull unprocessed articles and refine them with Gemini in parallel."""
     rows = conn.execute(
-        "SELECT id, headline, full_body, pillar_id, micro_tags FROM articles "
-        "WHERE ai_processed=0 ORDER BY collected_at DESC LIMIT ?",
+        "SELECT id, headline, source_headline, full_body, pillar_id, micro_tags "
+        "FROM articles WHERE ai_processed=0 ORDER BY collected_at DESC LIMIT ?",
         (AI_BATCH_SIZE,)
     ).fetchall()
 
@@ -986,11 +1026,19 @@ async def run_ai_batch(conn):
             existing_tags = json.loads(row["micro_tags"] or "[]")
             all_tags = list(dict.fromkeys(result["topic_tags"] + existing_tags))[:10]
 
+            # ── 0.2 + 0.4: both gates run before anything can be published ──
+            src_head = row["source_headline"] or row["headline"] or ""
+            status, audit = _gate_article(
+                result["refined_title"], result["full_body"], src_head,
+                row["full_body"] or "")
+
             conn.execute("""
                 UPDATE articles SET
                     headline=?, summary_60=?, full_body=?, source_summary=?,
                     when_info=?, where_info=?, pillar_id=?, micro_tags=?,
-                    is_trending=?, sentiment=?, ai_processed=1 AND status='published', reprocessed=1
+                    is_trending=?, sentiment=?, ai_processed=1, reprocessed=1,
+                    status=?, originality_json=?, originality_overlap=?,
+                    originality_run=?, originality_checked_at=?
                 WHERE id=?
             """, (
                 result["refined_title"],
@@ -1003,6 +1051,11 @@ async def run_ai_batch(conn):
                 json.dumps(all_tags),
                 1 if result["is_trending"] else 0,
                 result["sentiment"],
+                status,
+                json.dumps(audit),
+                audit["body"]["overlap"],
+                audit["body"]["longest_run"],
+                datetime.now(timezone.utc).isoformat(),
                 row["id"],
             ))
             success += 1
@@ -1879,11 +1932,19 @@ async def admin_reprocess(
             new_pid = SLUG_TO_PILLAR.get(result["category"], r["pillar_id"])
             existing_tags = json.loads(r["micro_tags"] or "[]")
             all_tags = list(dict.fromkeys(result["topic_tags"] + existing_tags))[:10]
+            # ── 0.2 + 0.4: both gates run before anything can be published ──
+            src_head = row["source_headline"] or row["headline"] or ""
+            status, audit = _gate_article(
+                result["refined_title"], result["full_body"], src_head,
+                row["full_body"] or "")
+
             conn.execute("""
                 UPDATE articles SET
                     headline=?, summary_60=?, full_body=?, source_summary=?,
                     when_info=?, where_info=?, pillar_id=?, micro_tags=?,
-                    is_trending=?, sentiment=?, ai_processed=1 AND status='published', reprocessed=1
+                    is_trending=?, sentiment=?, ai_processed=1, reprocessed=1,
+                    status=?, originality_json=?, originality_overlap=?,
+                    originality_run=?, originality_checked_at=?
                 WHERE id=?
             """, (
                 result["refined_title"], result["summary"], result["full_body"],

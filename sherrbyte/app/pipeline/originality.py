@@ -181,3 +181,35 @@ def originality_check(generated: str, source_text: str) -> tuple[bool, dict]:
                        "quote_tokens": MAX_QUOTE_TOKENS},
     }
     return (not reasons), metrics
+
+
+# ─── 0.2 — our headline must be ours ──────────────────────────────────────────
+# A rewrite that merely reorders or truncates the source headline is not a rewrite.
+# Two independent rules: it may not be contained in the source, and it may not share
+# any 5-word contiguous run with it.
+MAX_HEADLINE_RUN = 4          # 5-word run == fail, so the ceiling is 4
+
+
+def headline_is_original(ours: str, source: str) -> tuple[bool, dict]:
+    """Check a generated headline against the publisher's.
+
+    Returns (passed, metrics). An empty or whitespace-only headline fails: the caller
+    must park the row, never fall back to the source headline.
+    """
+    a, b = tokenize(ours), tokenize(source)
+    if not a:
+        return False, {"reason": "empty headline", "longest_run": 0, "substring": False}
+
+    # Substring test on the normalized token stream, so punctuation and casing
+    # differences cannot disguise a verbatim lift.
+    joined_src, joined_ours = " ".join(b), " ".join(a)
+    substring = bool(joined_ours) and joined_ours in joined_src
+
+    run = longest_common_run(a, b)
+    reasons = []
+    if substring:
+        reasons.append("headline is contained in the source headline")
+    if run > MAX_HEADLINE_RUN:
+        reasons.append(f"shares a {run}-word run with the source headline")
+    return (not reasons), {"longest_run": run, "substring": substring,
+                           "reasons": reasons, "tokens": len(a)}
