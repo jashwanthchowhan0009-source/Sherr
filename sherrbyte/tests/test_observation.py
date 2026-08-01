@@ -72,6 +72,42 @@ def test_clean_entities_drops_blanks():
     assert obs.clean_entities([{"entity": ""}, {"entity": None}, {}]) == []
 
 
+# ─── the card payload must survive json.dumps ─────────────────────────────────
+def test_connected_entity_ids_are_json_serialisable():
+    """asyncpg returns uuid.UUID, which json.dumps refuses — and write_insight
+    serialises the whole card, so one UUID aborted the entire detector run."""
+    import json
+    import uuid
+    rows = [{"entity_id": uuid.uuid4(), "entity": "Reliance Industries", "npmi": 0.61}]
+    with pytest.raises(TypeError):
+        json.dumps(rows)                       # the reported crash
+    json.dumps(obs.json_safe(rows))            # fixed
+
+
+def test_json_safe_does_not_mutate_the_originals():
+    """The same ids are fed back into queries with ::uuid[] casts, so the source
+    list has to keep its UUID objects."""
+    import uuid
+    u = uuid.uuid4()
+    rows = [{"entity_id": u, "entity": "Nifty"}]
+    obs.json_safe(rows)
+    assert isinstance(rows[0]["entity_id"], uuid.UUID)
+
+
+def test_json_safe_tolerates_a_missing_id():
+    assert obs.json_safe([{"entity": "Gold"}]) == [{"entity": "Gold"}]
+    assert obs.json_safe([{"entity_id": None, "entity": "Gold"}])[0]["entity_id"] is None
+
+
+def test_write_insight_serialises_unexpected_types_rather_than_crashing():
+    """Safety net: a stray UUID/datetime must not lose every insight in the batch."""
+    import datetime
+    import json
+    import uuid
+    payload = {"id": uuid.uuid4(), "when": datetime.datetime(2026, 8, 1)}
+    assert json.dumps(payload, default=str)
+
+
 # ─── the narrative stays short and claims nothing it lacks ────────────────────
 def _card(cross=(), connected=()):
     c = {"focal": {"type": "market_move", "instrument": "Sensex",

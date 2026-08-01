@@ -68,6 +68,23 @@ def baseline_note(points: int | None) -> str | None:
     return f"baseline n={points}"
 
 
+def json_safe(rows: list[dict]) -> list[dict]:
+    """Copy of `rows` with entity_id rendered as a string.
+
+    asyncpg returns uuid.UUID, which json.dumps refuses. The reasoned path never hit
+    this because reason_focal rebuilds `connected` and drops the id along the way;
+    Tier 1 passes the list straight into explain_json, so the conversion has to be
+    explicit. Done as a copy so the originals stay usable as query parameters.
+    """
+    out = []
+    for r in rows:
+        c = dict(r)
+        if c.get("entity_id") is not None:
+            c["entity_id"] = str(c["entity_id"])
+        out.append(c)
+    return out
+
+
 def clean_entities(rows: list[dict]) -> list[dict]:
     """Drop junk mentions that should never have entered the graph.
 
@@ -148,6 +165,9 @@ async def _related(conn, eid, instrument: str, days: int = 90,
         GROUP BY 1 ORDER BY MAX(npmi) DESC NULLS LAST LIMIT $3
         """, eid, str(int(days)), int(limit))
 
+    # entity_id stays a uuid.UUID here — these ids are fed straight back into queries
+    # with ::uuid[] casts. Conversion to str happens at the payload boundary
+    # (json_safe, below), not here.
     out, seen = [], {str(eid)}
     if rows:
         for r, n in zip(rows, await names_for(conn, [x["eid"] for x in rows])):
@@ -265,7 +285,7 @@ async def run(conn, *, top_n: int = 8, news_hours: int = 48) -> int:
                       "baseline_note": baseline_note(focal["baseline_points"])},
             "window_hours": news_hours,
             "news_link": news,
-            "connected": connected[:6],
+            "connected": json_safe(connected[:6]),
             "cross_market": cross,
             "historical": historical,
             "lag": lag,

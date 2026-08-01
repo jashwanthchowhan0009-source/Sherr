@@ -28,7 +28,12 @@ async def write_insight(conn, *, type: str, entity_ids: list, domains: list,
                 updated_at = now()
         RETURNING id
         """,
-        type, entity_ids, domains, float(score), json.dumps(explain), signature,
+        # default=str so a UUID, datetime or Decimal that reached explain_json cannot
+        # abort a whole detector run. explain_json is a display payload — rendering an
+        # id as its string form is exactly right, and losing every insight in the batch
+        # because one field was the wrong Python type is not.
+        type, entity_ids, domains, float(score),
+        json.dumps(explain, default=str), signature,
     )
     return str(new_id)
 
