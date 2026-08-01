@@ -146,3 +146,60 @@ async def refresh_and_report(conn, *, days: int = 365) -> dict:
     return {"total_documents": total, "entities": len(df["entities"]),
             "over_ceiling": [{"entity": n, "df": round(d, 4)} for n, d in over[:25]],
             "below_support_floor": thin, "table": df["entities"]}
+
+
+# ─── cached DF table ──────────────────────────────────────────────────────────
+# Computed on first use and reused for the process lifetime. The nightly job calls
+# refresh() to replace it; without that job the cache still populates itself on the
+# first resolve_many of a run, so the filter works from day one rather than waiting
+# for a scheduler nobody has wired up yet.
+_CACHE: dict = {"entities": {}, "total_documents": 0, "loaded": False}
+# Below this many documents, frequency is not a meaningful statistic.
+_MIN_DOCS_TO_TRUST = 20
+
+
+async def ensure_loaded(conn, *, days: int = 365) -> dict:
+    """Populate the DF cache if empty. Idempotent, safe to call once per batch."""
+    if _CACHE["loaded"]:
+        return _CACHE
+    try:
+        df = await compute_document_frequency(conn, days=days)
+    except Exception as e:
+        log.warning("DF table unavailable (%s) — admitting on type/shape only", e)
+        _CACHE.update(loaded=True, degraded=True)
+        return _CACHE
+    _CACHE.update(entities=df["entities"], total_documents=df["total_documents"],
+                  loaded=True, degraded=False)
+    log.info("entity DF cache: %d surfaces over %d documents",
+             len(df["entities"]), df["total_documents"])
+    return _CACHE
+
+
+def refresh(table: dict, total_documents: int) -> None:
+    """Replace the cache — used by the nightly recompute."""
+    _CACHE.update(entities=table, total_documents=total_documents,
+                  loaded=True, degraded=False)
+
+
+def invalidate() -> None:
+    _CACHE.update(entities={}, total_documents=0, loaded=False, degraded=False)
+
+
+def admits(name: str, ner_type: str | None) -> tuple[bool, str]:
+    """Admission decision against the cached table.
+
+    On a corpus too small for frequency to mean anything — a fresh install, or the DF
+    query failing — the ceiling and support floor are SKIPPED and only the type and
+    shape rules apply. Applying a 15% ceiling to 6 documents would reject everything
+    appearing twice, which is worse than not filtering at all.
+    """
+    total = _CACHE.get("total_documents", 0)
+    if _CACHE.get("degraded") or total < _MIN_DOCS_TO_TRUST:
+        if not type_allowed(ner_type):
+            return False, f"ner type {ner_type} not in whitelist"
+        surface = canonical_surface(name)
+        if not surface or len(surface) <= 2:
+            return False, "surface too short after normalisation"
+        return True, "ok (corpus too small for frequency rules)"
+    return is_admissible(name, ner_type,
+                         _CACHE["entities"].get(canonical_surface(name)), total)

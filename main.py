@@ -633,14 +633,25 @@ _MIGRATIONS = [
     "ALTER TABLE articles ADD COLUMN originality_overlap REAL DEFAULT -1",
     "ALTER TABLE articles ADD COLUMN originality_run INTEGER DEFAULT -1",
     "ALTER TABLE articles ADD COLUMN originality_checked_at TEXT DEFAULT ''",
+    # ── imagery ───────────────────────────────────────────────────────────────
+    # Which kind of image this row carries: stock | thumbnail | art. Stored rather
+    # than inferred so the render path knows which constraints to apply, and so a
+    # mode change stays auditable after the fact.
+    "ALTER TABLE articles ADD COLUMN image_source TEXT DEFAULT 'art'",
+    "ALTER TABLE articles ADD COLUMN image_credit TEXT DEFAULT ''",
+    "ALTER TABLE articles ADD COLUMN image_query TEXT DEFAULT ''",
 ]
 
 # Publisher image URLs are never persisted again (P0.1). Existing rows are scrubbed
 # on boot: a hotlinked hero is both a copyright exposure and a referrer leak, and
 # leaving old rows intact would keep serving them.
+# Legacy scrub: rows collected before image_source existed carry an unattributed
+# publisher hotlink. Rows written since are labelled and governed by IMAGE_MODE, so
+# they are left alone — otherwise every boot would wipe thumbnail mode's own output.
 _IMAGE_SCRUB = (
-    "UPDATE articles SET image_url = \'\' "
-    "WHERE image_url <> \'\' AND image_url NOT LIKE \'%sherrbyte%\'"
+    "UPDATE articles SET image_url = '' "
+    "WHERE image_url <> '' AND (image_source IS NULL OR image_source = '') "
+    "AND image_url NOT LIKE '%sherrbyte%'"
 )
 
 

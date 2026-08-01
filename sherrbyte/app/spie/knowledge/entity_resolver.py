@@ -356,12 +356,32 @@ async def resolve_many(conn, mentions: Iterable) -> list[str]:
     Each item is a str, a (name, type) tuple, or an object/dict with .name/.type.
     Order is preserved; junk and empty mentions are dropped.
     """
+    # 0) Load the document-frequency table once per process. Doing it here rather than
+    # in a scheduled job means the corpus-aware filter works on the first run, without
+    # depending on a nightly task being wired up.
+    from app.spie.graph import entities as _entities
+    try:
+        await _entities.ensure_loaded(conn)
+        _admits = _entities.admits
+    except Exception as e:                       # never block ingestion on the filter
+        log.warning("entity DF filter unavailable (%s) — shape-only filter", e)
+        _admits = None
+
     # 1) Pure pass: filter + normalize (no I/O).
     keyed: list[tuple[str, str, str, str]] = []      # (surface, norm_key, ctype, display)
     for m in mentions:
         name, mtype = _unpack_mention(m)
+        # is_valid_mention stays as a cheap pre-filter — it drops the obvious cases
+        # without a dict lookup. The corpus-aware rules then decide the rest.
         if not is_valid_mention(name, mtype):
             continue
+        if _admits is not None:
+            ok, why = _admits(name, mtype)
+            if not ok:
+                _STATS["filtered_out"] += 1
+                _STATS["df_rejected"] = _STATS.get("df_rejected", 0) + 1
+                log.debug("entity rejected by DF filter: %s (%s)", name, why)
+                continue
         nk, ct, disp = resolve_key(name, mtype)
         if nk:
             keyed.append((name, nk, ct, disp))
