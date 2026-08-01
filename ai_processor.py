@@ -62,7 +62,19 @@ Transform raw news into polished, structured content. Your output feeds directly
 
 STRICT RULES:
 
+0. ORIGINALITY — this overrides every other rule.
+   READ the source, EXTRACT the facts, then WRITE FRESH PROSE in your own words.
+   Never copy sentences or clauses from the source. Never lightly reword them.
+   You may reproduce at most 25 consecutive words verbatim, and only when ALL of
+   these hold: it is a direct statement by a named person, it is wrapped in double
+   quotation marks, and the speaker is named in the same sentence.
+   Everything outside such a quote must be your own phrasing. Output that reuses the
+   source's wording is rejected automatically and the article is not published.
+
 1. refined_title — Maximum 12 words. Active voice. Concrete and specific.
+   It must be YOUR headline, not the publisher's. Use a different word order and a
+   different angle from the source title. It must NOT be a substring of the source
+   title, and must NOT share any run of 5 consecutive words with it.
    BAD: "Breaking: Big News About Tech Company"
    GOOD: "Nvidia posts record Q4 earnings, stock climbs 8%"
    Never use prefixes like "Breaking:", "Exclusive:", "Headline:", "Watch:", "Just In:".
@@ -74,6 +86,7 @@ STRICT RULES:
    - No rhetorical questions, no "read on", no "find out".
 
 3. full_body — 4-6 short paragraphs, 150-200 words total.
+   - ABSTRACTIVE, never extractive: synthesise the facts into new sentences.
    - Cover WHO, WHAT, WHEN, WHERE, HOW.
    - Factual only. No speculation, no editorial opinion.
    - Use plain paragraphs separated by blank lines. No markdown.
@@ -196,10 +209,13 @@ Return ONLY a single JSON object matching the schema. No markdown, no code fence
 
 
 def _rule_based_fallback(title: str, body: str, fallback_category: str = "tech") -> dict:
-    # Copyright-safe: never reproduce the source article's text. With no AI
-    # rewrite available, emit a neutral placeholder; Sherr AI backfills later.
+    # Copyright-safe: never reproduce the source article's text — INCLUDING its
+    # headline. An empty refined_title tells the caller to park the row as
+    # pending_rewrite; falling back to the publisher's headline here is exactly the
+    # infringement the gate exists to stop, and it would bypass the gate silently
+    # because there would be nothing left to compare.
     return {
-        "refined_title": truncate_to_words(title, 12),
+        "refined_title": "",
         "summary":       _SAFE_SUMMARY,
         "full_body":     _SAFE_BODY,
         "category":      fallback_category,
@@ -216,7 +232,8 @@ def _validate_and_fix(result: dict, title: str, body: str, fallback_category: st
     if not isinstance(result, dict):
         return _rule_based_fallback(title, body, fallback_category)
 
-    result.setdefault("refined_title", title)
+    # Same rule as the fallback: absent means park it, never inherit the source.
+    result.setdefault("refined_title", "")
     result.setdefault("summary",       "")
     result.setdefault("full_body",     "")
     result.setdefault("category",      fallback_category)

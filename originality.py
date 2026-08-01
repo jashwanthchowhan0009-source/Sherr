@@ -26,6 +26,8 @@ _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
 
 originality_check = _mod.originality_check
+headline_is_original = _mod.headline_is_original
+MAX_HEADLINE_RUN = _mod.MAX_HEADLINE_RUN
 quoted_spans = _mod.quoted_spans
 tokenize = _mod.tokenize
 normalize = _mod.normalize
@@ -33,5 +35,5 @@ MAX_NGRAM_OVERLAP = _mod.MAX_NGRAM_OVERLAP
 MAX_CONTIGUOUS_RUN = _mod.MAX_CONTIGUOUS_RUN
 MAX_QUOTE_TOKENS = _mod.MAX_QUOTE_TOKENS
 
-__all__ = ["originality_check", "quoted_spans", "tokenize", "normalize",
+__all__ = ["originality_check", "headline_is_original", "MAX_HEADLINE_RUN", "quoted_spans", "tokenize", "normalize",
            "MAX_NGRAM_OVERLAP", "MAX_CONTIGUOUS_RUN", "MAX_QUOTE_TOKENS"]

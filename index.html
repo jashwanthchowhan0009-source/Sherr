@@ -1583,7 +1583,18 @@ nav.compact .nb.on { flex: 0 0 auto; padding-left: 16px; padding-right: 16px; }
     inset 0 1.5px 1px rgba(255,255,255,0.5); }
 
 
-/* P0.1 — generated category art. No network fetch, deterministic per article. */
+
+/* Imagery. A thumbnail is capped and never full-bleed — that constraint is the
+   whole basis for using the publisher's image at all, so it lives in CSS rather
+   than in each caller. */
+.img-wrap { position: relative; margin: 0; width: 100%; overflow: hidden; }
+.img-wrap.is-thumb { max-width: 400px; border-radius: 12px; }
+.img-wrap img { display: block; width: 100%; height: auto; }
+.img-credit { position: absolute; left: 0; right: 0; bottom: 0; padding: 5px 8px;
+  font: 600 0.62rem/1.3 var(--f); color: #fff; letter-spacing: 0.02em;
+  background: linear-gradient(to top, rgba(0,0,0,0.72), rgba(0,0,0,0)); }
+
+/* Generated category art. No network fetch, deterministic per article. */
 .gen-art { display:flex; align-items:center; justify-content:center; width:100%;
   height:100%; min-height:120px; color:rgba(255,255,255,0.92); }
 .gen-art i { font-size:2rem; opacity:0.85; filter:drop-shadow(0 2px 8px rgba(0,0,0,0.4)); }
@@ -4609,18 +4620,64 @@ function _loadImg(src, cross) {
 // export). Route through the free wsrv.nl image proxy, which adds the headers,
 // then fall back to a direct load.
 
-// ─── P0.1 — no publisher-hosted imagery, ever ────────────────────────────────
-// The backend stopped persisting image_url, but a cached payload or an older
-// client could still carry one, so the render path refuses them independently.
-// Only our own hosts are allowed through.
+// ─── Imagery — governed by IMAGE_MODE, enforced again at render ──────────────
+// The server decides the mode and labels each row with image_source. The client
+// re-checks rather than trusting the payload: a cached response or an older row
+// could still carry an unlabelled publisher hotlink, and that must not render as a
+// bare hero. The guard is no longer block-everything — it is allow-with-attribution,
+// and attribution is a hard requirement, not a nicety.
 const OWN_IMAGE_HOSTS = ['sherrbyte', 'sherr-i', 'r2.dev', 'cloudflarestorage.com'];
+const STOCK_HOSTS = ['pexels.com', 'images.pexels.com'];
+
+function _host(url) {
+  try { return new URL(url, location.href).hostname.toLowerCase(); } catch (e) { return ''; }
+}
+
+// Which treatment an article's image gets. Returns null when there is no usable
+// image, and the caller falls back to generated art — never blank.
+function imagePlan(a) {
+  const url = a && a.image_url;
+  if (!url) return null;
+  const h = _host(url);
+  const src = (a.image_source || '').toLowerCase();
+
+  if (h === location.hostname.toLowerCase() || OWN_IMAGE_HOSTS.some(k => h.includes(k)))
+    return { url, kind: 'own', credit: a.image_credit || '' };
+  if (STOCK_HOSTS.some(k => h.includes(k)))
+    return { url, kind: 'stock', credit: a.image_credit || 'Photo: Pexels' };
+  // A third-party host is only allowed as a CREDITED, SIZE-CAPPED thumbnail, and
+  // only when the row says that is what it is. An unlabelled row is refused.
+  if (src === 'thumbnail')
+    return { url, kind: 'thumbnail',
+             credit: a.image_credit || ('Image: ' + (a.source || a.source_name || 'source')) };
+  return null;
+}
+
+// Back-compat for call sites that only want a safe URL.
 function ownImage(url) {
-  if (!url) return '';
-  try {
-    const h = new URL(url, location.href).hostname.toLowerCase();
-    if (h === location.hostname.toLowerCase()) return url;
-    return OWN_IMAGE_HOSTS.some(k => h.includes(k)) ? url : '';
-  } catch (e) { return ''; }
+  const p = imagePlan({ image_url: url, image_source: '' });
+  return p ? p.url : '';
+}
+
+// Renders the image with its required attribution, or generated art if there is none.
+// Thumbnails are capped and never full-bleed; the credit is part of the markup, so
+// it cannot be lost by a caller forgetting to add it.
+function articleImage(a, cls) {
+  const plan = imagePlan(a);
+  if (!plan) return heroArt(a, cls);
+  const isThumb = plan.kind === 'thumbnail';
+  // A broken image must degrade to art, not to an empty box. The fallback is keyed
+  // on data- attributes so no JSON has to survive being embedded in an attribute.
+  const onerr = "this.closest('.img-wrap').outerHTML=" +
+                "heroArt({id:this.dataset.aid,category:this.dataset.acat},'" +
+                (cls || '') + "')";
+  return `<figure class="img-wrap${isThumb ? ' is-thumb' : ''}">
+    <img class="${cls || ''}" src="${plan.url}" loading="lazy" alt=""
+         data-aid="${bEsc(String((a && a.id) || ''))}"
+         data-acat="${bEsc(String((a && a.category) || ''))}"
+         onerror="${onerr}">
+    ${plan.credit ? `<figcaption class="img-credit">${bEsc(plan.credit)}</figcaption>` : ''}
+  </figure>`;
 }
 
 // Deterministic category art: same article always gets the same face, and nothing
@@ -4643,7 +4700,9 @@ function heroArt(a, cls) {
   const h = _artHash(a && (a.id != null ? a.id : a.title));
   const angle = h % 360;
   const shade = 18 + (h % 22);
-  return `<div class="${cls || 'gen-art'}" role="img" aria-label="Category artwork"
+  // gen-art is always present: it carries the layout, so a caller passing its own
+  // class must extend the styling rather than replace it.
+  return `<div class="gen-art ${cls || ''}" role="img" aria-label="Category artwork"
     style="background:linear-gradient(${angle}deg, ${colour} 0%, ${colour}${shade < 26 ? 'AA' : '77'} 55%, #0b0b0f 100%)">
     <i class="fa-solid ${icon}"></i></div>`;
 }
@@ -6623,7 +6682,11 @@ const SHERR_I_TYPES = [
   { key: '',                     label: 'All',             icon: 'fa-layer-group' },
   { key: 'reasoned',             label: 'Market Intelligence', icon: 'fa-brain',       color: '#F59E0B' },
   { key: 'observation',          label: 'Observation',     icon: 'fa-eye',             color: '#38BDF8' },
-  { key: 'market_reaction',      label: 'Market Reaction', icon: 'fa-chart-line',      color: '#22C55E' },
+  // Hidden pending the market-history backfill: with one daily bucket per instrument
+  // the MAD baseline is not computable, so the tab could only ever show an empty
+  // state. The detector still runs and still writes — this is surfacing only, and
+  // re-enabling is uncommenting this line.
+  // { key: 'market_reaction',   label: 'Market Reaction', icon: 'fa-chart-line',      color: '#22C55E' },
   { key: 'emergence',            label: 'Emergence',       icon: 'fa-diagram-project', color: '#22C55E' },
   { key: 'temporal_correlation', label: 'Temporal',        icon: 'fa-timeline',        color: '#A855F7' },
   { key: 'volume_anomaly',       label: 'Anomaly',         icon: 'fa-bolt',            color: '#EAB308' },

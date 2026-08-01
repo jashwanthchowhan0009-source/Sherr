@@ -23,6 +23,7 @@ say "newly appearing in current coverage", never "absent for 90 days".
 
 from __future__ import annotations
 
+import json
 import logging
 
 from app.spie.discovery.base import write_insight, names_for, domains_for, source_stats
@@ -32,6 +33,14 @@ log = logging.getLogger("sherbyte.detectors.emergence")
 # Association beyond chance, and independent corroboration. Both required.
 MIN_NPMI = 0.5
 MIN_SOURCES = 4
+# Only the strongest N are surfaced per run. Everything else that passed the filters
+# goes to `watchlist` — kept and queryable, just not in the feed. 74 "new connections"
+# in one run is a dump, not intelligence: the reader cannot tell which three matter.
+MAX_WRITTEN = 12
+# A pair already surfaced within this many days is suppressed unless its association
+# strength moved materially, so the same connection does not reappear daily.
+NOVELTY_WINDOW_DAYS = 5
+NOVELTY_NPMI_DELTA = 0.30
 # Below this much corpus history, "absent for N days" is not a claim we can make.
 MIN_HISTORY_DAYS_FOR_ABSENCE_CLAIM = 30
 
@@ -64,6 +73,39 @@ def history_clause(history_days: int, corpus_days: int) -> str:
     return "newly appearing in current coverage"
 
 
+def composite_score(npmi: float, source_count: int, novelty: float) -> float:
+    """Rank passing candidates: association strength x corroboration x novelty.
+
+    Multiplicative, not additive, so a candidate has to be decent on ALL THREE. An
+    additive score lets one strong term carry a pair that is weak everywhere else,
+    which is how a run ends up with 74 of them.
+    """
+    strength = max(0.0, min(1.0, float(npmi or 0.0)))
+    breadth = min(int(source_count or 0), 6) / 6.0
+    return round(strength * breadth * max(0.0, min(1.0, novelty)), 5)
+
+
+async def _recent_npmi(conn, a, b, days: int = NOVELTY_WINDOW_DAYS):
+    """NPMI recorded the last time this pair was surfaced, if it was."""
+    try:
+        row = await conn.fetchrow(
+            "SELECT (explain_json->>'npmi')::float AS npmi FROM insights "
+            "WHERE signature = $1 AND updated_at >= now() - ($2 || ' days')::interval",
+            f"emergence:{a}:{b}", str(int(days)))
+        return float(row["npmi"]) if row and row["npmi"] is not None else None
+    except Exception:
+        return None
+
+
+def novelty_factor(previous_npmi: float | None) -> float:
+    """1.0 if the pair is new, 0.0 if it was just surfaced and has not moved.
+
+    Without this the same connection reappears every day it stays above threshold,
+    which reads as the engine having nothing new to say.
+    """
+    return 1.0 if previous_npmi is None else 0.0
+
+
 async def run(conn, *, current_days: int = 7, history_days: int = 90,
               min_count: int = 3, min_npmi: float = MIN_NPMI,
               min_sources: int = MIN_SOURCES) -> int:
@@ -91,6 +133,7 @@ async def run(conn, *, current_days: int = 7, history_days: int = 90,
              "rejected_thin_sources": 0, "written": 0,
              "corpus_history_days": corpus_days, "blocklist_size": len(blocked)}
 
+    passing: list[dict] = []
     written = 0
     for r in candidates:
         a, b = r["entity_a"], r["entity_b"]
@@ -153,13 +196,51 @@ async def run(conn, *, current_days: int = 7, history_days: int = 90,
                    "corpus_history_days": corpus_days,
                    **src_stats, "confidence": confidence}
 
-        await write_insight(
-            conn, type="emergence", entity_ids=[a, b], domains=domains,
-            # Rank by association strength, not by raw corpus count.
-            score=round(npmi, 3), explain=explain, signature=f"emergence:{a}:{b}",
-        )
+        # Rank first, write later: everything that reaches here has PASSED, so the
+        # cap is an editorial decision about how much to surface, not a filter.
+        prev = await _recent_npmi(conn, a, b)
+        novelty = novelty_factor(prev)
+        if prev is not None and abs(npmi - prev) / max(prev, 1e-6) > NOVELTY_NPMI_DELTA:
+            novelty = 1.0          # association strength moved materially — say so
+        passing.append({
+            "a": a, "b": b, "npmi": npmi, "domains": domains, "explain": explain,
+            "score": composite_score(npmi, source_count, novelty),
+            "novelty": novelty,
+        })
         written += 1
 
+    # Top MAX_WRITTEN to the feed; the remainder is kept on the watchlist.
+    passing.sort(key=lambda p: p["score"], reverse=True)
+    surfaced, parked = passing[:MAX_WRITTEN], passing[MAX_WRITTEN:]
+
+    for p in surfaced:
+        p["explain"]["composite_score"] = p["score"]
+        await write_insight(
+            conn, type="emergence", entity_ids=[p["a"], p["b"]], domains=p["domains"],
+            score=round(p["npmi"], 3), explain=p["explain"],
+            signature=f"emergence:{p['a']}:{p['b']}")
+        written += 1
+
+    if parked:
+        try:
+            await conn.executemany(
+                """
+                INSERT INTO watchlist (entity_a, entity_b, kind, score, npmi, detail)
+                VALUES ($1, $2, 'emergence', $3, $4, $5::jsonb)
+                ON CONFLICT (entity_a, entity_b, kind) DO UPDATE
+                    SET score = EXCLUDED.score, npmi = EXCLUDED.npmi,
+                        detail = EXCLUDED.detail, seen_at = now()
+                """,
+                [(p["a"], p["b"], p["score"], p["npmi"],
+                  json.dumps({"why": p["explain"].get("why"),
+                              "source_count": p["explain"].get("source_count")}))
+                 for p in parked])
+        except Exception as e:
+            log.warning("watchlist write failed: %s", e)
+
+    stats["passing"] = len(passing)
+    stats["parked_to_watchlist"] = len(parked)
+    stats["suppressed_not_novel"] = sum(1 for p in passing if p["novelty"] == 0.0)
     stats["written"] = written
     LAST_RUN = stats
     log.info("emergence funnel: %s", stats)
