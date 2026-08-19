@@ -27,6 +27,7 @@ import json
 import logging
 import os
 import random
+import re
 import time
 
 import httpx
@@ -50,6 +51,11 @@ SCHEDULE = {
     "space":      12 * 3600,
     "word_of_day": 12 * 3600,
     "news_top":   12 * 3600,
+    "world_bank": 24 * 3600,     # annual series; daily is already generous
+    "nasa":       12 * 3600,     # APOD changes once a day
+    "flights":    12 * 3600,     # anonymous OpenSky is heavily rate limited
+    "macro_rates": 6 * 3600,
+    "govt_press":  1 * 3600,
 }
 
 # Process-local mirror of every value ever written. Upstash being unreachable must not
@@ -245,8 +251,124 @@ async def news_top(client: httpx.AsyncClient) -> dict:
     } for a in (r.json() or {}).get("articles", [])]}
 
 
+
+# ─── second tranche: zero-key public datasets ─────────────────────────────────
+FRED_API_KEY = os.getenv("FRED_API_KEY") or ""
+NASA_API_KEY = os.getenv("NASA_API_KEY") or "DEMO_KEY"   # DEMO_KEY works, rate-limited
+DATA_GOV_IN_KEY = os.getenv("DATA_GOV_IN_KEY") or ""
+
+
+async def world_bank(client: httpx.AsyncClient) -> dict:
+    """India macro indicators. One call per series; the API is per-indicator."""
+    series = {"NY.GDP.MKTP.KD.ZG": "gdp_growth_pct",
+              "FP.CPI.TOTL.ZG": "inflation_pct",
+              "SL.UEM.TOTL.ZS": "unemployment_pct"}
+    out: dict = {}
+
+    async def one(code, key):
+        try:
+            r = await client.get(
+                f"https://api.worldbank.org/v2/country/IND/indicator/{code}",
+                params={"format": "json", "per_page": 5, "mrnev": 1}, timeout=12)
+            if r.status_code != 200:
+                return
+            payload = r.json()
+            rows = payload[1] if isinstance(payload, list) and len(payload) > 1 else []
+            if rows and rows[0].get("value") is not None:
+                out[key] = {"value": round(float(rows[0]["value"]), 2),
+                            "year": rows[0].get("date"),
+                            "indicator": (rows[0].get("indicator") or {}).get("value")}
+        except Exception as e:
+            log.warning("world bank %s failed: %s", code, e)
+
+    await asyncio.gather(*(one(c, k) for c, k in series.items()))
+    return out
+
+
+async def nasa(client: httpx.AsyncClient) -> dict:
+    """Astronomy Picture of the Day. Image URL is NASA-hosted and free to use."""
+    r = await client.get("https://api.nasa.gov/planetary/apod",
+                         params={"api_key": NASA_API_KEY}, timeout=12)
+    r.raise_for_status()
+    d = r.json() or {}
+    return {"title": d.get("title"), "date": d.get("date"),
+            "explanation": (d.get("explanation") or "")[:600],
+            "media_type": d.get("media_type"),
+            "url": d.get("url"), "hdurl": d.get("hdurl"),
+            "copyright": d.get("copyright") or "NASA"}
+
+
+async def flights(client: httpx.AsyncClient) -> dict:
+    """Live aircraft over India via OpenSky. Anonymous access is heavily rate
+    limited, so this is a 12h job and a small bounding box, not a live tracker."""
+    r = await client.get("https://opensky-network.org/api/states/all",
+                         params={"lamin": 6.5, "lomin": 68.0,
+                                 "lamax": 35.5, "lomax": 97.5}, timeout=20)
+    r.raise_for_status()
+    states = (r.json() or {}).get("states") or []
+    return {"count": len(states), "sample": [{
+        "callsign": (s[1] or "").strip(), "origin_country": s[2],
+        "lon": s[5], "lat": s[6], "altitude_m": s[7],
+        "velocity_ms": s[9], "on_ground": s[8],
+    } for s in states[:15] if s and s[5] and s[6]]}
+
+
+async def macro_rates(client: httpx.AsyncClient) -> dict:
+    """US macro from FRED. Skipped cleanly when no key is configured."""
+    if not FRED_API_KEY:
+        raise RuntimeError("FRED_API_KEY not set")
+    series = {"DFF": "fed_funds_rate", "DGS10": "us_10y_yield",
+              "CPIAUCSL": "us_cpi_index", "UNRATE": "us_unemployment"}
+    out: dict = {}
+
+    async def one(sid, key):
+        try:
+            r = await client.get("https://api.stlouisfed.org/fred/series/observations",
+                                 params={"series_id": sid, "api_key": FRED_API_KEY,
+                                         "file_type": "json", "sort_order": "desc",
+                                         "limit": 1}, timeout=12)
+            if r.status_code != 200:
+                return
+            obs = (r.json() or {}).get("observations") or []
+            if obs and obs[0].get("value") not in (None, "", "."):
+                out[key] = {"value": float(obs[0]["value"]), "date": obs[0].get("date")}
+        except Exception as e:
+            log.warning("fred %s failed: %s", sid, e)
+
+    await asyncio.gather(*(one(s, k) for s, k in series.items()))
+    return out
+
+
+_RSS_TITLE = re.compile(r"<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?</title>", re.S)
+_RSS_LINK = re.compile(r"<link>(.*?)</link>", re.S)
+_RSS_DATE = re.compile(r"<pubDate>(.*?)</pubDate>", re.S)
+
+
+async def govt_press(client: httpx.AsyncClient) -> dict:
+    """PIB press releases. RSS, so parsed with regex rather than adding a parser
+    dependency — the feed is a fixed, well-formed shape."""
+    r = await client.get("https://www.pib.gov.in/RssMain.aspx?ModId=6&Lang=1&Regid=3",
+                         timeout=15, headers={"User-Agent": "Mozilla/5.0"})
+    r.raise_for_status()
+    items = r.text.split("<item>")[1:11]
+    out = []
+    for it in items:
+        t = _RSS_TITLE.search(it)
+        l = _RSS_LINK.search(it)
+        d = _RSS_DATE.search(it)
+        if t:
+            out.append({"title": t.group(1).strip(),
+                        "url": (l.group(1).strip() if l else ""),
+                        "published_at": (d.group(1).strip() if d else "")})
+    if not out:
+        raise RuntimeError("no items parsed from PIB feed")
+    return {"releases": out}
+
+
 FETCHERS = {"markets": markets, "forex": forex, "weather": weather,
-            "space": space, "word_of_day": word_of_day, "news_top": news_top}
+            "space": space, "word_of_day": word_of_day, "news_top": news_top,
+            "world_bank": world_bank, "nasa": nasa, "flights": flights,
+            "macro_rates": macro_rates, "govt_press": govt_press}
 
 
 # ─── orchestration ────────────────────────────────────────────────────────────
