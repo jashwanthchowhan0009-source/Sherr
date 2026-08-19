@@ -47,33 +47,69 @@ def _cset(key: str, data, ttl: int):
 
 
 # ─── Provider: Yahoo Finance (free, primary for stocks + forex + futures) ─
+# Last-good store. The TTL cache above answers within its window; this one keeps the
+# most recent NON-EMPTY payload per key indefinitely, so a transient upstream failure
+# shows yesterday's close rather than an em dash. A stale number with an as_of stamp is
+# information; "—" is not.
+_last_good: dict = {}
+
+
+def _remember(key: str, data: dict) -> dict:
+    if data:
+        _last_good[key] = {"data": data, "at": time.time()}
+    return data
+
+
+def _fallback(key: str) -> dict:
+    hit = _last_good.get(key)
+    return dict(hit["data"]) if hit else {}
+
+
+def stale_seconds(key: str) -> float | None:
+    hit = _last_good.get(key)
+    return round(time.time() - hit["at"], 1) if hit else None
+
+
 async def _yahoo(client: httpx.AsyncClient, symbols: list[str]) -> dict:
-    try:
-        r = await client.get(
-            "https://query1.finance.yahoo.com/v7/finance/quote",
-            params={"symbols": ",".join(symbols)},
-            headers={"User-Agent": "Mozilla/5.0 (compatible; SherByte/5.1)"},
-            timeout=8,
-        )
-        if r.status_code != 200:
-            log.warning("Yahoo HTTP %d for %s", r.status_code, symbols)
-            return {}
-        out = {}
-        for q in r.json().get("quoteResponse", {}).get("result", []):
-            price = q.get("regularMarketPrice", 0) or 0
-            out[q["symbol"]] = {
-                "price":      round(price, 2),
-                "change":     round(q.get("regularMarketChange", 0) or 0, 2),
-                "change_pct": round(q.get("regularMarketChangePercent", 0) or 0, 2),
-                "high":       round(q.get("regularMarketDayHigh", 0) or 0, 2),
-                "low":        round(q.get("regularMarketDayLow", 0) or 0, 2),
-                "prev_close": round(q.get("regularMarketPreviousClose", 0) or 0, 2),
-                "currency":   q.get("currency", ""),
+    """Quotes via the v8 CHART endpoint, one call per symbol.
+
+    The v7 /finance/quote endpoint used here previously now requires a crumb+cookie
+    pair and returns 401/429 to anonymous callers, which is why every Yahoo-backed
+    tile rendered "—" while CoinGecko-backed crypto kept working. v8/finance/chart
+    still answers anonymously — it is the endpoint workers/market_signals.py has been
+    using successfully all along, so this brings the two paths onto the same source.
+    """
+    out: dict = {}
+
+    async def one(sym: str) -> None:
+        try:
+            r = await client.get(
+                f"https://query1.finance.yahoo.com/v8/finance/chart/{sym}",
+                params={"range": "5d", "interval": "1d"},
+                headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+            if r.status_code != 200:
+                log.warning("Yahoo HTTP %d for %s", r.status_code, sym)
+                return
+            meta = (r.json().get("chart", {}).get("result") or [{}])[0].get("meta", {})
+            price = meta.get("regularMarketPrice") or 0
+            prev = meta.get("chartPreviousClose") or meta.get("previousClose") or 0
+            if not price:
+                return
+            change = price - prev if prev else 0.0
+            out[sym] = {
+                "price":      round(float(price), 2),
+                "change":     round(float(change), 2),
+                "change_pct": round(float(change / prev * 100), 2) if prev else 0.0,
+                "high":       round(float(meta.get("regularMarketDayHigh") or 0), 2),
+                "low":        round(float(meta.get("regularMarketDayLow") or 0), 2),
+                "prev_close": round(float(prev), 2),
+                "currency":   meta.get("currency", ""),
             }
-        return out
-    except Exception as e:
-        log.warning("Yahoo fetch failed: %s", e)
-        return {}
+        except Exception as e:
+            log.warning("Yahoo fetch failed for %s: %s", sym, e)
+
+    await asyncio.gather(*(one(s) for s in symbols))
+    return out
 
 
 async def _yahoo_history(client: httpx.AsyncClient, symbol: str, points: int = 20) -> list[float]:
@@ -218,6 +254,7 @@ async def fetch_stocks(with_sparkline: bool = False) -> dict:
                 if spark and labels[s] in result and result[labels[s]]:
                     result[labels[s]]["spark"] = spark
 
+    result = _remember(f"stocks_{with_sparkline}", result) or _fallback(f"stocks_{with_sparkline}")
     _cset(f"stocks_{with_sparkline}", result, 60)
     return result
 
@@ -232,6 +269,7 @@ async def fetch_crypto() -> dict:
             "cardano", "ripple", "binancecoin",
             "avalanche-2", "chainlink", "matic-network", "litecoin",
         ])
+    data = _remember("crypto", data) or _fallback("crypto")
     _cset("crypto", data, 45)
     return data
 
@@ -266,6 +304,7 @@ async def fetch_metals() -> dict:
         for label, d in metals.items():
             if "price_usd_oz" in d:
                 d["price_inr_10g"] = round(d["price_usd_oz"] * 0.3215 * usd_inr, 0)
+    metals = _remember("metals", metals) or _fallback("metals")
     _cset("metals", metals, 180)
     return metals
 
@@ -282,6 +321,7 @@ async def fetch_forex() -> dict:
         "JPYINR=X": "JPYINR", "EURUSD=X": "EURUSD", "GBPUSD=X": "GBPUSD",
     }
     result = {labels[p]: data.get(p, {}) for p in pairs}
+    result = _remember("forex", result) or _fallback("forex")
     _cset("forex", result, 90)
     return result
 
@@ -301,6 +341,7 @@ async def fetch_commodities() -> dict:
         "WHEAT":     data.get("ZW=F", {}),
         "COCOA":     data.get("CC=F", {}),
     }
+    result = _remember("commodities", result) or _fallback("commodities")
     _cset("commodities", result, 120)
     return result
 
@@ -320,6 +361,7 @@ async def fetch_rates() -> dict:
         "US30Y": data.get("^TYX", {}),
         "US13W": data.get("^IRX", {}),
     }
+    result = _remember("rates", result) or _fallback("rates")
     _cset("rates", result, 120)
     return result
 
@@ -338,6 +380,7 @@ async def fetch_energy_stocks() -> dict:
     async with httpx.AsyncClient() as client:
         base = await _yahoo(client, symbols)
     result = {labels[s]: base.get(s, {}) for s in symbols}
+    result = _remember("energy_stocks", result) or _fallback("energy_stocks")
     _cset("energy_stocks", result, 300)
     return result
 

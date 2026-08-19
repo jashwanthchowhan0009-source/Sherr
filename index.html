@@ -5889,6 +5889,17 @@ async function showExpCat(cat, scrollTo) {
   feed.innerHTML = '<div class="exp-cat-load">Loading…</div>';
   const counts = await _ensureExpCounts();
   if (_expCurCat !== cat) return;            // user switched while counts loaded
+  // Every pillar row shows the SAME number of stories. The server clamps to what the
+  // thinnest stocked pillar can supply, so rows are equal by construction rather than
+  // by each row independently asking for 14 and getting whatever it has.
+  if (cat === 'all') {
+    try {
+      const bal = await api('/explore/pillars?per=14');
+      _expBalanced = {};
+      (bal.pillars || []).forEach(p => { _expBalanced[p.slug] = p.articles || []; });
+      _expPerPillar = bal.per_pillar;
+    } catch (e) { _expBalanced = null; }
+  } else { _expBalanced = null; }
   feed.innerHTML = '';
   const order = cat === 'all'
     ? ['society','economy','tech','arts','nature','selfwell','philo','lifestyle','sports']
@@ -5898,6 +5909,7 @@ async function showExpCat(cat, scrollTo) {
     await renderExpCatSection(k, feed, counts[k]);
   }
 }
+let _expBalanced = null, _expPerPillar = null;
 async function renderExpCatSection(cat, feed, count) {
   const cc = CATS[cat]; if (!cc) return;
   const sec = document.createElement('div'); sec.className = 'exp-cat-sec';
@@ -5911,7 +5923,9 @@ async function renderExpCatSection(cat, feed, count) {
   sec.querySelector('.exp-cat-sec-all').onclick = () => gotoCategory(cat);
   const row = sec.querySelector('.exp-srow');
   try {
-    const data = await api(`/explore?category=${cat}&page=1&limit=14`);
+    const data = _expBalanced && _expBalanced[cat]
+      ? { articles: _expBalanced[cat] }
+      : await api(`/explore?category=${cat}&page=1&limit=14`);
     const arts = (data.articles || []).map(normalizeArticle).filter(a => a.id);
     row.innerHTML = '';
     if (!arts.length) { row.innerHTML = '<div class="exp-cat-load">No stories yet</div>'; return; }
@@ -5919,9 +5933,7 @@ async function renderExpCatSection(cat, feed, count) {
       const d = document.createElement('div'); d.className = 'exp-rcard tap';
       d.onclick = () => openArticle(a);
       d.innerHTML =
-        `${ownImage(a.image_url)
-          ? `<img src="${ownImage(a.image_url)}" loading="lazy" alt="" onerror="this.parentNode.style.background='${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}';this.remove()">`
-          : `<div class="exp-rcard-ph" style="background:${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}">${cc.icon}</div>`}
+        `${articleImage(a, 'exp-rcard-img')}
          <div class="exp-rcard-t">${bEsc(a.title)}</div>`;
       row.appendChild(d);
     });
