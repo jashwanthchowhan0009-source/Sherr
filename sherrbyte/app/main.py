@@ -17,7 +17,7 @@ from contextlib import asynccontextmanager
 from functools import lru_cache
 
 from app.sherr import admin
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import PILLARS, settings
@@ -77,8 +77,21 @@ async def lifespan(app: FastAPI):
         _scheduler.add_job(_market_signals_job, "cron", hour="1,7,13,19", id="market_signals")
         # Detectors are heavy + materialized, so run once nightly (02:00 UTC).
         _scheduler.add_job(_detectors_job, "cron", hour=2, id="detectors")
+        # Explore page feeds — six independent jobs on their own intervals.
+        try:
+            from app.pipeline import explore_feeds
+            explore_feeds.register_jobs(_scheduler)
+        except Exception as e:
+            log.error("explore jobs not registered: %s", e)
         _scheduler.start()
         asyncio.create_task(_ingest_job())  # kick one cycle on boot
+        # Warm every Explore key immediately so the first request is a cache hit
+        # rather than waiting up to 12h for the slowest job to fire.
+        try:
+            from app.pipeline import explore_feeds as _ef
+            asyncio.create_task(_ef.refresh_all())
+        except Exception as e:
+            log.error("explore warm-up skipped: %s", e)
         log.info("Scheduler started: ingest every %d min, detectors nightly @02:00",
                  settings.collect_interval_min)
 
@@ -112,6 +125,29 @@ from app.api import (  # noqa: E402  (import after app to avoid cycles)
     activity, article, auth, compat, feed, live, markets, signal, sherr, push,
     notifications, patterns,
 )
+
+
+# ─── Explore page snapshot ────────────────────────────────────────────────────
+@app.get("/explore/snapshot")
+async def explore_snapshot():
+    """Every Explore section from cache in one call. Pure Redis read — no upstream
+    API is touched on this path, which is what keeps it fast regardless of whether
+    Yahoo or GNews is having a bad day."""
+    from app.pipeline import explore_feeds
+    return await explore_feeds.snapshot()
+
+
+@app.post("/explore/refresh")
+async def explore_refresh(name: str = ""):
+    """Force a refresh — all sections, or one by name. Operational escape hatch for
+    when a section is stale and the next scheduled run is hours away."""
+    from app.pipeline import explore_feeds
+    if name:
+        if name not in explore_feeds.FETCHERS:
+            raise HTTPException(404, f"unknown section: {name}")
+        return await explore_feeds.refresh(name)
+    return await explore_feeds.refresh_all()
+
 
 app.include_router(patterns.router)
 app.include_router(push.router)
