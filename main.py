@@ -36,6 +36,9 @@ from text_utils import clean_html_fragments, title_fingerprint
 from originality import (
     MAX_CONTIGUOUS_RUN, MAX_NGRAM_OVERLAP, headline_is_original,
     originality_check)
+
+# Which imagery the feed serves: stock | thumbnail | art. See image_service.py.
+IMAGE_MODE = (os.getenv("IMAGE_MODE") or "thumbnail").strip().lower()
 from ai_processor import process_batch, available_providers
 
 load_dotenv()
@@ -640,6 +643,10 @@ _MIGRATIONS = [
     "ALTER TABLE articles ADD COLUMN image_source TEXT DEFAULT 'art'",
     "ALTER TABLE articles ADD COLUMN image_credit TEXT DEFAULT ''",
     "ALTER TABLE articles ADD COLUMN image_query TEXT DEFAULT ''",
+    # The publisher's og:image, stored but NOT necessarily rendered. Whether it is
+    # shown is IMAGE_MODE's decision at render time; keeping it here means flipping
+    # modes is an env-var change, not a re-crawl.
+    "ALTER TABLE articles ADD COLUMN source_image_url TEXT DEFAULT ''",
 ]
 
 # Publisher image URLs are never persisted again (P0.1). Existing rows are scrubbed
@@ -856,9 +863,10 @@ async def fetch_feed_async(feed_url: str, source_name: str, client: httpx.AsyncC
                 "where_info": "Not specified",
                 "what_info": title,
                 "how_info": "",
-                # P0.1: publisher images are never stored. The card renders
-                # deterministic category art keyed on the article id instead.
+                # image_url is what we RENDER; source_image_url is what the
+                # publisher offered. IMAGE_MODE decides which one wins.
                 "image_url": "",
+                "source_image_url": img or "",
                 "source_name": source_name,
                 "pillar_id": pid,
                 "micro_tags": json.dumps(tags),
@@ -932,7 +940,8 @@ async def collect_newsapi() -> list[dict]:
                         "where_info": "Not specified",
                         "what_info": title,
                         "how_info": "",
-                        "image_url": "",   # P0.1 — never hotlink the publisher
+                        "image_url": "",
+                        "source_image_url": a.get("urlToImage") or "",
 
                         "source_name": (a.get("source") or {}).get("name", "NewsAPI"),
                         "pillar_id": pid,
@@ -958,17 +967,18 @@ def _insert_with_dedup(conn, article: dict) -> bool:
     # Defaults so any caller that predates 0.2 still inserts — and parks, rather than
     # publishing an unchecked row by omission.
     article.setdefault("source_headline", article.get("headline", ""))
+    article.setdefault("source_image_url", "")
     article.setdefault("status", "pending_rewrite")
     try:
         conn.execute("""
             INSERT OR IGNORE INTO articles
             (url, title_hash, headline, source_headline, status, summary_60, full_body,
              source_summary, when_info, where_info, what_info, how_info, image_url,
-             source_name, pillar_id, micro_tags, scope, published_at)
+             source_image_url, source_name, pillar_id, micro_tags, scope, published_at)
             VALUES(:url, :title_hash, :headline, :source_headline, :status, :summary_60,
                    :full_body, :source_summary, :when_info, :where_info, :what_info,
-                   :how_info, :image_url, :source_name, :pillar_id, :micro_tags, :scope,
-                   :published_at)
+                   :how_info, :image_url, :source_image_url, :source_name, :pillar_id,
+                   :micro_tags, :scope, :published_at)
         """, article)
         return conn.total_changes > 0
     except Exception as e:
@@ -1333,6 +1343,19 @@ def article_row_to_dict(row) -> dict:
     # The visible byline is always our own brand (bodies are AI-written, not the
     # publisher's text); the original URL stays available as a verify link.
     d["orig_source"]    = d.get("source_name", "")
+
+    # Imagery is resolved at SERVE time, not at ingest, so flipping IMAGE_MODE takes
+    # effect on the next request instead of requiring a re-crawl. thumbnail mode
+    # surfaces the publisher image WITH credit; anything else leaves image_url as
+    # stored and the client falls back to generated art.
+    if IMAGE_MODE == "thumbnail" and not d.get("image_url"):
+        src_img = d.get("source_image_url") or ""
+        if src_img:
+            d["image_url"] = src_img
+            d["image_source"] = "thumbnail"
+            d["image_credit"] = f"Image: {d['orig_source'] or 'source'}"
+    d["source_image_url"] = d.get("source_image_url") or ""
+
     d["source_name"]    = "SherrByte News"
     d["source"]         = "SherrByte News"
     try:
@@ -1526,6 +1549,54 @@ async def explore_feed(
     conn.close()
     has_more = len(rows) > limit
     return {"articles": [article_row_to_dict(r) for r in rows[:limit]], "has_more": has_more}
+
+
+@app.get("/explore/pillars")
+async def explore_by_pillar(
+    per: int = Query(6, ge=1, le=20),
+    scope: str = Query(""),
+    authorization: str = Header(""),
+):
+    """Every pillar, with the SAME number of articles each.
+
+    The old page built its rows by slicing one flat recency-ordered feed, so a pillar
+    with a busy news day crowded out the quiet ones and the rows came out ragged. Here
+    each pillar gets its own top-N, and `per` is clamped to what the THINNEST pillar
+    can actually supply — otherwise "equal" would mean padding some rows with older
+    material while others stay fresh, which is a different kind of uneven.
+    """
+    get_current_user(authorization)
+    conn = get_db()
+    try:
+        sc_sql, sc_params = _scope_clause(scope)
+        base = ("SELECT COUNT(*) AS c FROM articles "
+                "WHERE ai_processed=1 AND status='published' AND pillar_id=?" + sc_sql)
+        avail = {pid: conn.execute(base, [pid] + sc_params).fetchone()["c"]
+                 for pid in PILLARS}
+        stocked = [c for c in avail.values() if c > 0]
+        # Clamp to the thinnest STOCKED pillar; an empty pillar is reported as empty
+        # rather than dragging every other row to zero.
+        n = min(per, min(stocked)) if stocked else 0
+
+        out = []
+        for pid, meta in PILLARS.items():
+            rows = conn.execute(
+                "SELECT * FROM articles WHERE ai_processed=1 AND status='published' "
+                "AND pillar_id=?" + sc_sql +
+                " ORDER BY published_at DESC, id DESC LIMIT ?",
+                [pid] + sc_params + [n]).fetchall() if n else []
+            out.append({
+                "pillar_id": pid, "name": meta["name"], "slug": meta["slug"],
+                "color": meta["color"], "emoji": meta["emoji"],
+                "available": avail[pid],
+                "articles": [article_row_to_dict(r) for r in rows],
+            })
+        return {"per_pillar": n, "requested": per, "pillars": out,
+                # Surfaced so a short row is explainable rather than looking broken.
+                "limited_by": (min(avail, key=lambda k: avail[k] if avail[k] else 10**9)
+                               if stocked and n < per else None)}
+    finally:
+        conn.close()
 
 
 @app.get("/trending")
