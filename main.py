@@ -15,7 +15,7 @@ Fixes vs v4.1:
 Run: python main.py   or   uvicorn main:app --host 0.0.0.0 --port $PORT
 """
 
-import os, sys, json, math, hashlib, asyncio, logging, re, sqlite3
+import os, sys, json, math, hashlib, asyncio, logging, re, sqlite3, time
 import hmac as hmac_module
 import base64
 from datetime import datetime, timedelta, timezone
@@ -47,8 +47,29 @@ log = logging.getLogger("sherbyte")
 
 # ─── ENV ─────────────────────────────────────────────────────────────────────
 NEWSAPI_KEY     = os.getenv("NEWSAPI_KEY", "")
-JWT_SECRET      = os.getenv("JWT_SECRET", "sherbyte-secret-change-in-prod")
+# A default signing secret is a backdoor, not a convenience: the value is in the
+# repository, so anyone who can read it can mint a token for any user id. Dev keeps a
+# generated ephemeral secret (tokens die on restart, which is fine locally); prod
+# refuses to boot without a real one rather than starting up quietly forgeable.
+JWT_SECRET = os.getenv("JWT_SECRET", "").strip()
+if not JWT_SECRET:
+    if (os.getenv("ENV") or "dev").lower() in ("prod", "production"):
+        raise RuntimeError(
+            "JWT_SECRET is not set. Refusing to start in production with a "
+            "predictable signing key — set JWT_SECRET to a long random value.")
+    import secrets as _secrets
+    JWT_SECRET = _secrets.token_urlsafe(48)
+    logging.getLogger("sherbyte").warning(
+        "JWT_SECRET unset — using an ephemeral dev secret; tokens reset on restart.")
 OPENWEATHER_KEY = os.getenv("OPENWEATHER_KEY", "")
+# Comma-separated allowlist. Defaults cover local dev and the deployed frontends;
+# override with CORS_ORIGINS in any other environment.
+CORS_ORIGINS = [o.strip() for o in (os.getenv(
+    "CORS_ORIGINS",
+    "https://sherrbyte.vercel.app,https://sherrbyte.com,https://www.sherrbyte.com,"
+    "http://localhost:3000,http://localhost:5173,http://127.0.0.1:5500"
+) or "").split(",") if o.strip()]
+
 DB_PATH         = os.getenv("DB_PATH", "sherbyte.db")
 
 # Knobs for the AI cycle
@@ -784,12 +805,58 @@ def init_db():
     log.info("DB ready at %s", DB_PATH)
 
 # ─── AUTH ────────────────────────────────────────────────────────────────────
+# Passwords were stored as a bare, unsalted SHA-256. That is a single fast hash: a
+# commodity GPU tries billions per second, so every password in the table — and every
+# place a user reused it — was recoverable from a database leak in minutes. Rainbow
+# tables handle the common ones with no compute at all.
+#
+# PBKDF2-HMAC-SHA256 instead: per-user random salt (kills rainbow tables and makes
+# each password a separate attack) and a deliberately slow iteration count (kills the
+# throughput). stdlib, so no new dependency — bcrypt/argon2 are stronger per unit of
+# work, but the security gap between "unsalted SHA-256" and "PBKDF2 at 600k" is the
+# one that matters here, and this ships today.
+PBKDF2_ITERATIONS = 600_000        # OWASP 2023 guidance for PBKDF2-HMAC-SHA256
+_HASH_PREFIX = "pbkdf2_sha256"
+
+
 def hash_password(pw: str) -> str:
-    return hashlib.sha256(pw.encode()).hexdigest()
+    """`pbkdf2_sha256$<iterations>$<salt_hex>$<hash_hex>` — self-describing, so the
+    iteration count can be raised later without breaking existing rows."""
+    salt = os.urandom(16)
+    dk = hashlib.pbkdf2_hmac("sha256", pw.encode(), salt, PBKDF2_ITERATIONS)
+    return f"{_HASH_PREFIX}${PBKDF2_ITERATIONS}${salt.hex()}${dk.hex()}"
 
 
 def check_password(pw: str, hashed: str) -> bool:
-    return hmac_module.compare_digest(hash_password(pw), hashed)
+    """Verify against either format.
+
+    Legacy rows are still accepted so nobody is locked out by the upgrade; the login
+    path rehashes them on the next successful sign-in (see needs_rehash). Legacy
+    verification is deliberately NOT removed yet — that happens once the table is
+    fully migrated.
+    """
+    if not hashed:
+        return False
+    if hashed.startswith(_HASH_PREFIX + "$"):
+        try:
+            _, iters, salt_hex, want = hashed.split("$", 3)
+            dk = hashlib.pbkdf2_hmac("sha256", pw.encode(),
+                                     bytes.fromhex(salt_hex), int(iters))
+            return hmac_module.compare_digest(dk.hex(), want)
+        except Exception:
+            return False
+    # Legacy unsalted SHA-256.
+    return hmac_module.compare_digest(hashlib.sha256(pw.encode()).hexdigest(), hashed)
+
+
+def needs_rehash(hashed: str) -> bool:
+    """True for a legacy hash, or one below the current iteration count."""
+    if not hashed or not hashed.startswith(_HASH_PREFIX + "$"):
+        return True
+    try:
+        return int(hashed.split("$", 2)[1]) < PBKDF2_ITERATIONS
+    except Exception:
+        return True
 
 
 def make_token(user_id: int) -> str:
@@ -1287,7 +1354,7 @@ def compute_feed_for_user(user_id: int):
 
 
 # ─── FASTAPI APP ─────────────────────────────────────────────────────────────
-from fastapi import FastAPI, HTTPException, Header, Query
+from fastapi import FastAPI, HTTPException, Header, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -1310,7 +1377,10 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="SherByte API", version="5.0.0", lifespan=lifespan)
 app.add_middleware(
-    CORSMiddleware, allow_origins=["*"], allow_credentials=True,
+    # allow_origins=["*"] WITH allow_credentials=True is rejected outright by every
+    # browser (the spec forbids the pair), so credentialed calls were silently failing
+    # while the wildcard still advertised the API to any origin. Pin real origins.
+    CORSMiddleware, allow_origins=CORS_ORIGINS, allow_credentials=True,
     allow_methods=["*"], allow_headers=["*"],
 )
 
@@ -1451,14 +1521,59 @@ async def signup(req: SignupReq):
             "display_name": req.name or req.email.split("@")[0], "message": "Account created"}
 
 
-@app.post("/login")
+# ─── Auth rate limiting ───────────────────────────────────────────────────────
+# Without this, /auth/login is an unmetered password oracle: PBKDF2 makes each guess
+# expensive for the ATTACKER, but nothing stopped them from making unlimited guesses
+# against a known email. Two independent buckets — per client IP and per account —
+# because one attacker with many IPs and many attackers on one IP are different
+# attacks. In-memory, so it resets on redeploy and does not span replicas; that is a
+# deliberate trade (no new infra) and it still removes the trivial case.
+_AUTH_HITS: dict = {}
+AUTH_MAX_ATTEMPTS = 8
+AUTH_WINDOW_SEC = 300
+
+
+def _client_ip(request) -> str:
+    # Render terminates TLS upstream, so the socket peer is the proxy.
+    fwd = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
+    return fwd or (request.client.host if request.client else "unknown")
+
+
+def auth_rate_limit(*keys: str) -> None:
+    """Raise 429 once any bucket exceeds the window. Call before verifying a password."""
+    now = time.time()
+    for key in keys:
+        if not key:
+            continue
+        hits = [t for t in _AUTH_HITS.get(key, []) if now - t < AUTH_WINDOW_SEC]
+        if len(hits) >= AUTH_MAX_ATTEMPTS:
+            retry = int(AUTH_WINDOW_SEC - (now - hits[0]))
+            raise HTTPException(429, f"Too many attempts. Try again in {retry}s.",
+                                headers={"Retry-After": str(max(retry, 1))})
+        hits.append(now)
+        _AUTH_HITS[key] = hits
+    # Bound the dict so a spray across many keys cannot grow it without limit.
+    if len(_AUTH_HITS) > 10_000:
+        for k in [k for k, v in _AUTH_HITS.items()
+                  if not v or now - v[-1] > AUTH_WINDOW_SEC]:
+            _AUTH_HITS.pop(k, None)
+
+
 @app.post("/auth/login")
-async def login(req: LoginReq):
+@app.post("/login")
+async def login(req: LoginReq, request: Request):
+    auth_rate_limit(f"ip:{_client_ip(request)}", f"acct:{(req.email or '').lower()}")
     conn = get_db()
     user = conn.execute("SELECT * FROM users WHERE email=?", (req.email,)).fetchone()
     if not user or not check_password(req.password, user["password"]):
         conn.close()
         raise HTTPException(401, "Invalid credentials")
+    # We have the plaintext exactly once per login — the only moment a legacy hash can
+    # be upgraded without forcing a password reset.
+    if needs_rehash(user["password"]):
+        conn.execute("UPDATE users SET password=? WHERE id=?",
+                     (hash_password(req.password), user["id"]))
+        log.info("upgraded password hash for user %s", user["id"])
     conn.execute("UPDATE users SET last_login=datetime('now') WHERE id=?", (user["id"],))
     conn.commit()
     pref_count = conn.execute(

@@ -9,6 +9,8 @@ Run:  uvicorn app.main:app --host 0.0.0.0 --port $PORT
 
 from __future__ import annotations
 
+import os
+
 import asyncio
 import logging
 from contextlib import asynccontextmanager
@@ -94,7 +96,14 @@ app = FastAPI(title=settings.app_name, version=settings.app_version, lifespan=li
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], allow_credentials=True,
+    # Same fix as the sqlite app: "*" with credentials is rejected by browsers and
+    # advertises the API to every origin. Pinned via CORS_ORIGINS.
+    allow_origins=[o.strip() for o in (os.getenv(
+        "CORS_ORIGINS",
+        "https://sherrbyte.vercel.app,https://sherrbyte.com,"
+        "https://www.sherrbyte.com,http://localhost:3000,http://localhost:5173"
+    ) or "").split(",") if o.strip()],
+    allow_credentials=True,
     allow_methods=["*"], allow_headers=["*"],
 )
 
