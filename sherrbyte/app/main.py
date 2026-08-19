@@ -66,6 +66,15 @@ async def lifespan(app: FastAPI):
     await db.connect()
     await run_migrations()
 
+    # One-shot backlog drain. Guarded by its own threshold and never raises, so a
+    # bad backlog cannot stop the app from booting.
+    try:
+        from app.pipeline import bypass
+        async with db.acquire() as _c:
+            await bypass.run_once_on_startup(_c)
+    except Exception as e:
+        log.error("bypass_rewrite startup check failed: %s", e)
+
     global _scheduler
     if settings.run_scheduler:
         from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -135,6 +144,16 @@ async def explore_snapshot():
     Yahoo or GNews is having a bad day."""
     from app.pipeline import explore_feeds
     return await explore_feeds.snapshot()
+
+
+@app.post("/admin/flush-pending")
+async def flush_pending(limit: int = 0, dry_run: bool = False):
+    """Manually drain pending_rewrite. Same code path as the startup check, minus
+    the threshold — an operator asking for it has already decided."""
+    from app.pipeline import bypass
+    async with db.acquire() as conn:
+        return await bypass.bypass_rewrite(conn, limit=limit or None,
+                                           dry_run=dry_run)
 
 
 @app.post("/explore/refresh")
