@@ -1368,6 +1368,14 @@ async def lifespan(app: FastAPI):
     init_activity_schema()
     asyncio.create_task(collect_news())
     scheduler.add_job(collect_news, "interval", minutes=COLLECT_INTERVAL_MIN, id="collect_news")
+    # Explore page feeds — six jobs on their own intervals, plus one warm-up pass so
+    # the first request hits a populated cache instead of waiting for the slowest job.
+    try:
+        import explore_feeds
+        explore_feeds.register_jobs(scheduler)
+        asyncio.create_task(explore_feeds.refresh_all())
+    except Exception as e:
+        log.error("explore feeds not started: %s", e)
     scheduler.start()
     log.info("Scheduler: collect every %d min", COLLECT_INTERVAL_MIN)
     log.info("AI providers: %s", available_providers())
@@ -1664,6 +1672,25 @@ async def explore_feed(
     conn.close()
     has_more = len(rows) > limit
     return {"articles": [article_row_to_dict(r) for r in rows[:limit]], "has_more": has_more}
+
+
+# ─── Explore page snapshot ────────────────────────────────────────────────────
+@app.get("/explore/snapshot")
+async def explore_snapshot():
+    """All Explore sections from cache in one call — no upstream API on this path."""
+    import explore_feeds
+    return await explore_feeds.snapshot()
+
+
+@app.post("/admin/explore/refresh")
+async def explore_refresh(name: str = Query("")):
+    """Force a refresh: all sections, or one by name."""
+    import explore_feeds
+    if name:
+        if name not in explore_feeds.FETCHERS:
+            raise HTTPException(404, f"unknown section: {name}")
+        return await explore_feeds.refresh(name)
+    return await explore_feeds.refresh_all()
 
 
 @app.get("/explore/pillars")
