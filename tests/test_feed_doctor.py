@@ -23,7 +23,11 @@ SCHEMA = """
 CREATE TABLE articles(
   id INTEGER PRIMARY KEY, headline TEXT, full_body TEXT, source_name TEXT,
   url TEXT, status TEXT, ai_processed INT, pillar_id INT, published_at TEXT,
-  originality_json TEXT, image_url TEXT DEFAULT '')
+  originality_json TEXT, image_url TEXT DEFAULT '',
+  -- the imagery columns main.py adds by migration; the drain carries the
+  -- publisher's image across through them
+  source_image_url TEXT DEFAULT '', image_source TEXT DEFAULT '',
+  image_credit TEXT DEFAULT '')
 """
 
 COLS = ("id,headline,full_body,source_name,url,status,ai_processed,"
@@ -377,3 +381,106 @@ def test_flush_pending_will_not_release_blocked_articles(client):
     out = c.get("/admin/flush-pending").json()
     assert out["published"] == 19
     assert out["now"]["blocked_originality"] == 5
+
+
+# ─── the publisher's image survives the drain ─────────────────────────────────
+def _img_row(i, image_url="", source_image_url="https://cdn.example/p.jpg"):
+    return (i, f"Story {i} on the economy", f"Body {i}.", "Reuters",
+            f"https://example.com/{i}", "pending_rewrite", 1, 0, "2026-08-19",
+            image_url, source_image_url, "", "")
+
+
+IMG_COLS = (COLS + ",image_url,source_image_url,image_source,image_credit")
+
+
+def _img_db(tmp_path, rows):
+    p = str(tmp_path / "img.db")
+    c = sqlite3.connect(p)
+    c.execute(SCHEMA)
+    c.executemany(f"INSERT INTO articles({IMG_COLS}) "
+                  f"VALUES({','.join('?' * 13)})", rows)
+    c.commit()
+    c.close()
+    return p
+
+
+def test_drain_carries_the_publishers_image_into_the_published_row(tmp_path, monkeypatch):
+    """image_url is written as '' at ingest and the publisher's image lands in
+    source_image_url. Serve-time resolution copies one to the other, but only
+    while IMAGE_MODE == 'thumbnail' — so the published row has to carry it
+    itself, or it renders as generated art the moment that flips."""
+    db = _img_db(tmp_path, [_img_row(1)])
+    from publish_pending import run_sqlite
+    run_sqlite(db, mode="aggregator", dry_run=False, limit=None)
+    c = sqlite3.connect(db)
+    c.row_factory = sqlite3.Row
+    r = c.execute("SELECT * FROM articles WHERE id=1").fetchone()
+    assert r["image_url"] == "https://cdn.example/p.jpg"
+    assert r["image_source"] == "thumbnail"
+    assert "Reuters" in r["image_credit"]
+    c.close()
+
+
+def test_drain_never_blanks_an_image_the_row_already_had(tmp_path):
+    """Our own hosted image outranks the publisher's."""
+    db = _img_db(tmp_path, [_img_row(1, image_url="https://sherrbyte.test/own.jpg")])
+    from publish_pending import run_sqlite
+    run_sqlite(db, mode="aggregator", dry_run=False, limit=None)
+    c = sqlite3.connect(db)
+    got = c.execute("SELECT image_url FROM articles WHERE id=1").fetchone()[0]
+    assert got == "https://sherrbyte.test/own.jpg"
+    c.close()
+
+
+def test_a_row_with_no_image_publishes_without_inventing_one(tmp_path):
+    db = _img_db(tmp_path, [_img_row(1, source_image_url="")])
+    from publish_pending import run_sqlite
+    run_sqlite(db, mode="aggregator", dry_run=False, limit=None)
+    c = sqlite3.connect(db)
+    r = c.execute("SELECT image_url, image_source, status FROM articles "
+                  "WHERE id=1").fetchone()
+    assert r[0] == "" and r[1] == "" and r[2] == "published"
+    c.close()
+
+
+def test_the_drain_still_runs_on_a_schema_without_the_image_columns(tmp_path):
+    """An emergency drain must not die because one schema is older than another.
+    Missing imagery columns cost the images, not the drain."""
+    p = str(tmp_path / "old.db")
+    c = sqlite3.connect(p)
+    c.execute("CREATE TABLE articles(id INTEGER PRIMARY KEY, headline TEXT, "
+              "full_body TEXT, source_name TEXT, url TEXT, status TEXT, "
+              "ai_processed INT, pillar_id INT, published_at TEXT, "
+              "originality_json TEXT)")
+    c.execute("INSERT INTO articles VALUES(1,'Economy story','Body.','Reuters',"
+              "'https://e/1','pending_rewrite',1,0,'2026-08-19',NULL)")
+    c.commit()
+    c.close()
+    from publish_pending import run_sqlite
+    out = run_sqlite(p, mode="aggregator", dry_run=False, limit=None)
+    assert out["published"] == 1
+
+
+# ─── backend selection ────────────────────────────────────────────────────────
+def test_postgres_is_used_when_database_url_is_a_postgres_url(monkeypatch):
+    """Render's free tier destroys the sqlite file on every deploy, so the whole
+    point is that this flips without touching any call site."""
+    monkeypatch.setenv("DATABASE_URL", "postgresql://u:p@h:6543/db?pgbouncer=true")
+    monkeypatch.setenv("ENV", "dev")
+    monkeypatch.setenv("ADMIN_TOKEN", "t")
+    monkeypatch.setenv("JWT_SECRET", "s")
+    import main
+    importlib.reload(main)
+    assert main.USE_POSTGRES is True
+
+
+def test_sqlite_remains_the_backend_for_local_development(monkeypatch, tmp_path):
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.delenv("SHERR_I_DATABASE_URL", raising=False)
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "x.db"))
+    monkeypatch.setenv("ENV", "dev")
+    monkeypatch.setenv("ADMIN_TOKEN", "t")
+    monkeypatch.setenv("JWT_SECRET", "s")
+    import main
+    importlib.reload(main)
+    assert main.USE_POSTGRES is False

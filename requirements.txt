@@ -11,3 +11,8 @@ gunicorn==23.0.0
 # Read the SPIE engine's insights straight from Supabase (same DB the workers
 # write to). Without this /patterns can only see the local sqlite demo rows.
 asyncpg==0.29.0
+# Articles storage on Supabase Postgres. Render's free tier has ephemeral disk,
+# so the sqlite file is destroyed on every deploy and the feed resets to zero;
+# pgcompat routes the existing sqlite-shaped queries here instead. Sync driver,
+# because the ~80 call sites in main.py are synchronous.
+psycopg[binary,pool]==3.2.1

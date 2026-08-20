@@ -767,7 +767,22 @@ _SAMPLE_INSIGHTS = [
 ]
 
 
+# Render's free tier gives the service an EPHEMERAL filesystem, so sherbyte.db is
+# destroyed on every deploy and the feed resets to zero. No amount of draining or
+# re-ingesting fixes that; the storage has to leave local disk. When DATABASE_URL
+# is a postgres URL every read and write goes to Postgres instead, through a
+# sqlite3-shaped adapter (pgcompat) so the ~80 existing call sites keep working
+# unmodified. sqlite remains only as the local-development backend.
+import pgcompat                                            # noqa: E402
+
+ARTICLES_DSN = (os.getenv("DATABASE_URL")
+                or os.getenv("SHERR_I_DATABASE_URL") or "").strip()
+USE_POSTGRES = pgcompat.is_postgres_url(ARTICLES_DSN)
+
+
 def get_db():
+    if USE_POSTGRES:
+        return pgcompat.connect(ARTICLES_DSN)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
@@ -779,8 +794,11 @@ def init_db():
     for stmt in _MIGRATIONS:
         try:
             conn.execute(stmt)
-        except sqlite3.OperationalError:
-            pass  # Column already exists — fine
+        except Exception:
+            # "column already exists" is the expected case on every boot after the
+            # first. Postgres raises its own error type, not sqlite3's, so this
+            # cannot stay narrowed to OperationalError.
+            pass
     # P0.1 backfill: null out every publisher-hosted hero already on disk. Idempotent,
     # and cheap enough to run on every boot — the alternative is a one-shot script
     # somebody forgets to run before a deploy.
@@ -1600,11 +1618,15 @@ async def signup(req: SignupReq):
         conn.close()
         raise HTTPException(400, "Email already registered")
     pw_hash = hash_password(req.password)
+    # RETURNING rather than lastrowid: sqlite has supported it since 3.35 and
+    # Postgres has no lastrowid at all, so this is the one form both backends
+    # answer identically.
     cur = conn.execute(
-        "INSERT INTO users (email, password, name) VALUES(?, ?, ?)",
+        "INSERT INTO users (email, password, name) VALUES(?, ?, ?) RETURNING id",
         (req.email, pw_hash, req.name or req.email.split("@")[0])
     )
-    user_id = cur.lastrowid
+    row = cur.fetchone()
+    user_id = row["id"] if row is not None else cur.lastrowid
     for topic in req.topics:
         pid = MICRO_TOPICS.get(topic, 1)
         try:

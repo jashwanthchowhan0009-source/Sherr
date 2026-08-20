@@ -190,7 +190,8 @@ async def run_postgres(url: str, *, mode: str, dry_run: bool, limit) -> dict:
             await conn.execute(stmt)
 
         q = """
-            SELECT io.id, io.headline, io.body, io.source_name, a.url
+            SELECT io.id, io.headline, io.body, io.source_name, a.url,
+                   io.image_url, a.image_url AS source_image_url
             FROM info_objects io
             LEFT JOIN articles a ON a.id = io.article_id
             WHERE io.status = 'pending_rewrite'
@@ -204,12 +205,17 @@ async def run_postgres(url: str, *, mode: str, dry_run: bool, limit) -> dict:
         for r in rows:
             u = build_update(dict(r), mode)
             by_pillar[u["pillar_id"]] = by_pillar.get(u["pillar_id"], 0) + 1
-            updates.append((u["pillar_id"], u["body"], json.dumps(u["audit"]), r["id"]))
+            # Same rule as the sqlite path: keep an image we already have,
+            # otherwise adopt the publisher's from the source article.
+            img = (r["image_url"] or "") or (r["source_image_url"] or "")
+            updates.append((u["pillar_id"], u["body"], json.dumps(u["audit"]),
+                            img, r["id"]))
 
         if not dry_run and updates:
             await conn.executemany(
                 "UPDATE info_objects SET pillar_id = $1, body = $2, "
-                "status = 'published', originality_json = $3::jsonb WHERE id = $4",
+                "status = 'published', originality_json = $3::jsonb, "
+                "image_url = $4 WHERE id = $5",
                 updates)
         return {"backend": "postgres", "mode": mode, "dry_run": dry_run,
                 "found": len(rows), "published": 0 if dry_run else len(updates),
@@ -219,11 +225,33 @@ async def run_postgres(url: str, *, mode: str, dry_run: bool, limit) -> dict:
 
 
 # ─── sqlite ───────────────────────────────────────────────────────────────────
+def _has_columns(conn, table: str, cols) -> bool:
+    """True when every named column exists.
+
+    The drain runs as an emergency measure on an empty feed, so it must not die
+    because one schema is older than another. Missing imagery columns cost the
+    images, not the drain.
+    """
+    try:
+        present = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+        return all(c in present for c in cols)
+    except Exception:
+        return False
+
+
 def run_sqlite(path: str, *, mode: str, dry_run: bool, limit) -> dict:
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
-    q = ("SELECT id, headline, full_body AS body, source_name, url FROM articles "
-         "WHERE status = 'pending_rewrite' ORDER BY published_at DESC")
+    # source_image_url is where ingest puts the publisher's image; image_url is
+    # what the feed renders and is written as '' at ingest. Serve-time resolution
+    # in article_row_to_dict copies one to the other, but only while
+    # IMAGE_MODE == 'thumbnail' — so a published row whose image only ever existed
+    # in source_image_url renders as generated art the moment that flips. Carry it
+    # across here so the published record is complete on its own.
+    have_img = _has_columns(conn, "articles", ("image_url", "source_image_url"))
+    img_cols = ", image_url, source_image_url" if have_img else ""
+    q = (f"SELECT id, headline, full_body AS body, source_name, url{img_cols} "
+         "FROM articles WHERE status = 'pending_rewrite' ORDER BY published_at DESC")
     if limit:
         q += f" LIMIT {int(limit)}"
     rows = conn.execute(q).fetchall()
@@ -233,7 +261,19 @@ def run_sqlite(path: str, *, mode: str, dry_run: bool, limit) -> dict:
         u = build_update(dict(r), mode)
         by_pillar[u["pillar_id"]] = by_pillar.get(u["pillar_id"], 0) + 1
         n += 1
-        if not dry_run:
+        if not dry_run and have_img:
+            # COALESCE-style in Python: keep an image_url that is already set,
+            # otherwise adopt the publisher's. Never blank one that exists.
+            img = (r["image_url"] or "") or (r["source_image_url"] or "")
+            conn.execute(
+                "UPDATE articles SET pillar_id=?, full_body=?, status='published', "
+                "ai_processed=1, image_url=?, image_source=?, image_credit=?, "
+                "originality_json=? WHERE id=?",
+                (u["pillar_id"], u["body"], img,
+                 "thumbnail" if img else "",
+                 (f"Image: {r['source_name'] or 'source'}" if img else ""),
+                 json.dumps(u["audit"]), r["id"]))
+        elif not dry_run:
             conn.execute(
                 "UPDATE articles SET pillar_id=?, full_body=?, status='published', "
                 "ai_processed=1, originality_json=? WHERE id=?",
