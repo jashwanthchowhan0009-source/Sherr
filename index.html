@@ -843,7 +843,7 @@ header {
   padding: 6px 0; overflow: hidden; margin-top: var(--hh);
 }
 .ticker-inner {
-  display: flex; gap: 0;
+  display: flex; gap: 0; width: max-content;
   animation: tickerScroll 32s linear infinite; white-space: nowrap;
 }
 .ticker-inner:hover { animation-play-state: paused; }
@@ -869,6 +869,18 @@ header {
 }
 .exp-hero:active { transform: scale(0.97); }
 .exp-hero img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* articleImage() wraps its <img> in a <figure>, and heroArt() returns a div;
+   both have to fill the hero box or the bulletin collapses to zero height. */
+.exp-hero .img-wrap, .exp-hero .gen-art { position:absolute; inset:0; height:100%; }
+/* Feed + hero cards: the <figure> replaces a plain <img>, so it inherits the
+   sizing the old markup carried inline. */
+.nc .img-wrap { width:100%; aspect-ratio:16/9; border-radius:12px;
+  overflow:hidden; margin:0 0 12px; }
+.nc .img-wrap img, .nc .img-wrap .gen-art { width:100%; height:100%; object-fit:cover; }
+.hero-card .img-wrap { position:absolute; inset:0; height:100%; }
+.hero-card .img-wrap img, .hero-card .img-wrap .gen-art {
+  width:100%; height:100%; object-fit:cover; }
+.exp-hero .img-credit { bottom:auto; top:6px; right:8px; left:auto; }
 .exp-hero-overlay {
   position: absolute; inset: 0;
   background: linear-gradient(to top, rgba(14,10,20,0.95) 0%, rgba(14,10,20,0.1) 60%);
@@ -3214,7 +3226,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
       } else {
         list.innerHTML=shown.map(function(a,i){
           var loc=axDetect(a); if(loc) locs.push({idx:i,key:loc});
-          var img=ownImage(a.image_url)?('<img class="ax-card-img" loading="lazy" src="'+a.image_url+'" alt="" onerror="this.style.visibility=\'hidden\'">')
+          var img=ownImage(a)?('<img class="ax-card-img" loading="lazy" src="'+a.image_url+'" alt="" onerror="this.style.visibility=\'hidden\'">')
                               :('<div class="ax-card-img"></div>');
           var locChip=loc&&AX_LOC[loc]?('<span class="ax-loc"><i class="fa-solid fa-location-dot"></i>'+AX_LOC[loc].l+'</span> · '):'';
           var meta=locChip+((a.source||'Global'))+' · '+(typeof timeAgo==='function'?(timeAgo(a.published_at)||'now'):'now');
@@ -4724,9 +4736,18 @@ function imagePlan(a) {
   return null;
 }
 
-// Back-compat for call sites that only want a safe URL.
-function ownImage(url) {
-  const p = imagePlan({ image_url: url, image_source: '' });
+// Back-compat for the dozen call sites that only want a safe URL (small
+// thumbnails, list rows, CSS background-images) where a figcaption does not fit.
+//
+// This used to hardcode image_source:'' , which makes imagePlan() reject every
+// third-party host — so a correctly-labelled, credited publisher thumbnail
+// resolved to '' and EVERY feed card rendered text-only. That is why the app
+// looked like it had no images at all. It now passes the article through, so the
+// one gate in imagePlan() decides, and callers with room for attribution use
+// articleImage() instead.
+function ownImage(a) {
+  const art = (a && typeof a === 'object') ? a : { image_url: a, image_source: 'thumbnail' };
+  const p = imagePlan(art);
   return p ? p.url : '';
 }
 
@@ -4837,8 +4858,8 @@ async function buildByteCard(a) {
   // hero image area (top ~48% — leaves room for the full summary below)
   const heroH = Math.round(H * 0.48);
   let drew = false;
-  if (ownImage(a.image_url)) {
-    for (const src of _imgCandidates(ownImage(a.image_url))) {
+  if (ownImage(a)) {
+    for (const src of _imgCandidates(ownImage(a))) {
       try { const im = await _loadImg(src, true); _coverDraw(ctx, im, 0, 0, W, heroH); drew = true; break; }
       catch (_) { /* try next candidate, then gradient */ }
     }
@@ -4998,8 +5019,8 @@ function renderContinueCard(article, container) {
   d.className = 'continue-card';
   d.onclick = () => openArticle(article);
   d.innerHTML = `
-    ${ownImage(article.image_url)
-      ? `<img class="continue-img" src="${ownImage(article.image_url)}" loading="lazy" onerror="this.style.background='${CAT_GRADIENTS[article.category]||CAT_GRADIENTS.tech}';this.src=''">`
+    ${ownImage(article)
+      ? `<img class="continue-img" src="${ownImage(article)}" loading="lazy" onerror="this.style.background='${CAT_GRADIENTS[article.category]||CAT_GRADIENTS.tech}';this.src=''">`
       : `<div class="continue-img" style="background:${CAT_GRADIENTS[article.category]||CAT_GRADIENTS.tech};display:flex;align-items:center;justify-content:center;font-size:1.5rem">${cc.icon}</div>`
     }
     <div class="continue-info">
@@ -5024,10 +5045,7 @@ function renderHeroCard(rawA, container) {
   d.className = 'hero-card fadein';
   d.onclick = () => openArticle(a);
   d.innerHTML = `
-    ${ownImage(a.image_url)
-      ? `<img class="hero-card-img" src="${ownImage(a.image_url)}" loading="lazy" onerror="this.parentNode.style.background='${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}';this.remove()">`
-      : heroArt(a, 'hero-card-img gen-art')
-    }
+    ${articleImage(a, 'hero-card-img')}
     <div class="hero-card-overlay">
       <div class="hero-badge-row">
         <span class="hero-cat-pill">${cc.icon} ${cc.short}</span>
@@ -5063,8 +5081,8 @@ function renderTrendingStrip(articles, container) {
     c.className = 'trending-card';
     c.onclick = () => openArticle(a);
     c.innerHTML = `
-      ${ownImage(a.image_url)
-        ? `<img class="trending-card-img" src="${ownImage(a.image_url)}" loading="lazy" onerror="this.style.background='${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}';this.src=''">`
+      ${ownImage(a)
+        ? `<img class="trending-card-img" src="${ownImage(a)}" loading="lazy" onerror="this.style.background='${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}';this.src=''">`
         : heroArt(a, 'trending-card-img gen-art')
       }
       <div class="trending-card-info">
@@ -5099,11 +5117,7 @@ function renderStandardCard(rawA, container) {
   d.dataset.aid = a.id;
   d.onclick = () => openArticle(a);
   d.innerHTML = `
-    ${ownImage(a.image_url) ? `
-      <div class="nc-hero-image" style="width:100%; aspect-ratio:16/9; border-radius:12px; overflow:hidden; margin:0 0 12px;">
-        <img src="${ownImage(a.image_url)}" style="width:100%; height:100%; object-fit:cover;" loading="lazy" onerror="this.parentNode.style.background='${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}';this.remove()">
-      </div>` : ''
-    }
+    ${articleImage(a, 'nc-hero-image')}
     <div class="nc-acts-row">
       <div class="nc-pill nc-like ${liked?'on':''}"><i class="fa-${liked?'solid':'regular'} fa-heart"></i> <span>${likeN}</span></div>
       <div class="nc-pill nc-comment"><i class="fa-regular fa-comment"></i> <span>${cmtN}</span></div>
@@ -5443,8 +5457,10 @@ async function loadFeed(reset = false) {
 
     hydrateFeedCounts();   // fill the pills with real like/comment counts
 
-    // Seed explore hero after first load (the grid loads independently in Explore)
-    if (feedPage === 2 && homeArticles.length) {
+    // Seed the Explore hero from whatever we have. This used to wait for
+    // feedPage === 2, so a corpus small enough to fit one page — which is every
+    // corpus right now — never got a bulletin at all.
+    if (homeArticles.length) {
       if (typeof renderExpHeroWithArticles === 'function') renderExpHeroWithArticles(homeArticles);
       if (typeof renderFeedArticles === 'function') renderFeedArticles();
     }
@@ -5731,7 +5747,7 @@ function openArticle(rawA) {
       vid.src = a.video_url; vid.controls = true; vid.playsInline = true; vid.preload = 'metadata';
       if (a.image_url) vid.poster = a.image_url;
       aoHero.appendChild(vid);
-    } else if (ownImage(a.image_url)) {
+    } else if (ownImage(a)) {
       const img = document.createElement('img'); img.id = 'ao-img';
       img.src = a.image_url; img.alt = ''; img.loading = 'lazy';
       img.onerror = () => {
@@ -5909,7 +5925,10 @@ function aoSave() {
 
 // ── EXPLORE ──
 function renderExpHeroWithArticles(rawArts) {
-  expHeroArts = rawArts.map(normalizeArticle).filter(a => a.image_url);
+  // Was .filter(a => a.image_url) — with imagery unavailable that emptied the
+  // list and the bulletin vanished entirely. A headline is the point; the art is
+  // generated when there is no photo.
+  expHeroArts = rawArts.map(normalizeArticle).filter(a => a.title).slice(0, 8);
   atlasArts = rawArts.map(normalizeArticle).filter(a => a.title);   // feed for the Atlas immersive view
   // Atlas HUD "Live Feeds" counter reflects the real story count in view.
   const _al = document.getElementById('atlas-live');
@@ -5927,7 +5946,7 @@ function renderExpHeroSlide() {
   const cc = CATS[a.category] || CATS.tech;
   wrap.innerHTML = `
     <div class="exp-hero tap" onclick='openArticle(${JSON.stringify(a).replace(/'/g,"&#39;")})'>
-      <img src="${ownImage(a.image_url)}" loading="lazy" alt="" onerror="this.parentNode.style.background='${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}';this.remove()">
+      ${articleImage(a, 'exp-hero-img')}
       <div class="exp-hero-overlay">
         <div class="exp-hero-badge"><span style="color:${cc.hex}">${cc.icon}</span> ${cc.short}</div>
         <div class="exp-hero-title">${a.title}</div>
@@ -6032,8 +6051,8 @@ function updateExpGrid(rawArticles, append) {
     d.className = 'exp-card fadein tap' + (i%7===0?' tall':'');
     d.onclick   = () => openArticle(a);
     d.innerHTML = `
-      ${ownImage(a.image_url)
-        ? `<img src="${ownImage(a.image_url)}" loading="lazy" alt="" style="min-height:120px"
+      ${ownImage(a)
+        ? `<img src="${ownImage(a)}" loading="lazy" alt="" style="min-height:120px"
              onerror="this.parentNode.style.background='${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}';this.remove()">`
         : `<div style="height:120px;background:${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech};display:flex;align-items:center;justify-content:center;font-size:1.8rem;opacity:0.6">${cc.icon}</div>`
       }
@@ -6155,8 +6174,8 @@ async function renderBM() {
       d.className = 'bm-card fadein tap';
       d.onclick   = (e) => { if (!e.target.closest('.bm-act')) openArticle(a); };
       d.innerHTML = `
-        ${ownImage(a.image_url)
-          ? `<img class="bm-img" src="${ownImage(a.image_url)}" loading="lazy" alt="" onerror="this.style.background='${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}';this.style.display='none'">`
+        ${ownImage(a)
+          ? `<img class="bm-img" src="${ownImage(a)}" loading="lazy" alt="" onerror="this.style.background='${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}';this.style.display='none'">`
           : `<div class="bm-img" style="background:${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech};display:flex;align-items:center;justify-content:center;font-size:1.2rem">${cc.icon}</div>`
         }
         <div class="bm-info">
@@ -6537,8 +6556,8 @@ function renderFeedArticles() {
     d.onclick   = () => openArticle(a);
     d.innerHTML = `
       <div class="fac-stripe" style="background:${cc.hex}"></div>
-      ${ownImage(a.image_url)
-        ? `<img class="fac-img" src="${ownImage(a.image_url)}" loading="lazy" alt="" onerror="this.style.background='${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}';this.style.display='none'">`
+      ${ownImage(a)
+        ? `<img class="fac-img" src="${ownImage(a)}" loading="lazy" alt="" onerror="this.style.background='${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}';this.style.display='none'">`
         : `<div class="fac-img" style="background:${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech};display:flex;align-items:center;justify-content:center;font-size:1.2rem">${cc.icon}</div>`
       }
       <div class="fac-info">
@@ -8411,8 +8430,8 @@ async function doSearch(q){
     results.forEach(a => {
       const cc = CATS[a.category] || CATS.tech;
       const d = document.createElement('div'); d.className = 'srch-item';
-      d.innerHTML = `${ownImage(a.image_url)
-          ? `<img class="srch-item-img" src="${ownImage(a.image_url)}" loading="lazy" onerror="this.style.display='none'">`
+      d.innerHTML = `${ownImage(a)
+          ? `<img class="srch-item-img" src="${ownImage(a)}" loading="lazy" onerror="this.style.display='none'">`
           : `<div class="srch-item-img" style="display:flex;align-items:center;justify-content:center;background:${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}">${cc.icon}</div>`}
         <div><div class="srch-item-t">${bEsc(a.title)}</div>
           <div class="srch-item-s">${cc.short} · ${bEsc(a.source||'')} · ${timeAgo(a.published_at)||''}</div></div>`;
@@ -8481,7 +8500,7 @@ function renderBytes(arts, feed){
     const src = a.source || 'SherrByte';
     el.innerHTML = `
       <div class="byte-card">
-        <div class="byte-media b-open" style="${ownImage(a.image_url) ? `background-image:url('${a.image_url}')` : `background:${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}`}">
+        <div class="byte-media b-open" style="${ownImage(a) ? `background-image:url('${a.image_url}')` : `background:${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}`}">
           ${a.image_url ? '' : '<i class="fa-regular fa-image byte-media-ico"></i>'}
         </div>
         <div class="byte-body">

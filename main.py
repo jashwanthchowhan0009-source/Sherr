@@ -1437,11 +1437,20 @@ def article_row_to_dict(row) -> dict:
     # effect on the next request instead of requiring a re-crawl. thumbnail mode
     # surfaces the publisher image WITH credit; anything else leaves image_url as
     # stored and the client falls back to generated art.
-    if IMAGE_MODE == "thumbnail" and not d.get("image_url"):
-        src_img = d.get("source_image_url") or ""
-        if src_img:
-            d["image_url"] = src_img
+    if IMAGE_MODE == "thumbnail":
+        if not d.get("image_url"):
+            src_img = d.get("source_image_url") or ""
+            if src_img:
+                d["image_url"] = src_img
+                d["image_source"] = "thumbnail"
+        # Rows ingested before the gate existed carry an image_url with no
+        # image_source. The client refuses an unlabelled third-party URL — by
+        # design — so every one of those articles rendered as generated art and
+        # the app looked like it had no images at all. In thumbnail mode a stored
+        # publisher image IS a credited thumbnail; label it so it can render.
+        elif not d.get("image_source"):
             d["image_source"] = "thumbnail"
+        if d.get("image_url") and not d.get("image_credit"):
             d["image_credit"] = f"Image: {d['orig_source'] or 'source'}"
     d["source_image_url"] = d.get("source_image_url") or ""
 
