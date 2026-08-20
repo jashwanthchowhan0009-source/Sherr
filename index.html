@@ -1585,28 +1585,66 @@ nav.compact .nb.on { flex: 0 0 auto; padding-left: 16px; padding-right: 16px; }
 
 
 
-/* ── /explore/snapshot sections ── */
-.snap-sec{margin:16px 14px 0;padding:14px;border-radius:18px;background:var(--bgcard);
-  border:1px solid var(--line2);}
-.snap-hd{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
-.snap-hd i{color:var(--tc,#5AC8FA);font-size:.85rem;}
-.snap-t{font:800 .92rem/1.2 var(--fd);color:var(--t1);letter-spacing:-.01em;}
-.snap-age{margin-left:auto;font:700 .58rem/1 var(--fd);letter-spacing:.08em;
-  text-transform:uppercase;color:var(--t3);}
+
+/* ── /explore/snapshot: ticker + sections ──
+   These reuse the app's existing "glassic slab" language (.bt / .glance-card):
+   a dark gradient body, a bright inset top edge, and a bottom glow tinted by the
+   section's own colour. The slabs are deliberately dark in both themes, exactly
+   like the market launcher cards they sit beside. */
+.snap-slab{background:linear-gradient(178deg,#151517 0%,#101012 46%,#0a0a0c 100%);
+  border:1px solid rgba(255,255,255,.05);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.13),
+    inset 0 -52px 44px -42px color-mix(in srgb, var(--tc,#5AC8FA) 46%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, var(--tc,#5AC8FA) 38%, transparent),
+    0 20px 42px -28px rgba(0,0,0,.92),
+    0 3px 20px -10px color-mix(in srgb, var(--tc,#5AC8FA) 20%, transparent);}
+
+/* One-line ticker for launches + government releases. */
+.snap-tk{--tc:#F97316;position:relative;display:flex;align-items:center;gap:8px;
+  margin:14px 14px 0;padding:10px 32px 10px 14px;border-radius:999px;overflow:hidden;
+  cursor:pointer;transition:transform .16s var(--spring);}
+.snap-tk:active{transform:scale(.98);}
+.snap-tk-track{display:flex;gap:26px;white-space:nowrap;
+  animation:snapTk 38s linear infinite;}
+.snap-tk:active .snap-tk-track,.snap-tk:hover .snap-tk-track{animation-play-state:paused;}
+.tk-item{font:500 .76rem/1.3 var(--f);color:rgba(255,255,255,.78);
+  display:inline-flex;align-items:center;gap:6px;}
+.tk-item i{color:#F97316;font-size:.7rem;}
+.tk-item b{font:800 .56rem/1 var(--fd);letter-spacing:.11em;text-transform:uppercase;
+  color:rgba(255,255,255,.42);}
+.snap-tk-more{position:absolute;right:13px;color:rgba(255,255,255,.4);font-size:.7rem;}
+@keyframes snapTk{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+@media (prefers-reduced-motion:reduce){.snap-tk-track{animation:none;}}
+#snap-ticker-full{display:none;} #snap-ticker-full.open{display:block;}
+
+/* ── section slabs ── */
+.snap-sec{position:relative;overflow:hidden;margin:14px 14px 0;padding:15px 16px 14px;
+  border-radius:24px;}
+.snap-hd{display:flex;align-items:center;gap:8px;margin-bottom:11px;}
+.snap-hd i{color:var(--tc,#5AC8FA);font-size:.82rem;}
+.snap-t{font:800 .76rem/1 var(--fd);color:#fff;letter-spacing:-.01em;}
+.snap-age{margin-left:auto;font:700 .55rem/1 var(--fd);letter-spacing:.09em;
+  text-transform:uppercase;color:rgba(255,255,255,.38);}
 .snap-age.is-stale{color:#EAB308;}
-.snap-row{display:flex;justify-content:space-between;gap:10px;padding:6px 0;
-  border-top:1px solid var(--line2);font:500 .8rem/1.4 var(--f);color:var(--t2);}
+.snap-row{display:flex;justify-content:space-between;gap:10px;padding:7px 0;
+  border-top:1px solid rgba(255,255,255,.06);font:500 .8rem/1.4 var(--f);}
 .snap-row:first-child{border-top:0;}
-.snap-k{color:var(--t2);} .snap-v{font-weight:700;color:var(--t1);text-align:right;}
+.snap-k{color:rgba(255,255,255,.5);}
+.snap-v{font:700 .8rem/1.4 var(--fd);color:#fff;text-align:right;}
 .snap-v.up{color:#22C55E;} .snap-v.down{color:#EF4444;}
-.snap-li{display:block;padding:7px 0;border-top:1px solid var(--line2);
-  font:500 .8rem/1.45 var(--f);color:var(--t1);text-decoration:none;}
+.snap-li{display:block;padding:8px 0;border-top:1px solid rgba(255,255,255,.06);
+  font:500 .8rem/1.45 var(--f);color:rgba(255,255,255,.86);text-decoration:none;}
 .snap-li:first-child{border-top:0;}
-.snap-li small{display:block;color:var(--t3);font:500 .68rem/1.3 var(--f);margin-top:2px;}
-.snap-empty{font:500 .76rem/1.5 var(--f);color:var(--t3);padding:4px 0;}
-.snap-img{width:100%;border-radius:12px;margin-bottom:8px;}
-.snap-search{width:100%;padding:8px 10px;margin-bottom:8px;border-radius:10px;
-  border:1px solid var(--line2);background:var(--bg);color:var(--t1);font:500 .8rem var(--f);}
+.snap-li small{display:block;color:rgba(255,255,255,.38);font:500 .66rem/1.3 var(--f);
+  margin-top:3px;}
+.snap-empty{font:500 .76rem/1.5 var(--f);color:rgba(255,255,255,.42);padding:4px 0;}
+.snap-img{width:100%;border-radius:14px;margin-bottom:8px;}
+.snap-list{max-height:260px;overflow-y:auto;}
+.snap-search{width:100%;padding:8px 11px;margin-bottom:8px;border-radius:12px;
+  border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.04);
+  color:#fff;font:500 .8rem var(--f);}
+.snap-search::placeholder{color:rgba(255,255,255,.34);}
 
 /* Imagery. A thumbnail is capped and never full-bleed — that constraint is the
    whole basis for using the publisher's image at all, so it lives in CSS rather
@@ -2977,6 +3015,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
     <div class="chip tap" onclick="selectChip(this,'lifestyle')"><i class="fa-solid fa-wand-magic-sparkles"></i> Lifestyle</div>
     <div class="chip tap" onclick="selectChip(this,'sports')"><i class="fa-solid fa-futbol"></i> Sports</div>
   </div>
+  <div id="home-headlines"></div>
   <div id="home-feed"></div>
   <div style="height:16px"></div>
 </div>
@@ -3435,7 +3474,12 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   </style>
   <div class="glance-grid" id="glance-grid"></div>
 
-  <!-- Data sections served from /explore/snapshot (one cached read, 11 sources). -->
+  <!-- Data sections served from /explore/snapshot (one cached read). -->
+  <div class="exp-sec-hdr">
+    <div class="exp-sec-hdr-title"><i class="fa-solid fa-satellite-dish"></i> Live Data</div>
+  </div>
+  <div id="snap-ticker"></div>
+  <div id="snap-ticker-full"></div>
   <div id="snapshot-sections"></div>
 
   <!-- ════════ BENTO ECOSYSTEM — Intelligence Explorer dashboard ════════ -->
@@ -4392,10 +4436,10 @@ const CATS = {
 };
 
 // Fallback articles shown before backend loads
-const FALLBACK_ARTICLES = [
-  {id:'f1', category:'tech',    source:'SherrByte', title:'Loading your personalised feed...', preview:'Connecting to the live news pipeline. Please wait a moment.', image_url:'', published_at: new Date().toISOString() },
-  {id:'f2', category:'society', source:'SherrByte', title:'Real AI-powered news is loading',   preview:'Articles are being fetched from 55+ sources and rewritten by AI.', image_url:'', published_at: new Date().toISOString() },
-];
+// No placeholder articles. Two fake cards reading "Loading your personalised
+// feed..." used to fill an empty feed; because they are static they never stopped
+// saying it, so every empty or unreachable feed looked like one still fetching.
+// An empty feed now says so plainly instead of impersonating content.
 
 // ── NAVIGATION STATE ──
 const navEl   = document.querySelector('nav');
@@ -5261,6 +5305,8 @@ function _writeFeedCache(arts) {
   try { localStorage.setItem(_FEED_CACHE_KEY, JSON.stringify({ t: Date.now(), arts: arts.slice(0, 24) })); } catch (e) {}
 }
 
+let _feedWatchdog = 0;
+
 async function loadFeed(reset = false) {
   if (feedLoading) return;
   if (!reset && feedExhausted) return;          // no more genuinely-new pages → stop infinite scroll
@@ -5271,20 +5317,28 @@ async function loadFeed(reset = false) {
   }
   feedLoading = true;
   const c = document.getElementById('home-feed');
+  // Watchdog: feedLoading is a mutex, and a stranded one is indistinguishable from
+  // a slow network — every later loadFeed() returns at the guard and the skeleton
+  // stays up forever. Release it unconditionally well past the request timeout.
+  clearTimeout(_feedWatchdog);
+  _feedWatchdog = setTimeout(() => { feedLoading = false; }, 60000);
 
   // First page: show cached headlines instantly if we have them (so a cold
   // backend never shows a blank skeleton / "Waking" wall); else a skeleton.
-  if (feedPage === 1) {
-    const cached = _isDefaultFeedView() ? _readFeedCache() : null;
-    if (cached) {
-      c.innerHTML = '';
-      if (curChip === 'all') renderSectionTabs(c);
-      cached.forEach(a => { try { renderStandardCard(normalizeArticle(a), c); } catch (e) {} });
-    } else {
-      c.innerHTML = '<div class="skel skel-hero"></div>' +
-        Array(4).fill('<div class="skel skel-card"></div>').join('');
+  // Wrapped because this runs before the try/finally that clears the mutex.
+  try {
+    if (feedPage === 1) {
+      const cached = _isDefaultFeedView() ? _readFeedCache() : null;
+      if (cached) {
+        c.innerHTML = '';
+        if (curChip === 'all') renderSectionTabs(c);
+        cached.forEach(a => { try { renderStandardCard(normalizeArticle(a), c); } catch (e) {} });
+      } else {
+        c.innerHTML = '<div class="skel skel-hero"></div>' +
+          Array(4).fill('<div class="skel skel-card"></div>').join('');
+      }
     }
-  }
+  } catch (e) { console.warn('feed pre-render failed', e); }
 
   try {
     // Region: national/local filter the feed; global = broadest (no filter).
@@ -5337,16 +5391,17 @@ async function loadFeed(reset = false) {
       if (curChip === 'all') renderSectionTabs(c);
 
       if (articles.length === 0) {
-        if (FALLBACK_ARTICLES && FALLBACK_ARTICLES.length) {
-          FALLBACK_ARTICLES.forEach(a => renderStandardCard(a, c));
-        } else {
-          c.insertAdjacentHTML('beforeend',
-            `<div class="empty-state">
-              <div class="empty-state-ico">📰</div>
-              <div class="empty-state-msg">Your feed is warming up</div>
-              <div class="empty-state-sub">Fresh articles are being processed. Check back in a moment.</div>
-            </div>`);
-        }
+        // The request succeeded and returned zero rows — that is the server
+        // holding no published articles, not a connection problem. Saying so is
+        // the whole point; a placeholder card here would hide a real outage.
+        c.insertAdjacentHTML('beforeend',
+          `<div class="empty-state">
+            <div class="empty-state-ico">📰</div>
+            <div class="empty-state-msg">No published stories yet</div>
+            <div class="empty-state-sub">The server answered, but has nothing published right now.
+              Fresh articles appear as they clear processing.</div>
+            <button class="es-retry" onclick="feedRetryCount=0;loadFeed(true)">Retry</button>
+          </div>`);
         return;
       }
 
@@ -5405,15 +5460,12 @@ async function loadFeed(reset = false) {
       if (stale()) {
         c.innerHTML = '';
         if (curChip === 'all') renderSectionTabs(c);
-        if (typeof FALLBACK_ARTICLES !== 'undefined' && FALLBACK_ARTICLES.length) {
-          FALLBACK_ARTICLES.forEach(a => renderStandardCard(a, c));
-        }
         const wake = document.createElement('div');
         wake.className = 'empty-state es-waking';
         wake.innerHTML = `
           <div class="empty-state-ico">⏳</div>
           <div class="empty-state-msg">Waking the server…</div>
-          <div class="empty-state-sub">The free server is starting up — this can take up to a minute.</div>`;
+          <div class="empty-state-sub">Attempt ${feedRetryCount} of ${FEED_MAX_RETRIES} — the free server can take up to a minute to start.</div>`;
         c.appendChild(wake);
       }
       feedLoading = false;
@@ -5423,19 +5475,17 @@ async function loadFeed(reset = false) {
     if (stale()) {
       c.innerHTML = '';
       if (curChip === 'all') renderSectionTabs(c);
-      if (typeof FALLBACK_ARTICLES !== 'undefined' && FALLBACK_ARTICLES.length) {
-        FALLBACK_ARTICLES.forEach(a => renderStandardCard(a, c));
-      }
       const notice = document.createElement('div');
       notice.className = 'empty-state';
       notice.innerHTML = `
         <div class="empty-state-ico">⚠️</div>
         <div class="empty-state-msg">Couldn't reach the server</div>
-        <div class="empty-state-sub">The server may be waking up — this can take a moment.</div>
+        <div class="empty-state-sub">${bEsc(String((e && e.message) || 'network error'))}</div>
         <button class="es-retry" onclick="feedRetryCount=0;loadFeed(true)">Retry</button>`;
       c.appendChild(notice);
     }
   } finally {
+    clearTimeout(_feedWatchdog);
     feedLoading = false;
     _signalReady();   // first feed attempt settled → let the intro dismiss
   }
@@ -7028,6 +7078,9 @@ function navTo(name) {
   }
 
   if (name==='home') {
+    // Headlines live on Home now, and Home may be opened before Explore has ever
+    // fetched the snapshot — so kick that fetch once from here.
+    ensureHeadlines();
     // Tapping Home always returns to the "All" feed (from any category/tab).
     if (curChip !== 'all' || homeActiveTab !== 'foryou') {
       const allChip = document.querySelector('#chip-row .chip[onclick*="\'all\'"]');
@@ -8559,17 +8612,19 @@ async function openDictionary() {
 // and returns rows; the wrapper handles the title, the age badge, and the three
 // states every section can be in — missing, empty, or populated.
 const SNAP_SECTIONS = [
-  { key:'markets',     title:'Markets',            icon:'fa-chart-line',   colour:'#22C55E' },
-  { key:'forex',       title:'Currencies',         icon:'fa-money-bill-transfer', colour:'#5E5CE6' },
-  { key:'macro_rates', title:'US Macro',           icon:'fa-percent',      colour:'#A855F7' },
-  { key:'world_bank',  title:'India Macro',        icon:'fa-landmark',     colour:'#0EA5E9' },
-  { key:'weather',     title:'Weather',            icon:'fa-cloud-sun',    colour:'#38BDF8' },
-  { key:'news_top',    title:'Top Headlines',      icon:'fa-newspaper',    colour:'#F59E0B' },
-  { key:'govt_press',  title:'Government Releases',icon:'fa-building-columns', colour:'#64748B' },
-  { key:'space',       title:'Upcoming Launches',  icon:'fa-rocket',       colour:'#F97316' },
-  { key:'nasa',        title:'Picture of the Day', icon:'fa-star',         colour:'#8B5CF6' },
-  { key:'flights',     title:'Aircraft over India',icon:'fa-plane',        colour:'#06B6D4' },
-  { key:'word_of_day', title:'Word of the Day',    icon:'fa-book',         colour:'#EC4899' },
+  { key:'markets',      title:'Markets',     icon:'fa-chart-line',   colour:'#22C55E' },
+  { key:'forex',        title:'Currency',    icon:'fa-money-bill-transfer', colour:'#5E5CE6' },
+  { key:'opportunities',title:'Opportunities',icon:'fa-arrow-trend-up', colour:'#A855F7' },
+  { key:'weather',      title:'Weather',     icon:'fa-cloud-sun',    colour:'#38BDF8' },
+  { key:'flights',      title:'Flights',     icon:'fa-plane',        colour:'#06B6D4' },
+];
+
+// Space launches and government releases share one scrolling line rather than two
+// cards: both are low-frequency lists nobody reads in full, and a ticker costs one
+// row instead of a screen. Tapping it opens the full list.
+const TICKER_SOURCES = [
+  { key:'space',      label:'Launch',   icon:'fa-rocket' },
+  { key:'govt_press', label:'Govt',     icon:'fa-building-columns' },
 ];
 
 function _snapAge(sec) {
@@ -8600,19 +8655,20 @@ const SNAP_RENDER = {
 
   forex: d => Object.entries(d).map(([k, v]) => _row(k, '₹' + Number(v).toFixed(2))).join(''),
 
-  macro_rates: d => Object.entries(d).map(([k, v]) =>
-    _row(k.replace(/_/g, ' '), v.value + (k.includes('rate') || k.includes('yield') || k.includes('unemployment') ? '%' : ''))).join(''),
-
-  world_bank: d => Object.entries(d).map(([k, v]) =>
-    _row((v.indicator || k.replace(/_/g, ' ')) + ` (${v.year})`, v.value + '%')).join(''),
+  // macro_rates (US) and world_bank (India) merged: they answer the same question
+  // and neither fills a card on its own.
+  opportunities: d => {
+    const ind = Object.entries(d.india || {}).map(([k, v]) =>
+      _row('IN · ' + (v.indicator || k.replace(/_/g, ' ')) + ` (${v.year})`, v.value + '%')).join('');
+    const us = Object.entries(d.us || {}).map(([k, v]) =>
+      _row('US · ' + k.replace(/_/g, ' ').replace(/^us /, ''),
+           v.value + (/rate|yield|unemployment/.test(k) ? '%' : ''))).join('');
+    return ind + us;
+  },
 
   weather: d => _row('Temperature', (d.temp_c ?? '—') + '°C')
     + _row('Humidity', (d.humidity ?? '—') + '%')
     + _row('Wind', (d.wind_kph ?? '—') + ' km/h'),
-
-  news_top: d => (d.articles || []).map(a =>
-    `<a class="snap-li" href="${bEsc(a.url || '#')}" target="_blank" rel="noopener">
-       ${bEsc(a.title || '')}<small>${bEsc(a.source || '')}</small></a>`).join(''),
 
   govt_press: d => (d.releases || []).map(r =>
     `<a class="snap-li" href="${bEsc(r.url || '#')}" target="_blank" rel="noopener">
@@ -8622,12 +8678,6 @@ const SNAP_RENDER = {
     `<div class="snap-li">${bEsc(l.name || '')}
        <small>${bEsc([l.provider, l.pad, l.status].filter(Boolean).join(' · '))}</small></div>`).join(''),
 
-  nasa: d => (d.media_type === 'image' && d.url
-      ? `<img class="snap-img" src="${bEsc(d.url)}" loading="lazy" alt="">` : '')
-    + `<div class="snap-li">${bEsc(d.title || '')}<small>${bEsc(d.copyright || 'NASA')} · ${bEsc(d.date || '')}</small></div>`
-    + `<div class="snap-empty">${bEsc(d.explanation || '')}</div>`,
-
-  // The only section with enough rows to be worth filtering.
   flights: d => `<input class="snap-search" placeholder="Filter by callsign or country…"
        oninput="_snapFilter(this)">
      <div class="snap-list">` + (d.sample || []).map(f =>
@@ -8636,9 +8686,6 @@ const SNAP_RENDER = {
        <small>${bEsc(f.origin_country || '')} · ${Math.round(f.altitude_m || 0)}m · ${Math.round((f.velocity_ms || 0) * 3.6)} km/h</small></div>`).join('')
     + `</div><div class="snap-empty">${d.count} aircraft tracked, showing ${(d.sample || []).length}</div>`,
 
-  word_of_day: d => `<div class="snap-li">${bEsc(d.word || '')}
-      <small>${bEsc([d.phonetic, d.part_of_speech].filter(Boolean).join(' · '))}</small></div>`
-    + `<div class="snap-empty">${bEsc(d.definition || '')}${d.example ? ' — “' + bEsc(d.example) + '”' : ''}</div>`,
 };
 
 function _snapFilter(input) {
@@ -8648,18 +8695,108 @@ function _snapFilter(input) {
   });
 }
 
+// ─── one-line ticker: launches + government releases ─────────────────────────
+// Both are low-frequency lists nobody reads in full. One scrolling row costs a
+// single line instead of two cards; tapping expands to the full list.
+let _snapTickerItems = [];
+
+function renderSnapTicker(snap) {
+  const host = document.getElementById('snap-ticker');
+  if (!host) return;
+  const items = [];
+  for (const src of TICKER_SOURCES) {
+    const sec = snap[src.key];
+    if (!sec || !sec.data) continue;
+    const rows = sec.data.launches || sec.data.releases || [];
+    rows.forEach(r => items.push({
+      label: src.label, icon: src.icon,
+      text: r.name || r.title || '',
+      sub: [r.provider, r.pad, r.status, r.published_at].filter(Boolean).join(' · '),
+      url: r.url || '',
+    }));
+  }
+  _snapTickerItems = items.filter(i => i.text);
+  if (!_snapTickerItems.length) { host.innerHTML = ''; return; }
+  // Duplicated once so the marquee wraps without a visible gap.
+  const line = _snapTickerItems.map(i =>
+    `<span class="tk-item"><i class="fa-solid ${i.icon}"></i>
+       <b>${bEsc(i.label)}</b> ${bEsc(i.text)}</span>`).join('');
+  host.innerHTML = `<div class="snap-tk snap-slab tap" onclick="openSnapTicker()"
+      role="button" aria-label="Launches and government releases">
+      <div class="snap-tk-track">${line}${line}</div>
+      <i class="fa-solid fa-chevron-right snap-tk-more"></i>
+    </div>`;
+}
+
+function openSnapTicker() {
+  const host = document.getElementById('snap-ticker-full');
+  if (!host || !_snapTickerItems.length) return;
+  const open = host.classList.toggle('open');
+  host.innerHTML = open ? `<div class="snap-sec snap-slab" style="--tc:#F97316">
+      <div class="snap-hd"><i class="fa-solid fa-rocket"></i>
+        <span class="snap-t">Launches &amp; Government</span>
+        <span class="snap-age">${_snapTickerItems.length} items</span></div>
+      ${_snapTickerItems.map(i => i.url
+        ? `<a class="snap-li" href="${bEsc(i.url)}" target="_blank" rel="noopener">
+             ${bEsc(i.text)}<small>${bEsc(i.label)}${i.sub ? ' · ' + bEsc(i.sub) : ''}</small></a>`
+        : `<div class="snap-li">${bEsc(i.text)}
+             <small>${bEsc(i.label)}${i.sub ? ' · ' + bEsc(i.sub) : ''}</small></div>`).join('')}
+    </div>` : '';
+}
+
+// ─── Top headlines — Home only ───────────────────────────────────────────────
+function renderHomeHeadlines() {
+  const host = document.getElementById('home-headlines');
+  if (!host) return;
+  const data = window._snapHeadlines;
+  const arts = (data && data.articles) || [];
+  if (!arts.length) { host.innerHTML = ''; return; }
+  host.innerHTML = `<div class="snap-sec snap-slab" style="--tc:#0EB7D6">
+    <div class="snap-hd"><i class="fa-solid fa-newspaper"></i>
+      <span class="snap-t">Top Headlines</span></div>
+    ${arts.slice(0, 8).map(a =>
+      `<a class="snap-li" href="${bEsc(a.url || '#')}" target="_blank" rel="noopener">
+         ${bEsc(a.title || '')}<small>${bEsc(a.source || '')}</small></a>`).join('')}
+  </div>`;
+}
+
+// Home does not call /explore/snapshot itself; it reuses whatever Explore cached.
+// If Home is opened first the fetch has not run, so kick it once.
+async function ensureHeadlines() {
+  if (window._snapHeadlines === undefined) {
+    try {
+      const snap = await api('/explore/snapshot', { timeout: 15000 });
+      window._snapHeadlines = (snap.news_top && snap.news_top.data) || null;
+    } catch (e) { window._snapHeadlines = null; }
+  }
+  renderHomeHeadlines();
+}
+
 async function loadSnapshot() {
   const host = document.getElementById('snapshot-sections');
   if (!host) return;
-  host.innerHTML = `<div class="snap-sec"><div class="snap-empty">Loading live data…</div></div>`;
+  host.innerHTML = `<div class="snap-sec snap-slab"><div class="snap-empty">Loading live data…</div></div>`;
   let snap;
   try {
     snap = await api('/explore/snapshot', { timeout: 15000 });
   } catch (e) {
-    host.innerHTML = `<div class="snap-sec"><div class="snap-empty">
+    host.innerHTML = `<div class="snap-sec snap-slab"><div class="snap-empty">
       Couldn’t reach the data service — ${bEsc(e.message || 'error')}</div></div>`;
     return;
   }
+  // Fold the two macro sources into one synthetic section before rendering.
+  const macro = snap.macro_rates, wb = snap.world_bank;
+  if (macro || wb) {
+    const newest = [macro, wb].filter(Boolean)
+      .sort((a, b) => (a.age_seconds || 0) - (b.age_seconds || 0))[0];
+    snap.opportunities = { ...newest,
+      data: { us: (macro && macro.data) || {}, india: (wb && wb.data) || {} } };
+  }
+  // Headlines belong on Home, not here.
+  window._snapHeadlines = (snap.news_top && snap.news_top.data) || null;
+  if (typeof renderHomeHeadlines === 'function') renderHomeHeadlines();
+  renderSnapTicker(snap);
+
   host.innerHTML = SNAP_SECTIONS.map(cfg => {
     const sec = snap[cfg.key];
     let body;
@@ -8674,7 +8811,7 @@ async function loadSnapshot() {
         ? rendered
         : `<div class="snap-empty">No entries right now.</div>`;
     }
-    return `<div class="snap-sec" style="--tc:${cfg.colour}">
+    return `<div class="snap-sec snap-slab" style="--tc:${cfg.colour}">
       <div class="snap-hd"><i class="fa-solid ${cfg.icon}"></i>
         <span class="snap-t">${bEsc(cfg.title)}</span>${_snapAge(sec)}</div>
       ${body}
@@ -8770,6 +8907,10 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('saved-ct').textContent = ST.saves.length;
   gateAppDownloadCTA();
   loadFeed(true);
+  // Home is the landing view, so its headlines are fetched here rather than
+  // waiting for a navTo('home') that never happens on a cold open. Deferred so
+  // /feed gets the cold backend to itself first.
+  setTimeout(() => { try { ensureHeadlines(); } catch (e) {} }, 1200);
   ActivityTracker.start();   // begin screen-time heartbeats (no-ops until signed in)
   // Markets/weather/Explore data load lazily when Explore is opened (navTo),
   // so startup only hits /feed — important for the cold free-tier backend.
