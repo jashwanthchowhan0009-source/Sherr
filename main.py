@@ -1081,29 +1081,78 @@ def _insert_with_dedup(conn, article: dict) -> bool:
 
 
 def _gate_article(headline: str, body: str, source_headline: str,
-                  source_body: str) -> tuple[str, dict]:
+                  source_body: str, ai_result: dict | None = None) -> tuple[str, dict]:
     """Run both originality gates. Returns (status, audit).
 
-    status is 'published' only when the headline is genuinely ours AND the body clears
-    the overlap gate. Anything else is parked — there is deliberately no path that
-    publishes on a failed check, and no fallback to the publisher's wording.
+    status is 'published' only when the headline is genuinely ours AND the body
+    clears the overlap gate. A failed BODY check stays absolute: a body that
+    overlaps the source is a reproduction, and nothing overrides that.
+
+    The one exception is the headline check, and only when both AI providers are
+    down. The rewrite is what makes a headline ours, so with no provider there is
+    nothing to compare and every article parks — which is precisely how the corpus
+    reached 1600+ parked rows and the feed served nothing. In that case we publish
+    on the AGGREGATOR posture instead: the publisher's headline kept with visible
+    credit and an outbound link, the body our own stub, never theirs. That is the
+    same posture scripts/publish_pending.py and the startup drain already take,
+    and the audit records it so these rows stay findable for a later rewrite.
     """
     head_ok, head_m = headline_is_original(headline, source_headline)
     body_ok, body_m = originality_check(body, source_body)
+    audit = {"status": None, "headline": head_m, "body": body_m}
+
     if head_ok and body_ok:
         status = "published"
-    elif not head_ok:
-        status = "pending_rewrite"
-    else:
+    elif not body_ok:
         status = "blocked_originality"
-    return status, {"status": status, "headline": head_m, "body": body_m}
+    elif ai_result and ai_result.get("publish_as_aggregator"):
+        status = "published"
+        audit["ai_fallback"] = True
+        audit["posture"] = "aggregator"
+        audit["classifier"] = ai_result.get("classifier", {})
+        audit["note"] = ("both AI providers failed; published with the publisher's "
+                         "headline under credit and our own body stub")
+    else:
+        status = "pending_rewrite"
+
+    audit["status"] = status
+    return status, audit
+
+
+# Mirrors ai_processor._SAFE_BODY. Our own words, used wherever a body cannot be
+# AI-written — never the publisher's text.
+_SAFE_BODY_TEXT = (
+    "Sherr AI is preparing an original, plain-language summary of this story — "
+    "the key facts, who is involved and why it matters will appear here shortly. "
+    "Use the source link to read the full report at the original publisher."
+)
+
+
+def _apply_aggregator_posture(result: dict, row) -> None:
+    """Attach the credit and the source link that the aggregator posture requires.
+
+    Our stub already replaces the publisher's prose; this adds the attribution
+    that makes keeping their HEADLINE defensible. Mutates `result` in place so
+    both AI batch paths get it from one call.
+    """
+    try:
+        src = (row["source_name"] if "source_name" in row.keys() else "") or ""
+        url = (row["url"] if "url" in row.keys() else "") or ""
+    except Exception:
+        src, url = "", ""
+    credit = f"Source: {src or 'the original publisher'}"
+    result["full_body"] = f"{_SAFE_BODY_TEXT}\n\n{credit}\n{url}".strip()
 
 
 async def run_ai_batch(conn):
     """Pull unprocessed articles and refine them with Gemini in parallel."""
     rows = conn.execute(
-        "SELECT id, headline, source_headline, full_body, pillar_id, micro_tags "
-        "FROM articles WHERE ai_processed=0 ORDER BY collected_at DESC LIMIT ?",
+        # source_name and url are here for the aggregator fallback: a credit
+        # line and an outbound link are what make it aggregation rather than
+        # a bare reproduction, so they are not optional.
+        "SELECT id, headline, source_headline, full_body, pillar_id, micro_tags, "
+        "source_name, url FROM articles WHERE ai_processed=0 "
+        "ORDER BY collected_at DESC LIMIT ?",
         (AI_BATCH_SIZE,)
     ).fetchall()
 
@@ -1145,7 +1194,9 @@ async def run_ai_batch(conn):
             src_head = row["source_headline"] or row["headline"] or ""
             status, audit = _gate_article(
                 result["refined_title"], result["full_body"], src_head,
-                row["full_body"] or "")
+                row["full_body"] or "", ai_result=result)
+            if audit.get("posture") == "aggregator":
+                _apply_aggregator_posture(result, row)
 
             conn.execute("""
                 UPDATE articles SET
@@ -2177,8 +2228,12 @@ async def admin_reprocess(
     limit = max(1, min(int(limit), 200))
     conn = get_db()
     rows = conn.execute(
-        "SELECT id, headline, full_body, pillar_id, micro_tags FROM articles "
-        "WHERE ai_processed=1 AND status='published' AND COALESCE(reprocessed,0)=0 ORDER BY id ASC LIMIT ?",
+        # source_name/url: same reason as the batch pass — the aggregator
+        # fallback needs a credit line and a link, and _apply_aggregator_posture
+        # reads them off this row.
+        "SELECT id, headline, full_body, pillar_id, micro_tags, source_name, url "
+        "FROM articles WHERE ai_processed=1 AND status='published' "
+        "AND COALESCE(reprocessed,0)=0 ORDER BY id ASC LIMIT ?",
         (limit,)
     ).fetchall()
 
@@ -2205,7 +2260,9 @@ async def admin_reprocess(
             src_head = row["source_headline"] or row["headline"] or ""
             status, audit = _gate_article(
                 result["refined_title"], result["full_body"], src_head,
-                row["full_body"] or "")
+                row["full_body"] or "", ai_result=result)
+            if audit.get("posture") == "aggregator":
+                _apply_aggregator_posture(result, row)
 
             conn.execute("""
                 UPDATE articles SET

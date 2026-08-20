@@ -302,4 +302,4 @@ def test_groq_model_is_a_currently_served_id():
     """llama-3.3-70b-versatile is decommissioned; a 404 from Groq means the rewrite
     pass silently stops promoting articles and the feed drains to empty."""
     import ai_processor
-    assert ai_processor.GROQ_MODEL == "llama3-70b-8192"
+    assert ai_processor.GROQ_MODEL == "llama-3.1-8b-instant"

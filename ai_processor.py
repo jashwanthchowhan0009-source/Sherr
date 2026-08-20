@@ -24,7 +24,7 @@ log = logging.getLogger("sherbyte.ai")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GROK_API_KEY   = os.getenv("GROK_API_KEY", "")
 GEMINI_MODEL   = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-GROQ_MODEL     = os.getenv("GROQ_MODEL",   "llama3-70b-8192")
+GROQ_MODEL     = os.getenv("GROQ_MODEL",   "llama-3.1-8b-instant")
 
 # Copyright-safe placeholders. When no AI rewrite is available we NEVER fall back
 # to the source article's text — we show these neutral, original strings instead.
@@ -208,29 +208,81 @@ Return ONLY a single JSON object matching the schema. No markdown, no code fence
         return None
 
 
-def _rule_based_fallback(title: str, body: str, fallback_category: str = "tech") -> dict:
-    # Copyright-safe: never reproduce the source article's text — INCLUDING its
-    # headline. An empty refined_title tells the caller to park the row as
-    # pending_rewrite; falling back to the publisher's headline here is exactly the
-    # infringement the gate exists to stop, and it would bypass the gate silently
-    # because there would be nothing left to compare.
-    return {
+# Pillar ids the keyword classifier returns, mapped onto the category slugs this
+# module speaks. Kept as a mapping rather than duplicating the keyword table:
+# scripts/publish_pending.py owns that table and the drain already uses it, and a
+# second copy would drift.
+_PILLAR_TO_CATEGORY = {
+    1: "society", 2: "economy", 3: "tech", 4: "arts", 5: "nature",
+    6: "selfwell", 7: "philo", 8: "lifestyle", 9: "sports",
+}
+
+
+def _classify_by_keyword(title: str, body: str, fallback_category: str) -> tuple:
+    """(category, evidence) from the shared keyword table, or the caller's default.
+
+    Imported lazily and defensively: this runs on the path where everything else
+    has already failed, so it must not be the thing that raises.
+    """
+    try:
+        import os as _os
+        import sys as _sys
+        _here = _os.path.dirname(_os.path.abspath(__file__))
+        _scripts = _os.path.join(_here, "scripts")
+        if _scripts not in _sys.path:
+            _sys.path.insert(0, _scripts)
+        from publish_pending import classify           # noqa: PLC0415
+        pillar, evidence = classify(title or "", body or "")
+        return _PILLAR_TO_CATEGORY.get(pillar, fallback_category), evidence
+    except Exception as e:                              # pragma: no cover
+        log.warning("keyword classifier unavailable, using default category: %s", e)
+        return fallback_category, {"matched": [], "reason": "classifier unavailable"}
+
+
+def _rule_based_fallback(title: str, body: str, fallback_category: str = "tech",
+                         publishable: bool = False) -> dict:
+    """Both providers are down. Classify by keyword and hand back a usable row.
+
+    COPYRIGHT: the body is never the publisher's. `full_body` is our own stub, as
+    it always was — an outage is not a licence to reproduce someone's article.
+
+    What changed is the headline. This used to return refined_title="" so the
+    caller parked the row as pending_rewrite, on the reasoning that the
+    publisher's headline is theirs. That is true, and it is also why the corpus
+    sat at 1600+ parked rows and the feed served nothing when the providers went
+    down: with no title there is nothing to publish. `publishable=True` keeps the
+    publisher's headline and marks the row for the aggregator posture — headline
+    with visible credit and an outbound link, body ours — which is the same
+    posture scripts/publish_pending.py and the startup drain already use. The row
+    records ai_fallback so it stays distinguishable from something that actually
+    cleared the gate, and a later rewrite pass can find it with one query.
+    """
+    category, evidence = _classify_by_keyword(title, body, fallback_category)
+    out = {
         "refined_title": "",
         "summary":       _SAFE_SUMMARY,
         "full_body":     _SAFE_BODY,
-        "category":      fallback_category,
+        "category":      category,
         "topic_tags":    [],
         "is_trending":   False,
         "sentiment":     "neutral",
         "when_info":     "",
         "where_info":    "Not specified",
+        "ai_fallback":   True,
+        "classifier":    evidence,
     }
+    if publishable:
+        out["refined_title"] = (title or "").strip()
+        out["publish_as_aggregator"] = True
+    return out
 
 
 def _validate_and_fix(result: dict, title: str, body: str, fallback_category: str = "tech") -> dict:
     """Defensive layer: fix anything the LLM got subtly wrong."""
     if not isinstance(result, dict):
-        return _rule_based_fallback(title, body, fallback_category)
+        # A provider answered with something unusable, which is a provider failure
+        # like any other — publish rather than park.
+        return _rule_based_fallback(title, body, fallback_category, publishable=True)
 
     # Same rule as the fallback: absent means park it, never inherit the source.
     result.setdefault("refined_title", "")
@@ -292,7 +344,11 @@ async def process_article(title: str, body: str, fallback_category: str = "tech"
         if result:
             return _validate_and_fix(result, title, body_clean, fallback_category)
 
-    return _rule_based_fallback(title, body_clean, fallback_category)
+    # Both providers failed — a 4xx on a retired model id, a 429, an outage, or no
+    # key at all. Parking the row here is what emptied the feed, so classify by
+    # keyword and publish on the aggregator posture instead.
+    log.warning("both AI providers failed for %r — rule-based fallback", (title or "")[:60])
+    return _rule_based_fallback(title, body_clean, fallback_category, publishable=True)
 
 
 async def process_batch(articles: list[dict], concurrency: int = 5) -> list[dict]:
