@@ -77,6 +77,15 @@ AI_BATCH_SIZE   = int(os.getenv("AI_BATCH_SIZE", "50"))
 AI_CONCURRENCY  = int(os.getenv("AI_CONCURRENCY", "5"))
 COLLECT_INTERVAL_MIN = int(os.getenv("COLLECT_INTERVAL_MIN", "25"))
 
+# The feed serves only status='published'. Ingest writes every article as
+# pending_rewrite and the AI pass is what promotes it, so whenever that pass is
+# behind the backlog grows and the feed empties out — which is what a reader sees
+# as "no articles, no images". Above this many pending rows that is no longer the
+# rewrite pass being briefly behind, it is a stall, and we release them on the
+# aggregator posture rather than serve nothing. A handful is left alone so a
+# normal lag is not raced. Set PENDING_DRAIN_THRESHOLD=0 to disable.
+PENDING_DRAIN_THRESHOLD = int(os.getenv("PENDING_DRAIN_THRESHOLD", "25"))
+
 # Admin token guarding the maintenance endpoints (/admin/*). These endpoints
 # reprocess, republish and re-scope the whole corpus, so a default that ships in
 # a public repo is the same as no token at all. Same posture as JWT_SECRET:
@@ -1387,6 +1396,9 @@ async def lifespan(app: FastAPI):
         asyncio.create_task(explore_feeds.refresh_all())
     except Exception as e:
         log.error("explore feeds not started: %s", e)
+    # Off the event loop: sqlite writes over the whole backlog would block boot.
+    asyncio.create_task(asyncio.get_event_loop().run_in_executor(
+        None, _drain_pending_if_stalled))
     scheduler.start()
     log.info("Scheduler: collect every %d min", COLLECT_INTERVAL_MIN)
     log.info("AI providers: %s", available_providers())
@@ -2215,6 +2227,42 @@ async def admin_reprocess(
     conn.close()
     log.info("[REPROCESS] %d rows reprocessed, %d remaining", done, remaining)
     return {"reprocessed": done, "remaining": remaining, "ai": providers["primary"]}
+
+
+def _drain_pending_if_stalled() -> dict:
+    """Release a stalled pending_rewrite backlog so the feed is not empty.
+
+    Aggregator posture only: the publisher's headline is kept with visible credit
+    and an outbound link, the body is replaced with our own stub. This never
+    republishes somebody else's prose, and it never touches blocked_originality —
+    those failed the body gate and releasing them would recreate the exposure the
+    gate exists to prevent.
+
+    Never raises. It runs inside lifespan, and a backlog drain must not be able to
+    stop the app from booting.
+    """
+    if PENDING_DRAIN_THRESHOLD <= 0:
+        return {"skipped": "disabled"}
+    try:
+        conn = get_db()
+        try:
+            pending = conn.execute(
+                "SELECT COUNT(*) c FROM articles WHERE status='pending_rewrite'"
+            ).fetchone()["c"]
+        finally:
+            conn.close()
+        if pending < PENDING_DRAIN_THRESHOLD:
+            return {"skipped": "below threshold", "pending": pending}
+
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "scripts"))
+        from publish_pending import run_sqlite            # noqa: PLC0415
+        out = run_sqlite(DB_PATH, mode="aggregator", dry_run=False, limit=None)
+        log.info("[DRAIN] released %s of %s pending articles into the feed",
+                 out.get("published"), pending)
+        return out
+    except Exception as e:
+        log.error("[DRAIN] pending drain failed, feed left as-is: %s", e)
+        return {"error": str(e)}
 
 
 @app.get("/admin/feed-doctor")
