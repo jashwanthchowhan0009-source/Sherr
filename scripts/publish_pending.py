@@ -47,7 +47,9 @@ from urllib.parse import urlsplit, urlunsplit
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-DB_PATH = os.getenv("DB_PATH", "sherrbyte.db")
+# Must match main.py's default, typo and all — otherwise a local run opens an
+# empty file beside the one the app actually serves and reports "0 found".
+DB_PATH = os.getenv("DB_PATH", "sherbyte.db")
 DATABASE_URL = (os.getenv("SHERR_I_DATABASE_URL")
                 or os.getenv("DATABASE_URL") or "").strip()
 _PGBOUNCER_ONLY = {"pgbouncer", "options", "sslmode", "connect_timeout",

@@ -77,9 +77,20 @@ AI_BATCH_SIZE   = int(os.getenv("AI_BATCH_SIZE", "50"))
 AI_CONCURRENCY  = int(os.getenv("AI_CONCURRENCY", "5"))
 COLLECT_INTERVAL_MIN = int(os.getenv("COLLECT_INTERVAL_MIN", "25"))
 
-# Admin token guarding the maintenance endpoints (/admin/*). Overridable via env;
-# a low-risk default keeps the endpoints usable out of the box for this app.
-ADMIN_TOKEN     = os.getenv("ADMIN_TOKEN", "sherr-admin")
+# Admin token guarding the maintenance endpoints (/admin/*). These endpoints
+# reprocess, republish and re-scope the whole corpus, so a default that ships in
+# a public repo is the same as no token at all. Same posture as JWT_SECRET:
+# mandatory in production, ephemeral in dev.
+ADMIN_TOKEN     = os.getenv("ADMIN_TOKEN", "").strip()
+if not ADMIN_TOKEN:
+    if (os.getenv("ENV") or "dev").lower() in ("prod", "production"):
+        raise RuntimeError(
+            "ADMIN_TOKEN is not set. Refusing to start in production with a "
+            "publicly-known admin token — set ADMIN_TOKEN to a long random value.")
+    import secrets as _asecrets
+    ADMIN_TOKEN = _asecrets.token_urlsafe(32)
+    logging.getLogger("sherbyte").warning(
+        "ADMIN_TOKEN unset — dev token for this process only: %s", ADMIN_TOKEN)
 
 # Optional: proxy /patterns to a SEPARATE engine deployment. Not needed in the
 # single-service setup — there, DATABASE_URL below is what matters.
@@ -2195,6 +2206,85 @@ async def admin_reprocess(
     conn.close()
     log.info("[REPROCESS] %d rows reprocessed, %d remaining", done, remaining)
     return {"reprocessed": done, "remaining": remaining, "ai": providers["primary"]}
+
+
+@app.get("/admin/feed-doctor")
+async def admin_feed_doctor(x_admin_token: str = Header("")):
+    """Why is the home feed empty?
+
+    /feed serves `ai_processed=1 AND status='published'`, so a feed can be empty
+    for four unrelated reasons that all look identical from the app. This answers
+    which one it is in a single call, and names the fix.
+    """
+    _check_admin(x_admin_token)
+    conn = get_db()
+    try:
+        one = lambda q, p=(): conn.execute(q, p).fetchone()["c"]
+        total     = one("SELECT COUNT(*) c FROM articles")
+        servable  = one("SELECT COUNT(*) c FROM articles "
+                        "WHERE ai_processed=1 AND status='published'")
+        pending   = one("SELECT COUNT(*) c FROM articles WHERE status='pending_rewrite'")
+        blocked   = one("SELECT COUNT(*) c FROM articles WHERE status='blocked_originality'")
+        unproc    = one("SELECT COUNT(*) c FROM articles WHERE COALESCE(ai_processed,0)=0")
+        newest    = conn.execute(
+            "SELECT MAX(published_at) AS t FROM articles "
+            "WHERE ai_processed=1 AND status='published'").fetchone()["t"]
+
+        # Ordered most-specific first: the first matching cause is the one to act on.
+        if total == 0:
+            diagnosis, fix = ("no articles ingested at all",
+                              "the collector has never run — check COLLECT_INTERVAL_MIN "
+                              "and the scheduler logs")
+        elif servable == 0 and pending > 0:
+            diagnosis, fix = (f"{pending} articles are held in pending_rewrite",
+                              "POST /admin/publish-pending?dry_run=false")
+        elif servable == 0 and blocked > 0:
+            diagnosis, fix = (f"{blocked} articles failed the originality gate",
+                              "they are verbatim copies — they need the AI rewrite, "
+                              "not a republish")
+        elif servable == 0 and unproc > 0:
+            diagnosis, fix = (f"{unproc} articles are ingested but never AI-processed",
+                              "POST /admin/reprocess — the AI cycle is not completing")
+        elif servable == 0:
+            diagnosis, fix = ("articles exist but none are servable",
+                              "check status and ai_processed on a sample row")
+        else:
+            diagnosis, fix = (f"{servable} articles are servable — the feed is not empty",
+                              "if the app still shows nothing, the problem is "
+                              "client-side or CORS, not the corpus")
+
+        return {"total": total, "servable": servable, "newest_published_at": newest,
+                "pending_rewrite": pending, "blocked_originality": blocked,
+                "not_ai_processed": unproc,
+                "diagnosis": diagnosis, "fix": fix}
+    finally:
+        conn.close()
+
+
+@app.post("/admin/publish-pending")
+async def admin_publish_pending(
+    dry_run: bool = Query(True),
+    limit: int = Query(0, ge=0),
+    x_admin_token: str = Header(""),
+):
+    """Release pending_rewrite articles into the feed, aggregator-style.
+
+    Same logic as scripts/publish_pending.py --mode aggregator, exposed over HTTP
+    because the deployment has no shell and its sqlite file is not reachable from
+    anywhere else. Only the aggregator posture is available here: the publisher's
+    headline is kept WITH credit and an outbound link, and the body is replaced
+    with our own stub. `--mode force` republishes somebody else's prose, so it
+    stays a deliberate command-line act and is deliberately not routable.
+
+    dry_run defaults to true — a corpus-wide write is never one accidental URL away.
+    """
+    _check_admin(x_admin_token)
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "scripts"))
+    from publish_pending import run_sqlite            # noqa: PLC0415
+
+    return await asyncio.get_event_loop().run_in_executor(
+        None, lambda: run_sqlite(DB_PATH, mode="aggregator",
+                                 dry_run=dry_run, limit=limit or None))
 
 
 @app.post("/admin/relink")
