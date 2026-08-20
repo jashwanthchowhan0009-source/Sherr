@@ -45,7 +45,7 @@ from urllib.parse import urlsplit, urlunsplit
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from originality import headline_is_original, originality_check   # noqa: E402
 
-DB_PATH = os.getenv("DB_PATH", "sherrbyte.db")
+DB_PATH = os.getenv("DB_PATH", "sherbyte.db")   # matches main.py's default
 DATABASE_URL = (os.getenv("SHERR_I_DATABASE_URL") or os.getenv("DATABASE_URL") or "").strip()
 
 _PG_PREFIXES = ("postgres://", "postgresql://")
