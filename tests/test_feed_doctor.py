@@ -185,14 +185,33 @@ def test_startup_drain_releases_a_stalled_backlog(client):
     assert d["servable"] == 39 and d["pending_rewrite"] == 0
 
 
-def test_startup_drain_leaves_a_normal_lag_alone(client):
-    """A handful of pending rows is the rewrite pass being briefly behind. Draining
-    those would race it and publish stubs for articles about to get real bodies."""
+def test_startup_drain_has_no_floor_by_default(client):
+    """The floor used to be 25, on the reasoning that a small backlog is just the
+    rewrite pass being briefly behind. With that pass pointed at a decommissioned
+    model the floor only decided how long an empty feed stayed empty."""
     import main
     c = client([_row(i) for i in range(1, 5)])
-    out = main._drain_pending_if_stalled()
-    assert out["skipped"] == "below threshold"
+    assert main.PENDING_DRAIN_THRESHOLD == 0
+    main._drain_pending_if_stalled()
+    assert c.get("/admin/feed-doctor", headers=AUTH).json()["pending_rewrite"] == 0
+
+
+def test_a_floor_is_still_honoured_when_one_is_configured(client, monkeypatch):
+    import main
+    c = client([_row(i) for i in range(1, 5)])
+    monkeypatch.setattr(main, "PENDING_DRAIN_THRESHOLD", 25)
+    assert main._drain_pending_if_stalled()["skipped"] == "below threshold"
     assert c.get("/admin/feed-doctor", headers=AUTH).json()["pending_rewrite"] == 4
+
+
+def test_drain_is_uncapped(client):
+    """The ask was to release ALL pending articles, not a page of them. run_sqlite
+    is called with limit=None; this pins that against a future default."""
+    import main
+    c = client([_row(i) for i in range(1, 220)])
+    out = main._drain_pending_if_stalled()
+    assert out["found"] == 219 and out["published"] == 219
+    assert c.get("/admin/feed-doctor", headers=AUTH).json()["servable"] == 219
 
 
 def test_startup_drain_never_raises(client, monkeypatch):
@@ -207,7 +226,7 @@ def test_startup_drain_never_raises(client, monkeypatch):
 def test_startup_drain_can_be_disabled(client, monkeypatch):
     import main
     client([_row(i) for i in range(1, 40)])
-    monkeypatch.setattr(main, "PENDING_DRAIN_THRESHOLD", 0)
+    monkeypatch.setattr(main, "DISABLE_PENDING_DRAIN", True)
     assert main._drain_pending_if_stalled()["skipped"] == "disabled"
 
 

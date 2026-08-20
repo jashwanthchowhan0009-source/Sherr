@@ -185,8 +185,12 @@ async def bypass_rewrite(conn, *, limit: int | None = None,
 
         if not dry_run and updates:
             await conn.executemany(
+                # 'published', not 'passed': publish_pending.py writes
+                # 'published' for this same terminal state, and two names for one
+                # state means any query filtering on either silently misses half
+                # the rows it should see.
                 "UPDATE info_objects SET headline = $1, pillar_id = $2, "
-                "status = 'passed', originality_json = $3::jsonb WHERE id = $4",
+                "status = 'published', originality_json = $3::jsonb WHERE id = $4",
                 updates)
 
         out = {"found": len(rows), "passed": 0 if dry_run else len(updates),

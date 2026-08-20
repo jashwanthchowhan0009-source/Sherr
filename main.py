@@ -80,11 +80,18 @@ COLLECT_INTERVAL_MIN = int(os.getenv("COLLECT_INTERVAL_MIN", "25"))
 # The feed serves only status='published'. Ingest writes every article as
 # pending_rewrite and the AI pass is what promotes it, so whenever that pass is
 # behind the backlog grows and the feed empties out — which is what a reader sees
-# as "no articles, no images". Above this many pending rows that is no longer the
-# rewrite pass being briefly behind, it is a stall, and we release them on the
-# aggregator posture rather than serve nothing. A handful is left alone so a
-# normal lag is not raced. Set PENDING_DRAIN_THRESHOLD=0 to disable.
-PENDING_DRAIN_THRESHOLD = int(os.getenv("PENDING_DRAIN_THRESHOLD", "25"))
+# as "no articles, no images".
+#
+# This used to hold a floor of 25, on the reasoning that a handful of pending rows
+# is the rewrite pass being briefly behind and draining those would race it. In
+# practice the pass was pointed at a decommissioned Groq model for long enough to
+# park the entire corpus, so the floor only decided how long an empty feed stayed
+# empty. It is gone: every boot drains whatever is pending, with no cap on how
+# many. Set PENDING_DRAIN_THRESHOLD to a positive number to restore a floor, or
+# leave it at 0 for none. DISABLE_PENDING_DRAIN=1 turns the pass off entirely.
+PENDING_DRAIN_THRESHOLD = int(os.getenv("PENDING_DRAIN_THRESHOLD", "0"))
+DISABLE_PENDING_DRAIN = (os.getenv("DISABLE_PENDING_DRAIN", "") or "").strip().lower() \
+    in ("1", "true", "yes")
 
 # Admin token guarding the maintenance endpoints (/admin/*). These endpoints
 # reprocess, republish and re-scope the whole corpus, so a default that ships in
@@ -2247,7 +2254,7 @@ def _drain_pending_if_stalled() -> dict:
     Never raises. It runs inside lifespan, and a backlog drain must not be able to
     stop the app from booting.
     """
-    if PENDING_DRAIN_THRESHOLD <= 0:
+    if DISABLE_PENDING_DRAIN:
         return {"skipped": "disabled"}
     try:
         conn = get_db()
@@ -2257,11 +2264,15 @@ def _drain_pending_if_stalled() -> dict:
             ).fetchone()["c"]
         finally:
             conn.close()
-        if pending < PENDING_DRAIN_THRESHOLD:
+        if not pending:
+            return {"skipped": "nothing pending", "pending": 0}
+        if PENDING_DRAIN_THRESHOLD and pending < PENDING_DRAIN_THRESHOLD:
             return {"skipped": "below threshold", "pending": pending}
 
         sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "scripts"))
         from publish_pending import run_sqlite            # noqa: PLC0415
+        # limit=None: every pending row, not a page of them. There has never
+        # been a cap here — the floor above was the only thing gating it.
         out = run_sqlite(DB_PATH, mode="aggregator", dry_run=False, limit=None)
         log.info("[DRAIN] released %s of %s pending articles into the feed",
                  out.get("published"), pending)
