@@ -121,7 +121,12 @@ def test_conditions_parse_then_extract_domains():
 # ─── condition normalization (line-97 AttributeError, all shapes) ─────────────
 from app.spie.decision.rules import normalize_conditions
 
-_CONDS = [{"domain": "weather", "direction": 1}, {"domain": "news", "direction": -1}]
+# Named apart from the chain fixture above. This block used to call its own
+# list _CONDS too, and because both are module-level the second assignment won
+# — so the three-condition chain tests silently ran against two conditions and
+# asserted on a chain that was never the one under test.
+_NORM_CONDS = [{"domain": "weather", "direction": 1},
+               {"domain": "news", "direction": -1}]
 
 
 def _domains(raw):
@@ -130,10 +135,10 @@ def _domains(raw):
 
 
 def test_normalize_parsed_and_encoded_forms():
-    assert normalize_conditions(_CONDS) == _CONDS
-    assert normalize_conditions(_json.dumps(_CONDS)) == _CONDS              # asyncpg str
-    assert normalize_conditions(_json.dumps(_json.dumps(_CONDS))) == _CONDS  # double-encoded
-    assert normalize_conditions(_json.dumps(_CONDS).encode()) == _CONDS      # bytes
+    assert normalize_conditions(_NORM_CONDS) == _NORM_CONDS
+    assert normalize_conditions(_json.dumps(_NORM_CONDS)) == _NORM_CONDS              # asyncpg str
+    assert normalize_conditions(_json.dumps(_json.dumps(_NORM_CONDS))) == _NORM_CONDS  # double-encoded
+    assert normalize_conditions(_json.dumps(_NORM_CONDS).encode()) == _NORM_CONDS      # bytes
     # a single unwrapped condition dict
     assert normalize_conditions({"domain": "forex", "direction": 1}) == [
         {"domain": "forex", "direction": 1}]
@@ -157,11 +162,11 @@ def test_normalize_drops_unusable_and_never_raises():
     assert normalize_conditions(["", "   "]) == []
     assert normalize_conditions([{"direction": 1}]) == []       # no domain
     # The call-site expression must be safe for every shape.
-    for shape in (_CONDS, _json.dumps(_CONDS), ["weather"], None, 42, [123, "news"]):
+    for shape in (_NORM_CONDS, _json.dumps(_NORM_CONDS), ["weather"], None, 42, [123, "news"]):
         _domains(shape)
 
 
 def test_every_normalized_element_is_a_dict():
-    for shape in (_CONDS, _json.dumps(_CONDS), ["weather", "news"], [123, "news"],
+    for shape in (_NORM_CONDS, _json.dumps(_NORM_CONDS), ["weather", "news"], [123, "news"],
                   {"domain": "forex"}):
         assert all(isinstance(c, dict) for c in normalize_conditions(shape))
