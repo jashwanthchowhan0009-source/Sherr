@@ -170,3 +170,52 @@ def test_production_refuses_to_start_without_an_admin_token(monkeypatch, tmp_pat
     import main
     with pytest.raises(RuntimeError, match="ADMIN_TOKEN"):
         importlib.reload(main)
+
+
+# ─── the startup drain ────────────────────────────────────────────────────────
+def test_startup_drain_releases_a_stalled_backlog(client):
+    """The feed serves only 'published'. When the AI pass stalls the backlog grows
+    and the feed empties — which is what a reader sees as an app with no articles
+    and no images."""
+    import main
+    c = client([_row(i) for i in range(1, 40)])
+    assert c.get("/admin/feed-doctor", headers=AUTH).json()["servable"] == 0
+    main._drain_pending_if_stalled()
+    d = c.get("/admin/feed-doctor", headers=AUTH).json()
+    assert d["servable"] == 39 and d["pending_rewrite"] == 0
+
+
+def test_startup_drain_leaves_a_normal_lag_alone(client):
+    """A handful of pending rows is the rewrite pass being briefly behind. Draining
+    those would race it and publish stubs for articles about to get real bodies."""
+    import main
+    c = client([_row(i) for i in range(1, 5)])
+    out = main._drain_pending_if_stalled()
+    assert out["skipped"] == "below threshold"
+    assert c.get("/admin/feed-doctor", headers=AUTH).json()["pending_rewrite"] == 4
+
+
+def test_startup_drain_never_raises(client, monkeypatch):
+    """It runs inside lifespan; an exception here must not stop the app booting."""
+    import main
+    client([_row(1)])
+    monkeypatch.setattr(main, "DB_PATH", "/nonexistent/nope.db")
+    monkeypatch.setattr(main, "get_db", lambda: (_ for _ in ()).throw(RuntimeError("boom")))
+    assert "error" in main._drain_pending_if_stalled()
+
+
+def test_startup_drain_can_be_disabled(client, monkeypatch):
+    import main
+    client([_row(i) for i in range(1, 40)])
+    monkeypatch.setattr(main, "PENDING_DRAIN_THRESHOLD", 0)
+    assert main._drain_pending_if_stalled()["skipped"] == "disabled"
+
+
+def test_startup_drain_does_not_release_blocked_articles(client):
+    """blocked_originality failed the body gate — releasing those recreates the
+    copyright exposure the gate exists to prevent."""
+    import main
+    c = client([_row(i) for i in range(1, 30)]
+               + [_row(i, status="blocked_originality") for i in range(30, 34)])
+    main._drain_pending_if_stalled()
+    assert c.get("/admin/feed-doctor", headers=AUTH).json()["blocked_originality"] == 4

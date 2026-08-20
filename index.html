@@ -844,7 +844,7 @@ header {
 }
 .ticker-inner {
   display: flex; gap: 0; width: max-content;
-  animation: tickerScroll 32s linear infinite; white-space: nowrap;
+  animation: tickerScroll 58s linear infinite; white-space: nowrap;
 }
 .ticker-inner:hover { animation-play-state: paused; }
 @keyframes tickerScroll { 0%{transform:translateX(0)} 100%{transform:translateX(-50%)} }
@@ -1603,13 +1603,33 @@ nav.compact .nb.on { flex: 0 0 auto; padding-left: 16px; padding-right: 16px; }
    a dark gradient body, a bright inset top edge, and a bottom glow tinted by the
    section's own colour. The slabs are deliberately dark in both themes, exactly
    like the market launcher cards they sit beside. */
-.snap-slab{background:linear-gradient(178deg,#151517 0%,#101012 46%,#0a0a0c 100%);
-  border:1px solid rgba(255,255,255,.05);
+/* Theme-aware slab. --sl-* are redefined under [data-theme="light"] below, so
+   one rule serves both modes instead of a dark brick sitting in a white page. */
+:root{
+  --sl-bg:linear-gradient(178deg,#151517 0%,#101012 46%,#0a0a0c 100%);
+  --sl-border:rgba(255,255,255,.05);
+  --sl-edge:rgba(255,255,255,.13);
+  --sl-shadow:0 20px 42px -28px rgba(0,0,0,.92);
+  --sl-t1:#fff; --sl-t2:rgba(255,255,255,.78);
+  --sl-t3:rgba(255,255,255,.42); --sl-rule:rgba(255,255,255,.06);
+  --sl-glow:46%; --sl-tint:.04;
+}
+[data-theme="light"]{
+  --sl-bg:linear-gradient(178deg,#FFFFFF 0%,#FBFBFD 52%,#F4F5F8 100%);
+  --sl-border:rgba(60,60,67,.10);
+  --sl-edge:rgba(255,255,255,.9);
+  --sl-shadow:0 14px 32px -24px rgba(60,60,67,.34);
+  --sl-t1:#1C1C1E; --sl-t2:rgba(60,60,67,.72);
+  --sl-t3:rgba(60,60,67,.46); --sl-rule:rgba(60,60,67,.09);
+  --sl-glow:20%; --sl-tint:.05;
+}
+.snap-slab{background:var(--sl-bg);
+  border:1px solid var(--sl-border);
   box-shadow:
-    inset 0 1px 0 rgba(255,255,255,.13),
-    inset 0 -52px 44px -42px color-mix(in srgb, var(--tc,#5AC8FA) 46%, transparent),
+    inset 0 1px 0 var(--sl-edge),
+    inset 0 -52px 44px -42px color-mix(in srgb, var(--tc,#5AC8FA) var(--sl-glow), transparent),
     inset 0 -1px 0 color-mix(in srgb, var(--tc,#5AC8FA) 38%, transparent),
-    0 20px 42px -28px rgba(0,0,0,.92),
+    var(--sl-shadow),
     0 3px 20px -10px color-mix(in srgb, var(--tc,#5AC8FA) 20%, transparent);}
 
 /* One-line ticker for launches + government releases. */
@@ -1618,14 +1638,14 @@ nav.compact .nb.on { flex: 0 0 auto; padding-left: 16px; padding-right: 16px; }
   cursor:pointer;transition:transform .16s var(--spring);}
 .snap-tk:active{transform:scale(.98);}
 .snap-tk-track{display:flex;gap:26px;white-space:nowrap;
-  animation:snapTk 38s linear infinite;}
+  animation:snapTk var(--tk-dur,110s) linear infinite;}
 .snap-tk:active .snap-tk-track,.snap-tk:hover .snap-tk-track{animation-play-state:paused;}
-.tk-item{font:500 .76rem/1.3 var(--f);color:rgba(255,255,255,.78);
+.tk-item{font:500 .76rem/1.3 var(--f);color:var(--sl-t2);
   display:inline-flex;align-items:center;gap:6px;}
 .tk-item i{color:#F97316;font-size:.7rem;}
 .tk-item b{font:800 .56rem/1 var(--fd);letter-spacing:.11em;text-transform:uppercase;
-  color:rgba(255,255,255,.42);}
-.snap-tk-more{position:absolute;right:13px;color:rgba(255,255,255,.4);font-size:.7rem;}
+  color:var(--sl-t3);}
+.snap-tk-more{position:absolute;right:13px;color:var(--sl-t3);font-size:.7rem;}
 @keyframes snapTk{from{transform:translateX(0)}to{transform:translateX(-50%)}}
 @media (prefers-reduced-motion:reduce){.snap-tk-track{animation:none;}}
 #snap-ticker-full{display:none;} #snap-ticker-full.open{display:block;}
@@ -1635,28 +1655,42 @@ nav.compact .nb.on { flex: 0 0 auto; padding-left: 16px; padding-right: 16px; }
   border-radius:24px;}
 .snap-hd{display:flex;align-items:center;gap:8px;margin-bottom:11px;}
 .snap-hd i{color:var(--tc,#5AC8FA);font-size:.82rem;}
-.snap-t{font:800 .76rem/1 var(--fd);color:#fff;letter-spacing:-.01em;}
+.snap-t{font:800 .76rem/1 var(--fd);color:var(--sl-t1);letter-spacing:-.01em;}
 .snap-age{margin-left:auto;font:700 .55rem/1 var(--fd);letter-spacing:.09em;
-  text-transform:uppercase;color:rgba(255,255,255,.38);}
+  text-transform:uppercase;color:var(--sl-t3);}
 .snap-age.is-stale{color:#EAB308;}
 .snap-row{display:flex;justify-content:space-between;gap:10px;padding:7px 0;
-  border-top:1px solid rgba(255,255,255,.06);font:500 .8rem/1.4 var(--f);}
+  border-top:1px solid var(--sl-rule);font:500 .8rem/1.4 var(--f);}
 .snap-row:first-child{border-top:0;}
-.snap-k{color:rgba(255,255,255,.5);}
-.snap-v{font:700 .8rem/1.4 var(--fd);color:#fff;text-align:right;}
+.snap-k{color:var(--sl-t2);}
+.snap-v{font:700 .8rem/1.4 var(--fd);color:var(--sl-t1);text-align:right;}
 .snap-v.up{color:#22C55E;} .snap-v.down{color:#EF4444;}
-.snap-li{display:block;padding:8px 0;border-top:1px solid rgba(255,255,255,.06);
-  font:500 .8rem/1.45 var(--f);color:rgba(255,255,255,.86);text-decoration:none;}
+.snap-li{display:block;padding:8px 0;border-top:1px solid var(--sl-rule);
+  font:500 .8rem/1.45 var(--f);color:var(--sl-t1);text-decoration:none;}
 .snap-li:first-child{border-top:0;}
-.snap-li small{display:block;color:rgba(255,255,255,.38);font:500 .66rem/1.3 var(--f);
+.snap-li small{display:block;color:var(--sl-t3);font:500 .66rem/1.3 var(--f);
   margin-top:3px;}
-.snap-empty{font:500 .76rem/1.5 var(--f);color:rgba(255,255,255,.42);padding:4px 0;}
+.snap-empty{font:500 .76rem/1.5 var(--f);color:var(--sl-t3);padding:4px 0;}
 .snap-img{width:100%;border-radius:14px;margin-bottom:8px;}
 .snap-list{max-height:260px;overflow-y:auto;}
 .snap-search{width:100%;padding:8px 11px;margin-bottom:8px;border-radius:12px;
-  border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.04);
-  color:#fff;font:500 .8rem var(--f);}
-.snap-search::placeholder{color:rgba(255,255,255,.34);}
+  border:1px solid var(--sl-border);background:color-mix(in srgb, var(--sl-t1) 5%, transparent);
+  color:var(--sl-t1);font:500 .8rem var(--f);}
+.snap-search::placeholder{color:var(--sl-t3);}
+
+/* ── Top Headlines strip (Home) ──
+   A reference strip, not the page. Titles clamp to two lines so one long
+   headline cannot set the height of every row. */
+.hl-strip{margin-top:10px;padding:13px 15px 11px;}
+.hl-row{padding:7px 0;}
+.hl-row .hl-t{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
+  overflow:hidden;font:600 .78rem/1.36 var(--f);letter-spacing:-.01em;}
+.hl-row small{margin-top:2px;font-size:.62rem;}
+.hl-extra{display:none;}
+.hl-strip.open .hl-extra{display:block;}
+.hl-more{margin-left:auto;border:0;background:transparent;cursor:pointer;
+  font:800 .55rem/1 var(--fd);letter-spacing:.08em;text-transform:uppercase;
+  color:var(--tc,#0EB7D6);padding:3px 0;}
 
 /* Imagery. A thumbnail is capped and never full-bleed — that constraint is the
    whole basis for using the publisher's image at all, so it lives in CSS rather
@@ -3456,8 +3490,9 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   </defs></svg>
   <style>
     /* Market launcher → dark glassic cards with live flagship data + sparkline */
-    .glance-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:2px 14px 12px;}
-    .glance-card{position:relative;overflow:hidden;border-radius:22px;--gc:#5AC8FA;min-height:110px;padding:13px 14px 12px;cursor:pointer;
+    .glance-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;padding:2px 14px 12px;}
+    @media (max-width:340px){ .glance-grid{grid-template-columns:repeat(2,1fr);} }
+    .glance-card{position:relative;overflow:hidden;border-radius:20px;--gc:#5AC8FA;min-height:100px;padding:11px 11px 10px;cursor:pointer;
       background:linear-gradient(178deg,#151517,#0c0c0e);border:1px solid rgba(255,255,255,.05);
       box-shadow:
         inset 0 1px 0 rgba(255,255,255,.12),
@@ -3468,11 +3503,13 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
       transition:transform .16s var(--spring);}
     .glance-card:active{transform:scale(.97);}
     .gc-hd{display:flex;align-items:center;gap:8px;position:relative;z-index:1;}
-    .gc-hd i{font-size:.82rem;color:var(--gc);} .gc-hd .t{font:700 .74rem/1 var(--fd);color:#fff;letter-spacing:-.01em;}
-    .gc-hd .gc-ch{margin-left:auto;font:800 .58rem/1 var(--fd);}
-    .gc-price{position:relative;z-index:1;font:800 1.18rem/1 var(--fd);color:#fff;margin-top:13px;letter-spacing:-.02em;}
-    .gc-sub{position:relative;z-index:1;font:600 .52rem/1 var(--fd);letter-spacing:.06em;text-transform:uppercase;color:rgba(255,255,255,.42);margin-top:6px;}
-    .gc-spark{position:absolute;left:0;right:0;bottom:0;height:32px;opacity:.85;pointer-events:none;} .gc-spark svg{width:100%;height:100%;}
+    .gc-hd{gap:5px;} .gc-hd i{font-size:.7rem;color:var(--gc);} .gc-hd .t{font:700 .6rem/1 var(--fd);color:#fff;letter-spacing:-.02em;}
+    .gc-hd .gc-ch{margin-left:auto;font:800 .5rem/1 var(--fd);}
+    .gc-price{position:relative;z-index:1;font:800 .92rem/1 var(--fd);color:#fff;margin-top:11px;letter-spacing:-.03em;
+      white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .gc-sub{position:relative;z-index:1;font:600 .45rem/1 var(--fd);letter-spacing:.05em;text-transform:uppercase;color:rgba(255,255,255,.42);margin-top:5px;
+      white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .gc-spark{position:absolute;left:0;right:0;bottom:0;height:26px;opacity:.85;pointer-events:none;} .gc-spark svg{width:100%;height:100%;}
     /* Category detail → dark glassic tiles + topic explainer */
     .mc-grid .mkt-tile, .mc-grid .mkt-metals-tile{background:linear-gradient(178deg,#151517,#0c0c0e)!important;border:1px solid rgba(255,255,255,.05)!important;border-radius:18px;box-shadow:inset 0 1px 0 rgba(255,255,255,.1), 0 12px 26px -20px rgba(0,0,0,.8)!important;}
     .mc-grid .mkt-tile-name{color:rgba(255,255,255,.5)!important;} .mc-grid .mkt-tile-price{color:#fff!important;}
@@ -3496,7 +3533,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 
   <!-- ════════ BENTO ECOSYSTEM — Intelligence Explorer dashboard ════════ -->
   <style>
-    .bento{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;grid-auto-rows:auto;margin:2px 14px 10px;}
+    .bento{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;grid-auto-rows:auto;margin:2px 14px 10px;}
     /* Glassic Lighting: thick illuminated glass slab — bright top edge + semantic bottom glow + backlight */
     .bt{position:relative;overflow:hidden;border-radius:26px;--gc:#3a3a3c;min-height:104px;
       background:linear-gradient(178deg,#151517 0%,#101012 46%,#0a0a0c 100%);border:1px solid rgba(255,255,255,.045);
@@ -3515,7 +3552,26 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
         inset 0 -1px 0 color-mix(in srgb, var(--gc) 60%, transparent),
         0 14px 30px -22px rgba(0,0,0,.9),
         0 4px 24px -8px color-mix(in srgb, var(--gc) 34%, transparent);}
-    .bt.w2{grid-column:span 2;} .bt.h2{grid-row:span 2;}
+    /* w2 means "needs the whole row", not "two of three" — Markets carries a
+       price list and the sport card a live scoreline, and neither survives a
+       third of the width. */
+    .bt.w2{grid-column:1 / -1;} .bt.h2{grid-row:span 2;}
+    /* A third of a phone is ~110px, so the tile chrome has to come down with it. */
+    .bento .bt{min-height:96px;padding:11px 10px;border-radius:20px;}
+    .bento .bt.w2{min-height:104px;padding:14px;border-radius:24px;}
+    .bento .bt-hd{gap:6px;margin-bottom:7px;}
+    .bento .bt-hd i{font-size:.72rem;}
+    .bento .bt-hd .nm{font-size:.62rem;letter-spacing:-.02em;}
+    .bento .bt.w2 .bt-hd .nm{font-size:.73rem;}
+    .bento .bt-hd .tag{font-size:.42rem;padding:3px 5px;}
+    .bento .bt-temp{font-size:1.72rem;} .bento .bt-temp small{font-size:.72rem;}
+    .bento .bt-cond{font-size:.6rem;margin-top:5px;}
+    .bento .bt-hilo{font-size:.52rem;margin-top:5px;}
+    .bento .ring svg{width:42px;height:42px;} .bento .ring{gap:8px;}
+    .bento .ring .rv{font-size:1rem;} .bento .ring .rl{font-size:.5rem;}
+    .bento .alerts .a{font-size:.56rem;gap:6px;padding:4px 0;}
+    /* Narrow phones cannot carry three of these; fall back rather than clip. */
+    @media (max-width:340px){ .bento{grid-template-columns:repeat(2,1fr);} }
     /* ── State engine: loading shimmer + offline/error/empty (layout preserved) ── */
     .bt.is-loading::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;z-index:5;
       background:linear-gradient(100deg,transparent 32%,rgba(255,255,255,.07) 50%,transparent 68%);
@@ -8740,8 +8796,12 @@ function renderSnapTicker(snap) {
   const line = _snapTickerItems.map(i =>
     `<span class="tk-item"><i class="fa-solid ${i.icon}"></i>
        <b>${bEsc(i.label)}</b> ${bEsc(i.text)}</span>`).join('');
+  // ~9s of travel per item. A fixed duration means twenty headlines scroll past
+  // at twice the speed of ten, which is why this read as too fast to follow.
+  const dur = Math.max(60, _snapTickerItems.length * 9);
   host.innerHTML = `<div class="snap-tk snap-slab tap" onclick="openSnapTicker()"
-      role="button" aria-label="Launches and government releases">
+      role="button" aria-label="Launches and government releases"
+      style="--tk-dur:${dur}s">
       <div class="snap-tk-track">${line}${line}</div>
       <i class="fa-solid fa-chevron-right snap-tk-more"></i>
     </div>`;
@@ -8770,12 +8830,21 @@ function renderHomeHeadlines() {
   const data = window._snapHeadlines;
   const arts = (data && data.articles) || [];
   if (!arts.length) { host.innerHTML = ''; return; }
-  host.innerHTML = `<div class="snap-sec snap-slab" style="--tc:#0EB7D6">
+  // Eight full-width rows pushed the actual feed off the first screen. Four
+  // compact rows, with the rest behind a toggle — headlines are a strip at the
+  // top of Home, not the page.
+  const top = arts.slice(0, 4), rest = arts.slice(4, 12);
+  host.innerHTML = `<div class="snap-sec snap-slab hl-strip" style="--tc:#0EB7D6">
     <div class="snap-hd"><i class="fa-solid fa-newspaper"></i>
-      <span class="snap-t">Top Headlines</span></div>
-    ${arts.slice(0, 8).map(a =>
-      `<a class="snap-li" href="${bEsc(a.url || '#')}" target="_blank" rel="noopener">
-         ${bEsc(a.title || '')}<small>${bEsc(a.source || '')}</small></a>`).join('')}
+      <span class="snap-t">Top Headlines</span>
+      ${rest.length ? `<button class="hl-more" onclick="this.closest('.hl-strip').classList.toggle('open');
+        this.textContent = this.closest('.hl-strip').classList.contains('open')
+          ? 'Less' : '+${rest.length} more'">+${rest.length} more</button>` : ''}</div>
+    ${top.concat(rest).map((a, i) =>
+      `<a class="snap-li hl-row${i >= top.length ? ' hl-extra' : ''}"
+          href="${bEsc(a.url || '#')}" target="_blank" rel="noopener">
+         <span class="hl-t">${bEsc(a.title || '')}</span>
+         <small>${bEsc(a.source || '')}</small></a>`).join('')}
   </div>`;
 }
 
