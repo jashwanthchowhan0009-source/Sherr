@@ -196,14 +196,6 @@ def test_startup_drain_has_no_floor_by_default(client):
     assert c.get("/admin/feed-doctor", headers=AUTH).json()["pending_rewrite"] == 0
 
 
-def test_a_floor_is_still_honoured_when_one_is_configured(client, monkeypatch):
-    import main
-    c = client([_row(i) for i in range(1, 5)])
-    monkeypatch.setattr(main, "PENDING_DRAIN_THRESHOLD", 25)
-    assert main._drain_pending_if_stalled()["skipped"] == "below threshold"
-    assert c.get("/admin/feed-doctor", headers=AUTH).json()["pending_rewrite"] == 4
-
-
 def test_drain_is_uncapped(client):
     """The ask was to release ALL pending articles, not a page of them. run_sqlite
     is called with limit=None; this pins that against a future default."""
@@ -303,3 +295,85 @@ def test_groq_model_is_a_currently_served_id():
     pass silently stops promoting articles and the feed drains to empty."""
     import ai_processor
     assert ai_processor.GROQ_MODEL == "llama-3.1-8b-instant"
+
+
+# ─── the drain runs inline at boot, and on demand ─────────────────────────────
+def test_drain_runs_inline_during_lifespan_not_as_a_task(tmp_path, monkeypatch):
+    """As a background task it was one more thing that could be starved or
+    swallowed before it ran. The feed has to be servable by the time the first
+    request lands, so it runs inline."""
+    import asyncio
+    import sqlite3
+
+    db = str(tmp_path / "inline.db")
+    for k, v in [("DB_PATH", db), ("ENV", "dev"), ("ADMIN_TOKEN", "t"),
+                 ("JWT_SECRET", "s"), ("COLLECT_INTERVAL_MIN", "999")]:
+        monkeypatch.setenv(k, v)
+    import main
+    importlib.reload(main)
+    main.init_db()
+    conn = main.get_db()
+    for i in range(1, 300):
+        conn.execute(
+            "INSERT INTO articles(headline, full_body, source_name, url, status, "
+            "ai_processed, pillar_id, published_at) "
+            "VALUES(?,?,?,?,'pending_rewrite',1,0,'2026-08-20')",
+            (f"Story {i} on markets and the economy", f"Body {i}.",
+             "Reuters", f"https://example.com/{i}"))
+    conn.commit()
+    conn.close()
+
+    async def _noop(*a, **k):
+        return None
+    monkeypatch.setattr(main, "collect_news", _noop)
+
+    async def run():
+        async with main.lifespan(main.app):
+            pass                      # no sleep: inline means it is already done
+    asyncio.run(run())
+
+    c = sqlite3.connect(db)
+    assert c.execute(
+        "SELECT COUNT(*) FROM articles WHERE status='pending_rewrite'").fetchone()[0] == 0
+    assert c.execute(
+        "SELECT COUNT(*) FROM articles WHERE status='published'").fetchone()[0] == 299
+    c.close()
+
+
+def test_flush_pending_needs_no_token(client):
+    """Deliberately open so it can be hit from a phone browser while the feed is
+    being brought back up."""
+    c = client([_row(i) for i in range(1, 30)])
+    r = c.get("/admin/flush-pending")
+    assert r.status_code == 200
+    assert r.json()["published"] == 29
+
+
+def test_flush_pending_reports_the_resulting_corpus_state(client):
+    """One call has to answer both 'did it run' and 'is the feed servable now' —
+    the second being the question actually being asked."""
+    c = client([_row(i) for i in range(1, 30)])
+    now = c.get("/admin/flush-pending").json()["now"]
+    assert now["servable"] == 29 and now["pending_rewrite"] == 0
+    assert set(now) >= {"servable", "pending_rewrite", "blocked_originality",
+                        "not_ai_processed", "total"}
+
+
+def test_flush_pending_is_a_no_op_once_drained(client):
+    """A GET that mutates will be re-fired by crawlers and link previews. The
+    second call must do nothing rather than churn the corpus."""
+    c = client([_row(i) for i in range(1, 30)])
+    c.get("/admin/flush-pending")
+    second = c.get("/admin/flush-pending").json()
+    assert second["published"] == 0 and second["skipped"] == "nothing pending"
+    assert second["now"]["servable"] == 29
+
+
+def test_flush_pending_will_not_release_blocked_articles(client):
+    """The open endpoint must not be a way to publish rows that failed the body
+    gate — that is the one exclusion the drain does not negotiate."""
+    c = client([_row(i) for i in range(1, 20)]
+               + [_row(i, status="blocked_originality") for i in range(20, 25)])
+    out = c.get("/admin/flush-pending").json()
+    assert out["published"] == 19
+    assert out["now"]["blocked_originality"] == 5

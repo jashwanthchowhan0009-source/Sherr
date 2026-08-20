@@ -1454,17 +1454,13 @@ async def lifespan(app: FastAPI):
         asyncio.create_task(explore_feeds.refresh_all())
     except Exception as e:
         log.error("explore feeds not started: %s", e)
-    # Off the event loop: sqlite writes over the whole backlog would block boot.
-    # run_in_executor returns a Future, and create_task only accepts a coroutine —
-    # passing one to the other raised TypeError inside lifespan, which meant the
-    # app could not start at all. Awaiting the future from a coroutine is the
-    # shape create_task actually wants.
-    async def _drain_off_thread():
-        await asyncio.get_event_loop().run_in_executor(
-            None, _drain_pending_if_stalled)
-    asyncio.create_task(_drain_off_thread())
     scheduler.start()
     log.info("Scheduler: collect every %d min", COLLECT_INTERVAL_MIN)
+    # Inline, not a background task. As a task it was one more thing that could be
+    # starved or swallowed before it ran, and the whole point is that the feed is
+    # servable by the time the first request arrives. It is a few seconds of local
+    # sqlite writes even over a few thousand rows, and it cannot raise.
+    _drain_pending_if_stalled()
     log.info("AI providers: %s", available_providers())
     yield
     scheduler.shutdown()
@@ -2300,18 +2296,20 @@ async def admin_reprocess(
 
 
 def _drain_pending_if_stalled() -> dict:
-    """Release a stalled pending_rewrite backlog so the feed is not empty.
+    """Release EVERY pending_rewrite article into the feed. No threshold, no cap.
 
     Aggregator posture only: the publisher's headline is kept with visible credit
     and an outbound link, the body is replaced with our own stub. This never
     republishes somebody else's prose, and it never touches blocked_originality —
-    those failed the body gate and releasing them would recreate the exposure the
-    gate exists to prevent.
+    those failed the BODY gate, and releasing them would recreate the exact
+    exposure the gate exists to prevent. That one exclusion is not a threshold; it
+    is the line between aggregating and copying.
 
-    Never raises. It runs inside lifespan, and a backlog drain must not be able to
-    stop the app from booting.
+    Never raises. It runs inline during lifespan, and a backlog drain must not be
+    able to stop the app from booting.
     """
     if DISABLE_PENDING_DRAIN:
+        log.info("[DRAIN] skipped: DISABLE_PENDING_DRAIN is set")
         return {"skipped": "disabled"}
     try:
         conn = get_db()
@@ -2322,21 +2320,59 @@ def _drain_pending_if_stalled() -> dict:
         finally:
             conn.close()
         if not pending:
-            return {"skipped": "nothing pending", "pending": 0}
-        if PENDING_DRAIN_THRESHOLD and pending < PENDING_DRAIN_THRESHOLD:
-            return {"skipped": "below threshold", "pending": pending}
+            log.info("[DRAIN] released 0 articles (nothing pending)")
+            return {"skipped": "nothing pending", "pending": 0, "published": 0}
 
         sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "scripts"))
         from publish_pending import run_sqlite            # noqa: PLC0415
-        # limit=None: every pending row, not a page of them. There has never
-        # been a cap here — the floor above was the only thing gating it.
+        # limit=None means every pending row, not a page of them.
         out = run_sqlite(DB_PATH, mode="aggregator", dry_run=False, limit=None)
-        log.info("[DRAIN] released %s of %s pending articles into the feed",
-                 out.get("published"), pending)
+        log.info("[DRAIN] released %s articles", out.get("published"))
+        out["pending_before"] = pending
         return out
     except Exception as e:
-        log.error("[DRAIN] pending drain failed, feed left as-is: %s", e)
-        return {"error": str(e)}
+        log.error("[DRAIN] failed, feed left as-is: %s", e, exc_info=True)
+        return {"error": str(e), "published": 0}
+
+
+@app.get("/admin/flush-pending")
+async def admin_flush_pending():
+    """Run the drain on demand and report what happened.
+
+    Deliberately unauthenticated so it can be opened from a phone browser while
+    the feed is being brought back up. That is a real exposure and it is meant to
+    be temporary: this is a corpus-wide write reachable by anyone with the URL,
+    and a GET at that, so a crawler or a link preview can fire it. It is bounded
+    rather than dangerous — it only ever moves pending_rewrite to published on the
+    aggregator posture, it cannot touch blocked_originality, and once the backlog
+    is drained a second call is a no-op — but it should be deleted or moved behind
+    _check_admin as soon as the feed is healthy. /admin/publish-pending is the
+    same operation with the token check and a dry-run default.
+    """
+    out = await asyncio.get_event_loop().run_in_executor(
+        None, _drain_pending_if_stalled)
+
+    # Report the resulting corpus state too, so one call answers both "did it run"
+    # and "is the feed actually servable now" — the latter being the real question.
+    conn = get_db()
+    try:
+        one = lambda q: conn.execute(q).fetchone()["c"]
+        out["now"] = {
+            "servable": one("SELECT COUNT(*) c FROM articles "
+                            "WHERE ai_processed=1 AND status='published'"),
+            "pending_rewrite": one("SELECT COUNT(*) c FROM articles "
+                                   "WHERE status='pending_rewrite'"),
+            "blocked_originality": one("SELECT COUNT(*) c FROM articles "
+                                       "WHERE status='blocked_originality'"),
+            "not_ai_processed": one("SELECT COUNT(*) c FROM articles "
+                                    "WHERE COALESCE(ai_processed,0)=0"),
+            "total": one("SELECT COUNT(*) c FROM articles"),
+        }
+    except Exception as e:
+        out["now"] = {"error": str(e)}
+    finally:
+        conn.close()
+    return out
 
 
 @app.get("/admin/feed-doctor")
