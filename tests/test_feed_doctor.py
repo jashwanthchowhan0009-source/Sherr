@@ -219,3 +219,68 @@ def test_startup_drain_does_not_release_blocked_articles(client):
                + [_row(i, status="blocked_originality") for i in range(30, 34)])
     main._drain_pending_if_stalled()
     assert c.get("/admin/feed-doctor", headers=AUTH).json()["blocked_originality"] == 4
+
+
+# ─── startup must actually start ──────────────────────────────────────────────
+def test_create_task_rejects_a_future_which_is_what_broke_boot():
+    """asyncio.create_task() takes a coroutine; run_in_executor() returns a Future.
+    Handing one to the other raises inside lifespan, so the app never starts —
+    pinning the API here because the two calls read as interchangeable."""
+    import asyncio
+
+    async def go():
+        fut = asyncio.get_event_loop().run_in_executor(None, lambda: None)
+        with pytest.raises(TypeError):
+            asyncio.create_task(fut)
+        await fut
+    asyncio.run(go())
+
+
+def test_lifespan_completes_and_drains(tmp_path, monkeypatch):
+    """The real lifespan, start to finish. A TypeError anywhere in it means the
+    service boot-loops, which no unit test of the drain alone would catch."""
+    import asyncio
+    import sqlite3
+
+    db = str(tmp_path / "boot.db")
+    monkeypatch.setenv("DB_PATH", db)
+    monkeypatch.setenv("ENV", "dev")
+    monkeypatch.setenv("ADMIN_TOKEN", "t")
+    monkeypatch.setenv("JWT_SECRET", "s")
+    import main
+    importlib.reload(main)
+    main.init_db()
+
+    conn = main.get_db()
+    for i in range(1, 40):
+        conn.execute(
+            "INSERT INTO articles(headline, full_body, source_name, url, status, "
+            "ai_processed, pillar_id, published_at) "
+            "VALUES(?,?,?,?,'pending_rewrite',1,0,'2026-08-20')",
+            (f"Economy story {i} on markets and policy", f"Body {i}.",
+             "Reuters", f"https://example.com/{i}"))
+    conn.commit()
+    conn.close()
+
+    async def _noop(*a, **k):
+        return None
+    monkeypatch.setattr(main, "collect_news", _noop)
+
+    async def run():
+        async with main.lifespan(main.app):
+            await asyncio.sleep(2.0)          # let the drain task land
+    asyncio.run(run())
+
+    c = sqlite3.connect(db)
+    assert c.execute(
+        "SELECT COUNT(*) FROM articles WHERE status='pending_rewrite'").fetchone()[0] == 0
+    assert c.execute(
+        "SELECT COUNT(*) FROM articles WHERE status='published'").fetchone()[0] == 39
+    c.close()
+
+
+def test_groq_model_is_a_currently_served_id():
+    """llama-3.3-70b-versatile is decommissioned; a 404 from Groq means the rewrite
+    pass silently stops promoting articles and the feed drains to empty."""
+    import ai_processor
+    assert ai_processor.GROQ_MODEL == "llama3-70b-8192"

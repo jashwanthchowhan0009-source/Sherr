@@ -1397,8 +1397,14 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         log.error("explore feeds not started: %s", e)
     # Off the event loop: sqlite writes over the whole backlog would block boot.
-    asyncio.create_task(asyncio.get_event_loop().run_in_executor(
-        None, _drain_pending_if_stalled))
+    # run_in_executor returns a Future, and create_task only accepts a coroutine —
+    # passing one to the other raised TypeError inside lifespan, which meant the
+    # app could not start at all. Awaiting the future from a coroutine is the
+    # shape create_task actually wants.
+    async def _drain_off_thread():
+        await asyncio.get_event_loop().run_in_executor(
+            None, _drain_pending_if_stalled)
+    asyncio.create_task(_drain_off_thread())
     scheduler.start()
     log.info("Scheduler: collect every %d min", COLLECT_INTERVAL_MIN)
     log.info("AI providers: %s", available_providers())

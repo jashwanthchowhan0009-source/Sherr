@@ -24,7 +24,7 @@ log = logging.getLogger("sherbyte.ai")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GROK_API_KEY   = os.getenv("GROK_API_KEY", "")
 GEMINI_MODEL   = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-GROQ_MODEL     = os.getenv("GROQ_MODEL",   "llama-3.3-70b-versatile")
+GROQ_MODEL     = os.getenv("GROQ_MODEL",   "llama3-70b-8192")
 
 # Copyright-safe placeholders. When no AI rewrite is available we NEVER fall back
 # to the source article's text — we show these neutral, original strings instead.
