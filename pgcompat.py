@@ -111,6 +111,12 @@ _SUBS = (
     # holding an ISO string, and Postgres refuses a timestamptz default on one.
     (re.compile(r"datetime\(\s*'now'\s*\)", re.I), "now()::text"),
     (re.compile(r"\bCOLLATE\s+NOCASE\b", re.I), ""),
+    # _MIGRATIONS re-runs every ADD COLUMN on every boot and relies on the error
+    # being swallowed. Postgres has IF NOT EXISTS for exactly this, so the
+    # statement becomes a no-op instead of an exception the logs fill up with.
+    # Guarded against double-adding it if a caller already wrote one.
+    (re.compile(r"\bADD\s+COLUMN\s+(?!IF\s+NOT\s+EXISTS)", re.I),
+     "ADD COLUMN IF NOT EXISTS "),
 )
 
 
@@ -156,13 +162,89 @@ class Cursor:
     def fetchall(self):
         return self._rows
 
+    def fetchmany(self, size=1):
+        out, self._rows = self._rows[:size], self._rows[size:]
+        return out
+
     def __iter__(self):
         return iter(self._rows)
+
+
+class ReusableCursor:
+    """What conn.cursor() hands back.
+
+    sqlite3 lets you keep one cursor and call execute() on it repeatedly, which
+    is what init_db does when seeding topics. Each execute replaces this
+    cursor's result set, exactly as sqlite3 does, so the fetch* and rowcount
+    surface stays honest between calls.
+    """
+
+    def __init__(self, conn: "Conn"):
+        self._conn = conn
+        self._last = Cursor([], -1, None)
+
+    def execute(self, sql, params=()):
+        self._last = self._conn.execute(sql, params)
+        return self._last
+
+    def executemany(self, sql, seq):
+        self._last = self._conn.executemany(sql, seq)
+        return self._last
+
+    def fetchone(self):
+        return self._last.fetchone()
+
+    def fetchall(self):
+        return self._last.fetchall()
+
+    def fetchmany(self, size=1):
+        return self._last.fetchmany(size)
+
+    @property
+    def rowcount(self):
+        return self._last.rowcount
+
+    @property
+    def lastrowid(self):
+        return self._last.lastrowid
+
+    def close(self):
+        return None
+
+    def __iter__(self):
+        return iter(self._last)
 
 
 # ─── connection ───────────────────────────────────────────────────────────────
 _pool = None
 _pool_lock = threading.Lock()
+
+
+# The app's tables live in their own Postgres schema.
+#
+# The Supabase database ALREADY has an `articles` table — the Sherr-I engine's,
+# with a completely different shape (UUID id, title, body, processed). main.py's
+# `articles` is a different table that happens to share a name: integer id,
+# headline, full_body, status. Point main.py at the public schema and
+# `CREATE TABLE IF NOT EXISTS articles` finds the engine's table, skips
+# creation, and every subsequent query fails on a column that was never there.
+#
+# A dedicated schema keeps the two apart with no query changes at all: the
+# search_path is set to this schema ALONE, so an unqualified `articles` can only
+# ever mean this app's. The engine keeps talking to public.articles through its
+# own asyncpg pool, untouched.
+APP_SCHEMA = "sherrbyte_app"
+
+
+CREATE_SCHEMA_SQL = f'CREATE SCHEMA IF NOT EXISTS "{APP_SCHEMA}"'
+# This schema ALONE. Adding the public schema here is what would let the engine's
+# same-named tables shadow this app's.
+SEARCH_PATH_SQL = f'SET search_path TO "{APP_SCHEMA}"'
+
+
+def _configure(conn) -> None:
+    conn.execute(CREATE_SCHEMA_SQL)
+    conn.execute(SEARCH_PATH_SQL)
 
 
 def _get_pool(dsn: str):
@@ -177,6 +259,10 @@ def _get_pool(dsn: str):
                 _pool = ConnectionPool(
                     sanitize_dsn(dsn), min_size=1, max_size=8,
                     kwargs={"row_factory": dict_row, "autocommit": True},
+                    # Every pooled connection gets the search_path, not just the
+                    # first: the transaction pooler hands out a different backend
+                    # each time, and a session setting does not follow the app.
+                    configure=_configure,
                     open=True, timeout=30,
                 )
     return _pool
@@ -228,6 +314,12 @@ class Conn:
             except Exception as e:
                 log.debug("ddl skipped: %s | %s", e, stmt[:90])
         return Cursor([], 0, None)
+
+    def cursor(self):
+        """sqlite3.Connection.cursor(). init_db() seeds the topics table through
+        one, so without this the very first boot on Postgres dies with
+        AttributeError before a single row is written."""
+        return ReusableCursor(self)
 
     def commit(self):
         return None            # autocommit

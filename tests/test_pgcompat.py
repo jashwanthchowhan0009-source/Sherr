@@ -138,3 +138,111 @@ def test_row_supports_the_membership_check_main_uses():
     r = Row({"source_name": "Reuters"})
     assert "source_name" in r.keys()
     assert "url" not in r.keys()
+
+
+# ─── the connection surface main.py actually calls ────────────────────────────
+def test_conn_exposes_cursor():
+    """init_db() seeds the topics table through conn.cursor(). Without it the
+    very first boot on Postgres dies with AttributeError before a single row is
+    written."""
+    from pgcompat import Conn
+    assert callable(getattr(Conn, "cursor", None))
+
+
+@pytest.mark.parametrize("name", ["execute", "executemany", "executescript",
+                                  "cursor", "commit", "rollback", "close"])
+def test_conn_covers_every_method_main_uses(name):
+    """Discovering these one AttributeError per deploy is a slow way to find them.
+    grep for `conn.<method>(` in main.py produced exactly this list."""
+    from pgcompat import Conn
+    assert callable(getattr(Conn, name, None)), name
+
+
+class _FakeConn:
+    def __init__(self):
+        self.seen = []
+
+    def execute(self, sql, params=()):
+        from pgcompat import Cursor, Row
+        self.seen.append((sql, params))
+        return Cursor([Row({"id": len(self.seen)})], 1, len(self.seen))
+
+    def executemany(self, sql, seq):
+        from pgcompat import Cursor
+        return Cursor([], len(list(seq)), None)
+
+
+def test_a_cursor_can_be_reused_across_executes():
+    """sqlite3 lets you hold one cursor and execute on it repeatedly, which is
+    exactly what the topics seed loop does."""
+    from pgcompat import ReusableCursor
+    fake = _FakeConn()
+    cur = ReusableCursor(fake)
+    for i in range(3):
+        cur.execute("INSERT INTO topics(name) VALUES(?)", (f"t{i}",))
+    assert len(fake.seen) == 3
+    assert cur.rowcount == 1 and cur.lastrowid == 3
+
+
+def test_the_cursor_result_set_refreshes_between_executes():
+    from pgcompat import ReusableCursor
+    cur = ReusableCursor(_FakeConn())
+    cur.execute("SELECT 1")
+    first = cur.fetchone()["id"]
+    cur.execute("SELECT 1")
+    assert cur.fetchone()["id"] != first
+
+
+def test_a_fresh_cursor_reports_no_rows_rather_than_raising():
+    from pgcompat import ReusableCursor
+    cur = ReusableCursor(_FakeConn())
+    assert cur.fetchone() is None and cur.fetchall() == []
+
+
+# ─── ALTER TABLE ADD COLUMN is re-run on every boot by design ─────────────────
+def test_add_column_becomes_idempotent():
+    """_MIGRATIONS replays every ADD COLUMN on each boot and relies on the error
+    being swallowed. On Postgres that is a DuplicateColumn exception per column,
+    per boot, filling the logs."""
+    out = translate("ALTER TABLE articles ADD COLUMN status TEXT DEFAULT 'published'")
+    assert out == ("ALTER TABLE articles ADD COLUMN IF NOT EXISTS status "
+                   "TEXT DEFAULT 'published'")
+
+
+def test_add_column_guard_is_not_applied_twice():
+    sql = "ALTER TABLE a ADD COLUMN IF NOT EXISTS x TEXT"
+    assert translate(sql) == sql
+
+
+def test_add_column_is_matched_case_insensitively():
+    assert "ADD COLUMN IF NOT EXISTS y" in translate(
+        "ALTER TABLE a add column y INTEGER DEFAULT 0")
+
+
+# ─── the app's tables must not collide with the engine's ─────────────────────
+def test_the_app_uses_its_own_schema():
+    """Supabase already holds an `articles` table — the engine's, with a totally
+    different shape. Sharing the public schema means CREATE TABLE IF NOT EXISTS
+    silently binds to it and every later query fails on a missing column."""
+    import pgcompat
+    assert pgcompat.APP_SCHEMA and pgcompat.APP_SCHEMA != "public"
+
+
+def test_search_path_excludes_public_so_the_engine_cannot_shadow_us():
+    """Assert on the statement, not the source: naming public in the search_path
+    is what lets public.articles (the engine's, different shape) answer an
+    unqualified `articles` here."""
+    import pgcompat
+    assert pgcompat.SEARCH_PATH_SQL == f'SET search_path TO "{pgcompat.APP_SCHEMA}"'
+    assert "public" not in pgcompat.SEARCH_PATH_SQL
+    assert pgcompat.CREATE_SCHEMA_SQL.startswith("CREATE SCHEMA IF NOT EXISTS")
+
+
+def test_every_pooled_connection_gets_the_search_path():
+    """The transaction pooler hands out a different backend each checkout, and a
+    session SET does not follow the app — configuring only the first connection
+    would leave later ones pointed at public."""
+    import inspect
+
+    import pgcompat
+    assert "configure=_configure" in inspect.getsource(pgcompat._get_pool)

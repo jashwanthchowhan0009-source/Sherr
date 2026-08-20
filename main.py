@@ -806,7 +806,10 @@ def init_db():
         scrubbed = conn.execute(_IMAGE_SCRUB).rowcount
         if scrubbed:
             log.info("P0.1 scrubbed %d hotlinked publisher images", scrubbed)
-    except sqlite3.OperationalError as e:
+    except Exception as e:
+        # Not sqlite3.OperationalError: on Postgres the driver raises its own
+        # type, so a narrowed except here would let a scrub failure abort init_db
+        # and take the whole boot with it.
         log.warning("image scrub skipped: %s", e)
     conn.commit()
 
@@ -847,7 +850,14 @@ def init_db():
 
     conn.commit()
     conn.close()
-    log.info("DB ready at %s", DB_PATH)
+    # Name the backend that is actually in use. "DB ready at sherbyte.db" while
+    # every query goes to Postgres is the kind of log line that costs an hour.
+    if USE_POSTGRES:
+        log.info("DB ready: postgres, schema %s (sqlite path unused)",
+                 pgcompat.APP_SCHEMA)
+    else:
+        log.info("DB ready: sqlite at %s (EPHEMERAL on Render — set DATABASE_URL "
+                 "to persist across deploys)", DB_PATH)
 
 # ─── AUTH ────────────────────────────────────────────────────────────────────
 # Passwords were stored as a bare, unsalted SHA-256. That is a single fast hash: a
@@ -2317,6 +2327,23 @@ async def admin_reprocess(
     return {"reprocessed": done, "remaining": remaining, "ai": providers["primary"]}
 
 
+def _run_drain_for_backend(*, dry_run: bool = False, limit=None) -> dict:
+    """Run the drain against whichever backend get_db() is actually using.
+
+    The two are different schemas, not one schema behind two drivers: on sqlite
+    our text and the publisher's share the articles table, while on Postgres the
+    rewritten row lives in info_objects and the original stays in articles. Each
+    path knows its own shape; the only decision here is which one to call.
+    """
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "scripts"))
+    import publish_pending                                   # noqa: PLC0415
+    if USE_POSTGRES:
+        return asyncio.run(publish_pending.run_postgres(
+            ARTICLES_DSN, mode="aggregator", dry_run=dry_run, limit=limit))
+    return publish_pending.run_sqlite(
+        DB_PATH, mode="aggregator", dry_run=dry_run, limit=limit)
+
+
 def _drain_pending_if_stalled() -> dict:
     """Release EVERY pending_rewrite article into the feed. No threshold, no cap.
 
@@ -2346,9 +2373,11 @@ def _drain_pending_if_stalled() -> dict:
             return {"skipped": "nothing pending", "pending": 0, "published": 0}
 
         sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "scripts"))
-        from publish_pending import run_sqlite            # noqa: PLC0415
-        # limit=None means every pending row, not a page of them.
-        out = run_sqlite(DB_PATH, mode="aggregator", dry_run=False, limit=None)
+        # Follow whichever backend get_db() is using. Hardcoding run_sqlite here
+        # meant that once DATABASE_URL was set the drain opened a sqlite file
+        # that no longer exists and cheerfully reported "released 0 articles"
+        # while the real backlog sat untouched in Postgres.
+        out = _run_drain_for_backend()
         log.info("[DRAIN] released %s articles", out.get("published"))
         out["pending_before"] = pending
         return out
@@ -2469,11 +2498,8 @@ async def admin_publish_pending(
     """
     _check_admin(x_admin_token)
     sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "scripts"))
-    from publish_pending import run_sqlite            # noqa: PLC0415
-
     return await asyncio.get_event_loop().run_in_executor(
-        None, lambda: run_sqlite(DB_PATH, mode="aggregator",
-                                 dry_run=dry_run, limit=limit or None))
+        None, lambda: _run_drain_for_backend(dry_run=dry_run, limit=limit or None))
 
 
 @app.post("/admin/relink")
