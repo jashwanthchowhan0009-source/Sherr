@@ -803,7 +803,10 @@ def init_db():
     # and cheap enough to run on every boot — the alternative is a one-shot script
     # somebody forgets to run before a deploy.
     try:
-        scrubbed = conn.execute(_IMAGE_SCRUB).rowcount
+        # In thumbnail mode publisher images ARE what we serve, so blanking them
+        # on every boot just fights the renderer. The scrub exists for the modes
+        # that do not serve them.
+        scrubbed = 0 if IMAGE_MODE == "thumbnail" else conn.execute(_IMAGE_SCRUB).rowcount
         if scrubbed:
             log.info("P0.1 scrubbed %d hotlinked publisher images", scrubbed)
     except Exception as e:
@@ -1104,7 +1107,10 @@ def _insert_with_dedup(conn, article: dict) -> bool:
         """, article)
         return conn.total_changes > 0
     except Exception as e:
-        log.debug("Insert skipped: %s", e)
+        # WARNING, not debug. A broken INSERT here means the collector reports
+        # "0 new articles inserted" every cycle while looking perfectly healthy —
+        # which is exactly how a placeholder-dialect mismatch stayed invisible.
+        log.warning("[DB] insert failed for %s: %s", (article.get("url") or "?")[:80], e)
         return False
 
 
@@ -1391,6 +1397,20 @@ async def collect_news():
 
         # AI refinement pass
         await run_ai_batch(conn)
+
+        # What actually came out the far end. "N inserted" says nothing about
+        # whether any of it is servable, and servable is the only thing the feed
+        # cares about.
+        try:
+            by_status = {r["status"] or "?": r["c"] for r in conn.execute(
+                "SELECT status, COUNT(*) AS c FROM articles GROUP BY status")}
+            servable = conn.execute(
+                "SELECT COUNT(*) AS c FROM articles "
+                "WHERE ai_processed=1 AND status='published'").fetchone()["c"]
+            log.info("[CYCLE] inserted=%d servable=%d by_status=%s",
+                     new_count, servable, by_status)
+        except Exception as e:
+            log.warning("[CYCLE] status summary failed: %s", e)
 
         # Link related articles into chronological story threads ("the string")
         try:
@@ -1780,6 +1800,17 @@ async def explore_feed(
     get_current_user(authorization)
     offset = (page - 1) * limit
     conn = get_db()
+    # Scope soft-fallback, matching /feed. Ingest classifies almost everything
+    # 'global', so a reader on Local was served an empty Explore page — every
+    # category row reading "No stories yet" while the same articles sat one
+    # filter away. An empty scope broadens rather than starving.
+    if scope and scope.lower() != "global":
+        sc_sql, sc_params = _scope_clause(scope)
+        have = conn.execute(
+            "SELECT COUNT(*) AS c FROM articles WHERE ai_processed=1 "
+            "AND status='published'" + sc_sql, sc_params).fetchone()["c"]
+        if have == 0:
+            scope = ""
     q = "SELECT * FROM articles WHERE ai_processed=1 AND status='published'"
     p = []
     if category and not pillar:

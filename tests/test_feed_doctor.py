@@ -27,7 +27,9 @@ CREATE TABLE articles(
   -- the imagery columns main.py adds by migration; the drain carries the
   -- publisher's image across through them
   source_image_url TEXT DEFAULT '', image_source TEXT DEFAULT '',
-  image_credit TEXT DEFAULT '')
+  image_credit TEXT DEFAULT '',
+  -- /explore and /feed both filter on this
+  scope TEXT DEFAULT 'global')
 """
 
 COLS = ("id,headline,full_body,source_name,url,status,ai_processed,"
@@ -484,3 +486,43 @@ def test_sqlite_remains_the_backend_for_local_development(monkeypatch, tmp_path)
     import main
     importlib.reload(main)
     assert main.USE_POSTGRES is False
+
+
+# ─── Explore must not go empty on a scope with no rows ───────────────────────
+def test_explore_falls_back_when_a_scope_has_nothing(client):
+    """Ingest classifies almost everything 'global'. A reader on Local got an
+    empty Explore page — every category row reading "No stories yet" while the
+    same articles sat one filter away. /feed already broadened; /explore did not."""
+    c = client([_row(i, status="published") for i in range(1, 10)])
+    assert len(c.get("/explore?page=1&limit=30&scope=local").json()["articles"]) == 9
+
+
+def test_explore_still_honours_a_scope_that_has_rows(client):
+    """The fallback must not become "ignore scope entirely"."""
+    c = client([_row(i, status="published") for i in range(1, 6)])
+    conn = sqlite3.connect(os.environ["DB_PATH"])
+    conn.execute("UPDATE articles SET scope='local' WHERE id <= 2")
+    conn.commit()
+    conn.close()
+    got = c.get("/explore?page=1&limit=30&scope=local").json()["articles"]
+    assert len(got) == 2
+
+
+def test_insert_failures_are_logged_loudly(caplog):
+    """A broken INSERT means "0 new articles inserted" every cycle while the
+    collector looks healthy. debug level is where that hid for days."""
+    import inspect
+
+    import main
+    src = inspect.getsource(main._insert_with_dedup)
+    assert "log.warning" in src and "log.debug" not in src
+
+
+def test_the_cycle_reports_what_became_servable(caplog):
+    """"N inserted" says nothing about whether any of it can be served, and
+    servable is the only thing the feed cares about."""
+    import inspect
+
+    import main
+    src = inspect.getsource(main.collect_news)
+    assert "[CYCLE]" in src and "servable" in src

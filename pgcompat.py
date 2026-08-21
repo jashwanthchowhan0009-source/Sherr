@@ -50,6 +50,7 @@ from __future__ import annotations
 import logging
 import re
 import threading
+from collections.abc import Mapping
 from urllib.parse import urlsplit, urlunsplit
 
 log = logging.getLogger("sherbyte.pg")
@@ -137,6 +138,53 @@ _SUBS = (
     (re.compile(r"\bADD\s+COLUMN\s+(?!IF\s+NOT\s+EXISTS)", re.I),
      "ADD COLUMN IF NOT EXISTS "),
 )
+
+
+# :name -> %(name)s. Skipped inside literals, and ::cast is not a placeholder.
+_NAMED = re.compile(r"(?<!:):([A-Za-z_][A-Za-z0-9_]*)")
+
+
+def named_to_pyformat(sql: str) -> str:
+    """:url -> %(url)s, for the callers that bind a dict instead of a tuple.
+
+    sqlite3 accepts :name with a dict; psycopg wants %(name)s. _insert_with_dedup
+    binds all nineteen article columns this way, so without this EVERY ingest
+    insert raised, was swallowed by a debug-level except, and the collector
+    logged "0 new articles inserted" forever while looking healthy.
+
+    ::text and ::interval must survive — a Postgres cast is not a parameter.
+    """
+    out, i, quote = [], 0, None
+    while i < len(sql):
+        c = sql[i]
+        if quote:
+            if c == "'" == quote and i + 1 < len(sql) and sql[i + 1] == "'":
+                out.append("''")
+                i += 2
+                continue
+            if c == quote:
+                quote = None
+            out.append(c)
+            i += 1
+            continue
+        if c in ("'", '"'):
+            quote = c
+            out.append(c)
+            i += 1
+            continue
+        if c == ":":
+            if sql[i:i + 2] == "::":              # a cast, not a placeholder
+                out.append("::")
+                i += 2
+                continue
+            m = _NAMED.match(sql, i)
+            if m:
+                out.append(f"%({m.group(1)})s")
+                i = m.end()
+                continue
+        out.append(c)
+        i += 1
+    return "".join(out)
 
 
 def translate(sql: str, bind: bool = True) -> str:
@@ -336,6 +384,7 @@ class Conn:
     """
 
     def __init__(self, dsn: str):
+        self._changes = 0
         self._pool = _get_pool(dsn)
         self._cm = self._pool.connection()
         self._conn = self._cm.__enter__()
@@ -345,14 +394,22 @@ class Conn:
         # out of step is the whole bug class: translate(bind=True) with params=None
         # leaves a literal %% in the SQL, and bind=False with params breaks any
         # query containing a literal %.
-        args = tuple(params) if params else None
-        q = translate(sql, bind=args is not None)
+        #
+        # A Mapping means the caller used :name placeholders and psycopg wants the
+        # dict passed through unchanged, not coerced to a tuple.
+        if isinstance(params, Mapping):
+            args = dict(params)
+            q = named_to_pyformat(translate(sql, bind=True))
+        else:
+            args = tuple(params) if params else None
+            q = translate(sql, bind=args is not None)
         cur = self._conn.cursor()
         try:
             cur.execute(q, args)
         except Exception as e:
             log.error("pg query failed: %s | %s", e, q[:200])
             raise
+        self._changes += max(cur.rowcount or 0, 0)
         rows, last = [], None
         if cur.description:
             rows = [Row(r) for r in cur.fetchall()]
@@ -380,6 +437,14 @@ class Conn:
             except Exception as e:
                 log.debug("ddl skipped: %s | %s", e, stmt[:90])
         return Cursor([], 0, None)
+
+    @property
+    def total_changes(self):
+        """sqlite3.Connection.total_changes. _insert_with_dedup returns
+        `conn.total_changes > 0` to report whether the row landed; without this
+        it raised AttributeError inside the same swallowed except that hid the
+        placeholder failure, so every insert silently reported "not inserted"."""
+        return self._changes
 
     def cursor(self):
         """sqlite3.Connection.cursor(). init_db() seeds the topics table through

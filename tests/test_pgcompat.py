@@ -8,6 +8,7 @@ environment cannot reach. So the rewrites are pinned here instead.
 """
 
 import os
+import re
 import sys
 
 import pytest
@@ -296,7 +297,17 @@ class _PsycopgLike:
         self._log.append((q, p))
         if p is None:
             return
-        n = q.replace("%%", "").count("%s")
+        stripped = q.replace("%%", "")
+        if isinstance(p, dict):
+            # psycopg matches %(name)s against the mapping's keys.
+            need = set(re.findall(r"%\((\w+)\)s", stripped))
+            missing = need - set(p)
+            if missing:
+                raise AssertionError(f"no value for {sorted(missing)}: {q}")
+            if not need:
+                raise AssertionError(f"dict params but no named placeholders: {q}")
+            return
+        n = len(re.findall(r"%s", re.sub(r"%\(\w+\)s", "", stripped)))
         if n != len(p):
             raise AssertionError(
                 f"query has {n} placeholders but {len(p)} parameters: {q}")
@@ -500,3 +511,59 @@ def test_configure_survives_a_connection_that_rejects_the_attribute():
     s = Stubborn()
     pgcompat._configure(s)
     assert len(s.sql) == 2
+
+
+# ─── named placeholders: what silently killed ingestion ──────────────────────
+def test_named_placeholders_are_converted():
+    """_insert_with_dedup binds all nineteen article columns as :name with a
+    dict. sqlite3 accepts that; psycopg wants %(name)s. Untranslated, every
+    ingest insert raised into a debug-level except and the collector logged
+    "0 new articles inserted" forever while looking healthy."""
+    from pgcompat import named_to_pyformat
+    assert named_to_pyformat("INSERT INTO a(url) VALUES(:url)") == \
+        "INSERT INTO a(url) VALUES(%(url)s)"
+
+
+def test_a_postgres_cast_is_not_mistaken_for_a_placeholder():
+    """::text and ::interval are casts. Rewriting them would corrupt every query
+    the datetime translation produces."""
+    from pgcompat import named_to_pyformat
+    out = named_to_pyformat("SELECT (now() + %s::interval)::text FROM a")
+    assert out == "SELECT (now() + %s::interval)::text FROM a"
+
+
+def test_a_colon_inside_a_literal_is_left_alone():
+    from pgcompat import named_to_pyformat
+    out = named_to_pyformat("SELECT * FROM a WHERE t='12:30:00' AND u=:user")
+    assert "'12:30:00'" in out and "%(user)s" in out
+
+
+def test_the_whole_ingest_insert_translates(conn):
+    """The real statement, all nineteen columns, end to end."""
+    cols = ("url title_hash headline source_headline status summary_60 full_body "
+            "source_summary when_info where_info what_info how_info image_url "
+            "source_image_url source_name pillar_id micro_tags scope published_at"
+            ).split()
+    sql = ("INSERT OR IGNORE INTO articles (" + ", ".join(cols) + ") VALUES(" +
+           ", ".join(f":{c}" for c in cols) + ")")
+    conn.execute(sql, {c: "v" for c in cols})
+    q = conn.log[-1][0]
+    assert q.count("%(") == 19
+    assert not re.search(r"(?<!:):[a-z_]+", q)
+    assert q.strip().endswith("ON CONFLICT DO NOTHING")
+
+
+def test_dict_params_reach_the_driver_as_a_dict(conn):
+    """psycopg matches %(name)s against a Mapping; coercing to a tuple loses the
+    names entirely."""
+    conn.execute("INSERT INTO a(url) VALUES(:url)", {"url": "https://e/1"})
+    assert conn.log[-1][1] == {"url": "https://e/1"}
+
+
+def test_total_changes_reports_written_rows(conn):
+    """_insert_with_dedup returns `conn.total_changes > 0`. Without the attribute
+    it raised AttributeError inside the same swallowed except that hid the
+    placeholder failure, so every insert reported "not inserted"."""
+    before = conn.total_changes
+    conn.execute("INSERT INTO a(url) VALUES(?)", ("https://e/1",))
+    assert conn.total_changes > before

@@ -4821,6 +4821,7 @@ function articleImage(a, cls) {
                 (cls || '') + "')";
   return `<figure class="img-wrap${isThumb ? ' is-thumb' : ''}">
     <img class="${cls || ''}" src="${plan.url}" loading="lazy" alt=""
+         referrerpolicy="no-referrer"
          data-aid="${bEsc(String((a && a.id) || ''))}"
          data-acat="${bEsc(String((a && a.category) || ''))}"
          onerror="${onerr}">
@@ -5396,13 +5397,23 @@ async function loadFeed(reset = false) {
   // First page: show cached headlines instantly if we have them (so a cold
   // backend never shows a blank skeleton / "Waking" wall); else a skeleton.
   // Wrapped because this runs before the try/finally that clears the mutex.
+  //
+  // `reset`, not `feedPage === 1`. An infinite-scroll call is loadFeed(false),
+  // and if feedPage is still 1 — page one reported has_more, then the next
+  // request failed, or the retry path put it back — it took this branch and
+  // rebuilt the page from scratch. That is the scroll-wipes-the-feed bug: the
+  // articles on screen were replaced by a skeleton and then, when the fetch
+  // came back empty, by "No published stories yet". A continuation appends; it
+  // never clears.
+  let cachedShown = false;
   try {
-    if (feedPage === 1) {
+    if (reset) {
       const cached = _isDefaultFeedView() ? _readFeedCache() : null;
       if (cached) {
         c.innerHTML = '';
         if (curChip === 'all') renderSectionTabs(c);
         cached.forEach(a => { try { renderStandardCard(normalizeArticle(a), c); } catch (e) {} });
+        cachedShown = cached.length > 0;
       } else {
         c.innerHTML = '<div class="skel skel-hero"></div>' +
           Array(4).fill('<div class="skel skel-card"></div>').join('');
@@ -5427,7 +5438,7 @@ async function loadFeed(reset = false) {
     let data = await api(url, { timeout: 45000 });   // long enough to ride a free-tier cold start
     // Region soft-fallback: if a scoped fetch is empty on page 1, broaden so the
     // feed never starves (e.g. few 'local' stories right now).
-    if (sc && feedPage === 1 && !(data.articles || []).length) {
+    if (sc && reset && !(data.articles || []).length) {
       data = await api(url.replace(sc, ''), { timeout: 45000 });
     }
     feedRetried = false; feedRetryCount = 0;   // server reached — reset cold-start retry budget
@@ -5441,11 +5452,11 @@ async function loadFeed(reset = false) {
       shownFeedIds.add(id);
       return true;
     });
-    if (feedPage === 1 && articles.length && _isDefaultFeedView()) _writeFeedCache(articles);
-    if (feedPage === 1 && articles[0]) feedTopId = articles[0].id;
+    if (reset && articles.length && _isDefaultFeedView()) _writeFeedCache(articles);
+    if (reset && articles[0]) feedTopId = articles[0].id;
 
-    // Fetch continue-reading article only on first page if logged in
-    if (feedPage === 1 && ST.token) {
+    // Fetch continue-reading article only on the first page if logged in
+    if (reset && ST.token) {
       try {
         const cr = await api('/me/continue');
         continueArticle = cr.article ? normalizeArticle(cr.article) : null;
@@ -5455,8 +5466,8 @@ async function loadFeed(reset = false) {
     homeArticles = homeArticles.concat(articles);
     structuredFeedData = homeArticles;
 
-    // First page → rebuild with section tabs + hero + trending strip + standards
-    if (feedPage === 1) {
+    // Full rebuild only on a reset — see the note above the skeleton block.
+    if (reset) {
       c.innerHTML = '';
       if (curChip === 'all') renderSectionTabs(c);
 
@@ -5464,6 +5475,9 @@ async function loadFeed(reset = false) {
         // The request succeeded and returned zero rows — that is the server
         // holding no published articles, not a connection problem. Saying so is
         // the whole point; a placeholder card here would hide a real outage.
+        // If we already had a cached page rendered, keep it: an empty refresh is
+        // not a reason to take away what the reader was reading.
+        if (cachedShown) { feedExhausted = true; return; }
         c.insertAdjacentHTML('beforeend',
           `<div class="empty-state">
             <div class="empty-state-ico">📰</div>
@@ -6075,8 +6089,13 @@ async function renderExpCatSection(cat, feed, count) {
   sec.querySelector('.exp-cat-sec-all').onclick = () => gotoCategory(cat);
   const row = sec.querySelector('.exp-srow');
   try {
-    const data = _expBalanced && _expBalanced[cat]
-      ? { articles: _expBalanced[cat] }
+    // .length, not just presence: /explore/pillars returns [] for a pillar with
+    // nothing in the current scope, and an empty array is truthy — so every
+    // category rendered "No stories yet" instead of falling back to the
+    // unfiltered query that would have found the articles.
+    const bal = _expBalanced && _expBalanced[cat];
+    const data = (bal && bal.length)
+      ? { articles: bal }
       : await api(`/explore?category=${cat}&page=1&limit=14`);
     const arts = (data.articles || []).map(normalizeArticle).filter(a => a.id);
     row.innerHTML = '';
@@ -8853,7 +8872,7 @@ function renderHomeHeadlines() {
 async function ensureHeadlines() {
   if (window._snapHeadlines === undefined) {
     try {
-      const snap = await api('/explore/snapshot', { timeout: 15000 });
+      const snap = await api('/explore/snapshot', { timeout: 45000 });
       window._snapHeadlines = (snap.news_top && snap.news_top.data) || null;
     } catch (e) { window._snapHeadlines = null; }
   }
@@ -8866,7 +8885,7 @@ async function loadSnapshot() {
   host.innerHTML = `<div class="snap-sec snap-slab"><div class="snap-empty">Loading live data…</div></div>`;
   let snap;
   try {
-    snap = await api('/explore/snapshot', { timeout: 15000 });
+    snap = await api('/explore/snapshot', { timeout: 45000 });
   } catch (e) {
     host.innerHTML = `<div class="snap-sec snap-slab"><div class="snap-empty">
       Couldn’t reach the data service — ${bEsc(e.message || 'error')}</div></div>`;
