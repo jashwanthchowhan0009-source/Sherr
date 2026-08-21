@@ -43,7 +43,22 @@ PILLAR_META = {
 
 
 # ─── DB helpers ─────────────────────────────────────────────────────────
+import pgcompat  # noqa: E402
+
+_DSN = (os.getenv("DATABASE_URL") or os.getenv("SHERR_I_DATABASE_URL") or "").strip()
+
+
 def _db():
+    """Same backend as main.get_db().
+
+    This opened sqlite3 directly, which meant that once DATABASE_URL was set
+    every screen-time row was still written to Render's ephemeral file — created
+    fresh on each deploy, read by nobody, and silently discarded. Its schema uses
+    the same AUTOINCREMENT and datetime('now') that pgcompat already translates,
+    so routing it through the shim needs no query changes.
+    """
+    if pgcompat.is_postgres_url(_DSN):
+        return pgcompat.connect(_DSN)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn

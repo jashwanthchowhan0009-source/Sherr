@@ -17,12 +17,20 @@ destroyed on every deploy and the feed resets to zero. That is not something the
 app can work around — the storage has to move off local disk.
 
 WHAT IS TRANSLATED
-    ?              -> $1, $2, …      (skipping ? inside string literals)
+    ?                 -> %s          (skipping ? inside string literals)
+    literal %         -> %%          (ONLY when parameters are bound)
     INSERT OR IGNORE  -> INSERT … ON CONFLICT DO NOTHING
     INSERT OR REPLACE -> INSERT … ON CONFLICT DO NOTHING   (see caveat below)
-    datetime('now')   -> now()
+    datetime('now')   -> now()::text
+    datetime('now',?) -> (now() + ?::interval)::text
+    ADD COLUMN        -> ADD COLUMN IF NOT EXISTS
     AUTOINCREMENT     -> (dropped; the schema uses SERIAL)
     INTEGER PRIMARY KEY AUTOINCREMENT -> SERIAL PRIMARY KEY
+
+PLACEHOLDER STYLE IS psycopg's, NOT asyncpg's. %s, not $1. They are different
+drivers with different syntaxes, and $1 in a psycopg query is not a placeholder
+at all — it reports "0 placeholders but N parameters were passed" and every
+parameterised query in the app fails at runtime while DDL keeps working.
 
 CAVEATS, stated rather than hidden:
   * INSERT OR REPLACE becomes DO NOTHING, not DO UPDATE, because the update
@@ -64,32 +72,40 @@ def sanitize_dsn(url: str) -> str:
 
 
 # ─── SQL translation ──────────────────────────────────────────────────────────
-def qmark_to_dollar(sql: str) -> str:
-    """?  ->  $1, $2 …, leaving ? inside quoted literals alone.
+def qmark_to_pyformat(sql: str, escape_percent: bool = True) -> str:
+    """?  ->  %s, leaving ? inside quoted literals alone.
 
-    A naive replace corrupts any query containing a literal question mark, e.g.
-    a LIKE pattern or a seeded headline.
+    psycopg speaks pyformat (%s). It does NOT understand $1/$2 — that is
+    asyncpg's style, and feeding it to psycopg yields "the query has 0
+    placeholders but N parameters were passed", because to psycopg there is no
+    placeholder in the string at all.
+
+    THE PERCENT SIGN IS THE OTHER HALF OF THIS. When psycopg binds parameters it
+    scans the whole query for %, so a literal one — `LIKE '%sherrbyte%'` — is read
+    as a malformed placeholder. It has to be doubled. But only when binding:
+    with no parameters psycopg does no interpolation at all, and doubling then
+    would put a literal %% into the SQL. Hence the flag rather than always-on.
     """
-    out, n, i, quote = [], 0, 0, None
+    out, i, quote = [], 0, None
+    pct = "%%" if escape_percent else "%"
     while i < len(sql):
         c = sql[i]
         if quote:
+            # '' inside a single-quoted literal is an escaped quote, not the end
+            if c == "'" == quote and i + 1 < len(sql) and sql[i + 1] == "'":
+                out.append("''")
+                i += 2
+                continue
             if c == quote:
-                # '' inside a single-quoted literal is an escaped quote
-                if c == "'" and i + 1 < len(sql) and sql[i + 1] == "'":
-                    out.append("''")
-                    i += 2
-                    continue
                 quote = None
-            out.append(c)
+            out.append(pct if c == "%" else c)
         elif c in ("'", '"'):
             quote = c
             out.append(c)
         elif c == "?":
-            n += 1
-            out.append(f"${n}")
+            out.append("%s")
         else:
-            out.append(c)
+            out.append(pct if c == "%" else c)
         i += 1
     return "".join(out)
 
@@ -120,7 +136,12 @@ _SUBS = (
 )
 
 
-def translate(sql: str) -> str:
+def translate(sql: str, bind: bool = True) -> str:
+    """Rewrite one statement for Postgres.
+
+    `bind` says whether parameters will be passed with it, which decides only
+    whether literal % is doubled — see qmark_to_pyformat.
+    """
     had_or = re.search(r"\bINSERT\s+OR\s+(IGNORE|REPLACE)\b", sql, re.I)
     for rx, rep in _SUBS:
         sql = rx.sub(rep, sql)
@@ -129,7 +150,7 @@ def translate(sql: str) -> str:
         # arbitrary SQL is not reliable, and a wrong conflict target is worse
         # than a skipped duplicate.
         sql = sql.rstrip().rstrip(";") + " ON CONFLICT DO NOTHING"
-    return qmark_to_dollar(sql)
+    return qmark_to_pyformat(sql, escape_percent=bind)
 
 
 class Row(dict):
@@ -283,10 +304,15 @@ class Conn:
         self._conn = self._cm.__enter__()
 
     def execute(self, sql, params=()):
-        q = translate(sql)
+        # bind mirrors exactly what is handed to psycopg below. Getting these two
+        # out of step is the whole bug class: translate(bind=True) with params=None
+        # leaves a literal %% in the SQL, and bind=False with params breaks any
+        # query containing a literal %.
+        args = tuple(params) if params else None
+        q = translate(sql, bind=args is not None)
         cur = self._conn.cursor()
         try:
-            cur.execute(q, tuple(params) if params else None)
+            cur.execute(q, args)
         except Exception as e:
             log.error("pg query failed: %s | %s", e, q[:200])
             raise
@@ -300,9 +326,10 @@ class Conn:
         return Cursor(rows, cur.rowcount, last)
 
     def executemany(self, sql, seq):
-        q = translate(sql)
+        rows = [tuple(p) for p in seq]
+        q = translate(sql, bind=True)          # executemany always binds
         cur = self._conn.cursor()
-        cur.executemany(q, [tuple(p) for p in seq])
+        cur.executemany(q, rows)
         return Cursor([], cur.rowcount, None)
 
     def executescript(self, script):
@@ -310,7 +337,9 @@ class Conn:
         # so one CREATE TABLE that already exists cannot abort the rest.
         for stmt in [s.strip() for s in script.split(";") if s.strip()]:
             try:
-                self._conn.cursor().execute(translate(stmt))
+                # bind=False: DDL takes no parameters, so psycopg does no
+                # interpolation and a literal % must stay a single %.
+                self._conn.cursor().execute(translate(stmt, bind=False))
             except Exception as e:
                 log.debug("ddl skipped: %s | %s", e, stmt[:90])
         return Cursor([], 0, None)

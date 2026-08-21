@@ -15,32 +15,63 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from pgcompat import (  # noqa: E402
-    Row, is_postgres_url, qmark_to_dollar, sanitize_dsn, translate,
+    Row, is_postgres_url, qmark_to_pyformat, sanitize_dsn, translate,
 )
 
 
 # ─── placeholders ─────────────────────────────────────────────────────────────
-def test_qmarks_become_numbered_parameters():
-    assert qmark_to_dollar("SELECT * FROM a WHERE x=? AND y=?") == \
-        "SELECT * FROM a WHERE x=$1 AND y=$2"
+def test_qmarks_become_pyformat_placeholders():
+    """psycopg speaks %s. $1 is asyncpg's syntax and psycopg does not see it as a
+    placeholder at all — it reports "0 placeholders but N parameters were
+    passed", so every parameterised query fails while DDL keeps working."""
+    assert qmark_to_pyformat("SELECT * FROM a WHERE x=? AND y=?") == \
+        "SELECT * FROM a WHERE x=%s AND y=%s"
+
+
+def test_no_dollar_placeholders_are_ever_emitted():
+    out = translate("SELECT COUNT(*) as c FROM articles WHERE pillar_id=?")
+    assert "$1" not in out and "%s" in out
 
 
 def test_a_question_mark_inside_a_literal_is_not_a_placeholder():
-    """A LIKE pattern or a seeded headline can contain '?'. Renumbering it
-    silently shifts every following parameter by one."""
-    out = qmark_to_dollar("SELECT * FROM a WHERE h LIKE '%what?%' AND id=?")
-    assert out == "SELECT * FROM a WHERE h LIKE '%what?%' AND id=$1"
+    """A LIKE pattern or a seeded headline can contain '?'. Turning it into a
+    placeholder adds one psycopg then demands a parameter for."""
+    out = qmark_to_pyformat("SELECT * FROM a WHERE h LIKE '%what?%' AND id=?",
+                            escape_percent=False)
+    assert out == "SELECT * FROM a WHERE h LIKE '%what?%' AND id=%s"
 
 
 def test_escaped_quotes_inside_a_literal_do_not_end_it():
-    out = qmark_to_dollar("SELECT * FROM a WHERE h='it''s a ? really' AND id=?")
-    assert out.endswith("id=$1")
+    out = qmark_to_pyformat("SELECT * FROM a WHERE h='it''s a ? really' AND id=?")
+    assert out.endswith("id=%s")
     assert "it''s a ? really" in out
 
 
 def test_double_quoted_identifiers_are_left_alone():
-    out = qmark_to_dollar('SELECT "we?rd" FROM a WHERE id=?')
-    assert out == 'SELECT "we?rd" FROM a WHERE id=$1'
+    out = qmark_to_pyformat('SELECT "we?rd" FROM a WHERE id=?')
+    assert out == 'SELECT "we?rd" FROM a WHERE id=%s'
+
+
+# ─── the percent sign, which is the other half of pyformat ───────────────────
+def test_a_literal_percent_is_doubled_when_parameters_are_bound():
+    """psycopg scans the whole query for % when binding, so LIKE '%sherrbyte%'
+    reads as a malformed placeholder unless it is doubled."""
+    out = translate("SELECT * FROM a WHERE u NOT LIKE '%sherrbyte%' AND id=?",
+                    bind=True)
+    assert "'%%sherrbyte%%'" in out and "id=%s" in out
+
+
+def test_a_literal_percent_is_left_alone_with_no_parameters():
+    """With no parameters psycopg does no interpolation, so doubling would put a
+    literal %% into the SQL and the LIKE would stop matching."""
+    out = translate("UPDATE a SET image_url='' WHERE image_url NOT LIKE '%sherrbyte%'",
+                    bind=False)
+    assert "'%sherrbyte%'" in out and "%%" not in out
+
+
+def test_like_patterns_passed_as_parameters_need_no_escaping_in_the_sql():
+    out = translate("SELECT * FROM a WHERE headline LIKE ? OR summary_60 LIKE ?")
+    assert out.count("%s") == 2 and "%%" not in out
 
 
 # ─── schema ───────────────────────────────────────────────────────────────────
@@ -62,8 +93,8 @@ def test_datetime_with_a_bound_modifier_becomes_interval_arithmetic():
     """datetime('now', ?) with '-7 days' is a date computation, not a constant.
     Collapsing it to now() would silently return today's rows only."""
     out = translate("SELECT * FROM a WHERE published_at >= datetime('now', ?) AND x=?")
-    assert "(now() + $1::interval)::text" in out
-    assert "x=$2" in out                       # numbering survives the rewrite
+    assert "(now() + %s::interval)::text" in out
+    assert out.count("%s") == 2                 # both placeholders survive
 
 
 def test_datetime_with_a_literal_modifier_keeps_the_interval():
@@ -85,7 +116,7 @@ def test_insert_or_x_becomes_on_conflict_do_nothing(verb):
     out = translate(f"INSERT OR {verb} INTO feeds(user_id, article_id) VALUES(?, ?)")
     assert out.startswith("INSERT INTO feeds")
     assert out.endswith("ON CONFLICT DO NOTHING")
-    assert "VALUES($1, $2)" in out
+    assert "VALUES(%s, %s)" in out
 
 
 def test_a_plain_insert_gains_no_conflict_clause():
@@ -246,3 +277,129 @@ def test_every_pooled_connection_gets_the_search_path():
 
     import pgcompat
     assert "configure=_configure" in inspect.getsource(pgcompat._get_pool)
+
+
+# ─── end to end: the SQL and the parameters must agree at the driver ──────────
+class _PsycopgLike:
+    """Stands in for a psycopg cursor, enforcing the check that produced the
+    reported failure: with parameters, %% is consumed as an escaped literal and
+    the remaining %s must match the parameter count exactly. With params=None
+    psycopg does no placeholder processing at all, so the query goes verbatim."""
+
+    description = [("c",)]
+    rowcount = 1
+
+    def __init__(self, log):
+        self._log = log
+
+    def execute(self, q, p=None):
+        self._log.append((q, p))
+        if p is None:
+            return
+        n = q.replace("%%", "").count("%s")
+        if n != len(p):
+            raise AssertionError(
+                f"query has {n} placeholders but {len(p)} parameters: {q}")
+
+    def executemany(self, q, seq):
+        seq = list(seq)
+        self.execute(q, seq[0] if seq else None)
+
+    def fetchall(self):
+        return [{"c": 7}]
+
+
+@pytest.fixture
+def conn(monkeypatch):
+    import pgcompat
+    log = []
+
+    class Raw:
+        def cursor(self):
+            return _PsycopgLike(log)
+
+    class CM:
+        def __enter__(self):
+            return Raw()
+
+        def __exit__(self, *a):
+            return False
+
+    class Pool:
+        def connection(self):
+            return CM()
+
+    monkeypatch.setattr(pgcompat, "_pool", Pool())
+    c = pgcompat.connect("postgresql://stub")
+    c.log = log
+    return c
+
+
+def test_the_reported_query_now_binds(conn):
+    """main.py:2637 — the failure that started this: 0 placeholders, 1 param."""
+    assert conn.execute(
+        "SELECT COUNT(*) as c FROM articles WHERE pillar_id=?", (3,)
+    ).fetchone()["c"] == 7
+    assert conn.log[-1][0].endswith("pillar_id=%s")
+
+
+def test_a_literal_percent_alongside_a_parameter(conn):
+    """'%sherrbyte%' contains the literal sequence %s. Undoubled, psycopg counts
+    it as a placeholder and the parameter count no longer matches."""
+    conn.execute("SELECT * FROM articles WHERE image_url NOT LIKE '%sherrbyte%' "
+                 "AND id=?", (1,))
+    assert "'%%sherrbyte%%'" in conn.log[-1][0]
+
+
+def test_a_literal_percent_with_no_parameters_is_sent_verbatim(conn):
+    """Doubling here would put a literal %% into the pattern and the LIKE would
+    stop matching — psycopg skips processing entirely when params is None."""
+    conn.execute("UPDATE articles SET image_url='' "
+                 "WHERE image_url NOT LIKE '%sherrbyte%'")
+    q, p = conn.log[-1]
+    assert p is None and "'%sherrbyte%'" in q and "%%" not in q
+
+
+def test_like_patterns_bound_as_parameters(conn):
+    conn.execute("SELECT * FROM articles WHERE headline LIKE ? OR summary_60 LIKE ?",
+                 ("%rbi%", "%rbi%"))
+    assert conn.log[-1][0].count("%s") == 2
+
+
+def test_interval_arithmetic_keeps_its_parameters_aligned(conn):
+    conn.execute("SELECT * FROM articles WHERE published_at >= datetime('now', ?) "
+                 "AND scope=?", ("-7 days", "global"))
+    assert "(now() + %s::interval)::text" in conn.log[-1][0]
+
+
+def test_insert_or_ignore_binds(conn):
+    conn.execute("INSERT OR IGNORE INTO topics (name, slug) VALUES (?,?)",
+                 ("AI", "ai"))
+    q = conn.log[-1][0]
+    assert "VALUES (%s,%s)" in q and q.endswith("ON CONFLICT DO NOTHING")
+
+
+def test_the_cursor_wrapper_translates_too(conn):
+    """conn.cursor().execute() is a second path to the driver, and it has to
+    translate exactly as conn.execute() does."""
+    conn.cursor().execute("INSERT INTO topics (name, slug) VALUES (?,?)",
+                          ("AI", "ai"))
+    assert "VALUES (%s,%s)" in conn.log[-1][0]
+
+
+def test_executemany_translates_too(conn):
+    conn.executemany("UPDATE articles SET status=? WHERE id=?",
+                     [("published", 1), ("published", 2)])
+    assert conn.log[-1][0] == "UPDATE articles SET status=%s WHERE id=%s"
+
+
+# ─── activity.py shares the backend ───────────────────────────────────────────
+def test_activity_follows_the_same_backend():
+    """activity.py opened sqlite3 directly, so with DATABASE_URL set every
+    screen-time row went to Render's ephemeral file — created fresh each deploy,
+    read by nobody."""
+    import inspect
+
+    import activity
+    src = inspect.getsource(activity._db)
+    assert "pgcompat.connect" in src and "is_postgres_url" in src
