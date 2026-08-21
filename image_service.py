@@ -1,7 +1,7 @@
 """
 image_service.py — article imagery with a safety switch.
 
-    IMAGE_MODE = stock | thumbnail | art        (default: stock)
+    IMAGE_MODE = stock | thumbnail | art        (default: thumbnail)
 
   stock      Pexels stock photography, queried on the article's top entity plus its
              pillar. Licensed for this use, so hotlinking the Pexels CDN is fine.
@@ -22,7 +22,8 @@ of image the reader is looking at.
 A NOTE ON `thumbnail`. Constrained, credited and linked is the strongest fair-dealing
 position, but it is a position, not an exemption: it is still the publisher's
 copyrighted image on our surface without a licence. `stock` carries no such exposure,
-which is why it is the default and why the switch exists.
+which is why the switch exists. The default is `thumbnail` because that is what
+this deployment has chosen to serve; set IMAGE_MODE=stock to take the safer one.
 """
 
 from __future__ import annotations
@@ -35,7 +36,10 @@ from typing import Optional
 
 log = logging.getLogger("sherbyte.images")
 
-IMAGE_MODE = (os.getenv("IMAGE_MODE") or "stock").strip().lower()
+# Must match main.py's default. These disagreed — "stock" here, "thumbnail"
+# there — so which imagery policy applied depended on which module happened
+# to read it. Unified on thumbnail, which is what the app actually serves.
+IMAGE_MODE = (os.getenv("IMAGE_MODE") or "thumbnail").strip().lower()
 PEXELS_API_KEY = (os.getenv("PEXELS_API_KEY") or "").strip()
 VALID_MODES = ("stock", "thumbnail", "art")
 

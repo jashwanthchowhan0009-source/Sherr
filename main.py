@@ -15,7 +15,7 @@ Fixes vs v4.1:
 Run: python main.py   or   uvicorn main:app --host 0.0.0.0 --port $PORT
 """
 
-import os, sys, json, math, hashlib, asyncio, logging, re, sqlite3, time
+import os, sys, json, math, hashlib, asyncio, logging, random, re, sqlite3, time
 import hmac as hmac_module
 import base64
 from datetime import datetime, timedelta, timezone
@@ -1099,7 +1099,7 @@ def _insert_with_dedup(conn, article: dict) -> bool:
     article.setdefault("source_image_url", "")
     article.setdefault("status", "pending_rewrite")
     try:
-        conn.execute("""
+        cur = conn.execute("""
             INSERT OR IGNORE INTO articles
             (url, title_hash, headline, source_headline, status, summary_60, full_body,
              source_summary, when_info, where_info, what_info, how_info, image_url,
@@ -1109,7 +1109,13 @@ def _insert_with_dedup(conn, article: dict) -> bool:
                    :how_info, :image_url, :source_image_url, :source_name, :pillar_id,
                    :micro_tags, :scope, :published_at)
         """, article)
-        return conn.total_changes > 0
+        # cur.rowcount, NOT conn.total_changes. total_changes is CUMULATIVE for
+        # the connection, so once a single row had ever landed it stayed > 0 and
+        # every subsequent call reported success — including the ones ON CONFLICT
+        # skipped as duplicates. That made "[CYCLE] inserted=N" count the whole
+        # batch every cycle regardless of what was actually written. rowcount is
+        # per-statement, and is 0 for a skipped duplicate on both backends.
+        return (cur.rowcount or 0) > 0
     except Exception as e:
         # WARNING, not debug. A broken INSERT here means the collector reports
         # "0 new articles inserted" every cycle while looking perfectly healthy —
@@ -1564,11 +1570,30 @@ app.include_router(markets_router)
 
 # ─── HELPERS ─────────────────────────────────────────────────────────────────
 def get_current_user(authorization: str = "") -> int:
+    """Lenient: public endpoints stay readable without a session."""
     if authorization and authorization.startswith("Bearer "):
         uid = verify_token(authorization[7:])
         if uid:
             return uid
     return 1  # Anonymous user default
+
+
+def require_user(authorization: str = "") -> int:
+    """Strict: for endpoints that describe a specific person.
+
+    The lenient path above turns a missing OR expired token into anonymous
+    uid=1, and when no row with that id exists the handler then answers 404
+    "User not found". A 404 is indistinguishable from a broken route, and the
+    client only refreshes its token on a 401 — so a stale session left the app
+    permanently signed out of itself instead of quietly renewing. 401 is both
+    the truth and the thing the client knows how to act on.
+    """
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(401, "Sign in to continue")
+    uid = verify_token(authorization[7:])
+    if not uid:
+        raise HTTPException(401, "Session expired — sign in again")
+    return uid
 
 
 def article_row_to_dict(row) -> dict:
@@ -1866,6 +1891,150 @@ async def explore_feed(
 
 
 # ─── Explore page snapshot ────────────────────────────────────────────────────
+# ─── /live/* ─────────────────────────────────────────────────────────────────
+# The Explore weather tile, the Word of the Day card and the dictionary lookup
+# have been calling these three since they were written; the routes were never
+# added, so all three 404'd and each tile sat on its loading state forever.
+#
+# explore_feeds already fetches weather and word_of_day on a schedule, but its
+# shapes are not these: it pins one latitude/longitude, and it returns the
+# definition flat while the card reads meanings[0].part_of_speech. Rather than
+# reshape a cached payload into something it is not, these fetch directly — the
+# weather tile is per-reader by nature (it takes the browser's coordinates) and
+# a dictionary lookup is a user action, neither of which a shared 12-hour cache
+# can answer.
+
+# Reused from the Explore pipeline rather than kept as a second copy — a
+# divergent list would mean the tile and the card disagree about the day's word.
+def _word_list() -> list:
+    try:
+        import explore_feeds                                  # noqa: PLC0415
+        words = getattr(explore_feeds._mod, "WORD_LIST", None)
+        if words:
+            return list(words)
+    except Exception as e:
+        log.warning("[LIVE] word list unavailable, using fallback: %s", e)
+    return ["serendipity", "ephemeral", "quixotic", "lucid", "candid",
+            "resilient", "eloquent", "pragmatic", "nuance", "salient"]
+
+
+WORD_OF_DAY_LIST = _word_list()
+_wod_cache: dict = {}
+
+
+def _dict_payload(word: str, entry: dict) -> dict:
+    """dictionaryapi.dev -> the shape the cards read.
+
+    The card does meanings[0].part_of_speech; the upstream nests definitions one
+    level deeper than that. Flattening it here keeps that knowledge in one place.
+    """
+    out = []
+    for m in (entry.get("meanings") or [])[:4]:
+        d0 = (m.get("definitions") or [{}])[0]
+        out.append({"part_of_speech": m.get("partOfSpeech") or "",
+                    "definition": d0.get("definition") or "",
+                    "example": d0.get("example") or ""})
+    return {"word": entry.get("word") or word,
+            "phonetic": entry.get("phonetic") or next(
+                (p.get("text") for p in (entry.get("phonetics") or [])
+                 if p.get("text")), ""),
+            "meanings": out}
+
+
+async def _lookup_word(word: str) -> dict:
+    """404 when the word genuinely has no entry, 503 when the upstream is the
+    problem. Letting a transport error escape turns an outage into an unhandled
+    500 with a stack trace, and tells the caller nothing about which it was."""
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.get(
+                f"https://api.dictionaryapi.dev/api/v2/entries/en/{word}")
+    except Exception as e:
+        log.warning("[LIVE] dictionary upstream failed for %r: %s", word, e)
+        raise HTTPException(503, f"dictionary upstream unavailable: {e}")
+    if r.status_code == 404:
+        raise HTTPException(404, f"no dictionary entry for {word!r}")
+    if r.status_code != 200:
+        raise HTTPException(503, f"dictionary upstream returned {r.status_code}")
+    try:
+        return _dict_payload(word, (r.json() or [{}])[0])
+    except Exception as e:
+        raise HTTPException(503, f"unreadable dictionary payload: {e}")
+
+
+@app.get("/live/weather")
+async def live_weather(lat: float = Query(19.076), lon: float = Query(72.877)):
+    """Current conditions for the reader's coordinates (Mumbai if not supplied)."""
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.get("https://api.open-meteo.com/v1/forecast", params={
+                "latitude": lat, "longitude": lon,
+                "current": "temperature_2m,relative_humidity_2m,weather_code,"
+                           "wind_speed_10m,apparent_temperature",
+                "daily": "temperature_2m_max,temperature_2m_min",
+                "timezone": "auto", "forecast_days": 3})
+            r.raise_for_status()
+            d = r.json() or {}
+            cur = d.get("current") or {}
+
+            # The tile shows a place name, and coordinates are not one. A failed
+            # reverse geocode costs the label, not the temperature.
+            city = ""
+            try:
+                g = await client.get(
+                    "https://geocoding-api.open-meteo.com/v1/search",
+                    params={"latitude": lat, "longitude": lon, "count": 1})
+                if g.status_code == 200:
+                    hit = ((g.json() or {}).get("results") or [{}])[0]
+                    city = hit.get("name") or ""
+            except Exception:
+                pass
+
+        daily = d.get("daily") or {}
+        return {
+            "lat": lat, "lon": lon, "city": city,
+            "temp_c": cur.get("temperature_2m"),
+            "feels_c": cur.get("apparent_temperature"),
+            "humidity": cur.get("relative_humidity_2m"),
+            "wind_kph": cur.get("wind_speed_10m"),
+            "code": cur.get("weather_code"),
+            "high_c": (daily.get("temperature_2m_max") or [None])[0],
+            "low_c": (daily.get("temperature_2m_min") or [None])[0],
+        }
+    except Exception as e:
+        log.warning("[LIVE] weather failed: %s", e)
+        raise HTTPException(503, f"weather upstream unavailable: {e}")
+
+
+@app.get("/live/word-of-day")
+async def live_word_of_day():
+    """One word per UTC day, so every reader sees the same one and a restart
+    does not reshuffle it. Cached because it cannot change within the day."""
+    day = int(time.time() // 86400)
+    hit = _wod_cache.get(day)
+    if hit:
+        return hit
+    word = WORD_OF_DAY_LIST[random.Random(day).randrange(len(WORD_OF_DAY_LIST))]
+    try:
+        payload = await _lookup_word(word)
+    except HTTPException:
+        raise                       # already the right status and message
+    except Exception as e:
+        log.warning("[LIVE] word-of-day failed for %r: %s", word, e)
+        raise HTTPException(503, f"dictionary upstream unavailable: {e}")
+    _wod_cache.clear()          # only ever one day in flight
+    _wod_cache[day] = payload
+    return payload
+
+
+@app.get("/live/dictionary/{word}")
+async def live_dictionary(word: str):
+    w = (word or "").strip().lower()[:64]
+    if not w or not w.replace("-", "").replace("'", "").isalpha():
+        raise HTTPException(400, "word must be alphabetic")
+    return await _lookup_word(w)
+
+
 @app.get("/explore/snapshot")
 async def explore_snapshot():
     """All Explore sections from cache in one call — no upstream API on this path."""
@@ -2150,12 +2319,14 @@ async def search(q: str = Query(""), authorization: str = Header("")):
 
 @app.get("/me")
 async def get_me(authorization: str = Header("")):
-    uid = get_current_user(authorization)
+    uid = require_user(authorization)
     conn = get_db()
     user = conn.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone()
     if not user:
+        # A valid token for a row that is gone is also a dead session, not a
+        # missing page.
         conn.close()
-        raise HTTPException(404, "User not found")
+        raise HTTPException(401, "Session no longer valid — sign in again")
     prefs = conn.execute(
         "SELECT topic_name, pillar_id, weight FROM user_preferences WHERE user_id=? ORDER BY weight DESC",
         (uid,)

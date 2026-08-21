@@ -1,6 +1,12 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
+<!-- Publisher CDNs commonly refuse hotlinked requests by Referer, and a blocked
+     image fires onerror and falls back to category art — which is exactly what
+     "the app has no images" looked like. Set once for the document so it covers
+     every <img referrerpolicy="no-referrer">, including ones added later; the per-tag attribute is belt and
+     braces. Nothing here depends on sending a Referer. -->
+<meta name="referrer" content="no-referrer">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>SherrByte</title>
@@ -869,10 +875,10 @@ header {
 }
 .exp-hero:active { transform: scale(0.97); }
 .exp-hero img { width: 100%; height: 100%; object-fit: cover; display: block; }
-/* articleImage() wraps its <img> in a <figure>, and heroArt() returns a div;
+/* articleImage() wraps its <img referrerpolicy="no-referrer"> in a <figure>, and heroArt() returns a div;
    both have to fill the hero box or the bulletin collapses to zero height. */
 .exp-hero .img-wrap, .exp-hero .gen-art { position:absolute; inset:0; height:100%; }
-/* Feed + hero cards: the <figure> replaces a plain <img>, so it inherits the
+/* Feed + hero cards: the <figure> replaces a plain <img referrerpolicy="no-referrer">, so it inherits the
    sizing the old markup carried inline. */
 .nc .img-wrap { width:100%; aspect-ratio:16/9; border-radius:12px;
   overflow:hidden; margin:0 0 12px; }
@@ -2899,7 +2905,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 <!-- ════════ ONBOARDING ════════ -->
 <div id="ob-screen">
   <div class="ob-top">
-    <div class="ob-top-logo"><img src="tiger-logo.png" alt="" onerror="this.outerHTML='⚡'"></div>
+    <div class="ob-top-logo"><img referrerpolicy="no-referrer" src="tiger-logo.png" alt="" onerror="this.outerHTML='⚡'"></div>
     <div class="ob-top-brand">Sherr<span>Byte</span></div>
   </div>
   <div class="ob-content">
@@ -2976,7 +2982,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 <!-- SPLASH (logo-only cinematic intro) -->
 <div id="splash" class="go" aria-hidden="true">
   <div class="sp3-wrap">
-    <img class="sp3-logo" src="tiger-logo.png" alt="">
+    <img referrerpolicy="no-referrer" class="sp3-logo" src="tiger-logo.png" alt="">
     <div class="sp3-sweep"></div>
     <div class="sp3-glow"></div>
   </div>
@@ -2998,7 +3004,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 <!-- SIDEBAR -->
 <div class="sidebar" id="sidebar">
   <div class="sb-head">
-    <div class="sb-ava"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%231565e8'/%3E%3Cstop offset='1' stop-color='%238E24AA'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='100' height='100' fill='url(%23g)'/%3E%3Ccircle cx='50' cy='40' r='15' fill='%23fff' opacity='.92'/%3E%3Cpath d='M24 80c0-14 12-22 26-22s26 8 26 22' fill='%23fff' opacity='.92'/%3E%3C/svg%3E" alt="" id="sb-ava-img"></div>
+    <div class="sb-ava"><img referrerpolicy="no-referrer" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%231565e8'/%3E%3Cstop offset='1' stop-color='%238E24AA'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='100' height='100' fill='url(%23g)'/%3E%3Ccircle cx='50' cy='40' r='15' fill='%23fff' opacity='.92'/%3E%3Cpath d='M24 80c0-14 12-22 26-22s26 8 26 22' fill='%23fff' opacity='.92'/%3E%3C/svg%3E" alt="" id="sb-ava-img"></div>
     <div>
       <div class="prof-name-row"><div class="sb-name" id="sb-name">SherrByte User</div></div>
       <div class="sb-handle" id="sb-handle">@user</div>
@@ -3031,7 +3037,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 <header id="hdr">
   <div class="h-left">
     <div class="hbtn tap" onclick="sbOpen()"><i class="fa-solid fa-bars-staggered"></i></div>
-    <div class="h-logo"><img src="tiger-logo.png" alt="" style="width:100%;height:100%;object-fit:contain;border-radius:8px" onerror="this.outerHTML='⚡'"></div>
+    <div class="h-logo"><img referrerpolicy="no-referrer" src="tiger-logo.png" alt="" style="width:100%;height:100%;object-fit:contain;border-radius:8px" onerror="this.outerHTML='⚡'"></div>
     <div class="h-brand" id="h-brand">Sherr<span>Byte</span></div>
     <div class="h-page" id="h-page"></div>
   </div>
@@ -3039,7 +3045,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
     <div class="hico tap" id="h-search" style="display:none" onclick="openSearch()"><i class="fa-solid fa-magnifying-glass"></i></div>
     <div class="hico tap" id="h-theme" onclick="toggleTheme()"><i class="fa-solid fa-moon"></i></div>
     <div class="h-avatar tap" onclick="navTo('profile')">
-      <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%231565e8'/%3E%3Cstop offset='1' stop-color='%238E24AA'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='100' height='100' fill='url(%23g)'/%3E%3Ccircle cx='50' cy='40' r='15' fill='%23fff' opacity='.92'/%3E%3Cpath d='M24 80c0-14 12-22 26-22s26 8 26 22' fill='%23fff' opacity='.92'/%3E%3C/svg%3E" alt="">
+      <img referrerpolicy="no-referrer" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%231565e8'/%3E%3Cstop offset='1' stop-color='%238E24AA'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='100' height='100' fill='url(%23g)'/%3E%3Ccircle cx='50' cy='40' r='15' fill='%23fff' opacity='.92'/%3E%3Cpath d='M24 80c0-14 12-22 26-22s26 8 26 22' fill='%23fff' opacity='.92'/%3E%3C/svg%3E" alt="">
     </div>
   </div>
 </header>
@@ -3260,7 +3266,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
       } else {
         list.innerHTML=shown.map(function(a,i){
           var loc=axDetect(a); if(loc) locs.push({idx:i,key:loc});
-          var img=ownImage(a)?('<img class="ax-card-img" loading="lazy" src="'+a.image_url+'" alt="" onerror="this.style.visibility=\'hidden\'">')
+          var img=ownImage(a)?('<img referrerpolicy="no-referrer" class="ax-card-img" loading="lazy" src="'+a.image_url+'" alt="" onerror="this.style.visibility=\'hidden\'">')
                               :('<div class="ax-card-img"></div>');
           var locChip=loc&&AX_LOC[loc]?('<span class="ax-loc"><i class="fa-solid fa-location-dot"></i>'+AX_LOC[loc].l+'</span> · '):'';
           var meta=locChip+((a.source||'Global'))+' · '+(typeof timeAgo==='function'?(timeAgo(a.published_at)||'now'):'now');
@@ -3309,7 +3315,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   </div>
   <div class="ao-scroll" id="ao-scroll">
     <div class="ao-hero">
-      <img id="ao-img" src="" alt="" loading="lazy">
+      <img referrerpolicy="no-referrer" id="ao-img" src="" alt="" loading="lazy">
       <div class="ao-hero-overlay"></div>
       <div class="ao-hero-cat" id="ao-cat-pill"></div>
     </div>
@@ -3934,7 +3940,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   <div class="prof-hero">
     <div class="prof-row">
       <div class="prof-ava" id="prof-ava-wrap" onclick="openEditProfile()" style="cursor:pointer;position:relative;">
-        <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%231565e8'/%3E%3Cstop offset='1' stop-color='%238E24AA'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='100' height='100' fill='url(%23g)'/%3E%3Ccircle cx='50' cy='40' r='15' fill='%23fff' opacity='.92'/%3E%3Cpath d='M24 80c0-14 12-22 26-22s26 8 26 22' fill='%23fff' opacity='.92'/%3E%3C/svg%3E" alt="" id="prof-ava-img">
+        <img referrerpolicy="no-referrer" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%231565e8'/%3E%3Cstop offset='1' stop-color='%238E24AA'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='100' height='100' fill='url(%23g)'/%3E%3Ccircle cx='50' cy='40' r='15' fill='%23fff' opacity='.92'/%3E%3Cpath d='M24 80c0-14 12-22 26-22s26 8 26 22' fill='%23fff' opacity='.92'/%3E%3C/svg%3E" alt="" id="prof-ava-img">
         <div style="position:absolute;bottom:0;right:0;width:20px;height:20px;border-radius:50%;background:var(--p-blue);display:flex;align-items:center;justify-content:center;font-size:0.5rem;color:#fff;border:2px solid var(--bg)"><i class="fa-solid fa-pen"></i></div>
       </div>
       <div class="prof-info">
@@ -4094,7 +4100,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 <!-- Full-screen media viewer (pinch / double-tap zoom + pan) -->
 <div id="media-viewer" class="media-viewer" onclick="if(event.target===this)closeMediaViewer()">
   <div class="mv-close tap" onclick="closeMediaViewer()"><i class="fa-solid fa-xmark"></i></div>
-  <img id="mv-img" class="mv-img" alt="">
+  <img referrerpolicy="no-referrer" id="mv-img" class="mv-img" alt="">
 </div>
 
 
@@ -4118,7 +4124,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
     <div class="fem-title">Edit Profile <span onclick="closeEditProfile()" style="font-size:1.2rem;cursor:pointer;color:var(--t3)">✕</span></div>
     <div style="text-align:center;margin-bottom:16px">
       <div style="width:72px;height:72px;border-radius:50%;overflow:hidden;margin:0 auto 8px;border:3px solid var(--accent);cursor:pointer" onclick="pickAvatar()">
-        <img id="epm-ava" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%231565e8'/%3E%3Cstop offset='1' stop-color='%238E24AA'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='100' height='100' fill='url(%23g)'/%3E%3Ccircle cx='50' cy='40' r='15' fill='%23fff' opacity='.92'/%3E%3Cpath d='M24 80c0-14 12-22 26-22s26 8 26 22' fill='%23fff' opacity='.92'/%3E%3C/svg%3E" style="width:100%;height:100%;object-fit:cover">
+        <img referrerpolicy="no-referrer" id="epm-ava" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%231565e8'/%3E%3Cstop offset='1' stop-color='%238E24AA'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='100' height='100' fill='url(%23g)'/%3E%3Ccircle cx='50' cy='40' r='15' fill='%23fff' opacity='.92'/%3E%3Cpath d='M24 80c0-14 12-22 26-22s26 8 26 22' fill='%23fff' opacity='.92'/%3E%3C/svg%3E" style="width:100%;height:100%;object-fit:cover">
       </div>
       <input type="file" id="epm-file" accept="image/*" style="display:none" onchange="onAvatarFile(this)">
       <div style="font-size:0.7rem;color:var(--accent);cursor:pointer" onclick="pickAvatar()">Change Photo</div>
@@ -5077,7 +5083,7 @@ function renderContinueCard(article, container) {
   d.onclick = () => openArticle(article);
   d.innerHTML = `
     ${ownImage(article)
-      ? `<img class="continue-img" src="${ownImage(article)}" loading="lazy" onerror="this.style.background='${CAT_GRADIENTS[article.category]||CAT_GRADIENTS.tech}';this.src=''">`
+      ? `<img referrerpolicy="no-referrer" class="continue-img" src="${ownImage(article)}" loading="lazy" onerror="this.style.background='${CAT_GRADIENTS[article.category]||CAT_GRADIENTS.tech}';this.src=''">`
       : `<div class="continue-img" style="background:${CAT_GRADIENTS[article.category]||CAT_GRADIENTS.tech};display:flex;align-items:center;justify-content:center;font-size:1.5rem">${cc.icon}</div>`
     }
     <div class="continue-info">
@@ -5139,7 +5145,7 @@ function renderTrendingStrip(articles, container) {
     c.onclick = () => openArticle(a);
     c.innerHTML = `
       ${ownImage(a)
-        ? `<img class="trending-card-img" src="${ownImage(a)}" loading="lazy" onerror="this.style.background='${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}';this.src=''">`
+        ? `<img referrerpolicy="no-referrer" class="trending-card-img" src="${ownImage(a)}" loading="lazy" onerror="this.style.background='${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}';this.src=''">`
         : heroArt(a, 'trending-card-img gen-art')
       }
       <div class="trending-card-info">
@@ -5893,7 +5899,7 @@ function openArticle(rawA) {
     d.className = 'ao-related-card tap';
     d.onclick   = () => openArticle(ra);
     d.innerHTML = `
-      ${ra.image_url ? `<img class="ao-related-img" src="${ra.image_url}" loading="lazy" alt=""
+      ${ra.image_url ? `<img referrerpolicy="no-referrer" class="ao-related-img" src="${ra.image_url}" loading="lazy" alt=""
         onerror="this.style.background='${CAT_GRADIENTS[ra.category]||CAT_GRADIENTS.tech}';this.style.display='none'">` :
         `<div class="ao-related-img" style="background:${CAT_GRADIENTS[ra.category]||CAT_GRADIENTS.tech};display:flex;align-items:center;justify-content:center;font-size:1.2rem">${rcc.icon}</div>`}
       <div class="ao-related-info">
@@ -6127,7 +6133,7 @@ function updateExpGrid(rawArticles, append) {
     d.onclick   = () => openArticle(a);
     d.innerHTML = `
       ${ownImage(a)
-        ? `<img src="${ownImage(a)}" loading="lazy" alt="" style="min-height:120px"
+        ? `<img referrerpolicy="no-referrer" src="${ownImage(a)}" loading="lazy" alt="" style="min-height:120px"
              onerror="this.parentNode.style.background='${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}';this.remove()">`
         : `<div style="height:120px;background:${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech};display:flex;align-items:center;justify-content:center;font-size:1.8rem;opacity:0.6">${cc.icon}</div>`
       }
@@ -6250,7 +6256,7 @@ async function renderBM() {
       d.onclick   = (e) => { if (!e.target.closest('.bm-act')) openArticle(a); };
       d.innerHTML = `
         ${ownImage(a)
-          ? `<img class="bm-img" src="${ownImage(a)}" loading="lazy" alt="" onerror="this.style.background='${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}';this.style.display='none'">`
+          ? `<img referrerpolicy="no-referrer" class="bm-img" src="${ownImage(a)}" loading="lazy" alt="" onerror="this.style.background='${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}';this.style.display='none'">`
           : `<div class="bm-img" style="background:${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech};display:flex;align-items:center;justify-content:center;font-size:1.2rem">${cc.icon}</div>`
         }
         <div class="bm-info">
@@ -6382,7 +6388,7 @@ async function renderNotifs() {
   items.forEach(n => {
     const d = document.createElement('div'); d.className = 'notif fadein tap';
     d.innerHTML = `<div class="notif-dot"></div>
-      ${n.image_url ? `<img class="notif-img" src="${n.image_url}" loading="lazy" onerror="this.style.display='none';this.style.background='${n.color||'var(--bg3)'}'">`
+      ${n.image_url ? `<img referrerpolicy="no-referrer" class="notif-img" src="${n.image_url}" loading="lazy" onerror="this.style.display='none';this.style.background='${n.color||'var(--bg3)'}'">`
                     : `<div class="notif-img" style="background:${n.color||'var(--bg3)'}"></div>`}
       <div class="notif-body"><div class="notif-title">${bEsc(n.headline||n.message||'')}</div><div class="notif-time">${n.topic ? 'New in '+bEsc(n.topic) : 'In your feed'}</div></div>`;
     const aid = n.article_id;
@@ -6632,7 +6638,7 @@ function renderFeedArticles() {
     d.innerHTML = `
       <div class="fac-stripe" style="background:${cc.hex}"></div>
       ${ownImage(a)
-        ? `<img class="fac-img" src="${ownImage(a)}" loading="lazy" alt="" onerror="this.style.background='${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}';this.style.display='none'">`
+        ? `<img referrerpolicy="no-referrer" class="fac-img" src="${ownImage(a)}" loading="lazy" alt="" onerror="this.style.background='${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}';this.style.display='none'">`
         : `<div class="fac-img" style="background:${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech};display:flex;align-items:center;justify-content:center;font-size:1.2rem">${cc.icon}</div>`
       }
       <div class="fac-info">
@@ -7878,7 +7884,7 @@ async function loadProfileAnalytics() {
           ${recent.activity.slice(0, 6).map(r => `
             <div class="activity-row" onclick='openArticle(${JSON.stringify({id:r.id, headline:r.headline||'', image_url:r.image_url||'', category:r.category||'tech', source_name:r.source_name||'', published_at:r.updated_at}).replace(/'/g,"&#39;")})'>
               ${r.image_url
-                ? `<img class="activity-img" src="${r.image_url}" loading="lazy" onerror="this.style.background='${CAT_GRADIENTS[r.category]||CAT_GRADIENTS.tech}';this.src=''">`
+                ? `<img referrerpolicy="no-referrer" class="activity-img" src="${r.image_url}" loading="lazy" onerror="this.style.background='${CAT_GRADIENTS[r.category]||CAT_GRADIENTS.tech}';this.src=''">`
                 : `<div class="activity-img" style="background:${CAT_GRADIENTS[r.category]||CAT_GRADIENTS.tech};display:flex;align-items:center;justify-content:center;font-size:1.2rem">${(CATS[r.category]||CATS.tech).icon}</div>`}
               <div class="activity-info">
                 <div class="activity-title">${r.headline || 'Untitled'}</div>
@@ -8515,7 +8521,7 @@ async function doSearch(q){
       const cc = CATS[a.category] || CATS.tech;
       const d = document.createElement('div'); d.className = 'srch-item';
       d.innerHTML = `${ownImage(a)
-          ? `<img class="srch-item-img" src="${ownImage(a)}" loading="lazy" onerror="this.style.display='none'">`
+          ? `<img referrerpolicy="no-referrer" class="srch-item-img" src="${ownImage(a)}" loading="lazy" onerror="this.style.display='none'">`
           : `<div class="srch-item-img" style="display:flex;align-items:center;justify-content:center;background:${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}">${cc.icon}</div>`}
         <div><div class="srch-item-t">${bEsc(a.title)}</div>
           <div class="srch-item-s">${cc.short} · ${bEsc(a.source||'')} · ${timeAgo(a.published_at)||''}</div></div>`;

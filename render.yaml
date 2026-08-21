@@ -45,6 +45,16 @@ services:
         value: "true"          # single free service owns ingestion
       - key: LOG_LEVEL
         value: INFO
+      # Which imagery policy the app serves. Declared rather than left to a
+      # default, because main.py and image_service.py each carried their own and
+      # a silent disagreement decides what every card looks like.
+      #   thumbnail — the publisher's image, size-capped and credited
+      #   stock     — Pexels, no third-party exposure (needs PEXELS_API_KEY)
+      #   art       — generated category art only
+      - key: IMAGE_MODE
+        value: thumbnail
+      - key: ADMIN_TOKEN
+        generateValue: true    # /admin/* is refused entirely without it in prod
       - key: JWT_SECRET
         generateValue: true
       - key: WATERMARK_SECRET
