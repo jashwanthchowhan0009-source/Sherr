@@ -40,6 +40,9 @@ CAVEATS, stated rather than hidden:
     ignoring a duplicate is correct there. A new caller must not assume upsert.
   * Everything is synchronous, on a small connection pool, because that is what
     the sqlite call sites expect. FastAPI already runs these in a threadpool.
+  * Server-side prepared statements are disabled outright. Supabase's
+    transaction pooler cannot support them, and psycopg's auto-preparation
+    would otherwise start colliding after any query's fifth execution.
 """
 
 from __future__ import annotations
@@ -263,7 +266,35 @@ CREATE_SCHEMA_SQL = f'CREATE SCHEMA IF NOT EXISTS "{APP_SCHEMA}"'
 SEARCH_PATH_SQL = f'SET search_path TO "{APP_SCHEMA}"'
 
 
+# Supabase's transaction pooler is the constraint behind everything below.
+#
+# PREPARED STATEMENTS. psycopg3 auto-prepares a query after the fifth execution
+# and names them sequentially (_pg3_0, _pg3_1, …). The pooler multiplexes many
+# client connections over fewer server backends, so the name is prepared on one
+# backend and re-used against another that has never seen it — or worse, one
+# that already holds a different statement under that name. That is
+# DuplicatePreparedStatement, and it surfaces only after an endpoint has been
+# hit five times, which is why it looks like a random runtime failure rather
+# than a startup one. prepare_threshold=None turns auto-preparation off.
+PREPARE_THRESHOLD = None
+
+# SEARCH PATH. Setting it with a runtime SET is not durable here for the same
+# reason: in transaction mode the server connection is only bound to the client
+# for the length of a transaction, and with autocommit every statement is its
+# own transaction, so a session-level SET can be lost the moment the next
+# statement lands on a different backend. Passing it as a libpq startup option
+# instead makes it part of the connection's identity — pgbouncer keys its pools
+# by these options, so every backend serving this app starts with the schema
+# already in place.
+CONN_OPTIONS = f"-c search_path={APP_SCHEMA}"
+
+
 def _configure(conn) -> None:
+    """Belt and braces on top of CONN_OPTIONS, and where the schema is created."""
+    try:
+        conn.prepare_threshold = PREPARE_THRESHOLD
+    except Exception:
+        pass
     conn.execute(CREATE_SCHEMA_SQL)
     conn.execute(SEARCH_PATH_SQL)
 
@@ -279,10 +310,16 @@ def _get_pool(dsn: str):
                 from psycopg.rows import dict_row                # noqa: PLC0415
                 _pool = ConnectionPool(
                     sanitize_dsn(dsn), min_size=1, max_size=8,
-                    kwargs={"row_factory": dict_row, "autocommit": True},
-                    # Every pooled connection gets the search_path, not just the
-                    # first: the transaction pooler hands out a different backend
-                    # each time, and a session setting does not follow the app.
+                    kwargs={
+                        "row_factory": dict_row,
+                        "autocommit": True,
+                        # Not prepared_statement_cache_size — that is asyncpg's
+                        # name for this. psycopg spells it prepare_threshold, and
+                        # None (not 0) is what disables preparation; 0 would mean
+                        # "prepare immediately", the exact opposite.
+                        "prepare_threshold": PREPARE_THRESHOLD,
+                        "options": CONN_OPTIONS,
+                    },
                     configure=_configure,
                     open=True, timeout=30,
                 )

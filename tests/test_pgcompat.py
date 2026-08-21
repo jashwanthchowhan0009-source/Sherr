@@ -403,3 +403,100 @@ def test_activity_follows_the_same_backend():
     import activity
     src = inspect.getsource(activity._db)
     assert "pgcompat.connect" in src and "is_postgres_url" in src
+
+
+# ─── Supabase's transaction pooler ────────────────────────────────────────────
+def test_prepared_statements_are_disabled():
+    """psycopg3 auto-prepares after a query's fifth execution and names them
+    _pg3_0, _pg3_1, … The pooler multiplexes clients over fewer backends, so the
+    name gets prepared on one and re-used against another — DuplicatePreparedStatement,
+    surfacing only once an endpoint has been hit five times."""
+    import pgcompat
+    assert pgcompat.PREPARE_THRESHOLD is None
+
+
+def test_the_threshold_is_none_and_not_zero():
+    """0 means "prepare immediately" in psycopg — the exact opposite of what is
+    wanted here. Only None disables preparation, and 0 is the plausible typo."""
+    import pgcompat
+    assert pgcompat.PREPARE_THRESHOLD is None
+    assert not isinstance(pgcompat.PREPARE_THRESHOLD, int)
+
+
+def test_the_pool_passes_the_threshold_to_every_connection():
+    import inspect
+
+    import pgcompat
+    src = inspect.getsource(pgcompat._get_pool)
+    assert '"prepare_threshold": PREPARE_THRESHOLD' in src
+
+
+def test_configure_also_disables_preparation_per_connection():
+    """Belt and braces: a connection made outside the pool kwargs still must not
+    prepare."""
+    import inspect
+
+    import pgcompat
+    assert "prepare_threshold" in inspect.getsource(pgcompat._configure)
+
+
+def test_search_path_is_a_startup_option_not_only_a_runtime_set():
+    """In transaction mode the backend is bound to the client only for the length
+    of a transaction, and with autocommit every statement is its own transaction —
+    so a session-level SET can be lost the moment the next statement lands on a
+    different backend. As a libpq startup option it is part of the connection's
+    identity and pgbouncer keys its pools by it."""
+    import inspect
+
+    import pgcompat
+    assert pgcompat.CONN_OPTIONS == f"-c search_path={pgcompat.APP_SCHEMA}"
+    assert '"options": CONN_OPTIONS' in inspect.getsource(pgcompat._get_pool)
+
+
+def test_configure_sets_prepare_threshold_before_running_any_sql():
+    """_configure runs statements itself; disabling preparation after them would
+    leave those first statements eligible."""
+    import pgcompat
+
+    class FakeConn:
+        def __init__(self):
+            self.order = []
+            self._pt = "unset"
+
+        @property
+        def prepare_threshold(self):
+            return self._pt
+
+        @prepare_threshold.setter
+        def prepare_threshold(self, v):
+            self._pt = v
+            self.order.append("threshold")
+
+        def execute(self, q):
+            self.order.append("sql")
+
+    c = FakeConn()
+    pgcompat._configure(c)
+    assert c.prepare_threshold is None
+    assert c.order[0] == "threshold"
+
+
+def test_configure_survives_a_connection_that_rejects_the_attribute():
+    """Older/odd drivers may not expose it; the schema setup must still run."""
+    import pgcompat
+
+    class Stubborn:
+        def __init__(self):
+            self.sql = []
+
+        def __setattr__(self, k, v):
+            if k == "prepare_threshold":
+                raise AttributeError("read-only")
+            object.__setattr__(self, k, v)
+
+        def execute(self, q):
+            self.sql.append(q)
+
+    s = Stubborn()
+    pgcompat._configure(s)
+    assert len(s.sql) == 2
