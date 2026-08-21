@@ -90,6 +90,10 @@ COLLECT_INTERVAL_MIN = int(os.getenv("COLLECT_INTERVAL_MIN", "25"))
 # many. Set PENDING_DRAIN_THRESHOLD to a positive number to restore a floor, or
 # leave it at 0 for none. DISABLE_PENDING_DRAIN=1 turns the pass off entirely.
 PENDING_DRAIN_THRESHOLD = int(os.getenv("PENDING_DRAIN_THRESHOLD", "0"))
+# How long boot will wait for the drain before carrying on without it. The
+# server does not accept connections until lifespan returns, so this is also
+# the longest the health check can be left unable to connect.
+DRAIN_BOOT_BUDGET_S = float(os.getenv("DRAIN_BOOT_BUDGET_S", "20"))
 DISABLE_PENDING_DRAIN = (os.getenv("DISABLE_PENDING_DRAIN", "") or "").strip().lower() \
     in ("1", "true", "yes")
 
@@ -1388,11 +1392,23 @@ async def collect_news():
                  len(unique), len(all_articles), len(all_articles) - len(unique))
 
         conn = get_db()
-        new_count = 0
-        for a in unique:
-            if _insert_with_dedup(conn, a):
-                new_count += 1
-        conn.commit()
+        loop = asyncio.get_event_loop()
+
+        # OFF THE EVENT LOOP. The driver is synchronous, so this loop is one
+        # blocking round trip per article — over the Supabase pooler, for a batch
+        # of a hundred-odd, that is seconds of a completely stalled loop during
+        # which nothing else is served. Combined with a health check that also
+        # hit the database, it was enough for Render to time out its probe and
+        # restart the instance mid-cycle, forever.
+        def _write_batch() -> int:
+            n = 0
+            for a in unique:
+                if _insert_with_dedup(conn, a):
+                    n += 1
+            conn.commit()
+            return n
+
+        new_count = await loop.run_in_executor(None, _write_batch)
         log.info("[DB] %d new articles inserted", new_count)
 
         # AI refinement pass
@@ -1400,21 +1416,25 @@ async def collect_news():
 
         # What actually came out the far end. "N inserted" says nothing about
         # whether any of it is servable, and servable is the only thing the feed
-        # cares about.
-        try:
+        # cares about. Two more queries, so also off the loop.
+        def _summary() -> str:
             by_status = {r["status"] or "?": r["c"] for r in conn.execute(
                 "SELECT status, COUNT(*) AS c FROM articles GROUP BY status")}
             servable = conn.execute(
                 "SELECT COUNT(*) AS c FROM articles "
                 "WHERE ai_processed=1 AND status='published'").fetchone()["c"]
-            log.info("[CYCLE] inserted=%d servable=%d by_status=%s",
-                     new_count, servable, by_status)
+            return "inserted=%d servable=%d by_status=%s" % (
+                new_count, servable, by_status)
+
+        try:
+            log.info("[CYCLE] %s", await loop.run_in_executor(None, _summary))
         except Exception as e:
             log.warning("[CYCLE] status summary failed: %s", e)
 
-        # Link related articles into chronological story threads ("the string")
+        # Link related articles into chronological story threads ("the string").
+        # Another whole-corpus synchronous walk — same reason, same treatment.
         try:
-            link_stories(conn)
+            await loop.run_in_executor(None, link_stories, conn)
         except Exception as e:
             log.warning("[STORY] linking failed: %s", e)
 
@@ -1504,11 +1524,27 @@ async def lifespan(app: FastAPI):
         log.error("explore feeds not started: %s", e)
     scheduler.start()
     log.info("Scheduler: collect every %d min", COLLECT_INTERVAL_MIN)
-    # Inline, not a background task. As a task it was one more thing that could be
-    # starved or swallowed before it ran, and the whole point is that the feed is
-    # servable by the time the first request arrives. It is a few seconds of local
-    # sqlite writes even over a few thousand rows, and it cannot raise.
-    _drain_pending_if_stalled()
+    # Inline, because the point is that the feed is servable by the time the first
+    # request arrives — as a background task it was one more thing that could be
+    # starved before it ran.
+    #
+    # But BOUNDED. Uvicorn does not accept connections until lifespan startup
+    # returns, so a slow drain holds the port closed and Render's health check
+    # cannot even connect — which is the same boot loop by a different route. On
+    # sqlite this was a third of a second; over the Supabase pooler it is a round
+    # trip per row and a large backlog can run long. So it gets a budget, and if
+    # it overruns, boot continues and the drain finishes in the background.
+    try:
+        await asyncio.wait_for(
+            asyncio.shield(asyncio.get_event_loop().run_in_executor(
+                None, _drain_pending_if_stalled)),
+            timeout=DRAIN_BOOT_BUDGET_S)
+    except asyncio.TimeoutError:
+        log.warning("[DRAIN] still running after %ss — continuing boot, "
+                    "the drain finishes in the background",
+                    DRAIN_BOOT_BUDGET_S)
+    except Exception as e:
+        log.error("[DRAIN] boot drain failed: %s", e)
     log.info("AI providers: %s", available_providers())
     yield
     scheduler.shutdown()
@@ -2658,24 +2694,58 @@ async def get_story(article_id: int):
 
 @app.get("/health")
 async def health():
-    conn = get_db()
-    article_count = conn.execute("SELECT COUNT(*) as c FROM articles").fetchone()["c"]
-    user_count = conn.execute("SELECT COUNT(*) as c FROM users").fetchone()["c"]
-    trending_count = conn.execute("SELECT COUNT(*) as c FROM articles WHERE is_trending=1").fetchone()["c"]
-    ai_processed = conn.execute("SELECT COUNT(*) as c FROM articles WHERE ai_processed=1 AND status='published'").fetchone()["c"]
-    pillar_counts = {}
-    for pid in range(1, 10):
-        cnt = conn.execute("SELECT COUNT(*) as c FROM articles WHERE pillar_id=?", (pid,)).fetchone()["c"]
-        pillar_counts[PILLARS[pid]["slug"]] = cnt
-    conn.close()
-    return {
-        "status": "ok", "version": "5.0.0",
-        "articles": article_count, "users": user_count,
-        "ai_processed": ai_processed, "trending": trending_count,
-        "pillars": 9, "micro_topics": len(MICRO_TOPICS),
-        "pillar_counts": pillar_counts,
-        "ai": available_providers(),
-    }
+    """LIVENESS ONLY. No database, no upstream, no I/O of any kind.
+
+    This used to run thirteen sequential COUNT(*) queries — four totals plus one
+    per pillar — each a round trip over the Supabase pooler, on the event loop.
+    Under load that exceeded Render's 5s health-check timeout, Render killed the
+    instance, and the restart put it straight back into the same collection cycle:
+    a permanent boot loop caused entirely by the health check itself.
+
+    A liveness probe answers one question — is this process able to serve? — and
+    anything that can be slow or can fail belongs somewhere a probe will not
+    reach. The counts moved to /admin/stats.
+    """
+    return {"status": "ok", "version": "5.0.0",
+            "pillars": 9, "micro_topics": len(MICRO_TOPICS)}
+
+
+@app.get("/admin/stats")
+async def admin_stats(x_admin_token: str = Header("")):
+    """The corpus counts /health used to carry.
+
+    Three queries rather than thirteen: conditional aggregation for the totals
+    and a GROUP BY for the pillars. The old shape cost one pooler round trip per
+    pillar to compute something one scan answers. Run off the loop so a slow
+    database cannot block request handling here either.
+    """
+    _check_admin(x_admin_token)
+
+    def _gather() -> dict:
+        conn = get_db()
+        try:
+            agg = conn.execute(
+                "SELECT COUNT(*) AS total, "
+                "SUM(CASE WHEN is_trending=1 THEN 1 ELSE 0 END) AS trending, "
+                "SUM(CASE WHEN ai_processed=1 AND status='published' "
+                "         THEN 1 ELSE 0 END) AS servable "
+                "FROM articles").fetchone()
+            by_pillar = {r["pillar_id"]: r["c"] for r in conn.execute(
+                "SELECT pillar_id, COUNT(*) AS c FROM articles GROUP BY pillar_id")}
+            users = conn.execute("SELECT COUNT(*) AS c FROM users").fetchone()["c"]
+        finally:
+            conn.close()
+        return {
+            "articles": agg["total"] or 0,
+            "users": users,
+            "ai_processed": agg["servable"] or 0,
+            "trending": agg["trending"] or 0,
+            "pillar_counts": {PILLARS[pid]["slug"]: by_pillar.get(pid, 0)
+                              for pid in range(1, 10)},
+            "ai": available_providers(),
+        }
+
+    return await asyncio.get_event_loop().run_in_executor(None, _gather)
 
 
 @app.get("/pillars")
