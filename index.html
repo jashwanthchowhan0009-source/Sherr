@@ -1604,6 +1604,128 @@ nav.compact .nb.on { flex: 0 0 auto; padding-left: 16px; padding-right: 16px; }
 
 
 
+/* ══════════ EXPLORE v7 ══════════
+   Light theme throughout — same tokens, radii and accent as the rest of the app.
+   Nothing here is dark; the surfaces are white on --bg with the existing hairlines. */
+.xp{padding-bottom:6px;}
+
+/* ── 1. scope + category rail ── */
+.xp-scope{display:flex;gap:2px;margin:12px 14px 0;padding:3px;border-radius:999px;
+  background:var(--surface-2);}
+.xp-scope button{flex:1;border:0;background:transparent;cursor:pointer;
+  padding:7px 0;border-radius:999px;font:700 .74rem/1 var(--fd);color:var(--t2);
+  transition:background .18s var(--spring),color .18s;}
+.xp-scope button.on{background:var(--surface);color:var(--t1);
+  box-shadow:0 1px 3px rgba(60,60,67,.14);}
+
+.xp-chips{display:flex;gap:7px;overflow-x:auto;scroll-snap-type:x proximity;
+  padding:11px 14px 3px;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
+.xp-chips::-webkit-scrollbar{display:none;}
+.xp-chip{scroll-snap-align:start;flex:0 0 auto;border:1px solid var(--line2);
+  background:var(--surface);color:var(--t2);padding:7px 13px;border-radius:999px;
+  font:600 .74rem/1 var(--f);white-space:nowrap;cursor:pointer;
+  transition:transform .16s var(--spring),background .18s,color .18s,border-color .18s;}
+.xp-chip:active{transform:scale(.95);}
+.xp-chip.on{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700;
+  box-shadow:0 4px 12px -4px rgba(10,132,255,.5);}
+
+/* ── section headers ── */
+.xp-hd{display:flex;align-items:baseline;gap:8px;margin:20px 14px 9px;}
+.xp-hd h3{font:800 .95rem/1 var(--fd);color:var(--t1);letter-spacing:-.02em;margin:0;}
+.xp-hd .all{margin-left:auto;font:700 .72rem/1 var(--f);color:var(--accent);cursor:pointer;}
+.xp-hd .all:active{opacity:.6;}
+.xp-live{display:inline-flex;align-items:center;gap:5px;font:700 .56rem/1 var(--fd);
+  letter-spacing:.1em;text-transform:uppercase;color:#22A06B;}
+.xp-dot{width:6px;height:6px;border-radius:50%;background:#22A06B;
+  animation:xpPulse 1.9s ease-in-out infinite;}
+@keyframes xpPulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.35;transform:scale(.72);}}
+
+/* ── 2. live pulse rail ── */
+.xp-rail{display:flex;gap:10px;overflow-x:auto;scroll-snap-type:x mandatory;
+  padding:2px 14px 6px;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
+.xp-rail::-webkit-scrollbar{display:none;}
+.xp-metric{scroll-snap-align:center;flex:0 0 132px;background:var(--surface);
+  border:1px solid var(--line2);border-radius:18px;padding:11px 12px 8px;cursor:pointer;
+  box-shadow:0 2px 8px -4px rgba(60,60,67,.18);
+  transition:transform .16s var(--spring),box-shadow .18s;}
+.xp-metric:active{transform:scale(.96);box-shadow:0 1px 4px -2px rgba(60,60,67,.2);}
+.xp-metric .nm{font:700 .62rem/1 var(--fd);color:var(--t3);letter-spacing:.07em;
+  text-transform:uppercase;}
+.xp-metric .val{font:800 1.02rem/1.1 var(--fd);color:var(--t1);margin-top:7px;
+  letter-spacing:-.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.xp-metric .chg{font:700 .68rem/1 var(--fd);margin-top:4px;}
+.xp-up{color:#12A150;} .xp-dn{color:#E5484D;}
+.xp-spark{display:block;width:100%;height:26px;margin-top:6px;}
+
+/* ── 4. module stubs ── */
+.xp-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0 14px;}
+.xp-card{background:var(--surface);border:1px solid var(--line2);border-radius:18px;
+  padding:12px 13px;cursor:pointer;
+  transition:transform .16s var(--spring);}
+.xp-card:active{transform:scale(.975);}
+.xp-card .k{font:700 .58rem/1 var(--fd);letter-spacing:.08em;text-transform:uppercase;
+  color:var(--t3);}
+.xp-card .v{font:800 1.18rem/1.1 var(--fd);color:var(--t1);margin-top:6px;letter-spacing:-.02em;}
+.xp-card .s{font:500 .68rem/1.35 var(--f);color:var(--t2);margin-top:3px;}
+.xp-wide{margin:0 14px;background:var(--surface);border:1px solid var(--line2);
+  border-radius:20px;padding:14px 15px;cursor:pointer;
+  transition:transform .16s var(--spring);}
+.xp-wide:active{transform:scale(.985);}
+.xp-wide .t{font:700 .86rem/1.35 var(--f);color:var(--t1);letter-spacing:-.01em;}
+.xp-wide .m{font:500 .7rem/1.4 var(--f);color:var(--t2);margin-top:5px;}
+.xp-row{display:flex;align-items:center;gap:11px;padding:9px 0;
+  border-top:1px solid var(--line2);}
+.xp-row:first-of-type{border-top:0;}
+.xp-row .ico{width:32px;height:32px;border-radius:11px;display:grid;place-items:center;
+  flex:0 0 auto;font-size:.8rem;}
+.xp-row .tx{min-width:0;flex:1;}
+.xp-row .tx b{display:block;font:700 .77rem/1.3 var(--f);color:var(--t1);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.xp-row .tx small{display:block;font:500 .66rem/1.3 var(--f);color:var(--t3);margin-top:2px;}
+.xp-cd{font:800 1.34rem/1 var(--fd);color:var(--t1);letter-spacing:-.02em;
+  font-variant-numeric:tabular-nums;}
+
+/* ── skeleton shimmer (never a spinner, never the word "Loading") ── */
+.xp-sk{background:linear-gradient(100deg,var(--surface-2) 30%,rgba(255,255,255,.85) 50%,var(--surface-2) 70%);
+  background-size:220% 100%;animation:xpShim 1.3s linear infinite;border-radius:8px;}
+@keyframes xpShim{to{background-position:-220% 0;}}
+
+/* ── 3. entity bottom sheet ── */
+.xp-scrim{position:fixed;inset:0;background:rgba(28,28,30,.42);backdrop-filter:blur(2px);
+  opacity:0;pointer-events:none;transition:opacity .26s ease;z-index:900;}
+.xp-scrim.on{opacity:1;pointer-events:auto;}
+.xp-sheet{position:fixed;left:0;right:0;bottom:0;z-index:901;
+  background:var(--surface);border-radius:26px 26px 0 0;
+  box-shadow:0 -12px 44px -12px rgba(28,28,30,.34);
+  max-height:88vh;overflow-y:auto;-webkit-overflow-scrolling:touch;
+  transform:translateY(100%);
+  /* spring, not ease — it should overshoot slightly and settle */
+  transition:transform .42s cubic-bezier(.16,1.02,.3,1);
+  padding:0 18px calc(26px + env(safe-area-inset-bottom));}
+.xp-sheet.on{transform:translateY(0);}
+.xp-sheet.drag{transition:none;}
+.xp-grab{position:sticky;top:0;background:var(--surface);padding:10px 0 6px;
+  display:grid;place-items:center;cursor:grab;touch-action:none;z-index:2;}
+.xp-grab i{display:block;width:38px;height:5px;border-radius:3px;background:var(--line);}
+.xp-sh-nm{font:700 .66rem/1 var(--fd);letter-spacing:.11em;text-transform:uppercase;
+  color:var(--t3);margin-top:2px;}
+.xp-sh-val{font:800 2rem/1.05 var(--fd);color:var(--t1);letter-spacing:-.035em;margin-top:7px;}
+.xp-sh-chg{font:700 .84rem/1 var(--fd);margin-top:6px;}
+.xp-sh-spark{width:100%;height:76px;margin:14px 0 4px;display:block;}
+.xp-sh-h{font:800 .82rem/1 var(--fd);color:var(--t1);margin:18px 0 8px;letter-spacing:-.01em;}
+.xp-why{display:flex;align-items:flex-start;gap:9px;padding:11px 0;
+  border-top:1px solid var(--line2);cursor:pointer;}
+.xp-why:active{opacity:.6;}
+.xp-why .ar{color:var(--accent);font-size:.72rem;margin-top:3px;flex:0 0 auto;}
+.xp-why .tx{font:600 .8rem/1.42 var(--f);color:var(--t1);}
+.xp-why .tx small{display:block;font:500 .66rem/1.3 var(--f);color:var(--t3);margin-top:3px;}
+.xp-rel{display:flex;flex-wrap:wrap;gap:7px;margin-top:4px;}
+.xp-rel button{border:1px solid var(--line2);background:var(--surface-2);color:var(--t1);
+  border-radius:999px;padding:7px 13px;font:600 .74rem/1 var(--f);cursor:pointer;
+  transition:transform .16s var(--spring);}
+.xp-rel button:active{transform:scale(.94);}
+.xp-note{font:500 .64rem/1.4 var(--f);color:var(--t3);margin-top:16px;}
+
 /* ── /explore/snapshot: ticker + sections ──
    These reuse the app's existing "glassic slab" language (.bt / .glance-card):
    a dark gradient body, a bright inset top edge, and a bottom glow tinted by the
@@ -3429,6 +3551,13 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   </div>
 </div>
 
+<!-- ENTITY BOTTOM SHEET (Explore v7) -->
+<div class="xp-scrim" id="xp-scrim" onclick="closeEntity()"></div>
+<div class="xp-sheet" id="xp-sheet" role="dialog" aria-modal="true" aria-label="Entity detail">
+  <div class="xp-grab" id="xp-grab"><i></i></div>
+  <div id="xp-sheet-body"></div>
+</div>
+
 <!-- MARKET DETAIL OVERLAY -->
 <div id="market-overlay">
   <div class="ao-header">
@@ -3461,15 +3590,32 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   <!-- Top News Hero -->
   <div id="exp-hero-wrap"></div>
 
-  <!-- Local / National / Global -->
-  <div class="scope-toggle">
+  <!-- The previous scope toggle and pillar icon row are superseded by the rail
+       below. Kept in the DOM, hidden, because selScope() and renderExpCats()
+       still write to them and still drive the feed's scope. -->
+  <div class="scope-toggle" style="display:none">
     <div class="scope-btn tap" onclick="selScope(this,'local')">Local</div>
     <div class="scope-btn tap" onclick="selScope(this,'national')">National</div>
     <div class="scope-btn on tap" onclick="selScope(this,'global')">Global</div>
   </div>
+  <div class="exp-cat-row" id="exp-cat-row" style="display:none"></div>
 
-  <!-- Category icons: All Stories + Arts, Well-being, Business, … (filters the feed below) -->
-  <div class="exp-cat-row" id="exp-cat-row"></div>
+  <!-- ════════ EXPLORE v7 ════════ -->
+  <div class="xp">
+    <!-- 1. scope + category rail -->
+    <div class="xp-scope" id="xp-scope"></div>
+    <div class="xp-chips" id="xp-chips"></div>
+
+    <!-- 2. live pulse -->
+    <div class="xp-hd">
+      <h3>Live Pulse</h3>
+      <span class="xp-live"><span class="xp-dot"></span>Live</span>
+    </div>
+    <div class="xp-rail" id="xp-pulse"></div>
+
+    <!-- 4. module stubs -->
+    <div id="xp-modules"></div>
+  </div>
 
   <!-- At a Glance: Live Markets (weather card removed; its data feeds the bento weather tile) -->
   <div class="exp-sec-hdr">
@@ -8716,6 +8862,440 @@ async function openDictionary() {
   }
 }
 
+// ══════════ EXPLORE v7 ══════════
+// Every invented number in this file lives in MOCK_EXPLORE and nowhere else, so
+// what is real and what is placeholder is answerable by reading one object.
+// Anything /explore/snapshot actually serves — markets, forex, weather, space,
+// word_of_day, news_top, world_bank, govt_press — is read from there and only
+// falls back to these shapes when the call times out.
+const MOCK_EXPLORE = {
+  pulse: {
+    NIFTY:     { label:'NIFTY 50', value:'24,231.85', pct:-0.55,
+                 series:[24480,24402,24455,24310,24288,24350,24261,24231] },
+    GOLD:      { label:'Gold',     value:'₹1,43,789', pct: 5.80,
+                 series:[135900,137200,136800,139500,141100,140600,142900,143789] },
+    BTC:       { label:'Bitcoin',  value:'$71,908',   pct:11.79,
+                 series:[63100,64800,66200,65400,68100,69900,70400,71908] },
+    USDINR:    { label:'USD/INR',  value:'₹95.69',    pct: 0.31,
+                 series:[95.1,95.22,95.18,95.34,95.41,95.5,95.61,95.69] },
+    AQI:       { label:'AQI Delhi',value:'168',       pct:-4.20,
+                 series:[201,196,188,192,180,176,171,168] },
+  },
+  essentials: { aqi:'168 · Poor', petrol:'₹104.21', diesel:'₹92.15',
+                weather:'31°C · Haze' },
+  government: {
+    scheme: { name:'PM-KISAN 19th instalment', meta:'₹2,000 credited · 9.8 cr farmers' },
+    tender: { name:'NHAI · 6-lane Nagpur–Jabalpur', meta:'Closes in 6 days · ₹1,240 cr' },
+  },
+  opportunities: {
+    job:   { name:'Data Analyst · SEBI', meta:'Mumbai · closes 12 Sep' },
+    grant: { name:'BIRAC BIG grant',     meta:'Up to ₹50 L · biotech startups' },
+  },
+  space:      { name:'PSLV-C60 · SpaceDev', pad:'Sriharikota · SDSC-SHA', t:'2026-08-24T09:42:00Z' },
+  knowledge:  { word:'serendipity', pos:'noun',
+                def:'The occurrence of events by chance in a happy or beneficial way.' },
+  // Fallback "why" lines, used only when the corpus search returns nothing.
+  why: {
+    GOLD:  [{t:'Global uncertainty rises', s:'Safe-haven demand broadens'},
+            {t:'Dollar weakens against basket', s:'Bullion cheaper for non-dollar buyers'}],
+    NIFTY: [{t:'Financials drag the index', s:'Banking heavyweights close lower'},
+            {t:'Foreign investors stay net sellers', s:'Outflows continue a third session'}],
+    SCHEME:[{t:'Instalment released ahead of sowing', s:'Timed to the kharif cycle'},
+            {t:'Beneficiary list revised after eKYC', s:'Records reconciled with land data'}],
+  },
+};
+
+const XP_SCOPES = [['local','Local'], ['national','India'], ['global','Global']];
+const XP_CATS = ['For You','Markets','Economy','Government','Opportunities',
+                 'Essentials','Career','Environment','Space','Sports','Knowledge'];
+let xpScope = 'global', xpCat = 'For You', xpSnap = null;
+
+// ── tiny inline sparkline ────────────────────────────────────────────────────
+// Drawn by hand rather than pulled in: five of these render per rail and a chart
+// library would cost more than the whole page does.
+function xpSpark(series, up, h) {
+  const w = 100, pad = 2;
+  h = h || 26;
+  const xs = series || [];
+  if (xs.length < 2) return '';
+  const lo = Math.min(...xs), hi = Math.max(...xs), span = (hi - lo) || 1;
+  const pts = xs.map((v, i) => [
+    (i / (xs.length - 1)) * w,
+    h - pad - ((v - lo) / span) * (h - pad * 2),
+  ]);
+  const d = pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' ');
+  const c = up ? '#12A150' : '#E5484D';
+  const id = 'g' + Math.abs(xs[0] * 1000 | 0) + xs.length + (up ? 'u' : 'd');
+  return `<svg class="xp-spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"
+      style="height:${h}px" aria-hidden="true">
+    <defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="${c}" stop-opacity=".22"/>
+      <stop offset="1" stop-color="${c}" stop-opacity="0"/></linearGradient></defs>
+    <path d="${d} L ${w} ${h} L 0 ${h} Z" fill="url(#${id})"/>
+    <path d="${d}" fill="none" stroke="${c}" stroke-width="1.8"
+          stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+  </svg>`;
+}
+
+const xpPct = p => `<span class="${p >= 0 ? 'xp-up' : 'xp-dn'}">${p >= 0 ? '▲' : '▼'} ${Math.abs(p).toFixed(2)}%</span>`;
+
+// ── 1. scope + category rail ────────────────────────────────────────────────
+function renderXpRail() {
+  const sc = document.getElementById('xp-scope');
+  if (sc) sc.innerHTML = XP_SCOPES.map(([k, l]) =>
+    `<button class="${k === xpScope ? 'on' : ''}" onclick="xpSetScope('${k}')">${l}</button>`).join('');
+  const ch = document.getElementById('xp-chips');
+  if (ch) ch.innerHTML = XP_CATS.map(c =>
+    `<button class="xp-chip ${c === xpCat ? 'on' : ''}" onclick="xpSetCat(${JSON.stringify(c)})">${bEsc(c)}</button>`).join('');
+}
+
+function xpSetScope(k) {
+  xpScope = k;
+  renderXpRail();
+  // Drive the existing scope machinery rather than duplicating it, so the feed
+  // below still filters the way it always did.
+  const btn = document.querySelector(`.scope-toggle .scope-btn[onclick*="'${k}'"]`);
+  if (btn && typeof selScope === 'function') { try { selScope(btn, k); } catch (e) {} }
+}
+
+function xpSetCat(c) { xpCat = c; renderXpRail(); }
+
+// ── 2. live pulse ───────────────────────────────────────────────────────────
+// Real values from /explore/snapshot where it has them, mock where it does not.
+// The series is always mock: the snapshot carries a point, not a history.
+function xpPulseData() {
+  const m = JSON.parse(JSON.stringify(MOCK_EXPLORE.pulse));
+  const mk = (xpSnap && xpSnap.markets && xpSnap.markets.data) || {};
+  const fx = (xpSnap && xpSnap.forex && xpSnap.forex.data) || {};
+  const pick = (o, ...keys) => keys.map(k => o[k]).find(v => v != null);
+  const nifty = pick(mk, 'NIFTY', 'Nifty', 'NIFTY 50');
+  if (nifty && nifty.price != null) {
+    m.NIFTY.value = '₹' + Number(nifty.price).toLocaleString('en-IN');
+    if (nifty.change_pct != null) m.NIFTY.pct = Number(nifty.change_pct);
+  }
+  const btc = pick(mk, 'BTC', 'Bitcoin', 'BITCOIN');
+  if (btc && btc.price != null) {
+    m.BTC.value = '$' + Number(btc.price).toLocaleString('en-US');
+    if (btc.change_pct != null) m.BTC.pct = Number(btc.change_pct);
+  }
+  const gold = pick(mk, 'GOLD', 'Gold');
+  if (gold && gold.price != null) m.GOLD.value = '₹' + Number(gold.price).toLocaleString('en-IN');
+  const usd = pick(fx, 'USD', 'USDINR', 'USD/INR');
+  if (usd != null) m.USDINR.value = '₹' + Number(usd.price != null ? usd.price : usd).toFixed(2);
+  return m;
+}
+
+function renderXpPulse() {
+  const host = document.getElementById('xp-pulse');
+  if (!host) return;
+  const d = xpPulseData();
+  host.innerHTML = Object.entries(d).map(([k, v]) => `
+    <div class="xp-metric" onclick="openEntity('${k}')" role="button" tabindex="0">
+      <div class="nm">${bEsc(v.label)}</div>
+      <div class="val">${bEsc(v.value)}</div>
+      <div class="chg">${xpPct(v.pct)}</div>
+      ${xpSpark(v.series, v.pct >= 0, 26)}
+    </div>`).join('');
+}
+
+function xpPulseSkeleton() {
+  const host = document.getElementById('xp-pulse');
+  if (!host) return;
+  // Shimmer, never the word "Loading" and never a spinner.
+  host.innerHTML = Array(4).fill(
+    `<div class="xp-metric" style="pointer-events:none">
+       <div class="xp-sk" style="height:9px;width:52%"></div>
+       <div class="xp-sk" style="height:17px;width:78%;margin-top:9px"></div>
+       <div class="xp-sk" style="height:9px;width:40%;margin-top:7px"></div>
+       <div class="xp-sk" style="height:26px;margin-top:8px"></div>
+     </div>`).join('');
+}
+
+
+// ── 3. entity bottom sheet ──────────────────────────────────────────────────
+// The differentiator: a number that explains itself. Three entities are built
+// properly — Gold, NIFTY and a government scheme — rather than thirteen that
+// each show a price and stop.
+const XP_ENTITIES = {
+  GOLD:   { key:'GOLD',   title:'Gold',  q:'gold',
+            related:['Silver','Crude','USD/INR'], why:'GOLD' },
+  NIFTY:  { key:'NIFTY',  title:'NIFTY 50', q:'nifty sensex market',
+            related:['Sensex','Bank Nifty','FII flows'], why:'NIFTY' },
+  SCHEME: { key:'SCHEME', title:'PM-KISAN', q:'pm kisan farmer scheme',
+            related:['MSP','Fertiliser subsidy','Crop insurance'], why:'SCHEME',
+            value:'₹2,000', pct:null, sub:'19th instalment · 9.8 cr farmers',
+            series:[1600,1600,1800,1800,2000,2000,2000,2000] },
+};
+
+let xpOpenKey = null;
+
+async function openEntity(key) {
+  const ent = XP_ENTITIES[key] || XP_ENTITIES[key === 'BTC' || key === 'USDINR' || key === 'AQI' ? 'NIFTY' : 'GOLD'];
+  const cfg = XP_ENTITIES[key] ? XP_ENTITIES[key] : null;
+  xpOpenKey = cfg ? key : null;
+
+  // Metrics without a built-out sheet still open one — an inert tap on a card
+  // that visibly invites a tap is worse than a smaller sheet.
+  const pulse = xpPulseData();
+  const p = pulse[key];
+  const spec = cfg || { key, title: (p && p.label) || key, q: (p && p.label) || key,
+                        related: [], why: null };
+  const value = spec.value || (p && p.value) || '—';
+  const pct   = spec.pct !== undefined ? spec.pct : (p ? p.pct : null);
+  const series = spec.series || (p && p.series) || [];
+
+  const body = document.getElementById('xp-sheet-body');
+  if (!body) return;
+  body.innerHTML = `
+    <div class="xp-sh-nm">${bEsc(spec.title)}</div>
+    <div class="xp-sh-val">${bEsc(value)}</div>
+    ${pct != null ? `<div class="xp-sh-chg">${xpPct(pct)}</div>`
+                  : (spec.sub ? `<div class="xp-sh-chg" style="color:var(--t2);font-weight:600">${bEsc(spec.sub)}</div>` : '')}
+    ${xpSpark(series, (pct == null ? true : pct >= 0), 76).replace('class="xp-spark"', 'class="xp-sh-spark"')}
+    <div class="xp-sh-h">Why is it moving?</div>
+    <div id="xp-why">
+      ${Array(2).fill('<div class="xp-why"><div class="xp-sk" style="height:14px;width:70%"></div></div>').join('')}
+    </div>
+    ${spec.related.length ? `<div class="xp-sh-h">Related</div>
+      <div class="xp-rel">${spec.related.map(r =>
+        `<button onclick="xpRelated(${JSON.stringify(r)})">${bEsc(r)}</button>`).join('')}</div>` : ''}
+    <div class="xp-note">Market intelligence, not investment advice.</div>`;
+
+  document.getElementById('xp-scrim').classList.add('on');
+  const sheet = document.getElementById('xp-sheet');
+  sheet.classList.remove('drag');
+  sheet.classList.add('on');
+  sheet.scrollTop = 0;
+  document.body.style.overflow = 'hidden';
+
+  xpFillWhy(spec);
+}
+
+// Real articles from the corpus, mock only when the search comes back empty.
+async function xpFillWhy(spec) {
+  const host = document.getElementById('xp-why');
+  if (!host) return;
+  let rows = [];
+  try {
+    const d = await api('/search?q=' + encodeURIComponent(spec.q), { timeout: 2500 });
+    rows = (d.articles || []).slice(0, 2).map(a => {
+      const n = normalizeArticle(a);
+      return { t: n.title, s: n.source + ' · ' + timeAgo(n.published_at), art: n };
+    });
+  } catch (e) { rows = []; }
+  if (!rows.length) {
+    const fb = (spec.why && MOCK_EXPLORE.why[spec.why]) || [];
+    rows = fb.map(x => ({ t: x.t, s: x.s, art: null }));
+  }
+  if (!rows.length) { host.innerHTML = ''; return; }
+  host.innerHTML = rows.map((r, i) => `
+    <div class="xp-why" onclick="xpWhyTap(${i})">
+      <i class="fa-solid fa-arrow-right ar"></i>
+      <div class="tx">${bEsc(r.t)}<small>${bEsc(r.s)}</small></div>
+    </div>`).join('');
+  host._rows = rows;
+}
+
+function xpWhyTap(i) {
+  const host = document.getElementById('xp-why');
+  const row = host && host._rows && host._rows[i];
+  if (row && row.art) { closeEntity(); openArticle(row.art); }
+}
+
+function xpRelated(name) {
+  const map = { 'Silver':'GOLD', 'Crude':'GOLD', 'USD/INR':'USDINR',
+                'Sensex':'NIFTY', 'Bank Nifty':'NIFTY', 'FII flows':'NIFTY' };
+  const k = map[name];
+  if (k && XP_ENTITIES[k]) return openEntity(k);
+  // No sheet of its own yet — search rather than dead-end the tap.
+  closeEntity();
+  if (typeof openSearch === 'function') { try { return openSearch(name); } catch (e) {} }
+}
+
+function closeEntity() {
+  const sheet = document.getElementById('xp-sheet');
+  if (sheet) { sheet.classList.remove('on', 'drag'); sheet.style.transform = ''; }
+  const sc = document.getElementById('xp-scrim');
+  if (sc) sc.classList.remove('on');
+  document.body.style.overflow = '';
+  xpOpenKey = null;
+}
+
+// Swipe down to dismiss. Tracks the finger 1:1, then either springs back or
+// carries through — a sheet that only closes from a button feels nailed down.
+(function xpSheetDrag() {
+  const sheet = document.getElementById('xp-sheet');
+  const grab = document.getElementById('xp-grab');
+  if (!sheet || !grab) return;
+  let y0 = 0, dy = 0, dragging = false;
+
+  const start = e => {
+    // Only from the top of the sheet, so scrolling its content is unaffected.
+    if (sheet.scrollTop > 0) return;
+    dragging = true; dy = 0;
+    y0 = (e.touches ? e.touches[0].clientY : e.clientY);
+    sheet.classList.add('drag');
+  };
+  const move = e => {
+    if (!dragging) return;
+    const y = (e.touches ? e.touches[0].clientY : e.clientY);
+    dy = Math.max(0, y - y0);
+    if (dy > 0 && e.cancelable) e.preventDefault();
+    sheet.style.transform = `translateY(${dy}px)`;
+    const sc = document.getElementById('xp-scrim');
+    if (sc) sc.style.opacity = String(Math.max(0, 1 - dy / 320));
+  };
+  const end = () => {
+    if (!dragging) return;
+    dragging = false;
+    sheet.classList.remove('drag');
+    const sc = document.getElementById('xp-scrim');
+    if (sc) sc.style.opacity = '';
+    // Past a quarter of the sheet, let it go; otherwise spring back.
+    if (dy > Math.min(150, sheet.offsetHeight * 0.25)) { closeEntity(); }
+    else { sheet.style.transform = ''; }
+    dy = 0;
+  };
+  grab.addEventListener('touchstart', start, { passive: true });
+  grab.addEventListener('touchmove', move, { passive: false });
+  grab.addEventListener('touchend', end);
+  grab.addEventListener('mousedown', start);
+  window.addEventListener('mousemove', move);
+  window.addEventListener('mouseup', end);
+  window.addEventListener('keydown', e => { if (e.key === 'Escape') closeEntity(); });
+})();
+
+
+// ── 4. module stubs ─────────────────────────────────────────────────────────
+// Deliberately compact and deliberately not built out: each is a doorway with a
+// real value on it, not a page. Sizes are mixed on purpose — a wide hero, a
+// 2-up grid and the rail above — so the page never reads as a uniform wall.
+function xpCountdown(iso) {
+  const t = Date.parse(iso) - Date.now();
+  if (!(t > 0)) return 'Launching now';
+  const d = Math.floor(t / 86400000), h = Math.floor(t / 3600000) % 24,
+        m = Math.floor(t / 60000) % 60, sec = Math.floor(t / 1000) % 60;
+  return d > 0 ? `${d}d ${h}h ${m}m` : `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+}
+
+function renderXpModules() {
+  const host = document.getElementById('xp-modules');
+  if (!host) return;
+  const M = MOCK_EXPLORE;
+  const snap = xpSnap || {};
+
+  // Real where the snapshot has it, mock where it does not.
+  const w = (snap.weather && snap.weather.data) || null;
+  const weather = w && w.temp_c != null ? `${Math.round(w.temp_c)}°C` : M.essentials.weather;
+  const sp = (snap.space && snap.space.data && (snap.space.data.launches || [])[0]) || null;
+  const launch = sp ? { name: sp.name || M.space.name,
+                        pad: [sp.provider, sp.pad].filter(Boolean).join(' · ') || M.space.pad,
+                        t: sp.net || sp.window_start || M.space.t }
+                    : M.space;
+  const wd = (snap.word_of_day && snap.word_of_day.data) || null;
+  const know = wd && wd.word ? { word: wd.word,
+                                 pos: (wd.meanings && wd.meanings[0] && wd.meanings[0].part_of_speech) || M.knowledge.pos,
+                                 def: (wd.meanings && wd.meanings[0] && wd.meanings[0].definition) || M.knowledge.def }
+                             : M.knowledge;
+  const gp = (snap.govt_press && snap.govt_press.data && (snap.govt_press.data.releases || [])[0]) || null;
+  const scheme = gp ? { name: gp.title, meta: gp.published_at || M.government.scheme.meta }
+                    : M.government.scheme;
+
+  const row = (bg, fg, icon, title, meta) => `
+    <div class="xp-row">
+      <div class="ico" style="background:${bg};color:${fg}"><i class="fa-solid ${icon}"></i></div>
+      <div class="tx"><b>${bEsc(title)}</b><small>${bEsc(meta)}</small></div>
+      <i class="fa-solid fa-chevron-right" style="color:var(--t3);font-size:.7rem"></i>
+    </div>`;
+
+  host.innerHTML = `
+    <div class="xp-hd"><h3>Essentials</h3><span class="all" onclick="xpSoon('Essentials')">View all →</span></div>
+    <div class="xp-grid">
+      <div class="xp-card" onclick="xpSoon('Air quality')">
+        <div class="k">Air quality</div><div class="v">${bEsc(M.essentials.aqi.split(' · ')[0])}</div>
+        <div class="s">${bEsc(M.essentials.aqi.split(' · ')[1] || '')} · Delhi</div></div>
+      <div class="xp-card" onclick="xpSoon('Weather')">
+        <div class="k">Weather</div><div class="v">${bEsc(weather)}</div>
+        <div class="s">${bEsc(w && w.humidity != null ? w.humidity + '% humidity' : 'Haze')}</div></div>
+      <div class="xp-card" onclick="xpSoon('Petrol')">
+        <div class="k">Petrol</div><div class="v">${bEsc(M.essentials.petrol)}</div>
+        <div class="s">per litre · Mumbai</div></div>
+      <div class="xp-card" onclick="xpSoon('Diesel')">
+        <div class="k">Diesel</div><div class="v">${bEsc(M.essentials.diesel)}</div>
+        <div class="s">per litre · Mumbai</div></div>
+    </div>
+
+    <div class="xp-hd"><h3>Government</h3><span class="all" onclick="xpSoon('Government')">View all →</span></div>
+    <div class="xp-wide" onclick="openEntity('SCHEME')">
+      ${row('#E8F1FF','#0A84FF','fa-landmark', scheme.name, scheme.meta)}
+      ${row('#FFF3E0','#F97316','fa-file-signature', M.government.tender.name, M.government.tender.meta)}
+    </div>
+
+    <div class="xp-hd"><h3>Opportunities</h3><span class="all" onclick="xpSoon('Opportunities')">View all →</span></div>
+    <div class="xp-wide" onclick="xpSoon('Opportunities')">
+      ${row('#E9F9F0','#12A150','fa-briefcase', M.opportunities.job.name, M.opportunities.job.meta)}
+      ${row('#F3E9FF','#8E24AA','fa-seedling', M.opportunities.grant.name, M.opportunities.grant.meta)}
+    </div>
+
+    <div class="xp-hd"><h3>Next Launch</h3>
+      <span class="xp-live"><span class="xp-dot"></span>T-minus</span>
+      <span class="all" onclick="xpSoon('Space')">View all →</span></div>
+    <div class="xp-wide" onclick="xpSoon('Space')">
+      <div class="t">${bEsc(launch.name)}</div>
+      <div class="m">${bEsc(launch.pad)}</div>
+      <div class="xp-cd" id="xp-cd" style="margin-top:9px">${bEsc(xpCountdown(launch.t))}</div>
+    </div>
+
+    <div class="xp-hd"><h3>Word of the Day</h3><span class="all" onclick="xpSoon('Knowledge')">View all →</span></div>
+    <div class="xp-wide" onclick="xpSoon('Knowledge')" style="margin-bottom:8px">
+      <div class="t" style="font-size:1.02rem">${bEsc(know.word)}
+        <span style="font:500 .7rem var(--f);color:var(--t3)">· ${bEsc(know.pos)}</span></div>
+      <div class="m">${bEsc(know.def)}</div>
+    </div>`;
+
+  clearInterval(window._xpCdTimer);
+  window._xpCdTimer = setInterval(() => {
+    const el = document.getElementById('xp-cd');
+    if (!el) return clearInterval(window._xpCdTimer);
+    el.textContent = xpCountdown(launch.t);
+  }, 1000);
+}
+
+function xpSoon(what) { if (typeof toast === 'function') toast(what + ' — coming soon'); }
+
+function xpModulesSkeleton() {
+  const host = document.getElementById('xp-modules');
+  if (!host) return;
+  const card = '<div class="xp-card" style="pointer-events:none">' +
+    '<div class="xp-sk" style="height:9px;width:48%"></div>' +
+    '<div class="xp-sk" style="height:19px;width:66%;margin-top:8px"></div>' +
+    '<div class="xp-sk" style="height:9px;width:80%;margin-top:6px"></div></div>';
+  host.innerHTML = `<div class="xp-hd"><h3>Essentials</h3></div>
+    <div class="xp-grid">${card + card + card + card}</div>
+    <div class="xp-hd"><h3>Government</h3></div>
+    <div class="xp-wide" style="pointer-events:none">
+      <div class="xp-sk" style="height:14px;width:72%"></div>
+      <div class="xp-sk" style="height:10px;width:52%;margin-top:8px"></div></div>`;
+}
+
+// ── boot ────────────────────────────────────────────────────────────────────
+// 2s and no longer. Past that the page is better off with placeholder numbers on
+// screen than with a reader watching a shimmer, so the mock renders and the real
+// values swap in later if they ever arrive.
+async function initExploreV7() {
+  renderXpRail();
+  xpPulseSkeleton();
+  xpModulesSkeleton();
+  try {
+    xpSnap = await api('/explore/snapshot', { timeout: 2000 });
+  } catch (e) {
+    xpSnap = null;                       // fall back to MOCK_EXPLORE, silently
+  }
+  renderXpPulse();
+  renderXpModules();
+}
+
+
 // ─── /explore/snapshot renderer ──────────────────────────────────────────────
 // One cached read gives eleven sections. Each renderer takes the section's `data`
 // and returns rows; the wrapper handles the title, the age badge, and the three
@@ -8942,6 +9522,7 @@ async function loadSnapshot() {
 }
 
 function startMarketsPolling() {
+  initExploreV7();   // Explore v7: rail, pulse, modules
   renderGlance();     // show launcher tiles immediately; badges fill in on data
   loadSnapshot();     // eleven cached sections in one request
   loadMarkets();
