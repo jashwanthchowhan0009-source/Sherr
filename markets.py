@@ -70,6 +70,31 @@ def stale_seconds(key: str) -> float | None:
     return round(time.time() - hit["at"], 1) if hit else None
 
 
+# Why the tiles are empty, recorded as it happens.
+#
+# A failed upstream currently shows an em dash and nothing else, which is
+# indistinguishable from "market closed", "symbol wrong" and "we are being rate
+# limited" — and Yahoo rate-limits datacenter ranges hard, which is exactly what
+# a Render instance looks like from the outside. These counts are returned by
+# /markets so the reason is one URL away instead of a guess.
+_upstream: dict = {}
+
+
+def _note(sym: str, why: str) -> None:
+    _upstream[sym] = why
+
+
+def upstream_report() -> dict:
+    """Per-symbol upstream status for whatever last failed."""
+    return dict(_upstream)
+
+
+# Yahoo load-balances across query1/query2 and will often answer on one while
+# rate-limiting the other. Trying the sibling host costs one request on a path
+# that has already failed.
+_YAHOO_HOSTS = ("query1.finance.yahoo.com", "query2.finance.yahoo.com")
+
+
 async def _yahoo(client: httpx.AsyncClient, symbols: list[str]) -> dict:
     """Quotes via the v8 CHART endpoint, one call per symbol.
 
@@ -83,17 +108,24 @@ async def _yahoo(client: httpx.AsyncClient, symbols: list[str]) -> dict:
 
     async def one(sym: str) -> None:
         try:
-            r = await client.get(
-                f"https://query1.finance.yahoo.com/v8/finance/chart/{sym}",
-                params={"range": "5d", "interval": "1d"},
-                headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
-            if r.status_code != 200:
-                log.warning("Yahoo HTTP %d for %s", r.status_code, sym)
+            r = None
+            for host in _YAHOO_HOSTS:
+                r = await client.get(
+                    f"https://{host}/v8/finance/chart/{sym}",
+                    params={"range": "5d", "interval": "1d"},
+                    headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+                if r.status_code == 200:
+                    break
+                log.warning("Yahoo HTTP %d for %s via %s", r.status_code, sym, host)
+            if r is None or r.status_code != 200:
+                code = r.status_code if r is not None else "no response"
+                _note(sym, f"HTTP {code}")
                 return
             meta = (r.json().get("chart", {}).get("result") or [{}])[0].get("meta", {})
             price = meta.get("regularMarketPrice") or 0
             prev = meta.get("chartPreviousClose") or meta.get("previousClose") or 0
             if not price:
+                _note(sym, "no price in payload")
                 return
             change = price - prev if prev else 0.0
             out[sym] = {
@@ -105,8 +137,10 @@ async def _yahoo(client: httpx.AsyncClient, symbols: list[str]) -> dict:
                 "prev_close": round(float(prev), 2),
                 "currency":   meta.get("currency", ""),
             }
+            _upstream.pop(sym, None)          # it worked; clear any stale note
         except Exception as e:
             log.warning("Yahoo fetch failed for %s: %s", sym, e)
+            _note(sym, f"{type(e).__name__}: {e}"[:120])
 
     await asyncio.gather(*(one(s) for s in symbols))
     return out
@@ -404,6 +438,9 @@ async def markets_all(spark: bool = False):
         "energy_stocks": _safe(energy),
         "rates":         _safe(rates),
         "timestamp":     int(time.time()),
+        # Empty when everything is fine. Non-empty is the answer to "why does the
+        # ticker say loading and every tile show an em dash".
+        "upstream_errors": upstream_report(),
         "providers": {
             "stocks_primary": "finnhub" if FINNHUB_KEY else "yahoo",
             "metals_primary": "metals-api" if METALS_API_KEY else "yahoo-futures",

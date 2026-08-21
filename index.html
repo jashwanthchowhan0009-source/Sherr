@@ -8117,7 +8117,16 @@ function renderTicker(data) {
   if (sec.BANKNIFTY?.price) push('BANKNIFTY', '#00ACC1', fmtNum(sec.BANKNIFTY.price), sec.BANKNIFTY.change_pct);
   if (rt.US10Y?.price) push('US 10Y', '#8E24AA', fmtNum(rt.US10Y.price) + '%', rt.US10Y.change_pct);
   if (f.USDINR?.price) push('USD/INR', '#FB8C00', '₹' + fmtNum(f.USDINR.price), f.USDINR.change_pct);
-  if (!items.length) return;   // keep static fallback until live data arrives
+  if (!items.length) {
+    // This used to just return, leaving "Live market data loading…" on screen
+    // forever — a permanent lie once the upstream has actually answered and had
+    // nothing. Say what happened instead.
+    const why = (data.upstream_errors && Object.keys(data.upstream_errors).length)
+      ? 'Market data unavailable — upstream declined'
+      : 'Markets closed or no data right now';
+    el.innerHTML = `<span class="tick-item" style="opacity:.55">● ${bEsc(why)}</span>`;
+    return;
+  }
   el.innerHTML = items.concat(items).join('');
 }
 
