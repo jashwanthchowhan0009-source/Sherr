@@ -2566,20 +2566,29 @@ async def admin_reprocess(
 
 
 def _run_drain_for_backend(*, dry_run: bool = False, limit=None) -> dict:
-    """Run the drain against whichever backend get_db() is actually using.
+    """Drain through get_db(), whatever it is connected to.
 
-    The two are different schemas, not one schema behind two drivers: on sqlite
-    our text and the publisher's share the articles table, while on Postgres the
-    rewritten row lives in info_objects and the original stays in articles. Each
-    path knows its own shape; the only decision here is which one to call.
+    THE DRAIN FOLLOWS THE SCHEMA, NOT THE DRIVER. This used to branch on
+    USE_POSTGRES and call run_postgres, which queries info_objects joined to
+    articles — the Sherr-I engine's two-table layout. But this app carries its
+    OWN single-table schema to Postgres through pgcompat, in its own
+    sherrbyte_app schema, and info_objects does not exist there. So the drain
+    reported found=0 against a backlog of 2343 rows: it was reading a table that
+    was not the one filling up.
+
+    One connection, one query, one table. pgcompat translates the '?' and the
+    rest, so the sqlite-shaped statements are correct on both.
     """
     sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "scripts"))
     import publish_pending                                   # noqa: PLC0415
-    if USE_POSTGRES:
-        return asyncio.run(publish_pending.run_postgres(
-            ARTICLES_DSN, mode="aggregator", dry_run=dry_run, limit=limit))
-    return publish_pending.run_sqlite(
-        DB_PATH, mode="aggregator", dry_run=dry_run, limit=limit)
+    conn = get_db()
+    try:
+        out = publish_pending.drain_articles(
+            conn, mode="aggregator", dry_run=dry_run, limit=limit)
+    finally:
+        conn.close()
+    out["backend"] = "postgres" if USE_POSTGRES else "sqlite"
+    return out
 
 
 def _drain_pending_if_stalled() -> dict:
@@ -2665,14 +2674,14 @@ async def admin_flush_pending():
 
 
 @app.get("/admin/feed-doctor")
-async def admin_feed_doctor(x_admin_token: str = Header("")):
+async def admin_feed_doctor(x_admin_token: str = Header(""), token: str = Query("")):
     """Why is the home feed empty?
 
     /feed serves `ai_processed=1 AND status='published'`, so a feed can be empty
     for four unrelated reasons that all look identical from the app. This answers
     which one it is in a single call, and names the fix.
     """
-    _check_admin(x_admin_token)
+    _check_admin(x_admin_token or token)       # ?token= for the address bar
     conn = get_db()
     try:
         one = lambda q, p=(): conn.execute(q, p).fetchone()["c"]
@@ -2722,6 +2731,7 @@ async def admin_publish_pending(
     dry_run: bool = Query(True),
     limit: int = Query(0, ge=0),
     x_admin_token: str = Header(""),
+    token: str = Query(""),
 ):
     """Release pending_rewrite articles into the feed, aggregator-style.
 
@@ -2733,8 +2743,9 @@ async def admin_publish_pending(
     stays a deliberate command-line act and is deliberately not routable.
 
     dry_run defaults to true — a corpus-wide write is never one accidental URL away.
+    Accepts ?token= as well as the header, for the same reason feed-doctor does.
     """
-    _check_admin(x_admin_token)
+    _check_admin(x_admin_token or token)
     sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "scripts"))
     return await asyncio.get_event_loop().run_in_executor(
         None, lambda: _run_drain_for_backend(dry_run=dry_run, limit=limit or None))
@@ -2882,15 +2893,18 @@ async def health():
 
 
 @app.get("/admin/stats")
-async def admin_stats(x_admin_token: str = Header("")):
+async def admin_stats(x_admin_token: str = Header(""), token: str = Query("")):
     """The corpus counts /health used to carry.
 
     Three queries rather than thirteen: conditional aggregation for the totals
     and a GROUP BY for the pillars. The old shape cost one pooler round trip per
     pillar to compute something one scan answers. Run off the loop so a slow
     database cannot block request handling here either.
+
+    Accepts ?token= as well as the header, because a browser address bar cannot
+    set headers and this is the endpoint you reach for when the app is down.
     """
-    _check_admin(x_admin_token)
+    _check_admin(x_admin_token or token)
 
     def _gather() -> dict:
         conn = get_db()

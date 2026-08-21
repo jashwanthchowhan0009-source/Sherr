@@ -29,7 +29,11 @@ CREATE TABLE articles(
   source_image_url TEXT DEFAULT '', image_source TEXT DEFAULT '',
   image_credit TEXT DEFAULT '',
   -- /explore and /feed both filter on this
-  scope TEXT DEFAULT 'global')
+  scope TEXT DEFAULT 'global',
+  -- /admin/stats aggregates over these
+  is_trending INTEGER DEFAULT 0);
+-- /admin/stats counts these too
+CREATE TABLE users(id INTEGER PRIMARY KEY, email TEXT)
 """
 
 COLS = ("id,headline,full_body,source_name,url,status,ai_processed,"
@@ -39,7 +43,7 @@ COLS = ("id,headline,full_body,source_name,url,status,ai_processed,"
 def _db(tmp_path, rows):
     p = str(tmp_path / "t.db")
     c = sqlite3.connect(p)
-    c.execute(SCHEMA)
+    c.executescript(SCHEMA)
     c.executemany(f"INSERT INTO articles({COLS}) VALUES(?,?,?,?,?,?,?,?,?)", rows)
     c.commit()
     c.close()
@@ -398,7 +402,7 @@ IMG_COLS = (COLS + ",image_url,source_image_url,image_source,image_credit")
 def _img_db(tmp_path, rows):
     p = str(tmp_path / "img.db")
     c = sqlite3.connect(p)
-    c.execute(SCHEMA)
+    c.executescript(SCHEMA)
     c.executemany(f"INSERT INTO articles({IMG_COLS}) "
                   f"VALUES({','.join('?' * 13)})", rows)
     c.commit()
@@ -526,3 +530,76 @@ def test_the_cycle_reports_what_became_servable(caplog):
     import main
     src = inspect.getsource(main.collect_news)
     assert "[CYCLE]" in src and "servable" in src
+
+
+# ─── the drain must read the table that is actually filling up ───────────────
+def test_the_drain_releases_rows_that_never_got_an_ai_pass(client):
+    """The backlog IS the rows the AI never touched — 2093 of 2343 in production
+    had ai_processed=0. Requiring ai_processed=1 would exclude exactly the rows
+    the drain exists for, so the SELECT is status='pending_rewrite' and nothing
+    else."""
+    rows = [_row(i) for i in range(1, 40)]
+    c = client(rows)
+    conn = sqlite3.connect(os.environ["DB_PATH"])
+    conn.execute("UPDATE articles SET ai_processed=0")      # none ever processed
+    conn.commit()
+    conn.close()
+    out = c.get("/admin/flush-pending").json()
+    assert out["found"] == 39 and out["published"] == 39
+    assert out["now"]["pending_rewrite"] == 0
+    assert out["now"]["servable"] == 39
+
+
+def test_the_drain_select_is_reported_so_a_zero_is_explainable(client):
+    """found=0 against a full table told us nothing about which table was read."""
+    c = client([_row(1)])
+    sel = c.get("/admin/flush-pending").json()["select"]
+    assert "FROM articles" in sel
+    assert "status = 'pending_rewrite'" in sel
+    assert "ai_processed" not in sel
+
+
+def test_the_drain_follows_the_schema_not_the_dsn():
+    """It branched on USE_POSTGRES and called run_postgres, which queries
+    info_objects joined to articles — the ENGINE's two-table layout. This app
+    carries its own single-table schema to Postgres, where info_objects does not
+    exist, so the drain reported found=0 against 2343 real rows."""
+    import inspect
+
+    import main
+    src = inspect.getsource(main._run_drain_for_backend)
+    body = src.split('"""')[-1]              # skip the docstring, which names it
+    assert "drain_articles" in body and "get_db()" in body
+    assert "run_postgres" not in body
+
+
+def test_the_column_probe_is_not_sqlite_only():
+    """PRAGMA table_info is sqlite-only and this runs on Postgres now."""
+    import inspect
+    import sys as _s
+    _s.path.insert(0, os.path.join(ROOT, "scripts"))
+    import publish_pending
+    src = inspect.getsource(publish_pending._has_columns)
+    body = src.split('"""')[-1]              # skip the docstring, which names it
+    assert "PRAGMA" not in body and "WHERE 1=0" in body
+
+
+# ─── admin endpoints reachable from a browser ────────────────────────────────
+@pytest.mark.parametrize("path", ["/admin/stats", "/admin/feed-doctor"])
+def test_admin_endpoints_accept_a_token_query_param(client, path):
+    """A browser address bar cannot set headers, and these are the endpoints you
+    reach for when the app is down."""
+    c = client([_row(1)])
+    assert c.get(f"{path}?token=test-token").status_code == 200
+
+
+@pytest.mark.parametrize("path", ["/admin/stats", "/admin/feed-doctor"])
+@pytest.mark.parametrize("qs", ["", "?token=wrong"])
+def test_a_query_param_does_not_weaken_the_guard(client, path, qs):
+    c = client([_row(1)])
+    assert c.get(path + qs).status_code == 403
+
+
+def test_the_header_still_works_alongside_the_query_param(client):
+    c = client([_row(1)])
+    assert c.get("/admin/stats", headers=AUTH).status_code == 200

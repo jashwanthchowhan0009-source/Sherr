@@ -40,6 +40,7 @@ import asyncio
 import json
 import os
 import re
+import logging
 import sqlite3
 import sys
 from datetime import datetime, timezone
@@ -49,6 +50,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Must match main.py's default, typo and all — otherwise a local run opens an
 # empty file beside the one the app actually serves and reports "0 found".
+log = logging.getLogger("sherbyte.drain")
+
 DB_PATH = os.getenv("DB_PATH", "sherbyte.db")
 DATABASE_URL = (os.getenv("SHERR_I_DATABASE_URL")
                 or os.getenv("DATABASE_URL") or "").strip()
@@ -226,44 +229,57 @@ async def run_postgres(url: str, *, mode: str, dry_run: bool, limit) -> dict:
 
 # ─── sqlite ───────────────────────────────────────────────────────────────────
 def _has_columns(conn, table: str, cols) -> bool:
-    """True when every named column exists.
+    """True when every named column exists, on any backend.
+
+    PRAGMA table_info is sqlite-only and this now runs against Postgres too, so
+    ask the database the portable way: select the columns with a predicate that
+    matches nothing. It costs no rows and fails loudly only if a column is
+    genuinely absent.
 
     The drain runs as an emergency measure on an empty feed, so it must not die
     because one schema is older than another. Missing imagery columns cost the
     images, not the drain.
     """
     try:
-        present = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
-        return all(c in present for c in cols)
+        conn.execute(f"SELECT {', '.join(cols)} FROM {table} WHERE 1=0").fetchall()
+        return True
     except Exception:
         return False
 
 
-def run_sqlite(path: str, *, mode: str, dry_run: bool, limit) -> dict:
-    conn = sqlite3.connect(path)
-    conn.row_factory = sqlite3.Row
-    # source_image_url is where ingest puts the publisher's image; image_url is
-    # what the feed renders and is written as '' at ingest. Serve-time resolution
-    # in article_row_to_dict copies one to the other, but only while
-    # IMAGE_MODE == 'thumbnail' — so a published row whose image only ever existed
-    # in source_image_url renders as generated art the moment that flips. Carry it
-    # across here so the published record is complete on its own.
+def drain_articles(conn, *, mode: str = "aggregator", dry_run: bool = False,
+                   limit=None) -> dict:
+    """Release every pending_rewrite row in the single `articles` table.
+
+    Takes an open connection rather than a path, so the caller decides the
+    backend. main.py now carries this same one-table schema on Postgres as well
+    as sqlite, and the drain has to follow the SCHEMA, not the driver — routing
+    by DSN sent it to a two-table layout that does not exist there.
+
+    THE SELECT IS DELIBERATELY status='pending_rewrite' AND NOTHING ELSE. In
+    particular it does not require ai_processed=1: rows that never got an AI
+    pass are precisely what this exists to release, and they are the majority of
+    any real backlog.
+    """
     have_img = _has_columns(conn, "articles", ("image_url", "source_image_url"))
     img_cols = ", image_url, source_image_url" if have_img else ""
     q = (f"SELECT id, headline, full_body AS body, source_name, url{img_cols} "
          "FROM articles WHERE status = 'pending_rewrite' ORDER BY published_at DESC")
     if limit:
         q += f" LIMIT {int(limit)}"
+    log.info("[DRAIN] SELECT: %s", " ".join(q.split()))
     rows = conn.execute(q).fetchall()
+    log.info("[DRAIN] matched %d rows (imagery columns present: %s)",
+             len(rows), have_img)
 
     by_pillar, n = {}, 0
     for r in rows:
         u = build_update(dict(r), mode)
         by_pillar[u["pillar_id"]] = by_pillar.get(u["pillar_id"], 0) + 1
         n += 1
-        if not dry_run and have_img:
-            # COALESCE-style in Python: keep an image_url that is already set,
-            # otherwise adopt the publisher's. Never blank one that exists.
+        if dry_run:
+            continue
+        if have_img:
             img = (r["image_url"] or "") or (r["source_image_url"] or "")
             conn.execute(
                 "UPDATE articles SET pillar_id=?, full_body=?, status='published', "
@@ -273,17 +289,31 @@ def run_sqlite(path: str, *, mode: str, dry_run: bool, limit) -> dict:
                  "thumbnail" if img else "",
                  (f"Image: {r['source_name'] or 'source'}" if img else ""),
                  json.dumps(u["audit"]), r["id"]))
-        elif not dry_run:
+        else:
             conn.execute(
                 "UPDATE articles SET pillar_id=?, full_body=?, status='published', "
                 "ai_processed=1, originality_json=? WHERE id=?",
                 (u["pillar_id"], u["body"], json.dumps(u["audit"]), r["id"]))
     if not dry_run:
         conn.commit()
-    conn.close()
-    return {"backend": "sqlite", "db": path, "mode": mode, "dry_run": dry_run,
-            "found": len(rows), "published": 0 if dry_run else n,
-            "by_pillar": dict(sorted(by_pillar.items()))}
+    log.info("[DRAIN] published %d of %d matched", 0 if dry_run else n, len(rows))
+    return {"mode": mode, "dry_run": dry_run, "found": len(rows),
+            "published": 0 if dry_run else n,
+            "by_pillar": dict(sorted(by_pillar.items())),
+            "select": " ".join(q.split())}
+
+
+def run_sqlite(path: str, *, mode: str, dry_run: bool, limit) -> dict:
+    """CLI entry point: open the sqlite file, then use the shared drain."""
+    conn = sqlite3.connect(path)
+    conn.row_factory = sqlite3.Row
+    try:
+        out = drain_articles(conn, mode=mode, dry_run=dry_run, limit=limit)
+    finally:
+        conn.close()
+    out["backend"] = "sqlite"
+    out["db"] = path
+    return out
 
 
 def run(*, mode="aggregator", dry_run=False, limit=None, url=None, db_path=None) -> dict:
