@@ -1604,127 +1604,222 @@ nav.compact .nb.on { flex: 0 0 auto; padding-left: 16px; padding-right: 16px; }
 
 
 
-/* ══════════ EXPLORE v7 ══════════
-   Light theme throughout — same tokens, radii and accent as the rest of the app.
-   Nothing here is dark; the surfaces are white on --bg with the existing hairlines. */
-.xp{padding-bottom:6px;}
+/* ══════════ EXPLORE v7 — visual pass ══════════
+   TWO FACES ONLY. --f (the app's existing sans) carries everything; Poppins is
+   the display face and appears in exactly three places: hero numbers, the
+   countdown, and Word of the Day. Both are already loaded by the <head>.
+
+   COLOUR. One family, derived from the app's accent, with saturation and warmth
+   varied per module so the sections read as different surfaces rather than as
+   eleven identical boxes. Semantic colour is used only where it means something:
+   green up, red down, AQI by value, amber for weather. The nine pillar colours
+   are NOT part of this palette — they stay on the category tiles and article
+   tags, where they are labels rather than decoration. */
+:root{
+  --xf:'Poppins','Inter',system-ui,sans-serif;   /* display face */
+  --xp-ink:#0B1220;                              /* headings, numbers */
+  --xp-mute:rgba(11,18,32,.52);                  /* metadata */
+  --xp-faint:rgba(11,18,32,.34);                 /* section labels */
+  --xp-up:#0E9F6E;   --xp-dn:#E02D3C;
+  --xp-tint:#F2F7FF;                             /* accent-derived band */
+  --xp-line:rgba(11,18,32,.07);
+}
+.xp{padding-bottom:10px;}
+
+/* Section labels: they label, they do not shout. */
+.xp-hd{display:flex;align-items:center;gap:8px;margin:26px 16px 10px;}
+.xp-hd h3{font:700 .62rem/1 var(--f);color:var(--xp-faint);letter-spacing:.15em;
+  text-transform:uppercase;margin:0;}
+.xp-hd .all{margin-left:auto;font:600 .7rem/1 var(--f);color:var(--accent);cursor:pointer;}
+.xp-hd .all:active{opacity:.55;}
+.xp-live{display:inline-flex;align-items:center;gap:5px;font:700 .55rem/1 var(--f);
+  letter-spacing:.13em;text-transform:uppercase;color:var(--xp-up);}
+.xp-dot{width:5px;height:5px;border-radius:50%;background:currentColor;
+  animation:xpPulse 1.9s ease-in-out infinite;}
+@keyframes xpPulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.3;transform:scale(.7);}}
 
 /* ── 1. scope + category rail ── */
-.xp-scope{display:flex;gap:2px;margin:12px 14px 0;padding:3px;border-radius:999px;
-  background:var(--surface-2);}
-.xp-scope button{flex:1;border:0;background:transparent;cursor:pointer;
-  padding:7px 0;border-radius:999px;font:700 .74rem/1 var(--fd);color:var(--t2);
-  transition:background .18s var(--spring),color .18s;}
-.xp-scope button.on{background:var(--surface);color:var(--t1);
-  box-shadow:0 1px 3px rgba(60,60,67,.14);}
+.xp-scope{display:flex;gap:2px;margin:12px 16px 0;padding:3px;border-radius:999px;
+  background:rgba(11,18,32,.05);}
+.xp-scope button{flex:1;border:0;background:transparent;cursor:pointer;padding:8px 0;
+  border-radius:999px;font:600 .78rem/1 var(--f);color:var(--xp-mute);
+  transition:background .2s var(--spring),color .2s;}
+.xp-scope button.on{background:#fff;color:var(--xp-ink);font-weight:700;
+  box-shadow:0 1px 3px rgba(11,18,32,.13);}
 
-.xp-chips{display:flex;gap:7px;overflow-x:auto;scroll-snap-type:x proximity;
-  padding:11px 14px 3px;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
+.xp-chips{display:flex;gap:8px;overflow-x:auto;scroll-snap-type:x proximity;
+  padding:12px 16px 2px;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
 .xp-chips::-webkit-scrollbar{display:none;}
-.xp-chip{scroll-snap-align:start;flex:0 0 auto;border:1px solid var(--line2);
-  background:var(--surface);color:var(--t2);padding:7px 13px;border-radius:999px;
-  font:600 .74rem/1 var(--f);white-space:nowrap;cursor:pointer;
-  transition:transform .16s var(--spring),background .18s,color .18s,border-color .18s;}
-.xp-chip:active{transform:scale(.95);}
-.xp-chip.on{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700;
-  box-shadow:0 4px 12px -4px rgba(10,132,255,.5);}
+.xp-chip{scroll-snap-align:start;flex:0 0 auto;border:0;background:rgba(11,18,32,.05);
+  color:var(--xp-mute);padding:8px 14px;border-radius:999px;
+  font:600 .76rem/1 var(--f);white-space:nowrap;cursor:pointer;
+  transition:transform .16s var(--spring),background .2s,color .2s;}
+.xp-chip:active{transform:scale(.94);}
+.xp-chip.on{background:var(--accent);color:#fff;font-weight:600;
+  box-shadow:0 6px 16px -6px color-mix(in srgb,var(--accent) 60%,transparent);}
 
-/* ── section headers ── */
-.xp-hd{display:flex;align-items:baseline;gap:8px;margin:20px 14px 9px;}
-.xp-hd h3{font:800 .95rem/1 var(--fd);color:var(--t1);letter-spacing:-.02em;margin:0;}
-.xp-hd .all{margin-left:auto;font:700 .72rem/1 var(--f);color:var(--accent);cursor:pointer;}
-.xp-hd .all:active{opacity:.6;}
-.xp-live{display:inline-flex;align-items:center;gap:5px;font:700 .56rem/1 var(--fd);
-  letter-spacing:.1em;text-transform:uppercase;color:#22A06B;}
-.xp-dot{width:6px;height:6px;border-radius:50%;background:#22A06B;
-  animation:xpPulse 1.9s ease-in-out infinite;}
-@keyframes xpPulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.35;transform:scale(.72);}}
+/* The pillar tiles, kept exactly as they were — soft per-category tints, the one
+   place the nine pillar colours belong. Only the spacing is retuned. */
+.xp .exp-cat-row{display:flex!important;padding:14px 16px 4px;gap:14px;}
 
-/* ── 2. live pulse rail ── */
-.xp-rail{display:flex;gap:10px;overflow-x:auto;scroll-snap-type:x mandatory;
-  padding:2px 14px 6px;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
+/* ── 2. LIVE PULSE — no outer card, floats on the page, bleeds right ── */
+.xp-rail{display:flex;gap:11px;overflow-x:auto;scroll-snap-type:x proximity;
+  /* 40px right padding is the bleed: the next card is always half-visible. */
+  padding:4px 40px 16px 16px;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
 .xp-rail::-webkit-scrollbar{display:none;}
-.xp-metric{scroll-snap-align:center;flex:0 0 132px;background:var(--surface);
-  border:1px solid var(--line2);border-radius:18px;padding:11px 12px 8px;cursor:pointer;
-  box-shadow:0 2px 8px -4px rgba(60,60,67,.18);
-  transition:transform .16s var(--spring),box-shadow .18s;}
-.xp-metric:active{transform:scale(.96);box-shadow:0 1px 4px -2px rgba(60,60,67,.2);}
-.xp-metric .nm{font:700 .62rem/1 var(--fd);color:var(--t3);letter-spacing:.07em;
+.xp-metric{scroll-snap-align:start;flex:0 0 138px;background:#fff;border:0;
+  border-radius:20px;padding:13px 14px 9px;cursor:pointer;
+  transition:transform .16s var(--spring),box-shadow .22s;}
+/* Depth by direction: the shadow is tinted by what the number did. */
+.xp-metric.up{box-shadow:0 10px 22px -14px rgba(14,159,110,.55),0 1px 2px rgba(11,18,32,.05);}
+.xp-metric.dn{box-shadow:0 10px 22px -14px rgba(224,45,60,.5),0 1px 2px rgba(11,18,32,.05);}
+.xp-metric:active{transform:scale(.955);}
+.xp-metric .nm{font:600 .58rem/1 var(--f);color:var(--xp-faint);letter-spacing:.12em;
   text-transform:uppercase;}
-.xp-metric .val{font:800 1.02rem/1.1 var(--fd);color:var(--t1);margin-top:7px;
-  letter-spacing:-.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.xp-metric .chg{font:700 .68rem/1 var(--fd);margin-top:4px;}
-.xp-up{color:#12A150;} .xp-dn{color:#E5484D;}
-.xp-spark{display:block;width:100%;height:26px;margin-top:6px;}
-
-/* ── 4. module stubs ── */
-.xp-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0 14px;}
-.xp-card{background:var(--surface);border:1px solid var(--line2);border-radius:18px;
-  padding:12px 13px;cursor:pointer;
-  transition:transform .16s var(--spring);}
-.xp-card:active{transform:scale(.975);}
-.xp-card .k{font:700 .58rem/1 var(--fd);letter-spacing:.08em;text-transform:uppercase;
-  color:var(--t3);}
-.xp-card .v{font:800 1.18rem/1.1 var(--fd);color:var(--t1);margin-top:6px;letter-spacing:-.02em;}
-.xp-card .s{font:500 .68rem/1.35 var(--f);color:var(--t2);margin-top:3px;}
-.xp-wide{margin:0 14px;background:var(--surface);border:1px solid var(--line2);
-  border-radius:20px;padding:14px 15px;cursor:pointer;
-  transition:transform .16s var(--spring);}
-.xp-wide:active{transform:scale(.985);}
-.xp-wide .t{font:700 .86rem/1.35 var(--f);color:var(--t1);letter-spacing:-.01em;}
-.xp-wide .m{font:500 .7rem/1.4 var(--f);color:var(--t2);margin-top:5px;}
-.xp-row{display:flex;align-items:center;gap:11px;padding:9px 0;
-  border-top:1px solid var(--line2);}
-.xp-row:first-of-type{border-top:0;}
-.xp-row .ico{width:32px;height:32px;border-radius:11px;display:grid;place-items:center;
-  flex:0 0 auto;font-size:.8rem;}
-.xp-row .tx{min-width:0;flex:1;}
-.xp-row .tx b{display:block;font:700 .77rem/1.3 var(--f);color:var(--t1);
+/* The number is the hero. */
+.xp-metric .val{font:700 1.32rem/1.05 var(--xf);color:var(--xp-ink);margin-top:8px;
+  letter-spacing:-.035em;font-variant-numeric:tabular-nums;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.xp-row .tx small{display:block;font:500 .66rem/1.3 var(--f);color:var(--t3);margin-top:2px;}
-.xp-cd{font:800 1.34rem/1 var(--fd);color:var(--t1);letter-spacing:-.02em;
-  font-variant-numeric:tabular-nums;}
+.xp-metric .chg{font:600 .7rem/1 var(--f);margin-top:5px;font-variant-numeric:tabular-nums;}
+.xp-up{color:var(--xp-up);} .xp-dn{color:var(--xp-dn);}
+.xp-spark{display:block;width:100%;height:28px;margin-top:8px;}
 
-/* ── skeleton shimmer (never a spinner, never the word "Loading") ── */
-.xp-sk{background:linear-gradient(100deg,var(--surface-2) 30%,rgba(255,255,255,.85) 50%,var(--surface-2) 70%);
-  background-size:220% 100%;animation:xpShim 1.3s linear infinite;border-radius:8px;}
+/* ── ESSENTIALS — tinted tiles, whole surface, no header ── */
+.xp-grid{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin:4px 16px 0;}
+.xp-tile{border-radius:20px;padding:14px 15px 13px;cursor:pointer;border:0;
+  transition:transform .16s var(--spring);}
+.xp-tile:active{transform:scale(.97);}
+.xp-tile .k{font:600 .56rem/1 var(--f);letter-spacing:.13em;text-transform:uppercase;
+  opacity:.62;}
+.xp-tile .v{font:700 1.5rem/1.05 var(--xf);margin-top:8px;letter-spacing:-.04em;
+  font-variant-numeric:tabular-nums;}
+.xp-tile .s{font:500 .68rem/1.35 var(--f);margin-top:4px;opacity:.6;}
+/* Weather is warm amber; the AQI scale has to stay legible NEXT TO it, so its
+   middle step is pushed orange rather than sharing the same yellow — two tiles
+   in the same tint read as one block and undo the point of tinting them. */
+.t-warm{background:linear-gradient(160deg,#FFF3DE,#FFE4B8);color:#7A4A00;}
+.t-cool{background:linear-gradient(160deg,#EEF3FA,#E1EAF6);color:#33415A;}
+.t-good{background:linear-gradient(160deg,#E4F7EE,#CFEEDF);color:#0A6E4C;}
+.t-mid {background:linear-gradient(160deg,#FFEBDD,#FFD9BE);color:#9A3D00;}
+.t-bad {background:linear-gradient(160deg,#FDE8EA,#F9D2D7);color:#9C1F2B;}
+
+/* ── GOVERNMENT / OPPORTUNITIES — a tinted band groups the rows ── */
+.xp-band{margin:0 16px;background:var(--xp-tint);border-radius:22px;
+  padding:4px 16px;border:0;}
+.xp-row{display:flex;align-items:center;gap:12px;padding:13px 0;
+  border-top:1px solid rgba(11,18,32,.06);cursor:pointer;}
+.xp-row:first-of-type{border-top:0;}
+.xp-row:active{opacity:.62;}
+.xp-row .ico{width:34px;height:34px;border-radius:12px;display:grid;place-items:center;
+  flex:0 0 auto;font-size:.82rem;background:#fff;color:var(--accent);
+  box-shadow:0 2px 6px -3px rgba(11,18,32,.2);}
+.xp-row .tx{min-width:0;flex:1;}
+.xp-row .tx b{display:block;font:600 .81rem/1.32 var(--f);color:var(--xp-ink);
+  letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.xp-row .tx small{display:block;font:500 .69rem/1.3 var(--f);color:var(--xp-mute);
+  margin-top:3px;}
+.xp-row .cv{color:var(--xp-faint);font-size:.7rem;flex:0 0 auto;}
+
+/* ── SPACE — the one dark surface ── */
+.xp-space{margin:0 16px;border-radius:24px;padding:18px 19px 19px;cursor:pointer;
+  background:linear-gradient(155deg,#1E1B4B 0%,#161544 45%,#0A0A18 100%);
+  box-shadow:0 18px 38px -22px rgba(30,27,75,.85);
+  position:relative;overflow:hidden;transition:transform .16s var(--spring);}
+.xp-space:active{transform:scale(.985);}
+/* A faint starfield, drawn not imported. */
+.xp-space::after{content:"";position:absolute;inset:0;pointer-events:none;opacity:.5;
+  background-image:radial-gradient(1.4px 1.4px at 22% 26%,#fff,transparent),
+    radial-gradient(1.1px 1.1px at 68% 18%,#fff,transparent),
+    radial-gradient(1.6px 1.6px at 84% 62%,#fff,transparent),
+    radial-gradient(1.1px 1.1px at 42% 72%,#fff,transparent),
+    radial-gradient(1px 1px at 12% 58%,#fff,transparent);}
+.xp-space .lbl{font:700 .55rem/1 var(--f);letter-spacing:.15em;text-transform:uppercase;
+  color:rgba(255,255,255,.5);display:flex;align-items:center;gap:6px;}
+.xp-space .lbl .xp-dot{color:#7DD3FC;}
+.xp-space .t{font:600 .92rem/1.32 var(--f);color:#fff;margin-top:10px;letter-spacing:-.015em;}
+.xp-space .m{font:500 .69rem/1.4 var(--f);color:rgba(255,255,255,.5);margin-top:4px;}
+.xp-cd{font:700 2.05rem/1 var(--xf);color:#fff;letter-spacing:-.045em;margin-top:13px;
+  font-variant-numeric:tabular-nums;position:relative;z-index:1;}
+
+/* ── WORD OF THE DAY — editorial, not a data card ── */
+.xp-word{margin:0 16px;background:linear-gradient(165deg,#FFFDF7,#FBF5E9);
+  border-radius:24px;padding:26px 22px 24px;cursor:pointer;
+  box-shadow:0 2px 10px -6px rgba(122,74,0,.3);
+  transition:transform .16s var(--spring);}
+.xp-word:active{transform:scale(.985);}
+.xp-word .lbl{font:600 .55rem/1 var(--f);letter-spacing:.2em;text-transform:uppercase;
+  color:rgba(122,74,0,.5);}
+.xp-word .w{font:700 2.35rem/1.05 var(--xf);color:#2A1F0B;margin-top:14px;
+  letter-spacing:-.045em;}
+.xp-word .pos{font:400 .78rem/1 var(--f);color:rgba(42,31,11,.45);
+  font-style:italic;margin-top:8px;}
+.xp-word .def{font:400 .88rem/1.6 var(--f);color:rgba(42,31,11,.76);margin-top:14px;
+  max-width:30ch;}
+
+/* ── skeleton shimmer ── */
+.xp-sk{background:linear-gradient(100deg,rgba(11,18,32,.055) 30%,rgba(11,18,32,.02) 50%,rgba(11,18,32,.055) 70%);
+  background-size:220% 100%;animation:xpShim 1.35s linear infinite;border-radius:8px;}
 @keyframes xpShim{to{background-position:-220% 0;}}
 
 /* ── 3. entity bottom sheet ── */
-.xp-scrim{position:fixed;inset:0;background:rgba(28,28,30,.42);backdrop-filter:blur(2px);
+.xp-scrim{position:fixed;inset:0;background:rgba(11,18,32,.42);backdrop-filter:blur(3px);
   opacity:0;pointer-events:none;transition:opacity .26s ease;z-index:900;}
 .xp-scrim.on{opacity:1;pointer-events:auto;}
-.xp-sheet{position:fixed;left:0;right:0;bottom:0;z-index:901;
-  background:var(--surface);border-radius:26px 26px 0 0;
-  box-shadow:0 -12px 44px -12px rgba(28,28,30,.34);
+.xp-sheet{position:fixed;left:0;right:0;bottom:0;z-index:901;background:#fff;
+  border-radius:28px 28px 0 0;box-shadow:0 -14px 48px -14px rgba(11,18,32,.36);
   max-height:88vh;overflow-y:auto;-webkit-overflow-scrolling:touch;
   transform:translateY(100%);
-  /* spring, not ease — it should overshoot slightly and settle */
   transition:transform .42s cubic-bezier(.16,1.02,.3,1);
-  padding:0 18px calc(26px + env(safe-area-inset-bottom));}
+  padding:0 20px calc(28px + env(safe-area-inset-bottom));}
 .xp-sheet.on{transform:translateY(0);}
 .xp-sheet.drag{transition:none;}
-.xp-grab{position:sticky;top:0;background:var(--surface);padding:10px 0 6px;
-  display:grid;place-items:center;cursor:grab;touch-action:none;z-index:2;}
-.xp-grab i{display:block;width:38px;height:5px;border-radius:3px;background:var(--line);}
-.xp-sh-nm{font:700 .66rem/1 var(--fd);letter-spacing:.11em;text-transform:uppercase;
-  color:var(--t3);margin-top:2px;}
-.xp-sh-val{font:800 2rem/1.05 var(--fd);color:var(--t1);letter-spacing:-.035em;margin-top:7px;}
-.xp-sh-chg{font:700 .84rem/1 var(--fd);margin-top:6px;}
-.xp-sh-spark{width:100%;height:76px;margin:14px 0 4px;display:block;}
-.xp-sh-h{font:800 .82rem/1 var(--fd);color:var(--t1);margin:18px 0 8px;letter-spacing:-.01em;}
-.xp-why{display:flex;align-items:flex-start;gap:9px;padding:11px 0;
-  border-top:1px solid var(--line2);cursor:pointer;}
-.xp-why:active{opacity:.6;}
-.xp-why .ar{color:var(--accent);font-size:.72rem;margin-top:3px;flex:0 0 auto;}
-.xp-why .tx{font:600 .8rem/1.42 var(--f);color:var(--t1);}
-.xp-why .tx small{display:block;font:500 .66rem/1.3 var(--f);color:var(--t3);margin-top:3px;}
-.xp-rel{display:flex;flex-wrap:wrap;gap:7px;margin-top:4px;}
-.xp-rel button{border:1px solid var(--line2);background:var(--surface-2);color:var(--t1);
-  border-radius:999px;padding:7px 13px;font:600 .74rem/1 var(--f);cursor:pointer;
+.xp-grab{position:sticky;top:0;background:#fff;padding:11px 0 8px;display:grid;
+  place-items:center;cursor:grab;touch-action:none;z-index:2;}
+.xp-grab i{display:block;width:38px;height:5px;border-radius:3px;background:rgba(11,18,32,.14);}
+.xp-sh-nm{font:600 .6rem/1 var(--f);letter-spacing:.16em;text-transform:uppercase;
+  color:var(--xp-faint);margin-top:4px;}
+.xp-sh-val{font:700 2.6rem/1.02 var(--xf);color:var(--xp-ink);letter-spacing:-.05em;
+  margin-top:10px;font-variant-numeric:tabular-nums;}
+.xp-sh-chg{font:600 .88rem/1 var(--f);margin-top:8px;font-variant-numeric:tabular-nums;}
+.xp-sh-spark{width:100%;height:84px;margin:18px 0 2px;display:block;}
+.xp-sh-h{font:700 .6rem/1 var(--f);color:var(--xp-faint);letter-spacing:.15em;
+  text-transform:uppercase;margin:24px 0 6px;}
+.xp-why{display:flex;align-items:flex-start;gap:11px;padding:13px 0;
+  border-top:1px solid var(--xp-line);cursor:pointer;}
+.xp-why:active{opacity:.58;}
+.xp-why .ar{color:var(--accent);font-size:.72rem;margin-top:4px;flex:0 0 auto;}
+.xp-why .tx{font:600 .84rem/1.45 var(--f);color:var(--xp-ink);letter-spacing:-.01em;}
+.xp-why .tx small{display:block;font:500 .69rem/1.3 var(--f);color:var(--xp-faint);
+  margin-top:4px;letter-spacing:0;}
+.xp-rel{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;}
+.xp-rel button{border:0;background:var(--xp-tint);color:var(--xp-ink);border-radius:999px;
+  padding:9px 15px;font:600 .77rem/1 var(--f);cursor:pointer;
   transition:transform .16s var(--spring);}
-.xp-rel button:active{transform:scale(.94);}
-.xp-note{font:500 .64rem/1.4 var(--f);color:var(--t3);margin-top:16px;}
+.xp-rel button:active{transform:scale(.93);}
+.xp-note{font:500 .66rem/1.45 var(--f);color:var(--xp-faint);margin-top:20px;}
+
+/* The Live Data sections sit below the redesigned modules and were the last of
+   the identical white boxes. Same visual language applied rather than removing
+   them: the accent-derived band, the small wide-tracked label, Poppins on the
+   figures. Scoped to light theme so the dark slab treatment is untouched. */
+[data-theme="light"] .snap-slab{
+  background:#F7FAFF;border:0;
+  box-shadow:0 1px 2px rgba(11,18,32,.04);}
+[data-theme="light"] .snap-sec{border-radius:22px;margin:12px 16px 0;padding:14px 16px;}
+[data-theme="light"] .snap-t{font:700 .62rem/1 var(--f);color:rgba(11,18,32,.34);
+  letter-spacing:.15em;text-transform:uppercase;}
+[data-theme="light"] .snap-hd i{font-size:.7rem;opacity:.5;}
+[data-theme="light"] .snap-age{font:600 .55rem/1 var(--f);letter-spacing:.11em;
+  color:rgba(11,18,32,.3);}
+[data-theme="light"] .snap-k{font:500 .8rem/1.4 var(--f);color:rgba(11,18,32,.55);}
+[data-theme="light"] .snap-v{font:700 .92rem/1.3 var(--xf);color:#0B1220;
+  letter-spacing:-.025em;font-variant-numeric:tabular-nums;}
+[data-theme="light"] .snap-row{border-top:1px solid rgba(11,18,32,.06);}
+[data-theme="light"] .snap-li{border-top:1px solid rgba(11,18,32,.06);
+  font:600 .8rem/1.4 var(--f);color:#0B1220;}
+[data-theme="light"] .snap-li small{font:500 .68rem/1.3 var(--f);color:rgba(11,18,32,.4);}
+[data-theme="light"] .snap-tk{background:#F7FAFF;border:0;
+  box-shadow:0 1px 2px rgba(11,18,32,.04);}
 
 /* ── /explore/snapshot: ticker + sections ──
    These reuse the app's existing "glassic slab" language (.bt / .glance-card):
@@ -3598,7 +3693,6 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
     <div class="scope-btn tap" onclick="selScope(this,'national')">National</div>
     <div class="scope-btn on tap" onclick="selScope(this,'global')">Global</div>
   </div>
-  <div class="exp-cat-row" id="exp-cat-row" style="display:none"></div>
 
   <!-- ════════ EXPLORE v7 ════════ -->
   <div class="xp">
@@ -3606,11 +3700,12 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
     <div class="xp-scope" id="xp-scope"></div>
     <div class="xp-chips" id="xp-chips"></div>
 
-    <!-- 2. live pulse -->
-    <div class="xp-hd">
-      <h3>Live Pulse</h3>
-      <span class="xp-live"><span class="xp-dot"></span>Live</span>
-    </div>
+    <!-- The pillar tiles, kept. Soft per-category tints, still driven by
+         renderExpCats() and still filtering the feed — moved here rather than
+         rebuilt, because the thing that makes them good is already built. -->
+    <div class="exp-cat-row" id="exp-cat-row"></div>
+
+    <!-- 2. live pulse — no header: the cards say NIFTY and GOLD themselves -->
     <div class="xp-rail" id="xp-pulse"></div>
 
     <!-- 4. module stubs -->
@@ -8990,11 +9085,12 @@ function renderXpPulse() {
   if (!host) return;
   const d = xpPulseData();
   host.innerHTML = Object.entries(d).map(([k, v]) => `
-    <div class="xp-metric" onclick="openEntity('${k}')" role="button" tabindex="0">
+    <div class="xp-metric ${v.pct >= 0 ? 'up' : 'dn'}" onclick="openEntity('${k}')"
+         role="button" tabindex="0">
       <div class="nm">${bEsc(v.label)}</div>
       <div class="val">${bEsc(v.value)}</div>
       <div class="chg">${xpPct(v.pct)}</div>
-      ${xpSpark(v.series, v.pct >= 0, 26)}
+      ${xpSpark(v.series, v.pct >= 0, 28)}
     </div>`).join('');
 }
 
@@ -9003,11 +9099,11 @@ function xpPulseSkeleton() {
   if (!host) return;
   // Shimmer, never the word "Loading" and never a spinner.
   host.innerHTML = Array(4).fill(
-    `<div class="xp-metric" style="pointer-events:none">
-       <div class="xp-sk" style="height:9px;width:52%"></div>
-       <div class="xp-sk" style="height:17px;width:78%;margin-top:9px"></div>
-       <div class="xp-sk" style="height:9px;width:40%;margin-top:7px"></div>
-       <div class="xp-sk" style="height:26px;margin-top:8px"></div>
+    `<div class="xp-metric up" style="pointer-events:none;box-shadow:none">
+       <div class="xp-sk" style="height:8px;width:52%"></div>
+       <div class="xp-sk" style="height:21px;width:80%;margin-top:10px"></div>
+       <div class="xp-sk" style="height:8px;width:40%;margin-top:7px"></div>
+       <div class="xp-sk" style="height:28px;margin-top:8px"></div>
      </div>`).join('');
 }
 
@@ -9201,56 +9297,64 @@ function renderXpModules() {
   const scheme = gp ? { name: gp.title, meta: gp.published_at || M.government.scheme.meta }
                     : M.government.scheme;
 
-  const row = (bg, fg, icon, title, meta) => `
+  // AQI is the one number whose colour carries meaning, so the tile is tinted by
+  // the value rather than by which tile it is.
+  const aqiN = parseInt(M.essentials.aqi, 10) || 0;
+  const aqiTint = aqiN <= 100 ? 't-good' : aqiN <= 200 ? 't-mid' : 't-bad';
+  const aqiWord = aqiN <= 100 ? 'Moderate' : aqiN <= 200 ? 'Poor' : 'Severe';
+
+  const row = (icon, title, meta) => `
     <div class="xp-row">
-      <div class="ico" style="background:${bg};color:${fg}"><i class="fa-solid ${icon}"></i></div>
+      <div class="ico"><i class="fa-solid ${icon}"></i></div>
       <div class="tx"><b>${bEsc(title)}</b><small>${bEsc(meta)}</small></div>
-      <i class="fa-solid fa-chevron-right" style="color:var(--t3);font-size:.7rem"></i>
+      <i class="fa-solid fa-chevron-right cv"></i>
     </div>`;
 
+  // Three section labels are gone on purpose — the tiles say AIR QUALITY and
+  // PETROL, the metric cards say NIFTY and GOLD, and a word in 38px display type
+  // does not need to be introduced as a word.
   host.innerHTML = `
-    <div class="xp-hd"><h3>Essentials</h3><span class="all" onclick="xpSoon('Essentials')">View all →</span></div>
     <div class="xp-grid">
-      <div class="xp-card" onclick="xpSoon('Air quality')">
-        <div class="k">Air quality</div><div class="v">${bEsc(M.essentials.aqi.split(' · ')[0])}</div>
-        <div class="s">${bEsc(M.essentials.aqi.split(' · ')[1] || '')} · Delhi</div></div>
-      <div class="xp-card" onclick="xpSoon('Weather')">
+      <div class="xp-tile ${aqiTint}" onclick="xpSoon('Air quality')">
+        <div class="k">Air quality</div><div class="v">${aqiN || '—'}</div>
+        <div class="s">${bEsc(aqiWord)} · Delhi</div></div>
+      <div class="xp-tile t-warm" onclick="xpSoon('Weather')">
         <div class="k">Weather</div><div class="v">${bEsc(weather)}</div>
         <div class="s">${bEsc(w && w.humidity != null ? w.humidity + '% humidity' : 'Haze')}</div></div>
-      <div class="xp-card" onclick="xpSoon('Petrol')">
+      <div class="xp-tile t-cool" onclick="xpSoon('Petrol')">
         <div class="k">Petrol</div><div class="v">${bEsc(M.essentials.petrol)}</div>
         <div class="s">per litre · Mumbai</div></div>
-      <div class="xp-card" onclick="xpSoon('Diesel')">
+      <div class="xp-tile t-cool" onclick="xpSoon('Diesel')">
         <div class="k">Diesel</div><div class="v">${bEsc(M.essentials.diesel)}</div>
         <div class="s">per litre · Mumbai</div></div>
     </div>
 
     <div class="xp-hd"><h3>Government</h3><span class="all" onclick="xpSoon('Government')">View all →</span></div>
-    <div class="xp-wide" onclick="openEntity('SCHEME')">
-      ${row('#E8F1FF','#0A84FF','fa-landmark', scheme.name, scheme.meta)}
-      ${row('#FFF3E0','#F97316','fa-file-signature', M.government.tender.name, M.government.tender.meta)}
+    <div class="xp-band" onclick="openEntity('SCHEME')">
+      ${row('fa-landmark', scheme.name, scheme.meta)}
+      ${row('fa-file-signature', M.government.tender.name, M.government.tender.meta)}
     </div>
 
     <div class="xp-hd"><h3>Opportunities</h3><span class="all" onclick="xpSoon('Opportunities')">View all →</span></div>
-    <div class="xp-wide" onclick="xpSoon('Opportunities')">
-      ${row('#E9F9F0','#12A150','fa-briefcase', M.opportunities.job.name, M.opportunities.job.meta)}
-      ${row('#F3E9FF','#8E24AA','fa-seedling', M.opportunities.grant.name, M.opportunities.grant.meta)}
+    <div class="xp-band" onclick="xpSoon('Opportunities')">
+      ${row('fa-briefcase', M.opportunities.job.name, M.opportunities.job.meta)}
+      ${row('fa-seedling', M.opportunities.grant.name, M.opportunities.grant.meta)}
     </div>
 
-    <div class="xp-hd"><h3>Next Launch</h3>
-      <span class="xp-live"><span class="xp-dot"></span>T-minus</span>
-      <span class="all" onclick="xpSoon('Space')">View all →</span></div>
-    <div class="xp-wide" onclick="xpSoon('Space')">
+    <div class="xp-hd" style="margin-bottom:0"></div>
+    <div class="xp-space" onclick="xpSoon('Space')">
+      <div class="lbl"><span class="xp-dot"></span>Next launch</div>
       <div class="t">${bEsc(launch.name)}</div>
       <div class="m">${bEsc(launch.pad)}</div>
-      <div class="xp-cd" id="xp-cd" style="margin-top:9px">${bEsc(xpCountdown(launch.t))}</div>
+      <div class="xp-cd" id="xp-cd">${bEsc(xpCountdown(launch.t))}</div>
     </div>
 
-    <div class="xp-hd"><h3>Word of the Day</h3><span class="all" onclick="xpSoon('Knowledge')">View all →</span></div>
-    <div class="xp-wide" onclick="xpSoon('Knowledge')" style="margin-bottom:8px">
-      <div class="t" style="font-size:1.02rem">${bEsc(know.word)}
-        <span style="font:500 .7rem var(--f);color:var(--t3)">· ${bEsc(know.pos)}</span></div>
-      <div class="m">${bEsc(know.def)}</div>
+    <div class="xp-hd" style="margin-bottom:0"></div>
+    <div class="xp-word" onclick="xpSoon('Knowledge')">
+      <div class="lbl">Word of the day</div>
+      <div class="w">${bEsc(know.word)}</div>
+      <div class="pos">${bEsc(know.pos)}</div>
+      <div class="def">${bEsc(know.def)}</div>
     </div>`;
 
   clearInterval(window._xpCdTimer);
@@ -9266,16 +9370,23 @@ function xpSoon(what) { if (typeof toast === 'function') toast(what + ' — comi
 function xpModulesSkeleton() {
   const host = document.getElementById('xp-modules');
   if (!host) return;
-  const card = '<div class="xp-card" style="pointer-events:none">' +
-    '<div class="xp-sk" style="height:9px;width:48%"></div>' +
-    '<div class="xp-sk" style="height:19px;width:66%;margin-top:8px"></div>' +
-    '<div class="xp-sk" style="height:9px;width:80%;margin-top:6px"></div></div>';
-  host.innerHTML = `<div class="xp-hd"><h3>Essentials</h3></div>
-    <div class="xp-grid">${card + card + card + card}</div>
+  // Shimmer in the tile's own tint, so the page does not change colour when the
+  // real values land.
+  const tile = t => `<div class="xp-tile ${t}" style="pointer-events:none">
+      <div class="xp-sk" style="height:8px;width:48%"></div>
+      <div class="xp-sk" style="height:24px;width:66%;margin-top:9px"></div>
+      <div class="xp-sk" style="height:8px;width:78%;margin-top:6px"></div></div>`;
+  host.innerHTML = `
+    <div class="xp-grid">${tile('t-good') + tile('t-warm') + tile('t-cool') + tile('t-cool')}</div>
     <div class="xp-hd"><h3>Government</h3></div>
-    <div class="xp-wide" style="pointer-events:none">
-      <div class="xp-sk" style="height:14px;width:72%"></div>
-      <div class="xp-sk" style="height:10px;width:52%;margin-top:8px"></div></div>`;
+    <div class="xp-band" style="pointer-events:none">
+      <div class="xp-row"><div class="xp-sk" style="width:34px;height:34px;border-radius:12px"></div>
+        <div class="tx"><div class="xp-sk" style="height:11px;width:72%"></div>
+          <div class="xp-sk" style="height:9px;width:44%;margin-top:7px"></div></div></div>
+      <div class="xp-row"><div class="xp-sk" style="width:34px;height:34px;border-radius:12px"></div>
+        <div class="tx"><div class="xp-sk" style="height:11px;width:64%"></div>
+          <div class="xp-sk" style="height:9px;width:50%;margin-top:7px"></div></div></div>
+    </div>`;
 }
 
 // ── boot ────────────────────────────────────────────────────────────────────
