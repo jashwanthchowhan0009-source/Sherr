@@ -1604,129 +1604,153 @@ nav.compact .nb.on { flex: 0 0 auto; padding-left: 16px; padding-right: 16px; }
 
 
 
-/* ══════════ EXPLORE v7 — visual pass ══════════
-   TWO FACES ONLY. --f (the app's existing sans) carries everything; Poppins is
-   the display face and appears in exactly three places: hero numbers, the
-   countdown, and Word of the Day. Both are already loaded by the <head>.
+/* ══════════ EXPLORE v8 ══════════
+   TWO FACES. --f (the app's sans) carries everything; Poppins is the display
+   face and appears only on hero numbers, the countdown, the bulletin headline
+   and the closing line. Both already loaded in <head>.
 
-   COLOUR. One family, derived from the app's accent, with saturation and warmth
-   varied per module so the sections read as different surfaces rather than as
-   eleven identical boxes. Semantic colour is used only where it means something:
-   green up, red down, AQI by value, amber for weather. The nine pillar colours
-   are NOT part of this palette — they stay on the category tiles and article
-   tags, where they are labels rather than decoration. */
+   COLOUR. One accent-derived family with saturation and warmth varied per
+   module, so sections read as different surfaces rather than as identical
+   boxes. Semantic colour only where it means something. The nine pillar colours
+   stay on article tags and the category chips, where they are labels. */
 :root{
-  --xf:'Poppins','Inter',system-ui,sans-serif;   /* display face */
-  --xp-ink:#0B1220;                              /* headings, numbers */
-  --xp-mute:rgba(11,18,32,.52);                  /* metadata */
-  --xp-faint:rgba(11,18,32,.34);                 /* section labels */
-  --xp-up:#0E9F6E;   --xp-dn:#E02D3C;
-  --xp-tint:#F2F7FF;                             /* accent-derived band */
-  --xp-line:rgba(11,18,32,.07);
+  --xf:'Poppins','Inter',system-ui,sans-serif;
+  --xp-ink:#0B1220; --xp-mute:rgba(11,18,32,.54); --xp-faint:rgba(11,18,32,.33);
+  --xp-up:#0E9F6E;  --xp-dn:#E02D3C;
+  --xp-tint:#F2F7FF; --xp-line:rgba(11,18,32,.07);
 }
-.xp{padding-bottom:10px;}
+.xp{padding-bottom:14px;}
 
-/* Section labels: they label, they do not shout. */
-.xp-hd{display:flex;align-items:center;gap:8px;margin:26px 16px 10px;}
-.xp-hd h3{font:700 .62rem/1 var(--f);color:var(--xp-faint);letter-spacing:.15em;
+/* Labels label; they do not shout. */
+.xp-hd{display:flex;align-items:center;gap:8px;margin:24px 16px 10px;}
+.xp-hd h3{font:700 .62rem/1 var(--f);color:var(--xp-faint);letter-spacing:.16em;
   text-transform:uppercase;margin:0;}
 .xp-hd .all{margin-left:auto;font:600 .7rem/1 var(--f);color:var(--accent);cursor:pointer;}
-.xp-hd .all:active{opacity:.55;}
-.xp-live{display:inline-flex;align-items:center;gap:5px;font:700 .55rem/1 var(--f);
-  letter-spacing:.13em;text-transform:uppercase;color:var(--xp-up);}
 .xp-dot{width:5px;height:5px;border-radius:50%;background:currentColor;
   animation:xpPulse 1.9s ease-in-out infinite;}
-@keyframes xpPulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.3;transform:scale(.7);}}
+@keyframes xpPulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.28;transform:scale(.68)}}
+.xp-sk{background:linear-gradient(100deg,rgba(11,18,32,.055) 30%,rgba(11,18,32,.02) 50%,rgba(11,18,32,.055) 70%);
+  background-size:220% 100%;animation:xpShim 1.35s linear infinite;border-radius:8px;}
+@keyframes xpShim{to{background-position:-220% 0}}
 
-/* ── 1. scope + category rail ── */
-.xp-scope{display:flex;gap:2px;margin:12px 16px 0;padding:3px;border-radius:999px;
-  background:rgba(11,18,32,.05);}
-.xp-scope button{flex:1;border:0;background:transparent;cursor:pointer;padding:8px 0;
-  border-radius:999px;font:600 .78rem/1 var(--f);color:var(--xp-mute);
-  transition:background .2s var(--spring),color .2s;}
-.xp-scope button.on{background:#fff;color:var(--xp-ink);font-weight:700;
-  box-shadow:0 1px 3px rgba(11,18,32,.13);}
-
+/* ── 2. category rail ── */
 .xp-chips{display:flex;gap:8px;overflow-x:auto;scroll-snap-type:x proximity;
-  padding:12px 16px 2px;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
-.xp-chips::-webkit-scrollbar{display:none;}
+  padding:12px 16px 4px;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
+.xp-chips::-webkit-scrollbar{display:none}
 .xp-chip{scroll-snap-align:start;flex:0 0 auto;border:0;background:rgba(11,18,32,.05);
-  color:var(--xp-mute);padding:8px 14px;border-radius:999px;
-  font:600 .76rem/1 var(--f);white-space:nowrap;cursor:pointer;
-  transition:transform .16s var(--spring),background .2s,color .2s;}
-.xp-chip:active{transform:scale(.94);}
-.xp-chip.on{background:var(--accent);color:#fff;font-weight:600;
+  color:var(--xp-mute);padding:8px 14px;border-radius:999px;font:600 .76rem/1 var(--f);
+  white-space:nowrap;cursor:pointer;transition:transform .16s var(--spring),background .2s,color .2s;}
+.xp-chip:active{transform:scale(.94)}
+.xp-chip .cdot{display:inline-block;width:6px;height:6px;border-radius:50%;
+  margin-right:6px;vertical-align:middle;}
+.xp-chip.on .cdot{background:rgba(255,255,255,.85)!important;}
+.xp-chip.on{background:var(--accent);color:#fff;
   box-shadow:0 6px 16px -6px color-mix(in srgb,var(--accent) 60%,transparent);}
 
-/* The pillar tiles, kept exactly as they were — soft per-category tints, the one
-   place the nine pillar colours belong. Only the spacing is retuned. */
-.xp .exp-cat-row{display:flex!important;padding:14px 16px 4px;gap:14px;}
+/* ── 3. bulletin hero — full bleed, no card border ── */
+.xp-hero{position:relative;margin:6px 0 0;}
+.xp-hero-track{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;
+  scrollbar-width:none;-webkit-overflow-scrolling:touch;}
+.xp-hero-track::-webkit-scrollbar{display:none}
+.xp-slide{scroll-snap-align:center;flex:0 0 100%;position:relative;height:212px;
+  cursor:pointer;overflow:hidden;}
+.xp-slide img{width:100%;height:100%;object-fit:cover;display:block;}
+.xp-slide .art{position:absolute;inset:0;}
+/* Scrim, not a card: the headline sits on the photograph. */
+.xp-slide .scrim{position:absolute;inset:0;
+  background:linear-gradient(to top,rgba(6,10,20,.88) 0%,rgba(6,10,20,.42) 38%,rgba(6,10,20,0) 70%);}
+.xp-slide .cap{position:absolute;left:16px;right:16px;bottom:22px;}
+.xp-slide .tag{display:inline-block;font:700 .55rem/1 var(--f);letter-spacing:.13em;
+  text-transform:uppercase;color:#fff;background:rgba(255,255,255,.2);
+  backdrop-filter:blur(6px);padding:5px 9px;border-radius:6px;}
+.xp-slide h4{font:600 1.12rem/1.32 var(--xf);color:#fff;margin:9px 0 0;
+  letter-spacing:-.025em;text-shadow:0 1px 12px rgba(0,0,0,.4);}
+.xp-slide .meta{font:500 .66rem/1 var(--f);color:rgba(255,255,255,.68);margin-top:7px;}
+.xp-dots{position:absolute;left:0;right:0;bottom:8px;display:flex;justify-content:center;gap:5px;}
+.xp-dots i{width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,.45);
+  transition:width .25s,background .25s;}
+.xp-dots i.on{width:16px;border-radius:3px;background:#fff;}
 
-/* ── 2. LIVE PULSE — no outer card, floats on the page, bleeds right ── */
-.xp-rail{display:flex;gap:11px;overflow-x:auto;scroll-snap-type:x proximity;
-  /* 40px right padding is the bleed: the next card is always half-visible. */
-  padding:4px 40px 16px 16px;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
-.xp-rail::-webkit-scrollbar{display:none;}
-.xp-metric{scroll-snap-align:start;flex:0 0 138px;background:#fff;border:0;
-  border-radius:20px;padding:13px 14px 9px;cursor:pointer;
-  transition:transform .16s var(--spring),box-shadow .22s;}
-/* Depth by direction: the shadow is tinted by what the number did. */
-.xp-metric.up{box-shadow:0 10px 22px -14px rgba(14,159,110,.55),0 1px 2px rgba(11,18,32,.05);}
-.xp-metric.dn{box-shadow:0 10px 22px -14px rgba(224,45,60,.5),0 1px 2px rgba(11,18,32,.05);}
-.xp-metric:active{transform:scale(.955);}
-.xp-metric .nm{font:600 .58rem/1 var(--f);color:var(--xp-faint);letter-spacing:.12em;
-  text-transform:uppercase;}
-/* The number is the hero. */
-.xp-metric .val{font:700 1.32rem/1.05 var(--xf);color:var(--xp-ink);margin-top:8px;
-  letter-spacing:-.035em;font-variant-numeric:tabular-nums;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.xp-metric .chg{font:600 .7rem/1 var(--f);margin-top:5px;font-variant-numeric:tabular-nums;}
-.xp-up{color:var(--xp-up);} .xp-dn{color:var(--xp-dn);}
-.xp-spark{display:block;width:100%;height:28px;margin-top:8px;}
-
-/* ── ESSENTIALS — tinted tiles, whole surface, no header ── */
-.xp-grid{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin:4px 16px 0;}
-.xp-tile{border-radius:20px;padding:14px 15px 13px;cursor:pointer;border:0;
+/* ── 4. matrix of markets — a tint per asset class, one family ── */
+.xp-matrix{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin:0 16px;}
+.xp-mt{border-radius:20px;padding:13px 14px 10px;cursor:pointer;border:0;
   transition:transform .16s var(--spring);}
-.xp-tile:active{transform:scale(.97);}
-.xp-tile .k{font:600 .56rem/1 var(--f);letter-spacing:.13em;text-transform:uppercase;
-  opacity:.62;}
-.xp-tile .v{font:700 1.5rem/1.05 var(--xf);margin-top:8px;letter-spacing:-.04em;
-  font-variant-numeric:tabular-nums;}
-.xp-tile .s{font:500 .68rem/1.35 var(--f);margin-top:4px;opacity:.6;}
-/* Weather is warm amber; the AQI scale has to stay legible NEXT TO it, so its
-   middle step is pushed orange rather than sharing the same yellow — two tiles
-   in the same tint read as one block and undo the point of tinting them. */
-.t-warm{background:linear-gradient(160deg,#FFF3DE,#FFE4B8);color:#7A4A00;}
-.t-cool{background:linear-gradient(160deg,#EEF3FA,#E1EAF6);color:#33415A;}
-.t-good{background:linear-gradient(160deg,#E4F7EE,#CFEEDF);color:#0A6E4C;}
-.t-mid {background:linear-gradient(160deg,#FFEBDD,#FFD9BE);color:#9A3D00;}
-.t-bad {background:linear-gradient(160deg,#FDE8EA,#F9D2D7);color:#9C1F2B;}
+.xp-mt:active{transform:scale(.965)}
+.xp-mt .nm{font:600 .56rem/1 var(--f);letter-spacing:.13em;text-transform:uppercase;opacity:.6;}
+.xp-mt .val{font:700 1.24rem/1.06 var(--xf);margin-top:8px;letter-spacing:-.035em;
+  font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.xp-mt .chg{font:600 .68rem/1 var(--f);margin-top:4px;font-variant-numeric:tabular-nums;}
+.xp-mt .sub{font:500 .58rem/1 var(--f);opacity:.5;margin-top:3px;}
+.xp-spark{display:block;width:100%;height:26px;margin-top:6px;}
+.m-stk{background:linear-gradient(160deg,#EAF1FE,#DCE8FD);color:#123A7A;}
+.m-cry{background:linear-gradient(160deg,#F3EDFF,#E7DDFF);color:#4A2A8A;}
+.m-fx {background:linear-gradient(160deg,#E9F5F4,#D7EDEA);color:#12564F;}
+.m-bnd{background:linear-gradient(160deg,#EEF1F7,#E1E6F0);color:#33415A;}
+.m-met{background:linear-gradient(160deg,#FFF4DE,#FFE8BE);color:#7A4A00;}
+.m-oil{background:linear-gradient(160deg,#FDEDE6,#F9DACE);color:#8A3A16;}
+.xp-up{color:var(--xp-up)} .xp-dn{color:var(--xp-dn)}
+/* Depth by direction — lift, not a second colour. */
+.xp-mt.up{box-shadow:0 10px 22px -15px rgba(14,159,110,.5)}
+.xp-mt.dn{box-shadow:0 10px 22px -15px rgba(224,45,60,.45)}
 
-/* ── GOVERNMENT / OPPORTUNITIES — a tinted band groups the rows ── */
-.xp-band{margin:0 16px;background:var(--xp-tint);border-radius:22px;
-  padding:4px 16px;border:0;}
-.xp-row{display:flex;align-items:center;gap:12px;padding:13px 0;
-  border-top:1px solid rgba(11,18,32,.06);cursor:pointer;}
-.xp-row:first-of-type{border-top:0;}
-.xp-row:active{opacity:.62;}
-.xp-row .ico{width:34px;height:34px;border-radius:12px;display:grid;place-items:center;
-  flex:0 0 auto;font-size:.82rem;background:#fff;color:var(--accent);
-  box-shadow:0 2px 6px -3px rgba(11,18,32,.2);}
-.xp-row .tx{min-width:0;flex:1;}
-.xp-row .tx b{display:block;font:600 .81rem/1.32 var(--f);color:var(--xp-ink);
-  letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.xp-row .tx small{display:block;font:500 .69rem/1.3 var(--f);color:var(--xp-mute);
-  margin-top:3px;}
-.xp-row .cv{color:var(--xp-faint);font-size:.7rem;flex:0 0 auto;}
+/* ── 5. take a look ── */
+.xp-tabs{display:flex;gap:7px;margin:0 16px 11px;}
+.xp-tab{border:0;background:rgba(11,18,32,.05);color:var(--xp-mute);border-radius:999px;
+  padding:8px 15px;font:600 .75rem/1 var(--f);cursor:pointer;transition:all .2s;}
+.xp-tab.on{background:var(--xp-ink);color:#fff;}
+/* One tinted band groups the cards; no per-card borders. */
+.xp-band{margin:0 16px;background:var(--xp-tint);border-radius:22px;padding:13px;}
+.xp-tal{display:grid;grid-template-columns:1.25fr 1fr;gap:11px;}
+.xp-tal .big{grid-row:span 2;background:#fff;border-radius:17px;padding:14px 15px;
+  display:flex;flex-direction:column;justify-content:center;cursor:pointer;
+  box-shadow:0 2px 8px -5px rgba(11,18,32,.24);transition:transform .16s var(--spring);}
+.xp-tal .sm{background:#fff;border-radius:15px;padding:11px 13px;cursor:pointer;
+  box-shadow:0 2px 8px -5px rgba(11,18,32,.2);transition:transform .16s var(--spring);}
+.xp-tal .big:active,.xp-tal .sm:active{transform:scale(.97)}
+.xp-tal .k{font:600 .55rem/1 var(--f);letter-spacing:.13em;text-transform:uppercase;
+  color:var(--xp-faint);}
+.xp-tal .big .v{font:700 1.72rem/1.05 var(--xf);color:var(--xp-ink);margin-top:9px;
+  letter-spacing:-.04em;font-variant-numeric:tabular-nums;}
+.xp-tal .sm .v{font:700 1.06rem/1.05 var(--xf);color:var(--xp-ink);margin-top:6px;
+  letter-spacing:-.035em;font-variant-numeric:tabular-nums;}
+.xp-tal .s{font:500 .64rem/1.35 var(--f);color:var(--xp-mute);margin-top:4px;}
 
-/* ── SPACE — the one dark surface ── */
-.xp-space{margin:0 16px;border-radius:24px;padding:18px 19px 19px;cursor:pointer;
+/* ── 6. bulletin ticker ── */
+.xp-btick{display:flex;align-items:center;gap:0;margin:20px 0 0;padding:11px 16px;
+  background:var(--xp-tint);overflow:hidden;}
+.xp-btick .run{display:flex;gap:26px;white-space:nowrap;flex:1;overflow:hidden;
+  -webkit-mask-image:linear-gradient(90deg,#000 82%,transparent);}
+.xp-btick .run span{font:500 .74rem/1.3 var(--f);color:var(--xp-ink);}
+.xp-btick .run b{color:var(--accent);font-weight:700;margin-right:5px;}
+.xp-btick .more{flex:0 0 auto;font:700 .68rem/1 var(--f);color:var(--accent);
+  cursor:pointer;margin-left:10px;}
+
+/* ── 7. government — flat grid, minimal chrome ── */
+.xp-gov{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0 16px;}
+.xp-gv{background:#fff;border-radius:17px;padding:13px 13px 12px;cursor:pointer;
+  box-shadow:0 1px 3px rgba(11,18,32,.06);transition:transform .16s var(--spring);}
+.xp-gv:active{transform:scale(.965)}
+.xp-gv i{color:var(--accent);font-size:.86rem;}
+.xp-gv b{display:block;font:600 .73rem/1.3 var(--f);color:var(--xp-ink);margin-top:9px;
+  letter-spacing:-.01em;}
+.xp-gv small{display:block;font:500 .63rem/1.32 var(--f);color:var(--xp-faint);margin-top:4px;}
+
+/* ── 8. also ── */
+.xp-also{margin:14px 16px 0;background:#fff;border-radius:18px;padding:0 15px;
+  box-shadow:0 1px 3px rgba(11,18,32,.06);}
+.xp-al{display:flex;align-items:center;gap:11px;padding:14px 0;
+  border-top:1px solid var(--xp-line);cursor:pointer;}
+.xp-al:first-child{border-top:0}
+.xp-al:active{opacity:.6}
+.xp-al b{flex:1;font:600 .81rem/1 var(--f);color:var(--xp-ink);}
+.xp-al i{color:var(--xp-faint);font-size:.72rem;}
+
+/* ── 9. space — the one dark surface ── */
+.xp-space{margin:20px 16px 0;border-radius:24px;padding:18px 19px 19px;cursor:pointer;
   background:linear-gradient(155deg,#1E1B4B 0%,#161544 45%,#0A0A18 100%);
-  box-shadow:0 18px 38px -22px rgba(30,27,75,.85);
-  position:relative;overflow:hidden;transition:transform .16s var(--spring);}
-.xp-space:active{transform:scale(.985);}
-/* A faint starfield, drawn not imported. */
+  box-shadow:0 18px 38px -22px rgba(30,27,75,.85);position:relative;overflow:hidden;
+  transition:transform .16s var(--spring);}
+.xp-space:active{transform:scale(.985)}
 .xp-space::after{content:"";position:absolute;inset:0;pointer-events:none;opacity:.5;
   background-image:radial-gradient(1.4px 1.4px at 22% 26%,#fff,transparent),
     radial-gradient(1.1px 1.1px at 68% 18%,#fff,transparent),
@@ -1735,44 +1759,83 @@ nav.compact .nb.on { flex: 0 0 auto; padding-left: 16px; padding-right: 16px; }
     radial-gradient(1px 1px at 12% 58%,#fff,transparent);}
 .xp-space .lbl{font:700 .55rem/1 var(--f);letter-spacing:.15em;text-transform:uppercase;
   color:rgba(255,255,255,.5);display:flex;align-items:center;gap:6px;}
-.xp-space .lbl .xp-dot{color:#7DD3FC;}
-.xp-space .t{font:600 .92rem/1.32 var(--f);color:#fff;margin-top:10px;letter-spacing:-.015em;}
+.xp-space .lbl .xp-dot{color:#7DD3FC}
+.xp-space .t{font:600 .95rem/1.3 var(--f);color:#fff;margin-top:10px;letter-spacing:-.015em;}
 .xp-space .m{font:500 .69rem/1.4 var(--f);color:rgba(255,255,255,.5);margin-top:4px;}
 .xp-cd{font:700 2.05rem/1 var(--xf);color:#fff;letter-spacing:-.045em;margin-top:13px;
   font-variant-numeric:tabular-nums;position:relative;z-index:1;}
+.xp-space .cta{font:600 .68rem/1 var(--f);color:#93C5FD;margin-top:12px;position:relative;z-index:1;}
 
-/* ── WORD OF THE DAY — editorial, not a data card ── */
-.xp-word{margin:0 16px;background:linear-gradient(165deg,#FFFDF7,#FBF5E9);
-  border-radius:24px;padding:26px 22px 24px;cursor:pointer;
-  box-shadow:0 2px 10px -6px rgba(122,74,0,.3);
-  transition:transform .16s var(--spring);}
-.xp-word:active{transform:scale(.985);}
-.xp-word .lbl{font:600 .55rem/1 var(--f);letter-spacing:.2em;text-transform:uppercase;
-  color:rgba(122,74,0,.5);}
-.xp-word .w{font:700 2.35rem/1.05 var(--xf);color:#2A1F0B;margin-top:14px;
-  letter-spacing:-.045em;}
-.xp-word .pos{font:400 .78rem/1 var(--f);color:rgba(42,31,11,.45);
-  font-style:italic;margin-top:8px;}
-.xp-word .def{font:400 .88rem/1.6 var(--f);color:rgba(42,31,11,.76);margin-top:14px;
-  max-width:30ch;}
+/* ── 10. ai & tech — near-monochrome, developer restraint ── */
+.xp-ai{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin:0 16px;}
+.xp-ac{background:#FBFBFD;border:1px solid var(--xp-line);border-radius:18px;
+  padding:13px 13px 12px;cursor:pointer;transition:transform .16s var(--spring);}
+.xp-ac:active{transform:scale(.965)}
+.xp-ac .k{font:600 .55rem/1 var(--f);letter-spacing:.13em;text-transform:uppercase;
+  color:var(--xp-faint);}
+.xp-ac li{list-style:none;font:500 .7rem/1.4 var(--f);color:var(--xp-ink);
+  margin-top:9px;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;
+  -webkit-line-clamp:2;-webkit-box-orient:vertical;}
+.xp-ac ul{margin:0;padding:0}
+.xp-ac .st{font:600 .6rem/1 var(--f);color:var(--xp-faint);margin-top:2px;
+  font-variant-numeric:tabular-nums;}
 
-/* ── skeleton shimmer ── */
-.xp-sk{background:linear-gradient(100deg,rgba(11,18,32,.055) 30%,rgba(11,18,32,.02) 50%,rgba(11,18,32,.055) 70%);
-  background-size:220% 100%;animation:xpShim 1.35s linear infinite;border-radius:8px;}
-@keyframes xpShim{to{background-position:-220% 0;}}
+/* ── 11. closing line ── */
+.xp-close{font:600 2.5rem/1.08 var(--xf);color:rgba(11,18,32,.13);letter-spacing:-.05em;
+  margin:34px 16px 22px;}
 
-/* ── 3. entity bottom sheet ── */
+/* ── Part C — expanded page in the same shell ── */
+.xp-page{position:fixed;inset:0;z-index:880;background:var(--bg);overflow-y:auto;
+  -webkit-overflow-scrolling:touch;transform:translateX(100%);
+  transition:transform .34s cubic-bezier(.22,1,.32,1);padding-bottom:100px;}
+.xp-page.on{transform:translateX(0)}
+.xp-pg-hd{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:12px;
+  padding:14px 16px;background:var(--bg);border-bottom:1px solid var(--xp-line);}
+.xp-pg-hd button{border:0;background:transparent;cursor:pointer;color:var(--xp-ink);
+  font-size:1rem;padding:2px 4px;}
+.xp-pg-hd h2{font:700 .95rem/1 var(--f);color:var(--xp-ink);margin:0;letter-spacing:-.02em;}
+.xp-seg{display:flex;gap:7px;padding:12px 16px 6px;overflow-x:auto;scrollbar-width:none;}
+.xp-seg::-webkit-scrollbar{display:none}
+.xp-sg{flex:0 0 auto;border:0;background:rgba(11,18,32,.05);color:var(--xp-mute);
+  border-radius:999px;padding:8px 14px;font:600 .74rem/1 var(--f);cursor:pointer;}
+.xp-sg.on{background:var(--xp-ink);color:#fff}
+.xp-list{margin:8px 16px 0;background:#fff;border-radius:20px;padding:0 15px;
+  box-shadow:0 1px 3px rgba(11,18,32,.06);}
+.xp-li{display:flex;align-items:center;gap:12px;padding:13px 0;
+  border-top:1px solid var(--xp-line);cursor:pointer;}
+.xp-li:first-child{border-top:0}
+.xp-li:active{opacity:.6}
+.xp-li .n{flex:1;min-width:0;}
+.xp-li .n b{display:block;font:600 .81rem/1.2 var(--f);color:var(--xp-ink);}
+.xp-li .n small{display:block;font:500 .64rem/1 var(--f);color:var(--xp-faint);margin-top:4px;}
+.xp-li .sp{flex:0 0 62px}
+.xp-li .p{text-align:right;flex:0 0 auto}
+.xp-li .p b{display:block;font:700 .86rem/1.2 var(--xf);color:var(--xp-ink);
+  letter-spacing:-.025em;font-variant-numeric:tabular-nums;}
+.xp-li .p small{display:block;font:600 .66rem/1 var(--f);margin-top:4px;
+  font-variant-numeric:tabular-nums;}
+.xp-gauge{margin:12px 16px 0;background:#fff;border-radius:20px;padding:16px;
+  box-shadow:0 1px 3px rgba(11,18,32,.06);text-align:center;}
+.xp-gauge .g{font:700 2.4rem/1 var(--xf);letter-spacing:-.045em;
+  font-variant-numeric:tabular-nums;}
+.xp-gauge .l{font:600 .62rem/1 var(--f);letter-spacing:.13em;text-transform:uppercase;
+  color:var(--xp-faint);margin-top:8px;}
+.xp-gauge .bar{height:7px;border-radius:99px;margin-top:13px;
+  background:linear-gradient(90deg,#E02D3C,#F5A524,#0E9F6E);position:relative;}
+.xp-gauge .bar i{position:absolute;top:-4px;width:15px;height:15px;border-radius:50%;
+  background:#fff;box-shadow:0 1px 5px rgba(11,18,32,.32);transform:translateX(-50%);}
+
+/* ── entity bottom sheet ── */
 .xp-scrim{position:fixed;inset:0;background:rgba(11,18,32,.42);backdrop-filter:blur(3px);
   opacity:0;pointer-events:none;transition:opacity .26s ease;z-index:900;}
-.xp-scrim.on{opacity:1;pointer-events:auto;}
+.xp-scrim.on{opacity:1;pointer-events:auto}
 .xp-sheet{position:fixed;left:0;right:0;bottom:0;z-index:901;background:#fff;
   border-radius:28px 28px 0 0;box-shadow:0 -14px 48px -14px rgba(11,18,32,.36);
   max-height:88vh;overflow-y:auto;-webkit-overflow-scrolling:touch;
-  transform:translateY(100%);
-  transition:transform .42s cubic-bezier(.16,1.02,.3,1);
+  transform:translateY(100%);transition:transform .42s cubic-bezier(.16,1.02,.3,1);
   padding:0 20px calc(28px + env(safe-area-inset-bottom));}
-.xp-sheet.on{transform:translateY(0);}
-.xp-sheet.drag{transition:none;}
+.xp-sheet.on{transform:translateY(0)}
+.xp-sheet.drag{transition:none}
 .xp-grab{position:sticky;top:0;background:#fff;padding:11px 0 8px;display:grid;
   place-items:center;cursor:grab;touch-action:none;z-index:2;}
 .xp-grab i{display:block;width:38px;height:5px;border-radius:3px;background:rgba(11,18,32,.14);}
@@ -1786,17 +1849,28 @@ nav.compact .nb.on { flex: 0 0 auto; padding-left: 16px; padding-right: 16px; }
   text-transform:uppercase;margin:24px 0 6px;}
 .xp-why{display:flex;align-items:flex-start;gap:11px;padding:13px 0;
   border-top:1px solid var(--xp-line);cursor:pointer;}
-.xp-why:active{opacity:.58;}
+.xp-why:active{opacity:.58}
 .xp-why .ar{color:var(--accent);font-size:.72rem;margin-top:4px;flex:0 0 auto;}
 .xp-why .tx{font:600 .84rem/1.45 var(--f);color:var(--xp-ink);letter-spacing:-.01em;}
 .xp-why .tx small{display:block;font:500 .69rem/1.3 var(--f);color:var(--xp-faint);
   margin-top:4px;letter-spacing:0;}
 .xp-rel{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;}
 .xp-rel button{border:0;background:var(--xp-tint);color:var(--xp-ink);border-radius:999px;
-  padding:9px 15px;font:600 .77rem/1 var(--f);cursor:pointer;
-  transition:transform .16s var(--spring);}
-.xp-rel button:active{transform:scale(.93);}
+  padding:9px 15px;font:600 .77rem/1 var(--f);cursor:pointer;transition:transform .16s var(--spring);}
+.xp-rel button:active{transform:scale(.93)}
 .xp-note{font:500 .66rem/1.45 var(--f);color:var(--xp-faint);margin-top:20px;}
+
+
+/* Superseded by Explore v8: the Matrix of Markets replaced At a Glance, and the
+   Live Data sections repeated it a third time. Hidden, not deleted — the
+   renderers still run and still populate these nodes. */
+#v-explore .exp-sec-hdr,
+#v-explore .glance-grid,
+#v-explore #snap-ticker,
+#v-explore #snap-ticker-full,
+#v-explore #snapshot-sections,
+#v-explore .bento,
+#v-explore #exp-hero-wrap{display:none!important;}
 
 /* The Live Data sections sit below the redesigned modules and were the last of
    the identical white boxes. Same visual language applied rather than removing
@@ -3694,23 +3768,46 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
     <div class="scope-btn on tap" onclick="selScope(this,'global')">Global</div>
   </div>
 
-  <!-- ════════ EXPLORE v7 ════════ -->
+  <!-- ════════ EXPLORE v8 ════════ -->
   <div class="xp">
-    <!-- 1. scope + category rail -->
-    <div class="xp-scope" id="xp-scope"></div>
+    <!-- 2. category rail -->
     <div class="xp-chips" id="xp-chips"></div>
 
-    <!-- The pillar tiles, kept. Soft per-category tints, still driven by
-         renderExpCats() and still filtering the feed — moved here rather than
-         rebuilt, because the thing that makes them good is already built. -->
-    <div class="exp-cat-row" id="exp-cat-row"></div>
+    <!-- 3. bulletin hero carousel -->
+    <div class="xp-hero" id="xp-hero"></div>
 
-    <!-- 2. live pulse — no header: the cards say NIFTY and GOLD themselves -->
-    <div class="xp-rail" id="xp-pulse"></div>
+    <!-- 4. matrix of markets -->
+    <div class="xp-hd"><h3>Matrix of markets</h3></div>
+    <div class="xp-matrix" id="xp-matrix"></div>
 
-    <!-- 4. module stubs -->
-    <div id="xp-modules"></div>
+    <!-- 5. take a look -->
+    <div class="xp-hd"><h3>Take a look</h3></div>
+    <div class="xp-tabs" id="xp-tal-tabs"></div>
+    <div id="xp-tal"></div>
+
+    <!-- 6. bulletin ticker -->
+    <div class="xp-btick" id="xp-btick"></div>
+
+    <!-- 7. government -->
+    <div class="xp-hd"><h3>Government</h3></div>
+    <div class="xp-gov" id="xp-gov"></div>
+
+    <!-- 8. also -->
+    <div class="xp-also" id="xp-also"></div>
+
+    <!-- 9. space -->
+    <div id="xp-space"></div>
+
+    <!-- 10. ai & tech -->
+    <div class="xp-hd"><h3>AI &amp; Tech</h3></div>
+    <div class="xp-ai" id="xp-ai"></div>
+
+    <!-- 11. closing line -->
+    <div class="xp-close">Exploring<br>the World</div>
   </div>
+
+  <!-- Part C — expanded pages, rendered into the same shell -->
+  <div id="xp-page" class="xp-page"></div>
 
   <!-- At a Glance: Live Markets (weather card removed; its data feeds the bento weather tile) -->
   <div class="exp-sec-hdr">
@@ -6388,7 +6485,9 @@ function updateExpGrid(rawArticles, append) {
 
 function renderExpCats() {
   const c = document.getElementById('exp-cat-row');
-  if (c.children.length) return;
+  // Null-guarded: the Explore rebuild moved the category rail to chips, and an
+  // unguarded .children here threw on every Explore open.
+  if (!c || c.children.length) return;
   const cats = [
     { label:'All Stories',color:'#8E8E93', icon:'fa-layer-group', cat:'all' },
     { label:'Arts',       color:'#E53935', icon:'fa-palette',    cat:'arts' },
@@ -8957,453 +9056,562 @@ async function openDictionary() {
   }
 }
 
-// ══════════ EXPLORE v7 ══════════
-// Every invented number in this file lives in MOCK_EXPLORE and nowhere else, so
-// what is real and what is placeholder is answerable by reading one object.
-// Anything /explore/snapshot actually serves — markets, forex, weather, space,
-// word_of_day, news_top, world_bank, govt_press — is read from there and only
-// falls back to these shapes when the call times out.
+// ══════════ EXPLORE v8 ══════════
+// EVERY invented value lives here and nowhere else, so each one is a single
+// object key away from being swapped for a real endpoint. Anything the snapshot
+// genuinely serves is read from it; these shapes are only the fallback.
 const MOCK_EXPLORE = {
-  pulse: {
-    NIFTY:     { label:'NIFTY 50', value:'24,231.85', pct:-0.55,
-                 series:[24480,24402,24455,24310,24288,24350,24261,24231] },
-    GOLD:      { label:'Gold',     value:'₹1,43,789', pct: 5.80,
-                 series:[135900,137200,136800,139500,141100,140600,142900,143789] },
-    BTC:       { label:'Bitcoin',  value:'$71,908',   pct:11.79,
-                 series:[63100,64800,66200,65400,68100,69900,70400,71908] },
-    USDINR:    { label:'USD/INR',  value:'₹95.69',    pct: 0.31,
-                 series:[95.1,95.22,95.18,95.34,95.41,95.5,95.61,95.69] },
-    AQI:       { label:'AQI Delhi',value:'168',       pct:-4.20,
-                 series:[201,196,188,192,180,176,171,168] },
+  hero: [
+    { tag:'Business', title:'RBI holds the repo rate as inflation cools for a third month',
+      meta:'SherrByte News · 2h ago', cat:'economy' },
+    { tag:'Sci & Tech', title:'ISRO clears the PSLV-C60 launch window for next month',
+      meta:'SherrByte News · 5h ago', cat:'tech' },
+    { tag:'Society', title:'Cabinet approves the national semiconductor mission',
+      meta:'SherrByte News · 8h ago', cat:'society' },
+  ],
+  matrix: {
+    stocks: { label:'Stocks',      sub:'NIFTY 50',  value:'24,231.85', pct:-0.55,
+              series:[24480,24402,24455,24310,24288,24350,24261,24231], tint:'m-stk' },
+    crypto: { label:'Crypto',      sub:'Bitcoin',   value:'$71,908',   pct:11.79,
+              series:[63100,64800,66200,65400,68100,69900,70400,71908], tint:'m-cry' },
+    forex:  { label:'Forex',       sub:'USD/INR',   value:'₹95.69',    pct:0.31,
+              series:[95.1,95.22,95.18,95.34,95.41,95.5,95.61,95.69], tint:'m-fx' },
+    bonds:  { label:'Bond Yields', sub:'US 10Y',    value:'4.65%',     pct:0.26,
+              series:[4.41,4.48,4.44,4.52,4.58,4.55,4.62,4.65], tint:'m-bnd' },
+    metals: { label:'Metals',      sub:'Gold',      value:'₹1,43,789', pct:5.80,
+              series:[135900,137200,136800,139500,141100,140600,142900,143789], tint:'m-met' },
+    oil:    { label:'Crude Oil',   sub:'WTI',       value:'$86.66',    pct:2.56,
+              series:[81.2,82.4,81.9,83.6,84.8,84.1,85.9,86.66], tint:'m-oil' },
   },
-  essentials: { aqi:'168 · Poor', petrol:'₹104.21', diesel:'₹92.15',
-                weather:'31°C · Haze' },
-  government: {
-    scheme: { name:'PM-KISAN 19th instalment', meta:'₹2,000 credited · 9.8 cr farmers' },
-    tender: { name:'NHAI · 6-lane Nagpur–Jabalpur', meta:'Closes in 6 days · ₹1,240 cr' },
+  mandi: { state:'Telangana', items:[
+    { commodity:'Onion', market:'Bowenpally', modal_price:2450, min_price:1800, max_price:2900, arrival_date:'21/08/2026' },
+    { commodity:'Tomato', market:'Gaddiannaram', modal_price:1620, min_price:1200, max_price:2100, arrival_date:'21/08/2026' },
+    { commodity:'Potato', market:'Malakpet', modal_price:1980, min_price:1600, max_price:2350, arrival_date:'21/08/2026' },
+  ]},
+  // No free circle-rate API exists in India. Same shape a real one would return,
+  // so a fetcher can replace this object without the renderer changing.
+  realty: { items:[
+    { city:'Hyderabad', rate:6800, cls:'Residential', duty:6.0 },
+    { city:'Bengaluru', rate:9400, cls:'Residential', duty:5.6 },
+    { city:'Mumbai',    rate:19500, cls:'Residential', duty:6.0 },
+    { city:'Delhi',     rate:12600, cls:'Residential', duty:6.0 },
+    { city:'Pune',      rate:8100, cls:'Residential', duty:6.0 },
+  ]},
+  bulletin: [
+    { k:'Markets', t:'Nifty ends lower for a third session' },
+    { k:'Policy',  t:'GST council meets on rate rationalisation' },
+    { k:'Space',   t:'PSLV-C60 cleared for a September window' },
+    { k:'Tech',    t:'Semiconductor mission gets cabinet nod' },
+  ],
+  gov: {
+    tax:    { t:'Tax & Compliance Deadlines', s:'GSTR-3B due 20 Sep' },
+    welfare:{ t:'Welfare Schemes & Subsidies', s:'PM-KISAN 19th instalment released' },
+    jobs:   { t:'Recruitment & Exam Alerts',   s:'SSC CGL tier-2 admit cards out' },
+    policy: { t:'Policy, Tariff & Price Changes', s:'Customs duty revised on 14 lines' },
+    civic:  { t:'Civic, Emergency & Holiday Orders', s:'Heavy rain advisory · 3 districts' },
+    land:   { t:'Land, Property & Legal Amendments', s:'Registration Act amendment notified' },
   },
-  opportunities: {
-    job:   { name:'Data Analyst · SEBI', meta:'Mumbai · closes 12 Sep' },
-    grant: { name:'BIRAC BIG grant',     meta:'Up to ₹50 L · biotech startups' },
+  space: { name:'Falcon 9 Block 5 · Starlink 10-39', rocket:'Falcon 9 Block 5',
+           provider:'SpaceX', pad:'Space Launch Complex 40',
+           t:'2026-08-24T09:42:00Z' },
+  ai: {
+    papers:[{title:'Scaling laws for retrieval-augmented reasoning',upvotes:184},
+            {title:'Sparse attention without quality loss',upvotes:131}],
+    repos: [{name:'ollama/ollama',stars:104000,lang:'Go'},
+            {name:'langchain-ai/langchain',stars:92000,lang:'Python'}],
   },
-  space:      { name:'PSLV-C60 · SpaceDev', pad:'Sriharikota · SDSC-SHA', t:'2026-08-24T09:42:00Z' },
-  knowledge:  { word:'serendipity', pos:'noun',
-                def:'The occurrence of events by chance in a happy or beneficial way.' },
-  // Fallback "why" lines, used only when the corpus search returns nothing.
+  // Fallback "why" lines — used only when the corpus search returns nothing.
   why: {
-    GOLD:  [{t:'Global uncertainty rises', s:'Safe-haven demand broadens'},
+    METALS:[{t:'Global uncertainty rises', s:'Safe-haven demand broadens'},
             {t:'Dollar weakens against basket', s:'Bullion cheaper for non-dollar buyers'}],
-    NIFTY: [{t:'Financials drag the index', s:'Banking heavyweights close lower'},
+    STOCKS:[{t:'Financials drag the index', s:'Banking heavyweights close lower'},
             {t:'Foreign investors stay net sellers', s:'Outflows continue a third session'}],
-    SCHEME:[{t:'Instalment released ahead of sowing', s:'Timed to the kharif cycle'},
-            {t:'Beneficiary list revised after eKYC', s:'Records reconciled with land data'}],
+    CRYPTO:[{t:'Spot ETF inflows accelerate', s:'Institutional allocation broadens'},
+            {t:'Dollar liquidity improves', s:'Risk assets bid across the board'}],
   },
 };
 
-const XP_SCOPES = [['local','Local'], ['national','India'], ['global','Global']];
-const XP_CATS = ['For You','Markets','Economy','Government','Opportunities',
-                 'Essentials','Career','Environment','Space','Sports','Knowledge'];
-let xpScope = 'global', xpCat = 'For You', xpSnap = null;
+const XP_CATS = ['All Stories','Arts','Well-being','Business','Nature','Society',
+                 'Sci&Tech','Philosophy'];
+// The pillar colours, carried onto the chips as a dot. Part A specifies a chip
+// rail rather than the icon tiles, and this is how the per-category identity
+// those tiles carried survives the change — as a label, which is the only role
+// these colours are allowed here.
+const XP_CAT_COLOUR = { 'Arts':'#E53935','Well-being':'#FB8C00','Business':'#FBC02D',
+  'Nature':'#43A047','Society':'#1E88E5','Sci&Tech':'#3949AB','Philosophy':'#8E24AA' };
+let xpCat = 'All Stories', xpSnap = null, xpTal = 'Mandi';
 
-// ── tiny inline sparkline ────────────────────────────────────────────────────
-// Drawn by hand rather than pulled in: five of these render per rail and a chart
-// library would cost more than the whole page does.
-function xpSpark(series, up, h) {
-  const w = 100, pad = 2;
-  h = h || 26;
+// ── sparkline ───────────────────────────────────────────────────────────────
+function xpSpark(series, up, h, w) {
+  w = w || 100; h = h || 26;
   const xs = series || [];
   if (xs.length < 2) return '';
-  const lo = Math.min(...xs), hi = Math.max(...xs), span = (hi - lo) || 1;
-  const pts = xs.map((v, i) => [
-    (i / (xs.length - 1)) * w,
-    h - pad - ((v - lo) / span) * (h - pad * 2),
-  ]);
-  const d = pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' ');
-  const c = up ? '#12A150' : '#E5484D';
-  const id = 'g' + Math.abs(xs[0] * 1000 | 0) + xs.length + (up ? 'u' : 'd');
+  const lo = Math.min(...xs), hi = Math.max(...xs), span = (hi - lo) || 1, pad = 2;
+  const pts = xs.map((v,i)=>[(i/(xs.length-1))*w, h-pad-((v-lo)/span)*(h-pad*2)]);
+  const d = pts.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' ');
+  const c = up ? '#0E9F6E' : '#E02D3C';
+  const id = 'sg'+Math.abs((xs[0]*997)|0)+xs.length+(up?'u':'d');
   return `<svg class="xp-spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"
       style="height:${h}px" aria-hidden="true">
     <defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="${c}" stop-opacity=".22"/>
+      <stop offset="0" stop-color="${c}" stop-opacity=".2"/>
       <stop offset="1" stop-color="${c}" stop-opacity="0"/></linearGradient></defs>
     <path d="${d} L ${w} ${h} L 0 ${h} Z" fill="url(#${id})"/>
-    <path d="${d}" fill="none" stroke="${c}" stroke-width="1.8"
-          stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
-  </svg>`;
+    <path d="${d}" fill="none" stroke="${c}" stroke-width="1.8" stroke-linecap="round"
+          stroke-linejoin="round" vector-effect="non-scaling-stroke"/></svg>`;
+}
+const xpPct = p => `<span class="${p>=0?'xp-up':'xp-dn'}">${p>=0?'▲':'▼'} ${Math.abs(p).toFixed(2)}%</span>`;
+const xpNum = n => Number(n).toLocaleString('en-IN');
+
+// ── 2. category rail ────────────────────────────────────────────────────────
+function renderXpChips() {
+  const el = document.getElementById('xp-chips');
+  if (!el) return;
+  el.innerHTML = XP_CATS.map(c => {
+    const col = XP_CAT_COLOUR[c];
+    return `<button class="xp-chip ${c===xpCat?'on':''}" onclick="xpSetCat(${JSON.stringify(c)})">
+      ${col ? `<span class="cdot" style="background:${col}"></span>` : ''}${bEsc(c)}</button>`;
+  }).join('');
+}
+function xpSetCat(c) {
+  xpCat = c; renderXpChips();
+  // Reuse the existing pillar filter rather than a parallel one.
+  const slug = {'Arts':'arts','Well-being':'selfwell','Business':'economy','Nature':'nature',
+                'Society':'society','Sci&Tech':'tech','Philosophy':'philo'}[c];
+  if (slug && typeof gotoCategory === 'function') { try { gotoCategory(slug); } catch(e){} }
 }
 
-const xpPct = p => `<span class="${p >= 0 ? 'xp-up' : 'xp-dn'}">${p >= 0 ? '▲' : '▼'} ${Math.abs(p).toFixed(2)}%</span>`;
-
-// ── 1. scope + category rail ────────────────────────────────────────────────
-function renderXpRail() {
-  const sc = document.getElementById('xp-scope');
-  if (sc) sc.innerHTML = XP_SCOPES.map(([k, l]) =>
-    `<button class="${k === xpScope ? 'on' : ''}" onclick="xpSetScope('${k}')">${l}</button>`).join('');
-  const ch = document.getElementById('xp-chips');
-  if (ch) ch.innerHTML = XP_CATS.map(c =>
-    `<button class="xp-chip ${c === xpCat ? 'on' : ''}" onclick="xpSetCat(${JSON.stringify(c)})">${bEsc(c)}</button>`).join('');
+// ── 3. bulletin hero ────────────────────────────────────────────────────────
+let _xpHeroArts = [];
+function renderXpHero(arts) {
+  const el = document.getElementById('xp-hero');
+  if (!el) return;
+  const slides = (arts && arts.length ? arts : MOCK_EXPLORE.hero).slice(0, 4);
+  _xpHeroArts = slides;
+  el.innerHTML = `<div class="xp-hero-track" id="xp-hero-track">
+      ${slides.map((a,i)=>`
+        <div class="xp-slide" onclick="xpHeroTap(${i})">
+          ${a.art ? articleImage(a,'') : (a.image_url ? articleImage(a,'') : heroArt({id:'h'+i,category:a.cat||'tech'},''))}
+          <div class="scrim"></div>
+          <div class="cap">
+            <span class="tag">${bEsc(a.tag || (CATS[a.category]||CATS.tech).short)}</span>
+            <h4>${bEsc(a.title)}</h4>
+            <div class="meta">${bEsc(a.meta || ((a.source||'SherrByte News')+' · '+timeAgo(a.published_at)))}</div>
+          </div>
+        </div>`).join('')}
+    </div>
+    <div class="xp-dots" id="xp-dots">${slides.map((_,i)=>`<i class="${i?'':'on'}"></i>`).join('')}</div>`;
+  const track = document.getElementById('xp-hero-track');
+  track.addEventListener('scroll', () => {
+    const i = Math.round(track.scrollLeft / track.clientWidth);
+    document.querySelectorAll('#xp-dots i').forEach((d,k)=>d.classList.toggle('on', k===i));
+  }, { passive: true });
+}
+function xpHeroTap(i) {
+  const a = _xpHeroArts[i];
+  if (a && a.id && typeof openArticle === 'function') openArticle(a);
 }
 
-function xpSetScope(k) {
-  xpScope = k;
-  renderXpRail();
-  // Drive the existing scope machinery rather than duplicating it, so the feed
-  // below still filters the way it always did.
-  const btn = document.querySelector(`.scope-toggle .scope-btn[onclick*="'${k}'"]`);
-  if (btn && typeof selScope === 'function') { try { selScope(btn, k); } catch (e) {} }
-}
-
-function xpSetCat(c) { xpCat = c; renderXpRail(); }
-
-// ── 2. live pulse ───────────────────────────────────────────────────────────
-// Real values from /explore/snapshot where it has them, mock where it does not.
-// The series is always mock: the snapshot carries a point, not a history.
-function xpPulseData() {
-  const m = JSON.parse(JSON.stringify(MOCK_EXPLORE.pulse));
+// ── 4. matrix of markets ────────────────────────────────────────────────────
+function xpMatrixData() {
+  const m = JSON.parse(JSON.stringify(MOCK_EXPLORE.matrix));
   const mk = (xpSnap && xpSnap.markets && xpSnap.markets.data) || {};
+  const cy = (xpSnap && xpSnap.crypto && xpSnap.crypto.data) || {};
   const fx = (xpSnap && xpSnap.forex && xpSnap.forex.data) || {};
-  const pick = (o, ...keys) => keys.map(k => o[k]).find(v => v != null);
-  const nifty = pick(mk, 'NIFTY', 'Nifty', 'NIFTY 50');
-  if (nifty && nifty.price != null) {
-    m.NIFTY.value = '₹' + Number(nifty.price).toLocaleString('en-IN');
-    if (nifty.change_pct != null) m.NIFTY.pct = Number(nifty.change_pct);
-  }
-  const btc = pick(mk, 'BTC', 'Bitcoin', 'BITCOIN');
-  if (btc && btc.price != null) {
-    m.BTC.value = '$' + Number(btc.price).toLocaleString('en-US');
-    if (btc.change_pct != null) m.BTC.pct = Number(btc.change_pct);
-  }
-  const gold = pick(mk, 'GOLD', 'Gold');
-  if (gold && gold.price != null) m.GOLD.value = '₹' + Number(gold.price).toLocaleString('en-IN');
-  const usd = pick(fx, 'USD', 'USDINR', 'USD/INR');
-  if (usd != null) m.USDINR.value = '₹' + Number(usd.price != null ? usd.price : usd).toFixed(2);
+  const pick = (o,...k) => k.map(x=>o[x]).find(v=>v!=null);
+  const n = pick(mk,'NIFTY','Nifty');
+  if (n && n.price!=null){ m.stocks.value='₹'+xpNum(n.price); if(n.change_pct!=null) m.stocks.pct=+n.change_pct; }
+  const btc = (cy.coins && (cy.coins.BITCOIN || cy.coins.bitcoin)) || pick(mk,'BTC','Bitcoin');
+  if (btc && btc.price!=null){ m.crypto.value='$'+Number(btc.price).toLocaleString('en-US');
+    if(btc.change_pct!=null) m.crypto.pct=+btc.change_pct; }
+  const usd = pick(fx,'USD','USDINR');
+  if (usd!=null) m.forex.value='₹'+Number(usd.price!=null?usd.price:usd).toFixed(2);
+  const gold = pick(mk,'GOLD','Gold');
+  if (gold && gold.price!=null) m.metals.value='₹'+xpNum(gold.price);
+  const oil = pick(mk,'WTI_CRUDE','CRUDE','WTI');
+  if (oil && oil.price!=null){ m.oil.value='$'+Number(oil.price).toFixed(2);
+    if(oil.change_pct!=null) m.oil.pct=+oil.change_pct; }
   return m;
 }
-
-function renderXpPulse() {
-  const host = document.getElementById('xp-pulse');
-  if (!host) return;
-  const d = xpPulseData();
-  host.innerHTML = Object.entries(d).map(([k, v]) => `
-    <div class="xp-metric ${v.pct >= 0 ? 'up' : 'dn'}" onclick="openEntity('${k}')"
-         role="button" tabindex="0">
+function renderXpMatrix() {
+  const el = document.getElementById('xp-matrix');
+  if (!el) return;
+  const d = xpMatrixData();
+  el.innerHTML = Object.entries(d).map(([k,v])=>`
+    <div class="xp-mt ${v.tint} ${v.pct>=0?'up':'dn'}" onclick="xpOpenPage('${k}')">
       <div class="nm">${bEsc(v.label)}</div>
       <div class="val">${bEsc(v.value)}</div>
       <div class="chg">${xpPct(v.pct)}</div>
-      ${xpSpark(v.series, v.pct >= 0, 28)}
+      <div class="sub">${bEsc(v.sub)}</div>
+      ${xpSpark(v.series, v.pct>=0, 26)}
     </div>`).join('');
 }
 
-function xpPulseSkeleton() {
-  const host = document.getElementById('xp-pulse');
-  if (!host) return;
-  // Shimmer, never the word "Loading" and never a spinner.
-  host.innerHTML = Array(4).fill(
-    `<div class="xp-metric up" style="pointer-events:none;box-shadow:none">
-       <div class="xp-sk" style="height:8px;width:52%"></div>
-       <div class="xp-sk" style="height:21px;width:80%;margin-top:10px"></div>
-       <div class="xp-sk" style="height:8px;width:40%;margin-top:7px"></div>
-       <div class="xp-sk" style="height:28px;margin-top:8px"></div>
-     </div>`).join('');
+
+// ── 5. take a look ──────────────────────────────────────────────────────────
+function renderXpTal() {
+  const tabs = document.getElementById('xp-tal-tabs');
+  if (tabs) tabs.innerHTML = ['Mandi','Real Estate'].map(t =>
+    `<button class="xp-tab ${t===xpTal?'on':''}" onclick="xpSetTal(${JSON.stringify(t)})">${t}</button>`).join('');
+  const el = document.getElementById('xp-tal');
+  if (!el) return;
+  if (xpTal === 'Mandi') {
+    const md = ((xpSnap && xpSnap.mandi && xpSnap.mandi.data) || MOCK_EXPLORE.mandi);
+    const it = md.items || [];
+    const [a,b,c] = [it[0]||{}, it[1]||{}, it[2]||{}];
+    const sm = x => `<div class="sm" onclick="xpSoon('${bEsc(x.commodity||'')}')">
+        <div class="k">${bEsc(x.commodity||'—')}</div>
+        <div class="v">₹${xpNum(x.modal_price||0)}</div>
+        <div class="s">${bEsc(x.market||'')}</div></div>`;
+    el.innerHTML = `<div class="xp-band"><div class="xp-tal">
+      <div class="big" onclick="xpSoon('Mandi')">
+        <div class="k">${bEsc(a.commodity||'Onion')} · ${bEsc(md.state||'')}</div>
+        <div class="v">₹${xpNum(a.modal_price||0)}</div>
+        <div class="s">₹${xpNum(a.min_price||0)}–₹${xpNum(a.max_price||0)} per quintal<br>
+          ${bEsc(a.market||'')} · ${bEsc(a.arrival_date||'')}</div>
+      </div>${sm(b)}${sm(c)}</div></div>`;
+  } else {
+    const rt = MOCK_EXPLORE.realty.items;
+    const sm = x => `<div class="sm" onclick="xpSoon('${bEsc(x.city)}')">
+        <div class="k">${bEsc(x.city)}</div>
+        <div class="v">₹${xpNum(x.rate)}</div>
+        <div class="s">per sq ft · ${x.duty}% duty</div></div>`;
+    el.innerHTML = `<div class="xp-band"><div class="xp-tal">
+      <div class="big" onclick="xpSoon('Circle rates')">
+        <div class="k">${bEsc(rt[0].city)} · circle rate</div>
+        <div class="v">₹${xpNum(rt[0].rate)}</div>
+        <div class="s">guidance value per sq ft<br>${bEsc(rt[0].cls)} · stamp duty ${rt[0].duty}%</div>
+      </div>${sm(rt[1])}${sm(rt[2])}</div></div>`;
+  }
+}
+function xpSetTal(t){ xpTal = t; renderXpTal(); }
+
+// ── 6. bulletin ticker ──────────────────────────────────────────────────────
+function renderXpBTick() {
+  const el = document.getElementById('xp-btick');
+  if (!el) return;
+  const top = (xpSnap && xpSnap.news_top && xpSnap.news_top.data && xpSnap.news_top.data.articles) || [];
+  const rows = top.length
+    ? top.slice(0,6).map(a => ({ k:(a.source||'News'), t:a.title }))
+    : MOCK_EXPLORE.bulletin;
+  el.innerHTML = `<div class="run">${rows.map(r =>
+      `<span><b>${bEsc(r.k)}</b>${bEsc(r.t)}</span>`).join('')}</div>
+    <span class="more" onclick="xpSoon('Bulletin')">Read more →</span>`;
 }
 
-
-// ── 3. entity bottom sheet ──────────────────────────────────────────────────
-// The differentiator: a number that explains itself. Three entities are built
-// properly — Gold, NIFTY and a government scheme — rather than thirteen that
-// each show a price and stop.
-const XP_ENTITIES = {
-  GOLD:   { key:'GOLD',   title:'Gold',  q:'gold',
-            related:['Silver','Crude','USD/INR'], why:'GOLD' },
-  NIFTY:  { key:'NIFTY',  title:'NIFTY 50', q:'nifty sensex market',
-            related:['Sensex','Bank Nifty','FII flows'], why:'NIFTY' },
-  SCHEME: { key:'SCHEME', title:'PM-KISAN', q:'pm kisan farmer scheme',
-            related:['MSP','Fertiliser subsidy','Crop insurance'], why:'SCHEME',
-            value:'₹2,000', pct:null, sub:'19th instalment · 9.8 cr farmers',
-            series:[1600,1600,1800,1800,2000,2000,2000,2000] },
+// ── 7. government ───────────────────────────────────────────────────────────
+// PIB items are classified into the six tiles by keyword; a tile with no live
+// match falls back to its mock line rather than rendering empty.
+const XP_GOV_KEYS = {
+  tax:    ['tax','gst','itr','compliance','filing','duty','cbdt','cbic'],
+  welfare:['scheme','subsidy','yojana','pension','kisan','beneficiar','welfare'],
+  jobs:   ['recruit','exam','vacanc','admit card','result','ssc','upsc'],
+  policy: ['tariff','policy','price','import','export','notification','revis'],
+  civic:  ['advisory','alert','holiday','emergency','disaster','rain','flood','civic'],
+  land:   ['land','property','registration','amendment','act','legal','acquisition'],
 };
+function xpGovClassify() {
+  const out = {};
+  const rel = (xpSnap && xpSnap.govt_press && xpSnap.govt_press.data && xpSnap.govt_press.data.releases) || [];
+  for (const [k, words] of Object.entries(XP_GOV_KEYS)) {
+    const hit = rel.find(r => {
+      const t = (r.title || '').toLowerCase();
+      return words.some(w => t.includes(w));
+    });
+    out[k] = hit ? { t: MOCK_EXPLORE.gov[k].t, s: hit.title, url: hit.url }
+                 : MOCK_EXPLORE.gov[k];
+  }
+  return out;
+}
+const XP_GOV_ICON = { tax:'fa-receipt', welfare:'fa-hand-holding-heart',
+  jobs:'fa-user-graduate', policy:'fa-scale-balanced',
+  civic:'fa-triangle-exclamation', land:'fa-map-location-dot' };
+function renderXpGov() {
+  const el = document.getElementById('xp-gov');
+  if (!el) return;
+  const g = xpGovClassify();
+  el.innerHTML = Object.entries(g).map(([k,v]) => `
+    <div class="xp-gv" onclick="xpSoon(${JSON.stringify(v.t)})">
+      <i class="fa-solid ${XP_GOV_ICON[k]}"></i>
+      <b>${bEsc(v.t)}</b><small>${bEsc(v.s)}</small></div>`).join('');
+}
 
-let xpOpenKey = null;
+// ── 8. also ─────────────────────────────────────────────────────────────────
+function renderXpAlso() {
+  const el = document.getElementById('xp-also');
+  if (!el) return;
+  el.innerHTML = ['Govt Jobs Notifications','Current Affairs','Policies'].map(t =>
+    `<div class="xp-al" onclick="xpSoon(${JSON.stringify(t)})">
+       <b>${bEsc(t)}</b><i class="fa-solid fa-chevron-right"></i></div>`).join('');
+}
 
-async function openEntity(key) {
-  const ent = XP_ENTITIES[key] || XP_ENTITIES[key === 'BTC' || key === 'USDINR' || key === 'AQI' ? 'NIFTY' : 'GOLD'];
-  const cfg = XP_ENTITIES[key] ? XP_ENTITIES[key] : null;
-  xpOpenKey = cfg ? key : null;
+// ── 9. space ────────────────────────────────────────────────────────────────
+function xpCountdown(iso) {
+  const t = Date.parse(iso) - Date.now();
+  if (!(t > 0)) return 'Launching now';
+  const d = Math.floor(t/86400000), h = Math.floor(t/3600000)%24,
+        m = Math.floor(t/60000)%60, sec = Math.floor(t/1000)%60;
+  return d>0 ? `${d}d ${h}h ${m}m` : `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+}
+function renderXpSpace() {
+  const el = document.getElementById('xp-space');
+  if (!el) return;
+  const L = (xpSnap && xpSnap.launches && xpSnap.launches.data && (xpSnap.launches.data.launches||[])[0])
+         || (xpSnap && xpSnap.space && xpSnap.space.data && (xpSnap.space.data.launches||[])[0]) || null;
+  const s = L ? { name:L.mission||L.name, rocket:L.rocket||'', provider:L.provider||'',
+                  pad:L.pad||'', t:L.net||MOCK_EXPLORE.space.t }
+              : MOCK_EXPLORE.space;
+  el.innerHTML = `<div class="xp-space" onclick="xpSoon('Space')">
+      <div class="lbl"><span class="xp-dot"></span>Next launch</div>
+      <div class="t">${bEsc(s.name)}</div>
+      <div class="m">${bEsc([s.rocket, s.provider, s.pad].filter(Boolean).join(' · '))}</div>
+      <div class="xp-cd" id="xp-cd">${bEsc(xpCountdown(s.t))}</div>
+      <div class="cta">Click for more →</div></div>`;
+  clearInterval(window._xpCd);
+  window._xpCd = setInterval(() => {
+    const e = document.getElementById('xp-cd');
+    if (!e) return clearInterval(window._xpCd);
+    e.textContent = xpCountdown(s.t);
+  }, 1000);
+}
 
-  // Metrics without a built-out sheet still open one — an inert tap on a card
-  // that visibly invites a tap is worse than a smaller sheet.
-  const pulse = xpPulseData();
-  const p = pulse[key];
-  const spec = cfg || { key, title: (p && p.label) || key, q: (p && p.label) || key,
-                        related: [], why: null };
-  const value = spec.value || (p && p.value) || '—';
-  const pct   = spec.pct !== undefined ? spec.pct : (p ? p.pct : null);
-  const series = spec.series || (p && p.series) || [];
+// ── 10. ai & tech ───────────────────────────────────────────────────────────
+function renderXpAi() {
+  const el = document.getElementById('xp-ai');
+  if (!el) return;
+  const P = (xpSnap && xpSnap.ai_papers && xpSnap.ai_papers.data && xpSnap.ai_papers.data.papers)
+         || MOCK_EXPLORE.ai.papers;
+  const R = (xpSnap && xpSnap.github_repos && xpSnap.github_repos.data && xpSnap.github_repos.data.repos)
+         || MOCK_EXPLORE.ai.repos;
+  const k = n => n >= 1000 ? Math.round(n/1000)+'k' : String(n);
+  el.innerHTML = `
+    <div class="xp-ac" onclick="xpSoon('AI research')">
+      <div class="k">AI models &amp; papers</div>
+      <ul>${P.slice(0,2).map(x=>`<li>${bEsc(x.title)}</li>
+        <div class="st">▲ ${k(x.upvotes||0)}</div>`).join('')}</ul></div>
+    <div class="xp-ac" onclick="xpSoon('GitHub trending')">
+      <div class="k">Trending repos</div>
+      <ul>${R.slice(0,2).map(x=>`<li>${bEsc(x.name)}</li>
+        <div class="st">★ ${k(x.stars||0)}${x.lang?' · '+bEsc(x.lang):''}</div>`).join('')}</ul></div>`;
+}
 
+function xpSoon(what){ if (typeof toast === 'function') toast(what + ' — coming soon'); }
+
+
+// ── Part C — expanded pages ─────────────────────────────────────────────────
+// One shell, one renderer. Each page is a segmented filter over a list of
+// instruments; the instruments themselves open the sheet below.
+const XP_PAGES = {
+  stocks: { title:'Stocks', segs:['Indices','Global','Movers'], entity:'STOCKS',
+    rows:{ Indices:[['NIFTY','NIFTY 50','24,231.85',-0.55],['SENSEX','BSE','77,528.10',-0.62],
+                    ['BANKNIFTY','Bank Nifty','51,204.35',-0.41],['INDIAVIX','India VIX','13.82',3.10]],
+           Global:[['NASDAQ','US','17,942.60',0.42],['SP500','US','5,431.20',0.28],
+                   ['NIKKEI','Japan','38,102.55',-0.18],['DAX','Germany','18,455.90',0.34],
+                   ['FTSE','UK','8,204.10',0.12],['HANGSENG','Hong Kong','17,880.44',-0.72]],
+           Movers:[['VIX','Volatility','14.62',5.20],['DOW','US','39,112.20',0.19]] } },
+  crypto: { title:'Crypto', segs:['Coins'], entity:'CRYPTO', gauge:true,
+    rows:{ Coins:[['BITCOIN','BTC','$71,908',11.79],['ETHEREUM','ETH','$3,844',6.21],
+                  ['SOLANA','SOL','$184.30',9.04],['RIPPLE','XRP','$0.62',-1.42],
+                  ['BINANCECOIN','BNB','$604.10',2.18]] } },
+  forex:  { title:'Forex', segs:['Pairs'], entity:'FOREX',
+    rows:{ Pairs:[['USD/INR','Dollar','95.69',0.31],['EUR/USD','Euro','1.0842',-0.12],
+                  ['GBP/INR','Pound','121.40',0.22],['EUR/INR','Euro','103.75',0.18],
+                  ['JPY/INR','Yen','0.618',-0.34],['AED/INR','Dirham','26.05',0.29],
+                  ['USD/CNY','Yuan','7.212',0.08],['DXY','Dollar index','104.62',0.15]] } },
+  bonds:  { title:'Bond Yields', segs:['Government','Corporate'], entity:'BONDS',
+    rows:{ Government:[['US10Y','US 10 year','4.65%',0.26],['US3M','US 3 month','5.22%',-0.04],
+                       ['IN10Y','India 10 year','7.02%',0.11]],
+           Corporate:[['AAA 5Y','Corporate AAA','7.62%',0.08],['AA 5Y','Corporate AA','8.15%',0.12]] } },
+  metals: { title:'Metals', segs:['Precious','Industrial'], entity:'METALS',
+    rows:{ Precious:[['GOLD','24k per 10g','₹1,43,789',5.80],['SILVER','per kg','₹2,134',4.90],
+                     ['PLATINUM','per oz','$982.40',1.22],['PALLADIUM','per oz','$1,024.60',-0.84]],
+           Industrial:[['COPPER','per lb','$4.28',2.14]] } },
+  oil:    { title:'Crude Oil', segs:['Brent','WTI','Natural Gas','Fuel rates'], entity:'OIL',
+    rows:{ Brent:[['BRENT','ICE Brent','$90.14',2.31]],
+           WTI:[['WTI','NYMEX WTI','$86.66',2.56]],
+           'Natural Gas':[['NATGAS','Henry Hub','$2.84',-1.10]],
+           'Fuel rates':[['PETROL','Mumbai','₹104.21',0],['DIESEL','Mumbai','₹92.15',0],
+                         ['PETROL DEL','Delhi','₹94.72',0],['DIESEL DEL','Delhi','₹87.62',0]] } },
+};
+let xpPageKey = null, xpSeg = null;
+
+function xpOpenPage(key) {
+  const cfg = XP_PAGES[key];
+  if (!cfg) return;
+  xpPageKey = key; xpSeg = cfg.segs[0];
+  xpRenderPage();
+  const pg = document.getElementById('xp-page');
+  pg.classList.add('on'); pg.scrollTop = 0;
+  document.body.style.overflow = 'hidden';
+}
+function xpClosePage() {
+  const pg = document.getElementById('xp-page');
+  if (pg) pg.classList.remove('on');
+  document.body.style.overflow = '';
+  xpPageKey = null;
+}
+function xpSetSeg(s) { xpSeg = s; xpRenderPage(); }
+
+function xpRenderPage() {
+  const pg = document.getElementById('xp-page');
+  const cfg = XP_PAGES[xpPageKey];
+  if (!pg || !cfg) return;
+  const rows = cfg.rows[xpSeg] || [];
+  // A deterministic wiggle around the value: enough for the row to read as a
+  // trend, and honest about being decorative rather than a real history.
+  const series = (pct, seed) => Array.from({length:8},(_,i)=>
+    100 + pct*i*0.6 + Math.sin((i+seed)*1.7)*Math.abs(pct||1)*0.8);
+  let gauge = '';
+  if (cfg.gauge) {
+    const fg = (xpSnap && xpSnap.crypto && xpSnap.crypto.data && xpSnap.crypto.data.fear_greed) || {value:62,label:'Greed'};
+    const dom = (xpSnap && xpSnap.crypto && xpSnap.crypto.data && xpSnap.crypto.data.btc_dominance) || 54.2;
+    const col = fg.value>=60?'#0E9F6E':fg.value>=40?'#F5A524':'#E02D3C';
+    gauge = `<div class="xp-gauge">
+      <div class="g" style="color:${col}">${fg.value}</div>
+      <div class="l">Fear &amp; Greed · ${bEsc(fg.label||'')}</div>
+      <div class="bar"><i style="left:${Math.max(3,Math.min(97,fg.value))}%"></i></div>
+      <div class="l" style="margin-top:14px">BTC dominance ${dom}%</div></div>`;
+  }
+  pg.innerHTML = `
+    <div class="xp-pg-hd">
+      <button onclick="xpClosePage()" aria-label="Back"><i class="fa-solid fa-arrow-left"></i></button>
+      <h2>${bEsc(cfg.title)}</h2></div>
+    ${cfg.segs.length>1 ? `<div class="xp-seg">${cfg.segs.map(s=>
+      `<button class="xp-sg ${s===xpSeg?'on':''}" onclick="xpSetSeg(${JSON.stringify(s)})">${bEsc(s)}</button>`).join('')}</div>` : ''}
+    ${gauge}
+    <div class="xp-list">${rows.map(([sym,sub,val,pct],i)=>`
+      <div class="xp-li" onclick="openEntity('${sym}','${cfg.entity}')">
+        <div class="n"><b>${bEsc(sym)}</b><small>${bEsc(sub)}</small></div>
+        <div class="sp">${xpSpark(series(pct,i), pct>=0, 24, 62)}</div>
+        <div class="p"><b>${bEsc(val)}</b>
+          <small class="${pct>=0?'xp-up':'xp-dn'}">${pct?((pct>=0?'▲ ':'▼ ')+Math.abs(pct).toFixed(2)+'%'):'—'}</small></div>
+      </div>`).join('')}</div>`;
+}
+
+// ── entity bottom sheet ─────────────────────────────────────────────────────
+// Built fully for Gold, NIFTY and Bitcoin; anything else still opens rather
+// than being an inert tap on a row that invites one.
+const XP_ENTITIES = {
+  GOLD:    { title:'Gold', q:'gold bullion', why:'METALS', value:'₹1,43,789', pct:5.80,
+             related:['Silver','Crude','USD/INR'],
+             series:[135900,137200,136800,139500,141100,140600,142900,143789] },
+  NIFTY:   { title:'NIFTY 50', q:'nifty sensex market', why:'STOCKS', value:'24,231.85', pct:-0.55,
+             related:['Sensex','Bank Nifty','India VIX'],
+             series:[24480,24402,24455,24310,24288,24350,24261,24231] },
+  BITCOIN: { title:'Bitcoin', q:'bitcoin crypto', why:'CRYPTO', value:'$71,908', pct:11.79,
+             related:['Ethereum','Solana','BTC dominance'],
+             series:[63100,64800,66200,65400,68100,69900,70400,71908] },
+};
+async function openEntity(sym, group) {
+  const spec = XP_ENTITIES[sym] || { title: sym, q: sym, why: group || null,
+                                     related: [], value:'—', pct:null, series:[] };
   const body = document.getElementById('xp-sheet-body');
   if (!body) return;
   body.innerHTML = `
     <div class="xp-sh-nm">${bEsc(spec.title)}</div>
-    <div class="xp-sh-val">${bEsc(value)}</div>
-    ${pct != null ? `<div class="xp-sh-chg">${xpPct(pct)}</div>`
-                  : (spec.sub ? `<div class="xp-sh-chg" style="color:var(--t2);font-weight:600">${bEsc(spec.sub)}</div>` : '')}
-    ${xpSpark(series, (pct == null ? true : pct >= 0), 76).replace('class="xp-spark"', 'class="xp-sh-spark"')}
+    <div class="xp-sh-val">${bEsc(spec.value)}</div>
+    ${spec.pct!=null ? `<div class="xp-sh-chg">${xpPct(spec.pct)}</div>` : ''}
+    ${xpSpark(spec.series, (spec.pct==null?true:spec.pct>=0), 84).replace('class="xp-spark"','class="xp-sh-spark"')}
     <div class="xp-sh-h">Why is it moving?</div>
-    <div id="xp-why">
-      ${Array(2).fill('<div class="xp-why"><div class="xp-sk" style="height:14px;width:70%"></div></div>').join('')}
-    </div>
-    ${spec.related.length ? `<div class="xp-sh-h">Related</div>
-      <div class="xp-rel">${spec.related.map(r =>
-        `<button onclick="xpRelated(${JSON.stringify(r)})">${bEsc(r)}</button>`).join('')}</div>` : ''}
+    <div id="xp-why">${Array(2).fill('<div class="xp-why"><div class="xp-sk" style="height:14px;width:70%"></div></div>').join('')}</div>
+    ${spec.related.length?`<div class="xp-sh-h">Related</div><div class="xp-rel">${
+      spec.related.map(r=>`<button onclick="xpRelated(${JSON.stringify(r)})">${bEsc(r)}</button>`).join('')}</div>`:''}
     <div class="xp-note">Market intelligence, not investment advice.</div>`;
-
   document.getElementById('xp-scrim').classList.add('on');
-  const sheet = document.getElementById('xp-sheet');
-  sheet.classList.remove('drag');
-  sheet.classList.add('on');
-  sheet.scrollTop = 0;
+  const sh = document.getElementById('xp-sheet');
+  sh.classList.remove('drag'); sh.classList.add('on'); sh.scrollTop = 0;
   document.body.style.overflow = 'hidden';
-
   xpFillWhy(spec);
 }
-
-// Real articles from the corpus, mock only when the search comes back empty.
 async function xpFillWhy(spec) {
   const host = document.getElementById('xp-why');
   if (!host) return;
   let rows = [];
   try {
     const d = await api('/search?q=' + encodeURIComponent(spec.q), { timeout: 2500 });
-    rows = (d.articles || []).slice(0, 2).map(a => {
+    rows = (d.articles||[]).slice(0,2).map(a=>{
       const n = normalizeArticle(a);
-      return { t: n.title, s: n.source + ' · ' + timeAgo(n.published_at), art: n };
+      return { t:n.title, s:(n.source||'')+' · '+timeAgo(n.published_at), art:n };
     });
-  } catch (e) { rows = []; }
-  if (!rows.length) {
-    const fb = (spec.why && MOCK_EXPLORE.why[spec.why]) || [];
-    rows = fb.map(x => ({ t: x.t, s: x.s, art: null }));
-  }
-  if (!rows.length) { host.innerHTML = ''; return; }
-  host.innerHTML = rows.map((r, i) => `
+  } catch(e) { rows = []; }
+  if (!rows.length) rows = ((spec.why && MOCK_EXPLORE.why[spec.why]) || []).map(x=>({t:x.t,s:x.s,art:null}));
+  if (!rows.length) { host.innerHTML=''; return; }
+  host.innerHTML = rows.map((r,i)=>`
     <div class="xp-why" onclick="xpWhyTap(${i})">
       <i class="fa-solid fa-arrow-right ar"></i>
-      <div class="tx">${bEsc(r.t)}<small>${bEsc(r.s)}</small></div>
-    </div>`).join('');
+      <div class="tx">${bEsc(r.t)}<small>${bEsc(r.s)}</small></div></div>`).join('');
   host._rows = rows;
 }
-
-function xpWhyTap(i) {
-  const host = document.getElementById('xp-why');
-  const row = host && host._rows && host._rows[i];
-  if (row && row.art) { closeEntity(); openArticle(row.art); }
+function xpWhyTap(i){
+  const h=document.getElementById('xp-why'); const r=h&&h._rows&&h._rows[i];
+  if (r&&r.art){ closeEntity(); openArticle(r.art); }
 }
-
-function xpRelated(name) {
-  const map = { 'Silver':'GOLD', 'Crude':'GOLD', 'USD/INR':'USDINR',
-                'Sensex':'NIFTY', 'Bank Nifty':'NIFTY', 'FII flows':'NIFTY' };
-  const k = map[name];
+function xpRelated(name){
+  const map={'Silver':'GOLD','Crude':'GOLD','USD/INR':'GOLD','Sensex':'NIFTY',
+             'Bank Nifty':'NIFTY','India VIX':'NIFTY','Ethereum':'BITCOIN',
+             'Solana':'BITCOIN','BTC dominance':'BITCOIN'};
+  const k=map[name];
   if (k && XP_ENTITIES[k]) return openEntity(k);
-  // No sheet of its own yet — search rather than dead-end the tap.
   closeEntity();
-  if (typeof openSearch === 'function') { try { return openSearch(name); } catch (e) {} }
+  if (typeof openSearch==='function'){ try{ return openSearch(name);}catch(e){} }
 }
-
-function closeEntity() {
-  const sheet = document.getElementById('xp-sheet');
-  if (sheet) { sheet.classList.remove('on', 'drag'); sheet.style.transform = ''; }
-  const sc = document.getElementById('xp-scrim');
-  if (sc) sc.classList.remove('on');
-  document.body.style.overflow = '';
-  xpOpenKey = null;
+function closeEntity(){
+  const sh=document.getElementById('xp-sheet');
+  if(sh){ sh.classList.remove('on','drag'); sh.style.transform=''; }
+  const sc=document.getElementById('xp-scrim'); if(sc) sc.classList.remove('on');
+  document.body.style.overflow = xpPageKey ? 'hidden' : '';
 }
-
-// Swipe down to dismiss. Tracks the finger 1:1, then either springs back or
-// carries through — a sheet that only closes from a button feels nailed down.
-(function xpSheetDrag() {
-  const sheet = document.getElementById('xp-sheet');
-  const grab = document.getElementById('xp-grab');
-  if (!sheet || !grab) return;
-  let y0 = 0, dy = 0, dragging = false;
-
-  const start = e => {
-    // Only from the top of the sheet, so scrolling its content is unaffected.
-    if (sheet.scrollTop > 0) return;
-    dragging = true; dy = 0;
-    y0 = (e.touches ? e.touches[0].clientY : e.clientY);
-    sheet.classList.add('drag');
-  };
-  const move = e => {
-    if (!dragging) return;
-    const y = (e.touches ? e.touches[0].clientY : e.clientY);
-    dy = Math.max(0, y - y0);
-    if (dy > 0 && e.cancelable) e.preventDefault();
-    sheet.style.transform = `translateY(${dy}px)`;
-    const sc = document.getElementById('xp-scrim');
-    if (sc) sc.style.opacity = String(Math.max(0, 1 - dy / 320));
-  };
-  const end = () => {
-    if (!dragging) return;
-    dragging = false;
-    sheet.classList.remove('drag');
-    const sc = document.getElementById('xp-scrim');
-    if (sc) sc.style.opacity = '';
-    // Past a quarter of the sheet, let it go; otherwise spring back.
-    if (dy > Math.min(150, sheet.offsetHeight * 0.25)) { closeEntity(); }
-    else { sheet.style.transform = ''; }
-    dy = 0;
-  };
-  grab.addEventListener('touchstart', start, { passive: true });
-  grab.addEventListener('touchmove', move, { passive: false });
-  grab.addEventListener('touchend', end);
-  grab.addEventListener('mousedown', start);
-  window.addEventListener('mousemove', move);
-  window.addEventListener('mouseup', end);
-  window.addEventListener('keydown', e => { if (e.key === 'Escape') closeEntity(); });
+(function xpDrag(){
+  const sh=document.getElementById('xp-sheet'), gb=document.getElementById('xp-grab');
+  if(!sh||!gb) return;
+  let y0=0,dy=0,on=false;
+  const st=e=>{ if(sh.scrollTop>0) return; on=true; dy=0;
+    y0=(e.touches?e.touches[0].clientY:e.clientY); sh.classList.add('drag'); };
+  const mv=e=>{ if(!on) return;
+    const y=(e.touches?e.touches[0].clientY:e.clientY); dy=Math.max(0,y-y0);
+    if(dy>0&&e.cancelable) e.preventDefault();
+    sh.style.transform=`translateY(${dy}px)`;
+    const sc=document.getElementById('xp-scrim'); if(sc) sc.style.opacity=String(Math.max(0,1-dy/320)); };
+  const en=()=>{ if(!on) return; on=false; sh.classList.remove('drag');
+    const sc=document.getElementById('xp-scrim'); if(sc) sc.style.opacity='';
+    if(dy>Math.min(150,sh.offsetHeight*0.25)) closeEntity(); else sh.style.transform='';
+    dy=0; };
+  gb.addEventListener('touchstart',st,{passive:true});
+  gb.addEventListener('touchmove',mv,{passive:false});
+  gb.addEventListener('touchend',en);
+  gb.addEventListener('mousedown',st);
+  window.addEventListener('mousemove',mv); window.addEventListener('mouseup',en);
+  window.addEventListener('keydown',e=>{ if(e.key!=='Escape') return;
+    if(document.getElementById('xp-sheet').classList.contains('on')) closeEntity();
+    else if(xpPageKey) xpClosePage(); });
 })();
 
-
-// ── 4. module stubs ─────────────────────────────────────────────────────────
-// Deliberately compact and deliberately not built out: each is a doorway with a
-// real value on it, not a page. Sizes are mixed on purpose — a wide hero, a
-// 2-up grid and the rail above — so the page never reads as a uniform wall.
-function xpCountdown(iso) {
-  const t = Date.parse(iso) - Date.now();
-  if (!(t > 0)) return 'Launching now';
-  const d = Math.floor(t / 86400000), h = Math.floor(t / 3600000) % 24,
-        m = Math.floor(t / 60000) % 60, sec = Math.floor(t / 1000) % 60;
-  return d > 0 ? `${d}d ${h}h ${m}m` : `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
-}
-
-function renderXpModules() {
-  const host = document.getElementById('xp-modules');
-  if (!host) return;
-  const M = MOCK_EXPLORE;
-  const snap = xpSnap || {};
-
-  // Real where the snapshot has it, mock where it does not.
-  const w = (snap.weather && snap.weather.data) || null;
-  const weather = w && w.temp_c != null ? `${Math.round(w.temp_c)}°C` : M.essentials.weather;
-  const sp = (snap.space && snap.space.data && (snap.space.data.launches || [])[0]) || null;
-  const launch = sp ? { name: sp.name || M.space.name,
-                        pad: [sp.provider, sp.pad].filter(Boolean).join(' · ') || M.space.pad,
-                        t: sp.net || sp.window_start || M.space.t }
-                    : M.space;
-  const wd = (snap.word_of_day && snap.word_of_day.data) || null;
-  const know = wd && wd.word ? { word: wd.word,
-                                 pos: (wd.meanings && wd.meanings[0] && wd.meanings[0].part_of_speech) || M.knowledge.pos,
-                                 def: (wd.meanings && wd.meanings[0] && wd.meanings[0].definition) || M.knowledge.def }
-                             : M.knowledge;
-  const gp = (snap.govt_press && snap.govt_press.data && (snap.govt_press.data.releases || [])[0]) || null;
-  const scheme = gp ? { name: gp.title, meta: gp.published_at || M.government.scheme.meta }
-                    : M.government.scheme;
-
-  // AQI is the one number whose colour carries meaning, so the tile is tinted by
-  // the value rather than by which tile it is.
-  const aqiN = parseInt(M.essentials.aqi, 10) || 0;
-  const aqiTint = aqiN <= 100 ? 't-good' : aqiN <= 200 ? 't-mid' : 't-bad';
-  const aqiWord = aqiN <= 100 ? 'Moderate' : aqiN <= 200 ? 'Poor' : 'Severe';
-
-  const row = (icon, title, meta) => `
-    <div class="xp-row">
-      <div class="ico"><i class="fa-solid ${icon}"></i></div>
-      <div class="tx"><b>${bEsc(title)}</b><small>${bEsc(meta)}</small></div>
-      <i class="fa-solid fa-chevron-right cv"></i>
-    </div>`;
-
-  // Three section labels are gone on purpose — the tiles say AIR QUALITY and
-  // PETROL, the metric cards say NIFTY and GOLD, and a word in 38px display type
-  // does not need to be introduced as a word.
-  host.innerHTML = `
-    <div class="xp-grid">
-      <div class="xp-tile ${aqiTint}" onclick="xpSoon('Air quality')">
-        <div class="k">Air quality</div><div class="v">${aqiN || '—'}</div>
-        <div class="s">${bEsc(aqiWord)} · Delhi</div></div>
-      <div class="xp-tile t-warm" onclick="xpSoon('Weather')">
-        <div class="k">Weather</div><div class="v">${bEsc(weather)}</div>
-        <div class="s">${bEsc(w && w.humidity != null ? w.humidity + '% humidity' : 'Haze')}</div></div>
-      <div class="xp-tile t-cool" onclick="xpSoon('Petrol')">
-        <div class="k">Petrol</div><div class="v">${bEsc(M.essentials.petrol)}</div>
-        <div class="s">per litre · Mumbai</div></div>
-      <div class="xp-tile t-cool" onclick="xpSoon('Diesel')">
-        <div class="k">Diesel</div><div class="v">${bEsc(M.essentials.diesel)}</div>
-        <div class="s">per litre · Mumbai</div></div>
-    </div>
-
-    <div class="xp-hd"><h3>Government</h3><span class="all" onclick="xpSoon('Government')">View all →</span></div>
-    <div class="xp-band" onclick="openEntity('SCHEME')">
-      ${row('fa-landmark', scheme.name, scheme.meta)}
-      ${row('fa-file-signature', M.government.tender.name, M.government.tender.meta)}
-    </div>
-
-    <div class="xp-hd"><h3>Opportunities</h3><span class="all" onclick="xpSoon('Opportunities')">View all →</span></div>
-    <div class="xp-band" onclick="xpSoon('Opportunities')">
-      ${row('fa-briefcase', M.opportunities.job.name, M.opportunities.job.meta)}
-      ${row('fa-seedling', M.opportunities.grant.name, M.opportunities.grant.meta)}
-    </div>
-
-    <div class="xp-hd" style="margin-bottom:0"></div>
-    <div class="xp-space" onclick="xpSoon('Space')">
-      <div class="lbl"><span class="xp-dot"></span>Next launch</div>
-      <div class="t">${bEsc(launch.name)}</div>
-      <div class="m">${bEsc(launch.pad)}</div>
-      <div class="xp-cd" id="xp-cd">${bEsc(xpCountdown(launch.t))}</div>
-    </div>
-
-    <div class="xp-hd" style="margin-bottom:0"></div>
-    <div class="xp-word" onclick="xpSoon('Knowledge')">
-      <div class="lbl">Word of the day</div>
-      <div class="w">${bEsc(know.word)}</div>
-      <div class="pos">${bEsc(know.pos)}</div>
-      <div class="def">${bEsc(know.def)}</div>
-    </div>`;
-
-  clearInterval(window._xpCdTimer);
-  window._xpCdTimer = setInterval(() => {
-    const el = document.getElementById('xp-cd');
-    if (!el) return clearInterval(window._xpCdTimer);
-    el.textContent = xpCountdown(launch.t);
-  }, 1000);
-}
-
-function xpSoon(what) { if (typeof toast === 'function') toast(what + ' — coming soon'); }
-
-function xpModulesSkeleton() {
-  const host = document.getElementById('xp-modules');
-  if (!host) return;
-  // Shimmer in the tile's own tint, so the page does not change colour when the
-  // real values land.
-  const tile = t => `<div class="xp-tile ${t}" style="pointer-events:none">
-      <div class="xp-sk" style="height:8px;width:48%"></div>
-      <div class="xp-sk" style="height:24px;width:66%;margin-top:9px"></div>
-      <div class="xp-sk" style="height:8px;width:78%;margin-top:6px"></div></div>`;
-  host.innerHTML = `
-    <div class="xp-grid">${tile('t-good') + tile('t-warm') + tile('t-cool') + tile('t-cool')}</div>
-    <div class="xp-hd"><h3>Government</h3></div>
-    <div class="xp-band" style="pointer-events:none">
-      <div class="xp-row"><div class="xp-sk" style="width:34px;height:34px;border-radius:12px"></div>
-        <div class="tx"><div class="xp-sk" style="height:11px;width:72%"></div>
-          <div class="xp-sk" style="height:9px;width:44%;margin-top:7px"></div></div></div>
-      <div class="xp-row"><div class="xp-sk" style="width:34px;height:34px;border-radius:12px"></div>
-        <div class="tx"><div class="xp-sk" style="height:11px;width:64%"></div>
-          <div class="xp-sk" style="height:9px;width:50%;margin-top:7px"></div></div></div>
-    </div>`;
-}
-
 // ── boot ────────────────────────────────────────────────────────────────────
-// 2s and no longer. Past that the page is better off with placeholder numbers on
-// screen than with a reader watching a shimmer, so the mock renders and the real
-// values swap in later if they ever arrive.
-async function initExploreV7() {
-  renderXpRail();
-  xpPulseSkeleton();
-  xpModulesSkeleton();
+function xpSkeleton() {
+  const m=document.getElementById('xp-matrix');
+  if(m) m.innerHTML=Array(6).fill(`<div class="xp-mt m-stk" style="pointer-events:none;box-shadow:none">
+      <div class="xp-sk" style="height:8px;width:50%"></div>
+      <div class="xp-sk" style="height:22px;width:74%;margin-top:9px"></div>
+      <div class="xp-sk" style="height:8px;width:38%;margin-top:7px"></div>
+      <div class="xp-sk" style="height:26px;margin-top:8px"></div></div>`).join('');
+  const h=document.getElementById('xp-hero');
+  if(h) h.innerHTML=`<div class="xp-sk" style="height:212px;border-radius:0"></div>`;
+}
+async function initExploreV8() {
+  renderXpChips();
+  xpSkeleton();
+  // 2s and no longer: placeholder numbers on screen beat a reader watching a
+  // shimmer, and the real values swap in if they arrive.
+  try { xpSnap = await api('/explore/snapshot', { timeout: 2000 }); }
+  catch (e) { xpSnap = null; }
+  let arts = [];
   try {
-    xpSnap = await api('/explore/snapshot', { timeout: 2000 });
-  } catch (e) {
-    xpSnap = null;                       // fall back to MOCK_EXPLORE, silently
-  }
-  renderXpPulse();
-  renderXpModules();
+    const d = await api('/explore?page=1&limit=6', { timeout: 2000 });
+    arts = (d.articles||[]).map(normalizeArticle).filter(a=>a.title);
+  } catch (e) { arts = []; }
+  renderXpHero(arts);
+  renderXpMatrix(); renderXpTal(); renderXpBTick();
+  renderXpGov(); renderXpAlso(); renderXpSpace(); renderXpAi();
 }
 
 
@@ -9633,7 +9841,7 @@ async function loadSnapshot() {
 }
 
 function startMarketsPolling() {
-  initExploreV7();   // Explore v7: rail, pulse, modules
+  initExploreV8();   // Explore v8
   renderGlance();     // show launcher tiles immediately; badges fill in on data
   loadSnapshot();     // eleven cached sections in one request
   loadMarkets();

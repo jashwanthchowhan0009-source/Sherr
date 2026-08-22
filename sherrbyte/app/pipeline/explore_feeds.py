@@ -29,6 +29,7 @@ import os
 import random
 import re
 import time
+from datetime import datetime, timedelta, timezone
 
 import httpx
 
@@ -56,6 +57,16 @@ SCHEDULE = {
     "flights":    12 * 3600,     # anonymous OpenSky is heavily rate limited
     "macro_rates": 6 * 3600,
     "govt_press":  1 * 3600,
+    # Part B. Intervals follow how fast each source actually changes: crypto is
+    # continuous, mandi is published once a day, GitHub trending barely moves
+    # within a day.
+    "crypto":          3 * 60,
+    "forex_pairs":     10 * 60,
+    "mandi":           12 * 3600,
+    "launches":        6 * 3600,
+    "ai_papers":       6 * 3600,
+    "github_repos":    12 * 3600,
+    "tech_news":       30 * 60,
 }
 
 # Process-local mirror of every value ever written. Upstash being unreachable must not
@@ -365,10 +376,217 @@ async def govt_press(client: httpx.AsyncClient) -> dict:
     return {"releases": out}
 
 
+# ─── Part B additions ─────────────────────────────────────────────────────────
+# Same contract as everything above: one async function, a short timeout, a plain
+# dict out, and an exception on failure so refresh() records it rather than
+# caching an empty shape that looks like real data.
+
+CRYPTO_IDS = "bitcoin,ethereum,solana,ripple,binancecoin"
+FX_PAIRS = [("USD", "INR"), ("EUR", "USD"), ("GBP", "INR"),
+            ("EUR", "INR"), ("JPY", "INR"), ("AED", "INR"), ("USD", "CNY")]
+MANDI_COMMODITIES = ("Onion", "Tomato", "Potato")
+MANDI_RESOURCE = "9ef84268-d588-465a-a308-a864a43d0070"
+
+
+async def crypto(client: httpx.AsyncClient) -> dict:
+    """Prices, BTC dominance and the Fear & Greed index.
+
+    Three independent upstreams gathered concurrently: one being down costs that
+    field, not the section.
+    """
+    async def prices():
+        r = await client.get("https://api.coingecko.com/api/v3/simple/price",
+                             params={"ids": CRYPTO_IDS, "vs_currencies": "usd",
+                                     "include_24hr_change": "true"}, timeout=10)
+        r.raise_for_status()
+        return {k.upper(): {"price": v.get("usd"),
+                            "change_pct": round(v.get("usd_24h_change") or 0, 2)}
+                for k, v in (r.json() or {}).items()}
+
+    async def dominance():
+        r = await client.get("https://api.coingecko.com/api/v3/global", timeout=10)
+        r.raise_for_status()
+        d = ((r.json() or {}).get("data") or {}).get("market_cap_percentage") or {}
+        return round(float(d.get("btc") or 0), 1)
+
+    async def fng():
+        r = await client.get("https://api.alternative.me/fng/", timeout=10)
+        r.raise_for_status()
+        row = ((r.json() or {}).get("data") or [{}])[0]
+        return {"value": int(row.get("value") or 0),
+                "label": row.get("value_classification") or ""}
+
+    got = await asyncio.gather(prices(), dominance(), fng(), return_exceptions=True)
+    coins, dom, greed = [None if isinstance(g, Exception) else g for g in got]
+    if not coins:
+        raise RuntimeError("coingecko returned no prices")
+    return {"coins": coins, "btc_dominance": dom, "fear_greed": greed}
+
+
+async def forex_pairs(client: httpx.AsyncClient) -> dict:
+    """The seven pairs the Forex page lists, plus the dollar index.
+
+    Frankfurter quotes one base per call, so the bases are grouped and fetched
+    concurrently rather than one request per pair.
+    """
+    bases = {}
+    for a, b in FX_PAIRS:
+        bases.setdefault(a, []).append(b)
+
+    async def one(base, syms):
+        r = await client.get(f"https://api.frankfurter.app/latest",
+                             params={"from": base, "to": ",".join(syms)}, timeout=10)
+        r.raise_for_status()
+        return base, (r.json() or {}).get("rates") or {}
+
+    got = await asyncio.gather(*(one(b, s) for b, s in bases.items()),
+                               return_exceptions=True)
+    out = {}
+    for g in got:
+        if isinstance(g, Exception):
+            continue
+        base, rates = g
+        for sym, rate in rates.items():
+            out[f"{base}/{sym}"] = round(float(rate), 4)
+    if not out:
+        raise RuntimeError("frankfurter returned no rates")
+    return {"pairs": out}
+
+
+async def mandi(client: httpx.AsyncClient) -> dict:
+    """Agmarknet mandi prices for the staples people actually track.
+
+    Needs DATA_GOV_IN_KEY. Raising when it is absent is deliberate: the section
+    then reports "not fetched" rather than showing a number nobody can source.
+    """
+    key = (os.getenv("DATA_GOV_IN_KEY") or "").strip()
+    if not key:
+        raise RuntimeError("DATA_GOV_IN_KEY not set")
+    state = (os.getenv("EXPLORE_STATE") or "Telangana").strip()
+
+    async def one(commodity):
+        r = await client.get(f"https://api.data.gov.in/resource/{MANDI_RESOURCE}",
+                             params={"api-key": key, "format": "json", "limit": 20,
+                                     "filters[commodity]": commodity,
+                                     "filters[state]": state}, timeout=10)
+        r.raise_for_status()
+        recs = (r.json() or {}).get("records") or []
+        if not recs:
+            return None
+        # The cheapest modal price across the state's mandis is the number a
+        # reader can act on; the spread is what tells them how firm it is.
+        rows = [x for x in recs if x.get("modal_price")]
+        if not rows:
+            return None
+        best = min(rows, key=lambda x: float(x["modal_price"]))
+        return {"commodity": commodity,
+                "market": best.get("market") or "",
+                "modal_price": float(best["modal_price"]),
+                "min_price": float(best.get("min_price") or 0),
+                "max_price": float(best.get("max_price") or 0),
+                "arrival_date": best.get("arrival_date") or ""}
+
+    got = await asyncio.gather(*(one(c) for c in MANDI_COMMODITIES),
+                               return_exceptions=True)
+    items = [g for g in got if g and not isinstance(g, Exception)]
+    if not items:
+        raise RuntimeError("agmarknet returned no records")
+    return {"state": state, "items": items}
+
+
+async def launches(client: httpx.AsyncClient) -> dict:
+    """Launch Library 2.3.0 — rocket, provider, mission and net for the countdown."""
+    r = await client.get("https://ll.thespacedevs.com/2.3.0/launches/upcoming/",
+                         params={"limit": 3, "mode": "list"}, timeout=12)
+    r.raise_for_status()
+    out = []
+    for x in (r.json() or {}).get("results") or []:
+        out.append({
+            "name": x.get("name") or "",
+            "rocket": ((x.get("rocket") or {}).get("configuration") or {}).get("name") or "",
+            "provider": (x.get("launch_service_provider") or {}).get("name") or "",
+            "mission": (x.get("mission") or {}).get("name") or "",
+            "pad": ((x.get("pad") or {}).get("name")) or "",
+            "net": x.get("net") or "",
+            "status": ((x.get("status") or {}).get("abbrev")) or "",
+        })
+    if not out:
+        raise RuntimeError("launch library returned no launches")
+    return {"launches": out}
+
+
+async def ai_papers(client: httpx.AsyncClient) -> dict:
+    """Hugging Face daily papers — the AI & Tech card's left half."""
+    r = await client.get("https://huggingface.co/api/daily_papers",
+                         params={"limit": 8}, timeout=10)
+    r.raise_for_status()
+    out = []
+    for x in (r.json() or [])[:8]:
+        paper = x.get("paper") or {}
+        out.append({"title": (paper.get("title") or x.get("title") or "").strip(),
+                    "upvotes": paper.get("upvotes") or 0,
+                    "id": paper.get("id") or "",
+                    "url": "https://huggingface.co/papers/" + (paper.get("id") or "")})
+    if not out:
+        raise RuntimeError("huggingface returned no papers")
+    return {"papers": out}
+
+
+async def github_repos(client: httpx.AsyncClient) -> dict:
+    """Repos with real momentum: over a thousand stars AND pushed this month.
+
+    Stars alone surfaces the same permanent top-100 every day; the recency filter
+    is what makes it a trending list rather than a hall of fame.
+    """
+    since = (datetime.now(timezone.utc) - timedelta(days=30)).strftime("%Y-%m-%d")
+    r = await client.get("https://api.github.com/search/repositories",
+                         params={"q": f"stars:>1000 pushed:>{since}",
+                                 "sort": "stars", "order": "desc", "per_page": 8},
+                         headers={"Accept": "application/vnd.github+json"}, timeout=12)
+    r.raise_for_status()
+    out = []
+    for x in (r.json() or {}).get("items") or []:
+        out.append({"name": x.get("full_name") or "",
+                    "desc": (x.get("description") or "")[:120],
+                    "stars": x.get("stargazers_count") or 0,
+                    "lang": x.get("language") or "",
+                    "url": x.get("html_url") or ""})
+    if not out:
+        raise RuntimeError("github returned no repos")
+    return {"repos": out}
+
+
+async def tech_news(client: httpx.AsyncClient) -> dict:
+    """Hacker News top stories. The index call returns 500 ids; only the first
+    eight are hydrated, because the other 492 are a rate limit waiting to
+    happen."""
+    r = await client.get("https://hacker-news.firebaseio.com/v0/topstories.json",
+                         timeout=10)
+    r.raise_for_status()
+    ids = (r.json() or [])[:8]
+
+    async def item(i):
+        rr = await client.get(f"https://hacker-news.firebaseio.com/v0/item/{i}.json",
+                              timeout=8)
+        rr.raise_for_status()
+        d = rr.json() or {}
+        return {"title": d.get("title") or "", "score": d.get("score") or 0,
+                "url": d.get("url") or f"https://news.ycombinator.com/item?id={i}"}
+
+    got = await asyncio.gather(*(item(i) for i in ids), return_exceptions=True)
+    out = [g for g in got if isinstance(g, dict)]
+    if not out:
+        raise RuntimeError("hacker news returned no stories")
+    return {"stories": out}
+
+
 FETCHERS = {"markets": markets, "forex": forex, "weather": weather,
             "space": space, "word_of_day": word_of_day, "news_top": news_top,
             "world_bank": world_bank, "nasa": nasa, "flights": flights,
-            "macro_rates": macro_rates, "govt_press": govt_press}
+            "macro_rates": macro_rates, "govt_press": govt_press,
+            "crypto": crypto, "forex_pairs": forex_pairs, "mandi": mandi,
+            "launches": launches, "ai_papers": ai_papers,
+            "github_repos": github_repos, "tech_news": tech_news}
 
 
 # ─── orchestration ────────────────────────────────────────────────────────────

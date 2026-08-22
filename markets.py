@@ -269,6 +269,7 @@ async def fetch_stocks(with_sparkline: bool = False) -> dict:
     symbols = [
         "^NSEI", "^BSESN", "^IXIC", "^GSPC", "^DJI", "^FTSE", "^N225",
         "^GDAXI", "^FCHI", "^HSI", "^AXJO", "^BVSP", "^STI", "^KS11", "000001.SS",
+        "^NSEBANK", "^VIX", "^INDIAVIX",
     ]
     labels  = {
         "^NSEI":    "NIFTY",    "^BSESN":   "SENSEX",   "^IXIC":    "NASDAQ",
@@ -276,6 +277,7 @@ async def fetch_stocks(with_sparkline: bool = False) -> dict:
         "^N225":    "NIKKEI",   "^GDAXI":   "DAX",       "^FCHI":    "CAC40",
         "^HSI":     "HANGSENG", "^AXJO":    "ASX200",    "^BVSP":    "BOVESPA",
         "^STI":     "STI",      "^KS11":    "KOSPI",     "000001.SS":"SHANGHAI",
+        "^NSEBANK": "BANKNIFTY", "^VIX":    "VIX",        "^INDIAVIX":"INDIAVIX",
     }
 
     async with httpx.AsyncClient() as client:
@@ -315,8 +317,9 @@ async def fetch_metals() -> dict:
     async with httpx.AsyncClient() as client:
         metals = await _metals_api(client)
         # Augment/fallback via Yahoo futures
-        fut = await _yahoo(client, ["GC=F", "SI=F", "PL=F", "PA=F"])
-        fb = {"GC=F": "GOLD", "SI=F": "SILVER", "PL=F": "PLATINUM", "PA=F": "PALLADIUM"}
+        fut = await _yahoo(client, ["GC=F", "SI=F", "PL=F", "PA=F", "HG=F"])
+        fb = {"GC=F": "GOLD", "SI=F": "SILVER", "PL=F": "PLATINUM",
+              "PA=F": "PALLADIUM", "HG=F": "COPPER"}
         for sym, label in fb.items():
             y = fut.get(sym, {})
             if not y:
@@ -349,7 +352,7 @@ async def fetch_forex() -> dict:
         return cached
     pairs = ["USDINR=X", "EURINR=X", "GBPINR=X", "JPYINR=X", "EURUSD=X", "GBPUSD=X"]
     async with httpx.AsyncClient() as client:
-        data = await _yahoo(client, pairs)
+        data = await _yahoo(client, pairs + ["DX-Y.NYB"])
     labels = {
         "USDINR=X": "USDINR", "EURINR=X": "EURINR", "GBPINR=X": "GBPINR",
         "JPYINR=X": "JPYINR", "EURUSD=X": "EURUSD", "GBPUSD=X": "GBPUSD",
