@@ -15,9 +15,18 @@ Per instrument, one signal:
 Quotes come from the same free endpoints the app's market cards use (Yahoo chart API
 for everything except crypto, CoinGecko for crypto) — no new infrastructure, no keys.
 
+One run writes ONE day. market_reaction needs min_history+1 = 6 daily
+observations per instrument before it will test a move for significance, so a
+fresh database is six days away from its first insight. --from-ticks closes that
+gap: it replays the daily closes already stored in sherrbyte_app.market_ticks
+(see market_ticks.py / scripts/backfill_ticks.py) as historical signals of
+exactly the shape below, so the history is there immediately.
+
 Standalone:
-    python -m app.workers.market_signals            # fetch + persist
+    python -m app.workers.market_signals            # fetch + persist today
     python -m app.workers.market_signals --dry-run  # fetch + print, write nothing
+    python -m app.workers.market_signals --from-ticks           # replay 90 days
+    python -m app.workers.market_signals --from-ticks --days 30
 """
 
 from __future__ import annotations
@@ -157,17 +166,133 @@ async def run(dry_run: bool = False) -> dict:
     }
 
 
+# ─── history replay from the price store ─────────────────────────────────────
+# market_ticks stores every symbol /markets quotes; INSTRUMENTS/CRYPTO above name
+# the subset the engine has entities for. Only the intersection is replayed —
+# giving "^FTSE" or "XOM" a display name here would be inventing entities the
+# daily path never creates, and the two would then resolve differently.
+#
+# Keys are the symbols as market_ticks stores them (Yahoo symbols; CoinGecko ids
+# for coins). Values match what collect() emits, so the Signal built below is
+# indistinguishable from the one the daily run writes — including ref_id, which
+# is what makes the two paths idempotent against each other.
+_TICK_SOURCES: dict[str, tuple[str, str, str]] = {
+    **{sym: (sym, name, cls) for sym, name, cls in INSTRUMENTS},
+    **{cid: (cid.upper(), name, "crypto") for cid, name in CRYPTO.items()},
+}
+
+_TICKS_SQL = """
+    SELECT symbol, ts, change_24h
+      FROM sherrbyte_app.market_ticks
+     WHERE symbol = ANY($1::text[])
+       AND change_24h IS NOT NULL
+       AND ts >= now() - ($2 || ' days')::interval
+     ORDER BY symbol, ts
+"""
+
+
+async def backfill_from_ticks(days: int = 90, dry_run: bool = False) -> dict:
+    """Replay stored daily closes as domain='market' signals.
+
+    Same Signal shape, same ref_id, same delete-then-insert as run(), so the
+    replay and the daily job can be run in any order any number of times — a day
+    already present is replaced, never duplicated.
+
+    Rows with change_24h IS NULL are skipped rather than treated as flat: that is
+    the first bar of a series (no previous close) or an unrepresentable print,
+    and a fabricated 0.0% would read to the detector as a genuinely flat day.
+    """
+    from app.spie.knowledge.adapters.base import direction, clamp
+    from app.spie.knowledge.signals import persist_signals
+    from app.models.signal import Signal, SignalEntity
+
+    symbols = sorted(_TICK_SOURCES)
+    async with db.acquire() as conn:
+        try:
+            rows = await conn.fetch(_TICKS_SQL, symbols, str(int(days)))
+        except Exception as e:
+            return {"collected": 0, "written": 0,
+                    "detail": f"cannot read sherrbyte_app.market_ticks: {e} — "
+                              f"run scripts/backfill_ticks.py first"}
+
+    sigs, per_symbol = [], {}
+    for r in rows:
+        signal_symbol, name, cls = _TICK_SOURCES[r["symbol"]]
+        pct = float(r["change_24h"])
+        day = r["ts"].astimezone(timezone.utc)
+        sigs.append(Signal(
+            entities=[SignalEntity(name=name, type="MISC")],
+            domain="market",
+            ts=day,
+            magnitude=abs(pct),
+            direction=direction(pct),
+            sentiment=None,
+            source_id=f"yahoo:{cls}",
+            credibility=0.9,
+            confidence=clamp(0.6 + min(abs(pct), 10.0) / 20.0),
+            ref_id=f"market:{signal_symbol}:{day.date().isoformat()}",
+        ))
+        per_symbol[name] = per_symbol.get(name, 0) + 1
+
+    if not sigs:
+        return {"collected": 0, "written": 0,
+                "detail": "market_ticks has no usable rows for the engine's "
+                          "instruments — run scripts/backfill_ticks.py "
+                          "(or GET /admin/backfill-ticks) first",
+                "symbols_looked_for": symbols}
+
+    if dry_run:
+        return {"collected": len(sigs), "written": 0, "dry_run": True,
+                "days": days, "per_instrument": per_symbol}
+
+    async with db.acquire() as conn:
+        # Same idempotency as run(), over the whole replayed window.
+        await conn.execute(
+            "DELETE FROM domain_signals WHERE domain='market' AND ref_id = ANY($1::text[])",
+            [s.ref_id for s in sigs])
+        written = await persist_signals(conn, sigs, conn_factory=db.acquire)
+
+    # What the detector actually gates on: distinct days per instrument.
+    depth = await db.fetch(
+        """
+        SELECT COUNT(DISTINCT (ts AT TIME ZONE 'UTC')::date) AS days
+          FROM domain_signals
+         WHERE domain='market'
+         GROUP BY entity_ids
+         ORDER BY 1 DESC
+        """)
+    deepest = int(depth[0]["days"]) if depth else 0
+    return {
+        "collected": len(sigs), "written": written, "days": days,
+        "per_instrument": per_symbol,
+        "market_signals_total": int(
+            await db.fetchval("SELECT COUNT(*) FROM domain_signals WHERE domain='market'") or 0),
+        "deepest_instrument_days": deepest,
+        # min_history + 1 in market_reaction.run().
+        "enough_for_market_reaction": deepest >= 6,
+    }
+
+
 async def _main() -> None:
     parser = argparse.ArgumentParser(description="Write market moves into domain_signals.")
     parser.add_argument("--dry-run", action="store_true",
                         help="fetch and print quotes without writing signals")
+    parser.add_argument("--from-ticks", action="store_true",
+                        help="replay stored daily closes from sherrbyte_app.market_ticks "
+                             "instead of fetching today's quotes")
+    parser.add_argument("--days", type=int, default=90,
+                        help="with --from-ticks: how far back to replay (default 90)")
     args = parser.parse_args()
 
     from app.workers import bootstrap, teardown
     await bootstrap()
     try:
-        result = await run(dry_run=args.dry_run)
-        log.info("market_signals: %s", result)
+        if args.from_ticks:
+            result = await backfill_from_ticks(days=args.days, dry_run=args.dry_run)
+            log.info("market_signals backfill: %s", result)
+        else:
+            result = await run(dry_run=args.dry_run)
+            log.info("market_signals: %s", result)
         print(json.dumps(result, indent=2, default=str))
     finally:
         await teardown()
