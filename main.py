@@ -1528,6 +1528,15 @@ async def lifespan(app: FastAPI):
         asyncio.create_task(explore_feeds.refresh_all())
     except Exception as e:
         log.error("explore feeds not started: %s", e)
+    # Sherr-I's historical price store: one daily close per symbol, appended
+    # nightly. Inert without a Postgres DSN (the job reports "skipped" rather
+    # than raising), so local sqlite development is unaffected. Seed the 90-day
+    # history it measures against with scripts/backfill_ticks.py.
+    try:
+        import market_ticks
+        market_ticks.register_jobs(scheduler)
+    except Exception as e:
+        log.error("market ticks job not started: %s", e)
     scheduler.start()
     log.info("Scheduler: collect every %d min", COLLECT_INTERVAL_MIN)
     # Inline, because the point is that the feed is servable by the time the first

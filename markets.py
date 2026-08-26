@@ -33,6 +33,65 @@ FINNHUB_KEY      = os.getenv("FINNHUB_KEY", "")
 METALS_API_KEY   = os.getenv("METALS_API_KEY", "")
 EXCHANGE_RATE_KEY= os.getenv("EXCHANGE_RATE_KEY", "")
 
+# ─── Symbol catalogue ────────────────────────────────────────────────────
+# Every symbol this module quotes, in one place, keyed by market_type.
+#
+# The aggregators below build their own response labels from this dict rather
+# than repeating the lists inline, because it is now also read by market_ticks.py
+# — the historical price store backfills and appends exactly what /markets
+# quotes. Two hand-maintained copies of "which symbols matter" would go out of
+# sync on the first symbol anyone added, and the store would silently stop
+# covering it.
+#
+# Yahoo symbols for everything except crypto, which is CoinGecko ids (their
+# `simple/price` and `market_chart` endpoints are both keyed by id, so the id IS
+# the symbol as far as storage is concerned).
+SYMBOLS: dict[str, dict[str, str]] = {
+    "stocks": {
+        "^NSEI":    "NIFTY",     "^BSESN":   "SENSEX",    "^IXIC":     "NASDAQ",
+        "^GSPC":    "SP500",     "^DJI":     "DOW",       "^FTSE":     "FTSE",
+        "^N225":    "NIKKEI",    "^GDAXI":   "DAX",       "^FCHI":     "CAC40",
+        "^HSI":     "HANGSENG",  "^AXJO":    "ASX200",    "^BVSP":     "BOVESPA",
+        "^STI":     "STI",       "^KS11":    "KOSPI",     "000001.SS": "SHANGHAI",
+        "^NSEBANK": "BANKNIFTY", "^VIX":     "VIX",       "^INDIAVIX": "INDIAVIX",
+    },
+    "metals": {
+        "GC=F": "GOLD", "SI=F": "SILVER", "PL=F": "PLATINUM",
+        "PA=F": "PALLADIUM", "HG=F": "COPPER",
+    },
+    "forex": {
+        "USDINR=X": "USDINR", "EURINR=X": "EURINR", "GBPINR=X": "GBPINR",
+        "JPYINR=X": "JPYINR", "EURUSD=X": "EURUSD", "GBPUSD=X": "GBPUSD",
+        # Fetched by fetch_forex today but not returned in its payload. It is a
+        # symbol this module already pulls, so the store keeps its history.
+        "DX-Y.NYB": "DXY",
+    },
+    "commodities": {
+        "CL=F": "WTI_CRUDE", "BZ=F": "BRENT", "NG=F": "NATGAS",
+        "HG=F": "COPPER",    "ZW=F": "WHEAT", "CC=F": "COCOA",
+    },
+    "rates": {
+        "^TNX": "US10Y", "^FVX": "US5Y", "^TYX": "US30Y", "^IRX": "US13W",
+    },
+    "energy_stocks": {
+        "XOM":  "EXXONMOBIL", "CVX": "CHEVRON",       "BP":  "BP",
+        "SHEL": "SHELL",      "TTE": "TOTALENERGIES", "COP": "CONOCOPHILLIPS",
+        "SLB":  "SCHLUMBERGER",
+    },
+    # CoinGecko ids -> ticker label.
+    "crypto": {
+        "bitcoin":     "BTC",  "ethereum":    "ETH",  "solana":        "SOL",
+        "dogecoin":    "DOGE", "cardano":     "ADA",  "ripple":        "XRP",
+        "binancecoin": "BNB",  "avalanche-2": "AVAX", "chainlink":     "LINK",
+        "matic-network": "POL", "litecoin":   "LTC",
+    },
+}
+
+# Extra CoinGecko ids _coingecko() can label but fetch_crypto does not request.
+# Kept out of SYMBOLS so the store does not backfill a coin the app never shows.
+_EXTRA_COIN_LABELS = {"polkadot": "DOT"}
+
+
 # ─── TTL cache ───────────────────────────────────────────────────────────
 _cache: dict = {}
 
@@ -183,13 +242,7 @@ async def _coingecko(client: httpx.AsyncClient, ids: list[str]) -> dict:
         if r.status_code != 200:
             return {}
         out = {}
-        name_map = {
-            "bitcoin":      "BTC",  "ethereum":     "ETH",  "solana":       "SOL",
-            "dogecoin":     "DOGE", "cardano":       "ADA",  "ripple":       "XRP",
-            "binancecoin":  "BNB",  "polkadot":      "DOT",
-            "avalanche-2":  "AVAX", "chainlink":     "LINK", "matic-network":"POL",
-            "litecoin":     "LTC",
-        }
+        name_map = {**SYMBOLS["crypto"], **_EXTRA_COIN_LABELS}
         for coin, d in r.json().items():
             sym = name_map.get(coin, coin.upper())
             out[sym] = {
@@ -266,19 +319,8 @@ async def fetch_stocks(with_sparkline: bool = False) -> dict:
     if cached:
         return cached
 
-    symbols = [
-        "^NSEI", "^BSESN", "^IXIC", "^GSPC", "^DJI", "^FTSE", "^N225",
-        "^GDAXI", "^FCHI", "^HSI", "^AXJO", "^BVSP", "^STI", "^KS11", "000001.SS",
-        "^NSEBANK", "^VIX", "^INDIAVIX",
-    ]
-    labels  = {
-        "^NSEI":    "NIFTY",    "^BSESN":   "SENSEX",   "^IXIC":    "NASDAQ",
-        "^GSPC":    "SP500",    "^DJI":     "DOW",       "^FTSE":    "FTSE",
-        "^N225":    "NIKKEI",   "^GDAXI":   "DAX",       "^FCHI":    "CAC40",
-        "^HSI":     "HANGSENG", "^AXJO":    "ASX200",    "^BVSP":    "BOVESPA",
-        "^STI":     "STI",      "^KS11":    "KOSPI",     "000001.SS":"SHANGHAI",
-        "^NSEBANK": "BANKNIFTY", "^VIX":    "VIX",        "^INDIAVIX":"INDIAVIX",
-    }
+    labels = SYMBOLS["stocks"]
+    symbols = list(labels)
 
     async with httpx.AsyncClient() as client:
         base = await _yahoo(client, symbols)
@@ -300,11 +342,7 @@ async def fetch_crypto() -> dict:
     if cached:
         return cached
     async with httpx.AsyncClient() as client:
-        data = await _coingecko(client, [
-            "bitcoin", "ethereum", "solana", "dogecoin",
-            "cardano", "ripple", "binancecoin",
-            "avalanche-2", "chainlink", "matic-network", "litecoin",
-        ])
+        data = await _coingecko(client, list(SYMBOLS["crypto"]))
     data = _remember("crypto", data) or _fallback("crypto")
     _cset("crypto", data, 45)
     return data
@@ -317,9 +355,8 @@ async def fetch_metals() -> dict:
     async with httpx.AsyncClient() as client:
         metals = await _metals_api(client)
         # Augment/fallback via Yahoo futures
-        fut = await _yahoo(client, ["GC=F", "SI=F", "PL=F", "PA=F", "HG=F"])
-        fb = {"GC=F": "GOLD", "SI=F": "SILVER", "PL=F": "PLATINUM",
-              "PA=F": "PALLADIUM", "HG=F": "COPPER"}
+        fb = SYMBOLS["metals"]
+        fut = await _yahoo(client, list(fb))
         for sym, label in fb.items():
             y = fut.get(sym, {})
             if not y:
@@ -350,13 +387,13 @@ async def fetch_forex() -> dict:
     cached = _cget("forex")
     if cached:
         return cached
-    pairs = ["USDINR=X", "EURINR=X", "GBPINR=X", "JPYINR=X", "EURUSD=X", "GBPUSD=X"]
+    labels = SYMBOLS["forex"]
+    # The dollar index is fetched with the pairs but deliberately not returned —
+    # the Forex card lists pairs only. It stays in the catalogue so market_ticks
+    # keeps its history.
+    pairs = [s for s in labels if s != "DX-Y.NYB"]
     async with httpx.AsyncClient() as client:
-        data = await _yahoo(client, pairs + ["DX-Y.NYB"])
-    labels = {
-        "USDINR=X": "USDINR", "EURINR=X": "EURINR", "GBPINR=X": "GBPINR",
-        "JPYINR=X": "JPYINR", "EURUSD=X": "EURUSD", "GBPUSD=X": "GBPUSD",
-    }
+        data = await _yahoo(client, list(labels))
     result = {labels[p]: data.get(p, {}) for p in pairs}
     result = _remember("forex", result) or _fallback("forex")
     _cset("forex", result, 90)
@@ -368,16 +405,10 @@ async def fetch_commodities() -> dict:
     cached = _cget("commodities")
     if cached:
         return cached
+    labels = SYMBOLS["commodities"]
     async with httpx.AsyncClient() as client:
-        data = await _yahoo(client, ["CL=F", "BZ=F", "NG=F", "HG=F", "ZW=F", "CC=F"])
-    result = {
-        "WTI_CRUDE": data.get("CL=F", {}),
-        "BRENT":     data.get("BZ=F", {}),
-        "NATGAS":    data.get("NG=F", {}),
-        "COPPER":    data.get("HG=F", {}),
-        "WHEAT":     data.get("ZW=F", {}),
-        "COCOA":     data.get("CC=F", {}),
-    }
+        data = await _yahoo(client, list(labels))
+    result = {label: data.get(sym, {}) for sym, label in labels.items()}
     result = _remember("commodities", result) or _fallback("commodities")
     _cset("commodities", result, 120)
     return result
@@ -390,14 +421,10 @@ async def fetch_rates() -> dict:
     cached = _cget("rates")
     if cached:
         return cached
+    labels = SYMBOLS["rates"]
     async with httpx.AsyncClient() as client:
-        data = await _yahoo(client, ["^TNX", "^FVX", "^TYX", "^IRX"])
-    result = {
-        "US10Y": data.get("^TNX", {}),
-        "US5Y":  data.get("^FVX", {}),
-        "US30Y": data.get("^TYX", {}),
-        "US13W": data.get("^IRX", {}),
-    }
+        data = await _yahoo(client, list(labels))
+    result = {label: data.get(sym, {}) for sym, label in labels.items()}
     result = _remember("rates", result) or _fallback("rates")
     _cset("rates", result, 120)
     return result
@@ -408,12 +435,8 @@ async def fetch_energy_stocks() -> dict:
     cached = _cget("energy_stocks")
     if cached:
         return cached
-    symbols = ["XOM", "CVX", "BP", "SHEL", "TTE", "COP", "SLB"]
-    labels  = {
-        "XOM": "EXXONMOBIL", "CVX": "CHEVRON",      "BP":  "BP",
-        "SHEL":"SHELL",       "TTE": "TOTALENERGIES","COP": "CONOCOPHILLIPS",
-        "SLB": "SCHLUMBERGER",
-    }
+    labels = SYMBOLS["energy_stocks"]
+    symbols = list(labels)
     async with httpx.AsyncClient() as client:
         base = await _yahoo(client, symbols)
     result = {labels[s]: base.get(s, {}) for s in symbols}
