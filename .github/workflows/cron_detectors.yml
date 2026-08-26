@@ -1,0 +1,48 @@
+name: Cron Detectors & Backfill
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+    inputs:
+      run_backfill:
+        description: 'Run 90-day ticks backfill (scripts/backfill_ticks.py)'
+        type: boolean
+        default: true
+      from_ticks:
+        description: 'Replay market signals (--from-ticks)'
+        type: boolean
+        default: true
+
+jobs:
+  run-detectors:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          pip install -r requirements.txt || pip install asyncpg psycopg2-binary yfinance requests
+
+      - name: Run Backfill
+        if: ${{ inputs.run_backfill || github.event_name == 'workflow_dispatch' }}
+        run: python scripts/backfill_ticks.py
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      - name: Run Market Signals
+        run: |
+          FLAGS=""
+          if [ "${{ inputs.from_ticks }}" = "true" ]; then
+            FLAGS="--from-ticks"
+          fi
+          python -m market_signals $FLAGS || python markets.py $FLAGS
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
