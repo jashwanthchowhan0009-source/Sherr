@@ -2682,6 +2682,118 @@ async def admin_flush_pending():
     return out
 
 
+# ─── Sherr-I: price-store backfill + engine diagnosis ────────────────────────
+# Both exist because the deployment has no shell. Render's free tier gives no
+# console, so "run the backfill" and "why is /patterns not saying engine" are
+# otherwise unanswerable from a phone.
+
+# The backfill in flight. One at a time: two concurrent runs would fight over the
+# same rows and double the upstream rate-limit pressure for no gain.
+_ticks_task: Optional[asyncio.Task] = None
+_ticks_result: dict = {}
+
+
+async def _run_ticks_backfill(days: int, only: str) -> None:
+    global _ticks_result
+    try:
+        import market_ticks
+        result = await market_ticks.backfill(days, only=only or None)
+        _ticks_result = result
+        log.info("[TICKS] backfill finished: %s", result)
+    except Exception as e:
+        _ticks_result = {"ok": False, "error": f"{type(e).__name__}: {e}"}
+        log.error("[TICKS] backfill failed: %s", e, exc_info=True)
+
+
+@app.get("/admin/backfill-ticks")
+async def admin_backfill_ticks(
+    x_admin_token: str = Header(""),
+    token: str = Query(""),
+    days: int = Query(90, ge=1, le=3650),
+    only: str = Query(""),
+    restart: int = Query(0),
+):
+    """Seed sherrbyte_app.market_ticks with daily closes, and report progress.
+
+    THE FIRST CALL STARTS THE RUN AND RETURNS IMMEDIATELY. Fetching ~57 symbols
+    takes minutes, and Render kills a request that outlives the health-check
+    window — so this never blocks on the work. Poll the same URL for progress;
+    when it finishes, the same URL returns the report.
+
+        GET /admin/backfill-ticks?token=...            -> {"status": "started"}
+        GET /admin/backfill-ticks?token=...            -> {"status": "running", ...}
+        GET /admin/backfill-ticks?token=...            -> {"status": "complete", ...}
+        GET /admin/backfill-ticks?token=...&restart=1  -> run again
+        GET /admin/backfill-ticks?token=...&only=crypto&days=30
+
+    Run as an asyncio task rather than in a thread-pool executor: the backfill is
+    already async httpx with its own bounded concurrency, so an executor would
+    only wrap it in a second event loop. Same non-blocking result, one less
+    moving part — and the same shape lifespan already uses for the Explore warm-up.
+    """
+    _check_admin(x_admin_token or token)          # ?token= for the address bar
+    global _ticks_task, _ticks_result
+
+    import market_ticks
+
+    running = _ticks_task is not None and not _ticks_task.done()
+
+    # An in-flight run reports progress. It is never restarted implicitly —
+    # two concurrent runs would fight over the same rows and double the
+    # upstream rate-limit pressure for nothing.
+    if running and not restart:
+        return {"status": "running", "progress": market_ticks.progress(),
+                "hint": "poll this URL; the report appears here when it finishes"}
+
+    # A finished run keeps answering with its report until a restart is asked
+    # for, so the result survives however long it takes someone to look.
+    if _ticks_task is not None and not running and not restart:
+        out = {"status": "complete", "progress": market_ticks.progress(),
+               "result": _ticks_result}
+        try:
+            out["report"] = await market_ticks.report()
+        except Exception as e:
+            out["report"] = {"ok": False, "error": f"{type(e).__name__}: {e}"}
+        return out
+
+    if not market_ticks.configured():
+        return {"status": "unconfigured",
+                "detail": "market_ticks is Postgres-only and neither "
+                          "DATABASE_URL nor SHERR_I_DATABASE_URL is set."}
+
+    if running and restart:
+        _ticks_task.cancel()
+    _ticks_result = {}
+    _ticks_task = asyncio.create_task(_run_ticks_backfill(days, only))
+    return {"status": "started", "days": days, "only": only or "all",
+            "symbols": len(market_ticks.catalogue(only or None)),
+            "hint": "poll this same URL for progress"}
+
+
+@app.get("/admin/sherr-i-doctor")
+async def admin_sherr_i_doctor(
+    x_admin_token: str = Header(""),
+    token: str = Query(""),
+    run_detector: int = Query(0),
+):
+    """Why is /patterns returning 'seed' or 'unavailable' instead of 'engine'?
+
+    Answers the whole chain in one call — DSN and pool, migrations applied here,
+    row counts for every detector input, and what is scheduled — then names the
+    FIRST broken link, because fixing anything downstream of it changes nothing.
+
+    Read-only unless &run_detector=1, which runs market_reaction for real (it
+    seeds instrument_keywords and persists anything it finds).
+    """
+    _check_admin(x_admin_token or token)
+    import sherr_i_doctor
+    which = ("SHERR_I_DATABASE_URL" if os.getenv("SHERR_I_DATABASE_URL")
+             else "DATABASE_URL" if os.getenv("DATABASE_URL") else "unset")
+    return await sherr_i_doctor.diagnose(
+        SHERR_I_DATABASE_URL, which, get_spie_pool,
+        scheduler=scheduler, run_detector=bool(run_detector))
+
+
 @app.get("/admin/feed-doctor")
 async def admin_feed_doctor(x_admin_token: str = Header(""), token: str = Query("")):
     """Why is the home feed empty?

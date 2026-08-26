@@ -39,6 +39,7 @@ import asyncio
 import logging
 import os
 import pathlib
+import time
 from datetime import datetime, timedelta, timezone
 
 import httpx
@@ -75,6 +76,21 @@ _PCT_LIMIT = 9999.9999
 
 _DDL_PATH = (pathlib.Path(__file__).resolve().parent
              / "sherrbyte" / "app" / "db" / "migrations" / "020_market_ticks.sql")
+
+# Live state of the run in flight, so a caller with no shell can poll a long
+# backfill instead of holding a request open for the length of it. Reset at the
+# start of every run; read through progress().
+PROGRESS: dict = {}
+
+
+def progress() -> dict:
+    """A snapshot of the run in flight (or the last one). Empty before any run."""
+    p = dict(PROGRESS)
+    if p.get("started_at") and not p.get("finished_at"):
+        p["elapsed_s"] = round(time.time() - p["started_at"], 1)
+    elif p.get("started_at") and p.get("finished_at"):
+        p["elapsed_s"] = round(p["finished_at"] - p["started_at"], 1)
+    return p
 
 TABLE = "sherrbyte_app.market_ticks"
 
@@ -305,6 +321,12 @@ async def _run(days: int, *, only: str | None, dry_run: bool, since: datetime | 
         if not dry_run:
             await ensure_schema(conn)
 
+        PROGRESS.clear()
+        PROGRESS.update({"running": True, "started_at": time.time(),
+                         "finished_at": None, "days": days, "only": only,
+                         "dry_run": dry_run, "total": len(targets), "done": 0,
+                         "rows_written": 0, "ok": 0, "failed": {}})
+
         y_gate = asyncio.Semaphore(YAHOO_CONCURRENCY)
         c_gate = asyncio.Semaphore(COINGECKO_CONCURRENCY)
         written: dict[str, int] = {}
@@ -318,6 +340,8 @@ async def _run(days: int, *, only: str | None, dry_run: bool, since: datetime | 
                     series = await fetch_symbol(client, symbol, market_type, days)
                 except Exception as e:
                     failed[symbol] = str(e)
+                    PROGRESS["done"] += 1
+                    PROGRESS["failed"][symbol] = str(e)
                     log.warning("market_ticks %s (%s) failed: %s",
                                 symbol, market_type, e)
                     return
@@ -327,12 +351,16 @@ async def _run(days: int, *, only: str | None, dry_run: bool, since: datetime | 
                 if dry_run:
                     written[symbol] = len([s for s in series
                                            if since is None or s[0] >= since])
-                    return
-                # One writer at a time: a single connection cannot interleave
-                # statements, and these batches are small.
-                async with lock:
-                    written[symbol] = await write_ticks(
-                        conn, symbol, market_type, series, since)
+                else:
+                    # One writer at a time: a single connection cannot interleave
+                    # statements, and these batches are small.
+                    async with lock:
+                        written[symbol] = await write_ticks(
+                            conn, symbol, market_type, series, since)
+                PROGRESS["done"] += 1
+                PROGRESS["ok"] += 1
+                PROGRESS["rows_written"] += written[symbol]
+                PROGRESS["last_symbol"] = symbol
 
         async with httpx.AsyncClient(follow_redirects=True) as client:
             await asyncio.gather(*(one(client, s, m) for s, m in targets))
@@ -342,6 +370,8 @@ async def _run(days: int, *, only: str | None, dry_run: bool, since: datetime | 
                 "rows_written": sum(written.values()),
                 "failed": failed}
     finally:
+        PROGRESS["running"] = False
+        PROGRESS["finished_at"] = time.time()
         if not dry_run and own_conn and conn is not None:
             await conn.close()
 
