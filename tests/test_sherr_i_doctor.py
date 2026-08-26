@@ -160,13 +160,33 @@ def test_a_healthy_chain_defers_to_the_detector_run():
 # ─── the engine import ───────────────────────────────────────────────────────
 def test_the_detector_package_imports_with_only_the_deployed_requirements():
     """app/spie/discovery must stay free of app.config and app.db: the root
-    service does not ship pydantic-settings, pgvector, numpy or redis, so a
-    dependency creeping in there would fail on Render and nowhere else."""
-    import pathlib
-    sys.path.insert(0, str(pathlib.Path(doc._ENGINE_ROOT)))
-    from app.spie.discovery import market_reaction     # noqa: F401
-    assert "app.config" not in sys.modules
-    assert "app.db" not in sys.modules
+    service ships neither pydantic-settings, pgvector, numpy nor redis, so a
+    dependency creeping in there would fail on Render and nowhere else.
+
+    Run in a subprocess with those four packages actively blocked. Asserting on
+    sys.modules in-process only proves nothing ELSE has imported them yet, which
+    depends on test ordering; blocking them proves the import genuinely does not
+    need them.
+    """
+    import subprocess
+    probe = (
+        "import sys\n"
+        "BLOCKED = {'pydantic_settings', 'pgvector', 'numpy', 'redis', 'arq'}\n"
+        "class Blocker:\n"
+        "    def find_module(self, name, path=None):\n"
+        "        return self if name.split('.')[0] in BLOCKED else None\n"
+        "    def load_module(self, name):\n"
+        "        raise ImportError(name + ' is not in the root requirements')\n"
+        "sys.meta_path.insert(0, Blocker())\n"
+        "sys.path.insert(0, %r)\n"
+        "from app.spie.discovery import market_reaction, REGISTRY\n"
+        "assert 'market_reaction' in REGISTRY\n"
+        "print('OK')\n" % str(doc._ENGINE_ROOT)
+    )
+    r = subprocess.run([sys.executable, "-c", probe],
+                       capture_output=True, text=True, timeout=120)
+    assert r.returncode == 0, f"stdout={r.stdout}\nstderr={r.stderr}"
+    assert "OK" in r.stdout
 
 
 # ─── b) and c) against real Postgres ─────────────────────────────────────────

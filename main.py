@@ -643,7 +643,7 @@ CREATE TABLE IF NOT EXISTS bookmarks (
 
 -- Sherr-I — SherrByte Pattern Intelligence Engine output. Mirrors the
 -- engine's insights schema so the app renders real pattern output. (The full
--- engine runs on the Postgres stack; this table lets the deployed app show it.)
+-- engine runs on the Postgres stack, and this table lets the deployed app show it.)
 CREATE TABLE IF NOT EXISTS insights (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     type TEXT NOT NULL,

@@ -1,48 +1,101 @@
-name: Cron Detectors & Backfill
+name: cron-detectors
 
+# Sherr-I's detector pass, on a schedule. Mirrors cron_ingest.yml — same working
+# directory, same DATABASE_URL secret, same standalone `python -m app.workers.*`
+# entry points.
+#
+# WHY THIS FILE EXISTS. app/main.py's lifespan schedules market_signals and the
+# detectors, but render.yaml starts `uvicorn main:app` — the ROOT app — so that
+# scheduler never runs in production. The ARQ cron in app/workers/__init__.py
+# lists ingest/embed/signal/als and no detectors, and nothing deploys an ARQ
+# worker anyway. The result was that the engine ingested news every 15 minutes
+# and never once ran a detector over it, so `insights` stayed empty and
+# /patterns served an empty list.
+#
+# ORDER MATTERS. market_signals writes each instrument's daily move into
+# domain_signals; market_reaction joins news against those rows. Signals run at
+# 01/07/13/19 UTC so the last one lands an hour before the 02:00 detector pass.
+#
+# NOTE: GitHub only runs workflows from the repository ROOT (.github/workflows),
+# which is why this lives here rather than under sherrbyte/.
+#
+# Required repo secret: DATABASE_URL (Supabase transaction-pooler URI).
 on:
   schedule:
-    - cron: '*/15 * * * *'
+    - cron: "0 1,7,13,19 * * *"   # market moves -> domain_signals
+    - cron: "0 2 * * *"           # detector pass over everything above
   workflow_dispatch:
     inputs:
-      run_backfill:
-        description: 'Run 90-day ticks backfill (scripts/backfill_ticks.py)'
-        type: boolean
-        default: true
-      from_ticks:
-        description: 'Replay market signals (--from-ticks)'
-        type: boolean
-        default: true
+      job:
+        description: "Which job to run on a manual dispatch"
+        required: false
+        default: both
+        type: choice
+        options: [both, market-signals, detectors]
+
+concurrency:
+  group: cron-detectors
+  cancel-in-progress: false
 
 jobs:
-  run-detectors:
+  market-signals:
+    # Scheduled at 01/07/13/19, or on a manual dispatch asking for it.
+    if: >-
+      github.event.schedule == '0 1,7,13,19 * * *' ||
+      (github.event_name == 'workflow_dispatch' &&
+       (inputs.job == 'both' || inputs.job == 'market-signals'))
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: sherrbyte
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-          cache: 'pip'
-
-      - name: Install Dependencies
-        run: |
-          pip install -r requirements.txt || pip install asyncpg psycopg2-binary yfinance requests
-
-      - name: Run Backfill
-        if: ${{ inputs.run_backfill || github.event_name == 'workflow_dispatch' }}
-        run: python scripts/backfill_ticks.py
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: sherrbyte/requirements.txt
+      - run: pip install -r requirements.txt
+      - name: Write market moves into domain_signals
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          REDIS_URL: ${{ secrets.REDIS_URL }}
+          RUN_SCHEDULER: "false"
+        run: python -m app.workers.market_signals
 
-      - name: Run Market Signals
-        run: |
-          FLAGS=""
-          if [ "${{ inputs.from_ticks }}" = "true" ]; then
-            FLAGS="--from-ticks"
-          fi
-          python -m market_signals $FLAGS || python markets.py $FLAGS
+  detectors:
+    # `needs` only orders a manual "both" dispatch — on the 02:00 schedule
+    # market-signals is skipped, and a skipped dependency would normally skip
+    # this job too. always() is what keeps it running; the result check is what
+    # still stops it when market-signals ran and FAILED.
+    needs: [market-signals]
+    if: >-
+      always() &&
+      (needs.market-signals.result == 'success' ||
+       needs.market-signals.result == 'skipped') &&
+      (github.event.schedule == '0 2 * * *' ||
+       (github.event_name == 'workflow_dispatch' &&
+        (inputs.job == 'both' || inputs.job == 'detectors')))
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: sherrbyte
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: sherrbyte/requirements.txt
+      - run: pip install -r requirements.txt
+      - name: Run the detector pass
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          REDIS_URL: ${{ secrets.REDIS_URL }}
+          RUN_SCHEDULER: "false"
+        # --diagnostics prints the news<->market funnels alongside each count, so
+        # a run that writes 0 insights says WHY in the job log rather than
+        # needing a second investigation.
+        run: python -m app.workers.detectors --diagnostics

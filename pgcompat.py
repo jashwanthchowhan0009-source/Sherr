@@ -187,6 +187,100 @@ def named_to_pyformat(sql: str) -> str:
     return "".join(out)
 
 
+# A ';' only ends a statement outside string literals and comments.
+#
+# This was a plain script.split(";"), and the cost of that was a table. The
+# comment above CREATE TABLE insights in main.py's CREATE_TABLES read
+# "...runs on the Postgres stack; this table lets..." — so the split landed
+# mid-comment, the next fragment began `this table lets the deployed app show
+# it.) CREATE TABLE IF NOT EXISTS insights (...`, Postgres reported a syntax
+# error at "this", and executescript's except swallowed it at debug level. The
+# table was simply never created on Postgres, silently, and stayed missing until
+# something queried it.
+#
+# Prose in a comment is not something a schema author should have to think about,
+# so the splitter tracks state instead: '' inside a single-quoted literal is an
+# escaped quote, not the end of it; -- runs to end of line; /* */ nests in
+# Postgres. Dollar-quoting is not handled because nothing in this codebase's DDL
+# uses it — add it here if a function body ever appears.
+def split_statements(script: str) -> list:
+    """Split a SQL script on statement-level semicolons only."""
+    out, buf, i, n = [], [], 0, len(script)
+    quote = None          # "'" or '"' when inside a literal/identifier
+    line_comment = False
+    block_depth = 0
+
+    def flush():
+        stmt = "".join(buf).strip()
+        if stmt:
+            out.append(stmt)
+        buf.clear()
+
+    while i < n:
+        c = script[i]
+        nxt = script[i + 1] if i + 1 < n else ""
+
+        if line_comment:
+            if c == "\n":
+                line_comment = False
+            buf.append(c)
+            i += 1
+            continue
+
+        if block_depth:
+            if c == "*" and nxt == "/":
+                block_depth -= 1
+                buf.append("*/")
+                i += 2
+                continue
+            if c == "/" and nxt == "*":
+                block_depth += 1
+                buf.append("/*")
+                i += 2
+                continue
+            buf.append(c)
+            i += 1
+            continue
+
+        if quote:
+            # '' inside a literal is an escaped quote, not its end.
+            if c == quote and nxt == quote:
+                buf.append(c + nxt)
+                i += 2
+                continue
+            if c == quote:
+                quote = None
+            buf.append(c)
+            i += 1
+            continue
+
+        if c == "-" and nxt == "-":
+            line_comment = True
+            buf.append("--")
+            i += 2
+            continue
+        if c == "/" and nxt == "*":
+            block_depth = 1
+            buf.append("/*")
+            i += 2
+            continue
+        if c in ("'", '"'):
+            quote = c
+            buf.append(c)
+            i += 1
+            continue
+        if c == ";":
+            flush()
+            i += 1
+            continue
+
+        buf.append(c)
+        i += 1
+
+    flush()
+    return out
+
+
 def translate(sql: str, bind: bool = True) -> str:
     """Rewrite one statement for Postgres.
 
@@ -427,9 +521,9 @@ class Conn:
         return Cursor([], cur.rowcount, None)
 
     def executescript(self, script):
-        # DDL only, and split on ';' at statement level. Each runs independently
-        # so one CREATE TABLE that already exists cannot abort the rest.
-        for stmt in [s.strip() for s in script.split(";") if s.strip()]:
+        # DDL only, split at statement level. Each runs independently so one
+        # CREATE TABLE that already exists cannot abort the rest.
+        for stmt in split_statements(script):
             try:
                 # bind=False: DDL takes no parameters, so psycopg does no
                 # interpolation and a literal % must stay a single %.
