@@ -81,25 +81,29 @@
 }
 
 /* ── Apple DARK (active) ───────────────────────────────────────── */
+/* Dark is the app's default. Retuned to a near-black canvas with raised
+   surfaces: on dark, elevation reads as a LIGHTER surface, not a drop shadow —
+   a shadow on near-black is invisible and only muddies the edge. Every module
+   below builds depth from surface steps and glow instead. */
 [data-theme="dark"] {
-  --bg:        #000000;
-  --bg-grouped:#000000;
-  --surface:   #1C1C1E;
-  --surface-2: #2C2C2E;
-  --bg1:       #1C1C1E;
-  --bg2:       #2C2C2E;
-  --bg3:       #3A3A3C;
-  --bg4:       #48484A;
-  --bgcard:    #1C1C1E;
-  --glass:     rgba(30,30,32,0.62);
-  --glass2:    rgba(28,28,30,0.94);
-  --glassB:    rgba(255,255,255,0.10);
-  --line:      rgba(84,84,88,0.60);
-  --line2:     rgba(84,84,88,0.34);
-  --separator: rgba(84,84,88,0.60);
-  --t1:        #FFFFFF;
-  --t2:        rgba(235,235,245,0.60);
-  --t3:        rgba(235,235,245,0.30);
+  --bg:        #0A0A0C;
+  --bg-grouped:#0A0A0C;
+  --surface:   #16161A;
+  --surface-2: #1E1E24;
+  --bg1:       #16161A;
+  --bg2:       #1E1E24;
+  --bg3:       #26262E;
+  --bg4:       #32323C;
+  --bgcard:    #16161A;
+  --glass:     rgba(22,22,26,0.72);
+  --glass2:    rgba(16,16,20,0.94);
+  --glassB:    rgba(255,255,255,0.08);
+  --line:      rgba(255,255,255,0.10);
+  --line2:     rgba(255,255,255,0.06);
+  --separator: rgba(255,255,255,0.08);
+  --t1:        #F5F5F7;
+  --t2:        rgba(255,255,255,0.55);
+  --t3:        rgba(255,255,255,0.35);
   --t4:        rgba(235,235,245,0.18);
   --accent:    #0A84FF;
   --as:        rgba(10,132,255,0.16);
@@ -1604,273 +1608,302 @@ nav.compact .nb.on { flex: 0 0 auto; padding-left: 16px; padding-right: 16px; }
 
 
 
-/* ══════════ EXPLORE v8 ══════════
-   TWO FACES. --f (the app's sans) carries everything; Poppins is the display
-   face and appears only on hero numbers, the countdown, the bulletin headline
-   and the closing line. Both already loaded in <head>.
+/* ══════════ EXPLORE v9 — dark ══════════
+   Reference qualities taken from the POP UPI deck: content IS the card (imagery
+   and gradients run to the edge, no visible frame), rails bleed past the right
+   margin, depth comes in three layers (tinted band → card → chip), the vertical
+   rhythm is tight, and tiny status pills carry live state everywhere.
 
-   COLOUR. One accent-derived family with saturation and warmth varied per
-   module, so sections read as different surfaces rather than as identical
-   boxes. Semantic colour only where it means something. The nine pillar colours
-   stay on article tags and the category chips, where they are labels. */
+   On near-black, elevation is a LIGHTER SURFACE, not a shadow. Every module
+   below steps up through --surface / --surface-2 and adds a coloured glow where
+   something is genuinely live. Two faces only: the app sans, plus Poppins for
+   numbers and editorial moments. */
 :root{
   --xf:'Poppins','Inter',system-ui,sans-serif;
+  --xp-ink:#F5F5F7; --xp-mute:rgba(255,255,255,.55); --xp-faint:rgba(255,255,255,.35);
+  --xp-up:#34D399;  --xp-dn:#FB7185;
+  --xp-surf:#16161A; --xp-surf2:#1E1E24; --xp-band:#131318;
+  --xp-line:rgba(255,255,255,.06);
+  --xp-violet:#7C3AED;
+}
+[data-theme="light"]{
   --xp-ink:#0B1220; --xp-mute:rgba(11,18,32,.54); --xp-faint:rgba(11,18,32,.33);
   --xp-up:#0E9F6E;  --xp-dn:#E02D3C;
-  --xp-tint:#F2F7FF; --xp-line:rgba(11,18,32,.07);
+  --xp-surf:#FFFFFF; --xp-surf2:#F4F6FA; --xp-band:#F2F7FF;
+  --xp-line:rgba(11,18,32,.07);
 }
-.xp{padding-bottom:14px;}
+.xp{padding-bottom:8px;}
 
-/* Labels label; they do not shout. */
-.xp-hd{display:flex;align-items:center;gap:8px;margin:24px 16px 10px;}
-.xp-hd h3{font:700 .62rem/1 var(--f);color:var(--xp-faint);letter-spacing:.16em;
+/* Tight rhythm: section gaps cut by about a third against v8. */
+.xp-hd{display:flex;align-items:center;gap:8px;margin:17px 16px 8px;}
+.xp-hd h3{font:700 .6rem/1 var(--f);color:var(--xp-faint);letter-spacing:.16em;
   text-transform:uppercase;margin:0;}
-.xp-hd .all{margin-left:auto;font:600 .7rem/1 var(--f);color:var(--accent);cursor:pointer;}
+.xp-hd .all{margin-left:auto;font:600 .68rem/1 var(--f);color:var(--accent);cursor:pointer;}
 .xp-dot{width:5px;height:5px;border-radius:50%;background:currentColor;
   animation:xpPulse 1.9s ease-in-out infinite;}
 @keyframes xpPulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.28;transform:scale(.68)}}
-.xp-sk{background:linear-gradient(100deg,rgba(11,18,32,.055) 30%,rgba(11,18,32,.02) 50%,rgba(11,18,32,.055) 70%);
+/* Small status pills — frequent, never decorative. */
+.xp-pill{display:inline-flex;align-items:center;gap:4px;font:700 .52rem/1 var(--f);
+  letter-spacing:.1em;text-transform:uppercase;padding:4px 7px;border-radius:5px;}
+.p-live{color:#34D399;background:rgba(52,211,153,.14)}
+.p-new {color:#A78BFA;background:rgba(167,139,250,.16)}
+.p-soon{color:#FBBF24;background:rgba(251,191,36,.15)}
+.p-tm  {color:#7DD3FC;background:rgba(125,211,252,.15)}
+.xp-sk{background:linear-gradient(100deg,rgba(255,255,255,.045) 30%,rgba(255,255,255,.09) 50%,rgba(255,255,255,.045) 70%);
   background-size:220% 100%;animation:xpShim 1.35s linear infinite;border-radius:8px;}
 @keyframes xpShim{to{background-position:-220% 0}}
 
-/* ── 2. category rail ── */
-.xp-chips{display:flex;gap:8px;overflow-x:auto;scroll-snap-type:x proximity;
-  padding:12px 16px 4px;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
-.xp-chips::-webkit-scrollbar{display:none}
-.xp-chip{scroll-snap-align:start;flex:0 0 auto;border:0;background:rgba(11,18,32,.05);
-  color:var(--xp-mute);padding:8px 14px;border-radius:999px;font:600 .76rem/1 var(--f);
-  white-space:nowrap;cursor:pointer;transition:transform .16s var(--spring),background .2s,color .2s;}
-.xp-chip:active{transform:scale(.94)}
-.xp-chip .cdot{display:inline-block;width:6px;height:6px;border-radius:50%;
-  margin-right:6px;vertical-align:middle;}
-.xp-chip.on .cdot{background:rgba(255,255,255,.85)!important;}
-.xp-chip.on{background:var(--accent);color:#fff;
-  box-shadow:0 6px 16px -6px color-mix(in srgb,var(--accent) 60%,transparent);}
+/* ── 2. category rail — the icon tiles ── */
+.xp-cats{display:flex;gap:13px;overflow-x:auto;scroll-snap-type:x proximity;
+  /* Bleeds past the right margin so the next tile is half-visible. */
+  padding:10px 44px 6px 16px;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
+.xp-cats::-webkit-scrollbar{display:none}
+.xp-cat{scroll-snap-align:start;flex:0 0 auto;width:60px;text-align:center;
+  cursor:pointer;border:0;background:transparent;padding:0;}
+.xp-cat .ic{width:56px;height:56px;border-radius:19px;display:grid;place-items:center;
+  font-size:1.28rem;transition:transform .16s var(--spring);}
+.xp-cat:active .ic{transform:scale(.9)}
+.xp-cat.on .ic{box-shadow:0 0 0 2px var(--xp-ink), 0 0 0 4px rgba(0,0,0,.55);}
+.xp-cat span{display:block;font:600 .6rem/1.2 var(--f);color:var(--xp-mute);margin-top:6px;}
+.xp-cat.on span{color:var(--xp-ink)}
 
-/* ── 3. bulletin hero — full bleed, no card border ── */
-.xp-hero{position:relative;margin:6px 0 0;}
+/* ── 3. bulletin hero — content IS the card ── */
+.xp-hero{position:relative;margin:2px 0 0}
 .xp-hero-track{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;
   scrollbar-width:none;-webkit-overflow-scrolling:touch;}
 .xp-hero-track::-webkit-scrollbar{display:none}
-.xp-slide{scroll-snap-align:center;flex:0 0 100%;position:relative;height:212px;
+.xp-slide{scroll-snap-align:center;flex:0 0 100%;position:relative;height:206px;
   cursor:pointer;overflow:hidden;}
-.xp-slide img{width:100%;height:100%;object-fit:cover;display:block;}
-.xp-slide .art{position:absolute;inset:0;}
-/* Scrim, not a card: the headline sits on the photograph. */
+.xp-slide img,.xp-slide .gen-art{width:100%;height:100%;object-fit:cover;display:block}
+.xp-slide .img-wrap{position:absolute;inset:0;height:100%;margin:0}
 .xp-slide .scrim{position:absolute;inset:0;
-  background:linear-gradient(to top,rgba(6,10,20,.88) 0%,rgba(6,10,20,.42) 38%,rgba(6,10,20,0) 70%);}
-.xp-slide .cap{position:absolute;left:16px;right:16px;bottom:22px;}
-.xp-slide .tag{display:inline-block;font:700 .55rem/1 var(--f);letter-spacing:.13em;
-  text-transform:uppercase;color:#fff;background:rgba(255,255,255,.2);
-  backdrop-filter:blur(6px);padding:5px 9px;border-radius:6px;}
-.xp-slide h4{font:600 1.12rem/1.32 var(--xf);color:#fff;margin:9px 0 0;
-  letter-spacing:-.025em;text-shadow:0 1px 12px rgba(0,0,0,.4);}
-.xp-slide .meta{font:500 .66rem/1 var(--f);color:rgba(255,255,255,.68);margin-top:7px;}
-.xp-dots{position:absolute;left:0;right:0;bottom:8px;display:flex;justify-content:center;gap:5px;}
-.xp-dots i{width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,.45);
-  transition:width .25s,background .25s;}
-.xp-dots i.on{width:16px;border-radius:3px;background:#fff;}
+  background:linear-gradient(to top,rgba(5,5,9,.94) 0%,rgba(5,5,9,.5) 40%,rgba(5,5,9,.05) 72%);}
+.xp-slide .cap{position:absolute;left:16px;right:16px;bottom:20px}
+.xp-slide h4{font:600 1.1rem/1.32 var(--xf);color:#fff;margin:8px 0 0;letter-spacing:-.025em;}
+.xp-slide .meta{font:500 .64rem/1 var(--f);color:rgba(255,255,255,.6);margin-top:6px;}
+.xp-dots{position:absolute;left:0;right:0;bottom:7px;display:flex;justify-content:center;gap:5px}
+.xp-dots i{width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,.35);
+  transition:width .25s,background .25s}
+.xp-dots i.on{width:16px;border-radius:3px;background:#fff}
 
-/* ── 4. matrix of markets — a tint per asset class, one family ── */
-.xp-matrix{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin:0 16px;}
-.xp-mt{border-radius:20px;padding:13px 14px 10px;cursor:pointer;border:0;
-  transition:transform .16s var(--spring);}
+/* ── 4. matrix — deep saturated washes, not pastels ── */
+.xp-matrix{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:0 16px}
+.xp-mt{border-radius:18px;padding:12px 13px 9px;cursor:pointer;border:1px solid var(--xp-line);
+  transition:transform .16s var(--spring);position:relative;overflow:hidden;}
 .xp-mt:active{transform:scale(.965)}
-.xp-mt .nm{font:600 .56rem/1 var(--f);letter-spacing:.13em;text-transform:uppercase;opacity:.6;}
-.xp-mt .val{font:700 1.24rem/1.06 var(--xf);margin-top:8px;letter-spacing:-.035em;
-  font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.xp-mt .chg{font:600 .68rem/1 var(--f);margin-top:4px;font-variant-numeric:tabular-nums;}
-.xp-mt .sub{font:500 .58rem/1 var(--f);opacity:.5;margin-top:3px;}
-.xp-spark{display:block;width:100%;height:26px;margin-top:6px;}
-.m-stk{background:linear-gradient(160deg,#EAF1FE,#DCE8FD);color:#123A7A;}
-.m-cry{background:linear-gradient(160deg,#F3EDFF,#E7DDFF);color:#4A2A8A;}
-.m-fx {background:linear-gradient(160deg,#E9F5F4,#D7EDEA);color:#12564F;}
-.m-bnd{background:linear-gradient(160deg,#EEF1F7,#E1E6F0);color:#33415A;}
-.m-met{background:linear-gradient(160deg,#FFF4DE,#FFE8BE);color:#7A4A00;}
-.m-oil{background:linear-gradient(160deg,#FDEDE6,#F9DACE);color:#8A3A16;}
+.xp-mt .nm{font:600 .55rem/1 var(--f);letter-spacing:.13em;text-transform:uppercase;
+  color:var(--xp-mute);}
+.xp-mt .val{font:700 1.2rem/1.06 var(--xf);margin-top:7px;letter-spacing:-.035em;
+  color:var(--xp-ink);font-variant-numeric:tabular-nums;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis;}
+.xp-mt .chg{font:600 .66rem/1 var(--f);margin-top:4px;font-variant-numeric:tabular-nums}
+.xp-mt .sub{font:500 .56rem/1 var(--f);color:var(--xp-faint);margin-top:3px}
+.xp-spark{display:block;width:100%;height:24px;margin-top:6px}
 .xp-up{color:var(--xp-up)} .xp-dn{color:var(--xp-dn)}
-/* Depth by direction — lift, not a second colour. */
-.xp-mt.up{box-shadow:0 10px 22px -15px rgba(14,159,110,.5)}
-.xp-mt.dn{box-shadow:0 10px 22px -15px rgba(224,45,60,.45)}
+/* Deep washes over the dark surface — each reads as its own colour and none
+   glows white. Glow, not shadow, carries the direction. */
+.m-stk{background:linear-gradient(158deg,rgba(59,130,246,.20),rgba(59,130,246,.05) 70%),var(--xp-surf);}
+.m-cry{background:linear-gradient(158deg,rgba(139,92,246,.22),rgba(139,92,246,.05) 70%),var(--xp-surf);}
+.m-fx {background:linear-gradient(158deg,rgba(20,184,166,.20),rgba(20,184,166,.05) 70%),var(--xp-surf);}
+.m-bnd{background:linear-gradient(158deg,rgba(148,163,184,.20),rgba(148,163,184,.05) 70%),var(--xp-surf);}
+.m-met{background:linear-gradient(158deg,rgba(245,158,11,.22),rgba(245,158,11,.05) 70%),var(--xp-surf);}
+.m-oil{background:linear-gradient(158deg,rgba(239,68,68,.20),rgba(239,68,68,.05) 70%),var(--xp-surf);}
+.xp-mt.up{box-shadow:inset 0 -22px 26px -26px rgba(52,211,153,.55)}
+.xp-mt.dn{box-shadow:inset 0 -22px 26px -26px rgba(251,113,133,.5)}
 
-/* ── 5. take a look ── */
-.xp-tabs{display:flex;gap:7px;margin:0 16px 11px;}
-.xp-tab{border:0;background:rgba(11,18,32,.05);color:var(--xp-mute);border-radius:999px;
-  padding:8px 15px;font:600 .75rem/1 var(--f);cursor:pointer;transition:all .2s;}
-.xp-tab.on{background:var(--xp-ink);color:#fff;}
-/* One tinted band groups the cards; no per-card borders. */
-.xp-band{margin:0 16px;background:var(--xp-tint);border-radius:22px;padding:13px;}
-.xp-tal{display:grid;grid-template-columns:1.25fr 1fr;gap:11px;}
-.xp-tal .big{grid-row:span 2;background:#fff;border-radius:17px;padding:14px 15px;
+/* ── 5. take a look — three layers: band, card, chip ── */
+.xp-tabs{display:flex;gap:7px;margin:0 16px 9px}
+.xp-tab{border:1px solid var(--xp-line);background:var(--xp-surf);color:var(--xp-mute);
+  border-radius:999px;padding:7px 14px;font:600 .73rem/1 var(--f);cursor:pointer;transition:all .2s}
+.xp-tab.on{background:var(--xp-ink);color:#0A0A0C;border-color:transparent}
+.xp-band{margin:0 16px;background:var(--xp-band);border-radius:20px;padding:11px;
+  border:1px solid var(--xp-line);}
+.xp-tal{display:grid;grid-template-columns:1.25fr 1fr;gap:9px}
+.xp-tal .big{grid-row:span 2;background:var(--xp-surf2);border-radius:15px;padding:13px 14px;
   display:flex;flex-direction:column;justify-content:center;cursor:pointer;
-  box-shadow:0 2px 8px -5px rgba(11,18,32,.24);transition:transform .16s var(--spring);}
-.xp-tal .sm{background:#fff;border-radius:15px;padding:11px 13px;cursor:pointer;
-  box-shadow:0 2px 8px -5px rgba(11,18,32,.2);transition:transform .16s var(--spring);}
+  transition:transform .16s var(--spring)}
+.xp-tal .sm{background:var(--xp-surf2);border-radius:13px;padding:10px 12px;cursor:pointer;
+  transition:transform .16s var(--spring)}
 .xp-tal .big:active,.xp-tal .sm:active{transform:scale(.97)}
-.xp-tal .k{font:600 .55rem/1 var(--f);letter-spacing:.13em;text-transform:uppercase;
-  color:var(--xp-faint);}
-.xp-tal .big .v{font:700 1.72rem/1.05 var(--xf);color:var(--xp-ink);margin-top:9px;
-  letter-spacing:-.04em;font-variant-numeric:tabular-nums;}
-.xp-tal .sm .v{font:700 1.06rem/1.05 var(--xf);color:var(--xp-ink);margin-top:6px;
-  letter-spacing:-.035em;font-variant-numeric:tabular-nums;}
-.xp-tal .s{font:500 .64rem/1.35 var(--f);color:var(--xp-mute);margin-top:4px;}
+.xp-tal .k{font:600 .53rem/1 var(--f);letter-spacing:.13em;text-transform:uppercase;color:var(--xp-faint)}
+.xp-tal .big .v{font:700 1.62rem/1.05 var(--xf);color:var(--xp-ink);margin-top:8px;
+  letter-spacing:-.04em;font-variant-numeric:tabular-nums}
+.xp-tal .sm .v{font:700 1rem/1.05 var(--xf);color:var(--xp-ink);margin-top:5px;
+  letter-spacing:-.035em;font-variant-numeric:tabular-nums}
+.xp-tal .s{font:500 .62rem/1.35 var(--f);color:var(--xp-mute);margin-top:4px}
 
 /* ── 6. bulletin ticker ── */
-.xp-btick{display:flex;align-items:center;gap:0;margin:20px 0 0;padding:11px 16px;
-  background:var(--xp-tint);overflow:hidden;}
-.xp-btick .run{display:flex;gap:26px;white-space:nowrap;flex:1;overflow:hidden;
-  -webkit-mask-image:linear-gradient(90deg,#000 82%,transparent);}
-.xp-btick .run span{font:500 .74rem/1.3 var(--f);color:var(--xp-ink);}
-.xp-btick .run b{color:var(--accent);font-weight:700;margin-right:5px;}
-.xp-btick .more{flex:0 0 auto;font:700 .68rem/1 var(--f);color:var(--accent);
-  cursor:pointer;margin-left:10px;}
+.xp-btick{display:flex;align-items:center;margin:14px 0 0;padding:10px 16px;
+  background:var(--xp-band);border-top:1px solid var(--xp-line);
+  border-bottom:1px solid var(--xp-line);overflow:hidden;}
+.xp-btick .run{display:flex;gap:22px;white-space:nowrap;flex:1;overflow-x:auto;
+  scrollbar-width:none;-webkit-mask-image:linear-gradient(90deg,#000 84%,transparent)}
+.xp-btick .run::-webkit-scrollbar{display:none}
+.xp-btick .run span{font:500 .72rem/1.3 var(--f);color:var(--xp-ink);cursor:pointer}
+.xp-btick .run b{color:var(--accent);font-weight:700;margin-right:5px}
+.xp-btick .more{flex:0 0 auto;font:700 .66rem/1 var(--f);color:var(--accent);cursor:pointer;margin-left:8px}
 
-/* ── 7. government — flat grid, minimal chrome ── */
-.xp-gov{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0 16px;}
-.xp-gv{background:#fff;border-radius:17px;padding:13px 13px 12px;cursor:pointer;
-  box-shadow:0 1px 3px rgba(11,18,32,.06);transition:transform .16s var(--spring);}
+/* ── 7. government ── */
+.xp-gov{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:0 16px}
+.xp-gv{background:var(--xp-surf);border:1px solid var(--xp-line);border-radius:15px;
+  padding:12px;cursor:pointer;transition:transform .16s var(--spring)}
 .xp-gv:active{transform:scale(.965)}
-.xp-gv i{color:var(--accent);font-size:.86rem;}
-.xp-gv b{display:block;font:600 .73rem/1.3 var(--f);color:var(--xp-ink);margin-top:9px;
-  letter-spacing:-.01em;}
-.xp-gv small{display:block;font:500 .63rem/1.32 var(--f);color:var(--xp-faint);margin-top:4px;}
+.xp-gv .ic{width:30px;height:30px;border-radius:10px;display:grid;place-items:center;font-size:.76rem}
+.xp-gv b{display:block;font:600 .71rem/1.3 var(--f);color:var(--xp-ink);margin-top:8px;letter-spacing:-.01em}
+.xp-gv small{display:block;font:500 .61rem/1.32 var(--f);color:var(--xp-faint);margin-top:3px}
 
-/* ── 8. also ── */
-.xp-also{margin:14px 16px 0;background:#fff;border-radius:18px;padding:0 15px;
-  box-shadow:0 1px 3px rgba(11,18,32,.06);}
-.xp-al{display:flex;align-items:center;gap:11px;padding:14px 0;
-  border-top:1px solid var(--xp-line);cursor:pointer;}
+/* ── 8. also — same treatment as the tiles above it ── */
+.xp-also{margin:9px 16px 0;background:var(--xp-surf);border:1px solid var(--xp-line);
+  border-radius:16px;padding:0 14px}
+.xp-al{display:flex;align-items:center;gap:12px;padding:12px 0;
+  border-top:1px solid var(--xp-line);cursor:pointer}
 .xp-al:first-child{border-top:0}
 .xp-al:active{opacity:.6}
-.xp-al b{flex:1;font:600 .81rem/1 var(--f);color:var(--xp-ink);}
-.xp-al i{color:var(--xp-faint);font-size:.72rem;}
+.xp-al .ic{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;
+  font-size:.8rem;flex:0 0 auto}
+.xp-al .tx{flex:1;min-width:0}
+.xp-al .tx b{display:block;font:600 .79rem/1.2 var(--f);color:var(--xp-ink)}
+.xp-al .tx small{display:block;font:500 .63rem/1.3 var(--f);color:var(--xp-faint);margin-top:3px}
+.xp-al > i{color:var(--xp-faint);font-size:.7rem}
 
-/* ── 9. space — the one dark surface ── */
-.xp-space{margin:20px 16px 0;border-radius:24px;padding:18px 19px 19px;cursor:pointer;
-  background:linear-gradient(155deg,#1E1B4B 0%,#161544 45%,#0A0A18 100%);
-  box-shadow:0 18px 38px -22px rgba(30,27,75,.85);position:relative;overflow:hidden;
-  transition:transform .16s var(--spring);}
+/* ── 9. space — violet-to-black, content to the edge ── */
+.xp-space{margin:14px 16px 0;border-radius:22px;padding:17px 18px 18px;cursor:pointer;
+  background:radial-gradient(120% 90% at 12% 0%,rgba(124,58,237,.55) 0%,rgba(76,29,149,.28) 38%,rgba(10,10,14,0) 72%),
+    linear-gradient(160deg,#1B1235 0%,#120E24 46%,#08080E 100%);
+  border:1px solid rgba(167,139,250,.16);position:relative;overflow:hidden;
+  transition:transform .16s var(--spring)}
 .xp-space:active{transform:scale(.985)}
-.xp-space::after{content:"";position:absolute;inset:0;pointer-events:none;opacity:.5;
+.xp-space::after{content:"";position:absolute;inset:0;pointer-events:none;opacity:.6;
   background-image:radial-gradient(1.4px 1.4px at 22% 26%,#fff,transparent),
     radial-gradient(1.1px 1.1px at 68% 18%,#fff,transparent),
     radial-gradient(1.6px 1.6px at 84% 62%,#fff,transparent),
     radial-gradient(1.1px 1.1px at 42% 72%,#fff,transparent),
-    radial-gradient(1px 1px at 12% 58%,#fff,transparent);}
-.xp-space .lbl{font:700 .55rem/1 var(--f);letter-spacing:.15em;text-transform:uppercase;
-  color:rgba(255,255,255,.5);display:flex;align-items:center;gap:6px;}
-.xp-space .lbl .xp-dot{color:#7DD3FC}
-.xp-space .t{font:600 .95rem/1.3 var(--f);color:#fff;margin-top:10px;letter-spacing:-.015em;}
-.xp-space .m{font:500 .69rem/1.4 var(--f);color:rgba(255,255,255,.5);margin-top:4px;}
-.xp-cd{font:700 2.05rem/1 var(--xf);color:#fff;letter-spacing:-.045em;margin-top:13px;
-  font-variant-numeric:tabular-nums;position:relative;z-index:1;}
-.xp-space .cta{font:600 .68rem/1 var(--f);color:#93C5FD;margin-top:12px;position:relative;z-index:1;}
+    radial-gradient(1px 1px at 12% 58%,#fff,transparent),
+    radial-gradient(1.2px 1.2px at 56% 42%,#fff,transparent);}
+.xp-space .t{font:600 .93rem/1.3 var(--f);color:#fff;margin-top:9px;letter-spacing:-.015em;
+  position:relative;z-index:1}
+.xp-space .m{font:500 .67rem/1.4 var(--f);color:rgba(255,255,255,.52);margin-top:4px;
+  position:relative;z-index:1}
+.xp-cd{font:700 1.95rem/1 var(--xf);color:#fff;letter-spacing:-.045em;margin-top:11px;
+  font-variant-numeric:tabular-nums;position:relative;z-index:1}
+.xp-space .cta{font:600 .66rem/1 var(--f);color:#C4B5FD;margin-top:10px;position:relative;z-index:1}
 
-/* ── 10. ai & tech — near-monochrome, developer restraint ── */
-.xp-ai{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin:0 16px;}
-.xp-ac{background:#FBFBFD;border:1px solid var(--xp-line);border-radius:18px;
-  padding:13px 13px 12px;cursor:pointer;transition:transform .16s var(--spring);}
+/* ── 10. ai & tech ── */
+.xp-ai{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:0 16px}
+.xp-ac{background:var(--xp-surf);border:1px solid var(--xp-line);border-radius:16px;
+  padding:12px;cursor:pointer;transition:transform .16s var(--spring)}
 .xp-ac:active{transform:scale(.965)}
-.xp-ac .k{font:600 .55rem/1 var(--f);letter-spacing:.13em;text-transform:uppercase;
-  color:var(--xp-faint);}
-.xp-ac li{list-style:none;font:500 .7rem/1.4 var(--f);color:var(--xp-ink);
-  margin-top:9px;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;
-  -webkit-line-clamp:2;-webkit-box-orient:vertical;}
+.xp-ac .k{font:600 .53rem/1 var(--f);letter-spacing:.13em;text-transform:uppercase;color:var(--xp-faint)}
 .xp-ac ul{margin:0;padding:0}
-.xp-ac .st{font:600 .6rem/1 var(--f);color:var(--xp-faint);margin-top:2px;
-  font-variant-numeric:tabular-nums;}
+.xp-ac li{list-style:none;font:500 .69rem/1.4 var(--f);color:var(--xp-ink);margin-top:8px;
+  overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.xp-ac .st{font:600 .58rem/1 var(--f);color:var(--xp-faint);margin-top:2px;font-variant-numeric:tabular-nums}
 
-/* ── 11. closing line ── */
-.xp-close{font:600 2.5rem/1.08 var(--xf);color:rgba(11,18,32,.13);letter-spacing:-.05em;
-  margin:34px 16px 22px;}
+/* ── editorial break mid-page: a visual moment between data modules ── */
+.xp-break{margin:16px 16px 0;border-radius:22px;padding:26px 20px;position:relative;
+  overflow:hidden;cursor:pointer;
+  background:radial-gradient(110% 120% at 88% 8%,rgba(236,72,153,.4) 0%,rgba(124,58,237,.24) 40%,rgba(10,10,14,0) 74%),
+    linear-gradient(150deg,#1A1030 0%,#0E0B1C 60%,#08080E 100%);
+  border:1px solid rgba(236,72,153,.14)}
+.xp-break .q{font:600 1.42rem/1.28 var(--xf);color:#fff;letter-spacing:-.035em}
+.xp-break .b{font:500 .68rem/1.5 var(--f);color:rgba(255,255,255,.5);margin-top:9px;max-width:26ch}
 
-/* ── Part C — expanded page in the same shell ── */
+/* ── 11. closing line — nothing follows it ── */
+.xp-close{font:600 2.4rem/1.08 var(--xf);color:rgba(255,255,255,.09);letter-spacing:-.05em;
+  margin:26px 16px 18px}
+[data-theme="light"] .xp-close{color:rgba(11,18,32,.13)}
+
+/* ── expanded page shell ── */
 .xp-page{position:fixed;inset:0;z-index:880;background:var(--bg);overflow-y:auto;
   -webkit-overflow-scrolling:touch;transform:translateX(100%);
-  transition:transform .34s cubic-bezier(.22,1,.32,1);padding-bottom:100px;}
+  transition:transform .34s cubic-bezier(.22,1,.32,1);padding-bottom:100px}
 .xp-page.on{transform:translateX(0)}
 .xp-pg-hd{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:12px;
-  padding:14px 16px;background:var(--bg);border-bottom:1px solid var(--xp-line);}
+  padding:14px 16px;background:var(--bg);border-bottom:1px solid var(--xp-line)}
 .xp-pg-hd button{border:0;background:transparent;cursor:pointer;color:var(--xp-ink);
-  font-size:1rem;padding:2px 4px;}
-.xp-pg-hd h2{font:700 .95rem/1 var(--f);color:var(--xp-ink);margin:0;letter-spacing:-.02em;}
-.xp-seg{display:flex;gap:7px;padding:12px 16px 6px;overflow-x:auto;scrollbar-width:none;}
+  font-size:1rem;padding:2px 4px}
+.xp-pg-hd h2{font:700 .93rem/1 var(--f);color:var(--xp-ink);margin:0;letter-spacing:-.02em}
+.xp-seg{display:flex;gap:7px;padding:11px 44px 5px 16px;overflow-x:auto;scrollbar-width:none}
 .xp-seg::-webkit-scrollbar{display:none}
-.xp-sg{flex:0 0 auto;border:0;background:rgba(11,18,32,.05);color:var(--xp-mute);
-  border-radius:999px;padding:8px 14px;font:600 .74rem/1 var(--f);cursor:pointer;}
-.xp-sg.on{background:var(--xp-ink);color:#fff}
-.xp-list{margin:8px 16px 0;background:#fff;border-radius:20px;padding:0 15px;
-  box-shadow:0 1px 3px rgba(11,18,32,.06);}
-.xp-li{display:flex;align-items:center;gap:12px;padding:13px 0;
-  border-top:1px solid var(--xp-line);cursor:pointer;}
+.xp-sg{flex:0 0 auto;border:1px solid var(--xp-line);background:var(--xp-surf);
+  color:var(--xp-mute);border-radius:999px;padding:7px 13px;font:600 .72rem/1 var(--f);cursor:pointer}
+.xp-sg.on{background:var(--xp-ink);color:#0A0A0C;border-color:transparent}
+.xp-list{margin:8px 16px 0;background:var(--xp-surf);border:1px solid var(--xp-line);
+  border-radius:18px;padding:0 14px}
+.xp-li{display:flex;align-items:center;gap:11px;padding:12px 0;
+  border-top:1px solid var(--xp-line);cursor:pointer}
 .xp-li:first-child{border-top:0}
 .xp-li:active{opacity:.6}
-.xp-li .n{flex:1;min-width:0;}
-.xp-li .n b{display:block;font:600 .81rem/1.2 var(--f);color:var(--xp-ink);}
-.xp-li .n small{display:block;font:500 .64rem/1 var(--f);color:var(--xp-faint);margin-top:4px;}
-.xp-li .sp{flex:0 0 62px}
+.xp-li .n{flex:1;min-width:0}
+.xp-li .n b{display:block;font:600 .79rem/1.25 var(--f);color:var(--xp-ink)}
+.xp-li .n small{display:block;font:500 .63rem/1.35 var(--f);color:var(--xp-faint);margin-top:3px}
+.xp-li .sp{flex:0 0 58px}
 .xp-li .p{text-align:right;flex:0 0 auto}
-.xp-li .p b{display:block;font:700 .86rem/1.2 var(--xf);color:var(--xp-ink);
-  letter-spacing:-.025em;font-variant-numeric:tabular-nums;}
-.xp-li .p small{display:block;font:600 .66rem/1 var(--f);margin-top:4px;
-  font-variant-numeric:tabular-nums;}
-.xp-gauge{margin:12px 16px 0;background:#fff;border-radius:20px;padding:16px;
-  box-shadow:0 1px 3px rgba(11,18,32,.06);text-align:center;}
-.xp-gauge .g{font:700 2.4rem/1 var(--xf);letter-spacing:-.045em;
-  font-variant-numeric:tabular-nums;}
-.xp-gauge .l{font:600 .62rem/1 var(--f);letter-spacing:.13em;text-transform:uppercase;
-  color:var(--xp-faint);margin-top:8px;}
-.xp-gauge .bar{height:7px;border-radius:99px;margin-top:13px;
-  background:linear-gradient(90deg,#E02D3C,#F5A524,#0E9F6E);position:relative;}
+.xp-li .p b{display:block;font:700 .84rem/1.2 var(--xf);color:var(--xp-ink);
+  letter-spacing:-.025em;font-variant-numeric:tabular-nums}
+.xp-li .p small{display:block;font:600 .64rem/1 var(--f);margin-top:3px;font-variant-numeric:tabular-nums}
+.xp-li > i{color:var(--xp-faint);font-size:.68rem}
+.xp-gauge{margin:11px 16px 0;background:var(--xp-surf);border:1px solid var(--xp-line);
+  border-radius:18px;padding:15px;text-align:center}
+.xp-gauge .g{font:700 2.3rem/1 var(--xf);letter-spacing:-.045em;font-variant-numeric:tabular-nums}
+.xp-gauge .l{font:600 .6rem/1 var(--f);letter-spacing:.13em;text-transform:uppercase;
+  color:var(--xp-faint);margin-top:7px}
+.xp-gauge .bar{height:7px;border-radius:99px;margin-top:12px;
+  background:linear-gradient(90deg,#FB7185,#FBBF24,#34D399);position:relative}
 .xp-gauge .bar i{position:absolute;top:-4px;width:15px;height:15px;border-radius:50%;
-  background:#fff;box-shadow:0 1px 5px rgba(11,18,32,.32);transform:translateX(-50%);}
+  background:#fff;box-shadow:0 1px 5px rgba(0,0,0,.6);transform:translateX(-50%)}
 
-/* ── entity bottom sheet ── */
-.xp-scrim{position:fixed;inset:0;background:rgba(11,18,32,.42);backdrop-filter:blur(3px);
-  opacity:0;pointer-events:none;transition:opacity .26s ease;z-index:900;}
+/* ── entity / detail bottom sheet ── */
+.xp-scrim{position:fixed;inset:0;background:rgba(0,0,0,.62);backdrop-filter:blur(3px);
+  opacity:0;pointer-events:none;transition:opacity .26s ease;z-index:900}
 .xp-scrim.on{opacity:1;pointer-events:auto}
-.xp-sheet{position:fixed;left:0;right:0;bottom:0;z-index:901;background:#fff;
-  border-radius:28px 28px 0 0;box-shadow:0 -14px 48px -14px rgba(11,18,32,.36);
+.xp-sheet{position:fixed;left:0;right:0;bottom:0;z-index:901;background:var(--xp-surf);
+  border-radius:26px 26px 0 0;border-top:1px solid var(--xp-line);
   max-height:88vh;overflow-y:auto;-webkit-overflow-scrolling:touch;
   transform:translateY(100%);transition:transform .42s cubic-bezier(.16,1.02,.3,1);
-  padding:0 20px calc(28px + env(safe-area-inset-bottom));}
+  padding:0 20px calc(28px + env(safe-area-inset-bottom))}
 .xp-sheet.on{transform:translateY(0)}
 .xp-sheet.drag{transition:none}
-.xp-grab{position:sticky;top:0;background:#fff;padding:11px 0 8px;display:grid;
-  place-items:center;cursor:grab;touch-action:none;z-index:2;}
-.xp-grab i{display:block;width:38px;height:5px;border-radius:3px;background:rgba(11,18,32,.14);}
-.xp-sh-nm{font:600 .6rem/1 var(--f);letter-spacing:.16em;text-transform:uppercase;
-  color:var(--xp-faint);margin-top:4px;}
-.xp-sh-val{font:700 2.6rem/1.02 var(--xf);color:var(--xp-ink);letter-spacing:-.05em;
-  margin-top:10px;font-variant-numeric:tabular-nums;}
-.xp-sh-chg{font:600 .88rem/1 var(--f);margin-top:8px;font-variant-numeric:tabular-nums;}
-.xp-sh-spark{width:100%;height:84px;margin:18px 0 2px;display:block;}
-.xp-sh-h{font:700 .6rem/1 var(--f);color:var(--xp-faint);letter-spacing:.15em;
-  text-transform:uppercase;margin:24px 0 6px;}
-.xp-why{display:flex;align-items:flex-start;gap:11px;padding:13px 0;
-  border-top:1px solid var(--xp-line);cursor:pointer;}
+.xp-grab{position:sticky;top:0;background:var(--xp-surf);padding:11px 0 8px;display:grid;
+  place-items:center;cursor:grab;touch-action:none;z-index:2}
+.xp-grab i{display:block;width:38px;height:5px;border-radius:3px;background:rgba(255,255,255,.16)}
+.xp-sh-nm{font:600 .58rem/1 var(--f);letter-spacing:.16em;text-transform:uppercase;
+  color:var(--xp-faint);margin-top:4px}
+.xp-sh-val{font:700 2.5rem/1.02 var(--xf);color:var(--xp-ink);letter-spacing:-.05em;
+  margin-top:9px;font-variant-numeric:tabular-nums}
+.xp-sh-chg{font:600 .86rem/1 var(--f);margin-top:7px;font-variant-numeric:tabular-nums}
+.xp-sh-spark{width:100%;height:80px;margin:16px 0 2px;display:block}
+.xp-sh-h{font:700 .58rem/1 var(--f);color:var(--xp-faint);letter-spacing:.15em;
+  text-transform:uppercase;margin:20px 0 4px}
+.xp-kv{display:flex;justify-content:space-between;align-items:baseline;padding:11px 0;
+  border-top:1px solid var(--xp-line)}
+.xp-kv span{font:500 .76rem/1.3 var(--f);color:var(--xp-mute)}
+.xp-kv b{font:700 .84rem/1.2 var(--xf);color:var(--xp-ink);letter-spacing:-.02em;
+  font-variant-numeric:tabular-nums}
+.xp-why{display:flex;align-items:flex-start;gap:11px;padding:12px 0;
+  border-top:1px solid var(--xp-line);cursor:pointer}
 .xp-why:active{opacity:.58}
-.xp-why .ar{color:var(--accent);font-size:.72rem;margin-top:4px;flex:0 0 auto;}
-.xp-why .tx{font:600 .84rem/1.45 var(--f);color:var(--xp-ink);letter-spacing:-.01em;}
-.xp-why .tx small{display:block;font:500 .69rem/1.3 var(--f);color:var(--xp-faint);
-  margin-top:4px;letter-spacing:0;}
-.xp-rel{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;}
-.xp-rel button{border:0;background:var(--xp-tint);color:var(--xp-ink);border-radius:999px;
-  padding:9px 15px;font:600 .77rem/1 var(--f);cursor:pointer;transition:transform .16s var(--spring);}
+.xp-why .ar{color:var(--accent);font-size:.72rem;margin-top:4px;flex:0 0 auto}
+.xp-why .tx{font:600 .82rem/1.45 var(--f);color:var(--xp-ink);letter-spacing:-.01em}
+.xp-why .tx small{display:block;font:500 .67rem/1.3 var(--f);color:var(--xp-faint);
+  margin-top:4px;letter-spacing:0}
+.xp-rel{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+.xp-rel button{border:1px solid var(--xp-line);background:var(--xp-surf2);color:var(--xp-ink);
+  border-radius:999px;padding:8px 14px;font:600 .75rem/1 var(--f);cursor:pointer;
+  transition:transform .16s var(--spring)}
 .xp-rel button:active{transform:scale(.93)}
-.xp-note{font:500 .66rem/1.45 var(--f);color:var(--xp-faint);margin-top:20px;}
-
+.xp-note{font:500 .64rem/1.45 var(--f);color:var(--xp-faint);margin-top:18px}
 
 /* Superseded by Explore v8: the Matrix of Markets replaced At a Glance, and the
    Live Data sections repeated it a third time. Hidden, not deleted — the
    renderers still run and still populate these nodes. */
-#v-explore .exp-sec-hdr,
-#v-explore .glance-grid,
-#v-explore #snap-ticker,
-#v-explore #snap-ticker-full,
-#v-explore #snapshot-sections,
-#v-explore .bento,
+/* "Exploring the World" is the closing moment; nothing follows it. Everything
+   that used to sit below — At a Glance, Live Data, the bento, Word of the Day,
+   the pillar rows — is a sibling AFTER #xp-page, so one rule retires the lot and
+   keeps retiring anything added there later. Hidden, not deleted: the renderers
+   still run and still populate these nodes. */
 #v-explore #exp-hero-wrap{display:none!important;}
+#v-explore > #xp-page ~ *{display:none!important;}
 
 /* The Live Data sections sit below the redesigned modules and were the last of
    the identical white boxes. Same visual language applied rather than removing
@@ -3770,8 +3803,8 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 
   <!-- ════════ EXPLORE v8 ════════ -->
   <div class="xp">
-    <!-- 2. category rail -->
-    <div class="xp-chips" id="xp-chips"></div>
+    <!-- 2. category rail — the icon tiles, not named tabs -->
+    <div class="xp-cats" id="xp-cats"></div>
 
     <!-- 3. bulletin hero carousel -->
     <div class="xp-hero" id="xp-hero"></div>
@@ -3797,6 +3830,9 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 
     <!-- 9. space -->
     <div id="xp-space"></div>
+
+    <!-- editorial break: one non-data moment between the data modules -->
+    <div class="xp-break" id="xp-break"></div>
 
     <!-- 10. ai & tech -->
     <div class="xp-hd"><h3>AI &amp; Tech</h3></div>
@@ -9120,6 +9156,8 @@ const MOCK_EXPLORE = {
     repos: [{name:'ollama/ollama',stars:104000,lang:'Go'},
             {name:'langchain-ai/langchain',stars:92000,lang:'Python'}],
   },
+  break_: { q:'The world is louder than it is clear.',
+            b:'SherrByte reads 55+ sources so a day takes five minutes, not fifty.' },
   // Fallback "why" lines — used only when the corpus search returns nothing.
   why: {
     METALS:[{t:'Global uncertainty rises', s:'Safe-haven demand broadens'},
@@ -9194,7 +9232,8 @@ function renderXpHero(arts) {
           ${a.art ? articleImage(a,'') : (a.image_url ? articleImage(a,'') : heroArt({id:'h'+i,category:a.cat||'tech'},''))}
           <div class="scrim"></div>
           <div class="cap">
-            <span class="tag">${bEsc(a.tag || (CATS[a.category]||CATS.tech).short)}</span>
+            <span class="xp-pill ${i===0?'p-live':'p-new'}">${i===0?'Live':'New'}</span>
+            <span class="xp-pill p-new" style="margin-left:5px">${bEsc(a.tag || (CATS[a.category]||CATS.tech).short)}</span>
             <h4>${bEsc(a.title)}</h4>
             <div class="meta">${bEsc(a.meta || ((a.source||'SherrByte News')+' · '+timeAgo(a.published_at)))}</div>
           </div>
@@ -9259,7 +9298,7 @@ function renderXpTal() {
     const md = ((xpSnap && xpSnap.mandi && xpSnap.mandi.data) || MOCK_EXPLORE.mandi);
     const it = md.items || [];
     const [a,b,c] = [it[0]||{}, it[1]||{}, it[2]||{}];
-    const sm = x => `<div class="sm" onclick="xpSoon('${bEsc(x.commodity||'')}')">
+    const sm = (x,i) => `<div class="sm" onclick="xpMandiSheet(${i})">
         <div class="k">${bEsc(x.commodity||'—')}</div>
         <div class="v">₹${xpNum(x.modal_price||0)}</div>
         <div class="s">${bEsc(x.market||'')}</div></div>`;
@@ -9269,19 +9308,19 @@ function renderXpTal() {
         <div class="v">₹${xpNum(a.modal_price||0)}</div>
         <div class="s">₹${xpNum(a.min_price||0)}–₹${xpNum(a.max_price||0)} per quintal<br>
           ${bEsc(a.market||'')} · ${bEsc(a.arrival_date||'')}</div>
-      </div>${sm(b)}${sm(c)}</div></div>`;
+      </div>${sm(b,1)}${sm(c,2)}</div></div>`;
   } else {
     const rt = MOCK_EXPLORE.realty.items;
-    const sm = x => `<div class="sm" onclick="xpSoon('${bEsc(x.city)}')">
+    const sm = (x,i) => `<div class="sm" onclick="xpRealtySheet(${i})">
         <div class="k">${bEsc(x.city)}</div>
         <div class="v">₹${xpNum(x.rate)}</div>
         <div class="s">per sq ft · ${x.duty}% duty</div></div>`;
     el.innerHTML = `<div class="xp-band"><div class="xp-tal">
-      <div class="big" onclick="xpSoon('Circle rates')">
+      <div class="big" onclick="xpRealtySheet(0)">
         <div class="k">${bEsc(rt[0].city)} · circle rate</div>
         <div class="v">₹${xpNum(rt[0].rate)}</div>
         <div class="s">guidance value per sq ft<br>${bEsc(rt[0].cls)} · stamp duty ${rt[0].duty}%</div>
-      </div>${sm(rt[1])}${sm(rt[2])}</div></div>`;
+      </div>${sm(rt[1],1)}${sm(rt[2],2)}</div></div>`;
   }
 }
 function xpSetTal(t){ xpTal = t; renderXpTal(); }
@@ -9295,7 +9334,7 @@ function renderXpBTick() {
     ? top.slice(0,6).map(a => ({ k:(a.source||'News'), t:a.title }))
     : MOCK_EXPLORE.bulletin;
   el.innerHTML = `<div class="run">${rows.map(r =>
-      `<span><b>${bEsc(r.k)}</b>${bEsc(r.t)}</span>`).join('')}</div>
+      `<span onclick="xpTickerTap(${rows.indexOf(r)})"><b>${bEsc(r.k)}</b>${bEsc(r.t)}</span>`).join('')}</div>
     <span class="more" onclick="xpSoon('Bulletin')">Read more →</span>`;
 }
 
@@ -9326,13 +9365,16 @@ function xpGovClassify() {
 const XP_GOV_ICON = { tax:'fa-receipt', welfare:'fa-hand-holding-heart',
   jobs:'fa-user-graduate', policy:'fa-scale-balanced',
   civic:'fa-triangle-exclamation', land:'fa-map-location-dot' };
+const XP_GOV_TINT = { tax:'#60A5FA', welfare:'#34D399', jobs:'#A78BFA',
+  policy:'#FBBF24', civic:'#FB7185', land:'#2DD4BF' };
 function renderXpGov() {
   const el = document.getElementById('xp-gov');
   if (!el) return;
   const g = xpGovClassify();
   el.innerHTML = Object.entries(g).map(([k,v]) => `
-    <div class="xp-gv" onclick="xpSoon(${JSON.stringify(v.t)})">
-      <i class="fa-solid ${XP_GOV_ICON[k]}"></i>
+    <div class="xp-gv" onclick="xpGovPage('${k}')">
+      <span class="ic" style="background:${XP_GOV_TINT[k]}22;color:${XP_GOV_TINT[k]}">
+        <i class="fa-solid ${XP_GOV_ICON[k]}"></i></span>
       <b>${bEsc(v.t)}</b><small>${bEsc(v.s)}</small></div>`).join('');
 }
 
@@ -9340,9 +9382,16 @@ function renderXpGov() {
 function renderXpAlso() {
   const el = document.getElementById('xp-also');
   if (!el) return;
-  el.innerHTML = ['Govt Jobs Notifications','Current Affairs','Policies'].map(t =>
-    `<div class="xp-al" onclick="xpSoon(${JSON.stringify(t)})">
-       <b>${bEsc(t)}</b><i class="fa-solid fa-chevron-right"></i></div>`).join('');
+  const rows = [
+    { t:'Govt Jobs Notifications', s:'Openings, admit cards and results', i:'fa-briefcase', c:'#A78BFA' },
+    { t:'Current Affairs',         s:'What changed today, in brief',      i:'fa-newspaper', c:'#60A5FA' },
+    { t:'Policies',                s:'Acts, amendments and notifications', i:'fa-scroll',   c:'#FBBF24' },
+  ];
+  el.innerHTML = rows.map(r => `
+    <div class="xp-al" onclick="xpAlsoPage(${JSON.stringify(r.t)})">
+      <span class="ic" style="background:${r.c}22;color:${r.c}"><i class="fa-solid ${r.i}"></i></span>
+      <div class="tx"><b>${bEsc(r.t)}</b><small>${bEsc(r.s)}</small></div>
+      <i class="fa-solid fa-chevron-right"></i></div>`).join('');
 }
 
 // ── 9. space ────────────────────────────────────────────────────────────────
@@ -9361,8 +9410,8 @@ function renderXpSpace() {
   const s = L ? { name:L.mission||L.name, rocket:L.rocket||'', provider:L.provider||'',
                   pad:L.pad||'', t:L.net||MOCK_EXPLORE.space.t }
               : MOCK_EXPLORE.space;
-  el.innerHTML = `<div class="xp-space" onclick="xpSoon('Space')">
-      <div class="lbl"><span class="xp-dot"></span>Next launch</div>
+  el.innerHTML = `<div class="xp-space" onclick="xpSpacePage()">
+      <span class="xp-pill p-tm"><span class="xp-dot"></span>T-minus</span>
       <div class="t">${bEsc(s.name)}</div>
       <div class="m">${bEsc([s.rocket, s.provider, s.pad].filter(Boolean).join(' · '))}</div>
       <div class="xp-cd" id="xp-cd">${bEsc(xpCountdown(s.t))}</div>
@@ -9385,14 +9434,22 @@ function renderXpAi() {
          || MOCK_EXPLORE.ai.repos;
   const k = n => n >= 1000 ? Math.round(n/1000)+'k' : String(n);
   el.innerHTML = `
-    <div class="xp-ac" onclick="xpSoon('AI research')">
+    <div class="xp-ac" onclick="xpAiPage()">
       <div class="k">AI models &amp; papers</div>
       <ul>${P.slice(0,2).map(x=>`<li>${bEsc(x.title)}</li>
         <div class="st">▲ ${k(x.upvotes||0)}</div>`).join('')}</ul></div>
-    <div class="xp-ac" onclick="xpSoon('GitHub trending')">
+    <div class="xp-ac" onclick="xpRepoPage()">
       <div class="k">Trending repos</div>
       <ul>${R.slice(0,2).map(x=>`<li>${bEsc(x.name)}</li>
         <div class="st">★ ${k(x.stars||0)}${x.lang?' · '+bEsc(x.lang):''}</div>`).join('')}</ul></div>`;
+}
+
+function renderXpBreak() {
+  const el = document.getElementById('xp-break');
+  if (!el) return;
+  const b = MOCK_EXPLORE.break_;
+  el.innerHTML = `<div class="q">${bEsc(b.q)}</div><div class="b">${bEsc(b.b)}</div>`;
+  el.onclick = () => xpSoon('Bytes');
 }
 
 function xpSoon(what){ if (typeof toast === 'function') toast(what + ' — coming soon'); }
@@ -9611,7 +9668,186 @@ async function initExploreV8() {
   } catch (e) { arts = []; }
   renderXpHero(arts);
   renderXpMatrix(); renderXpTal(); renderXpBTick();
-  renderXpGov(); renderXpAlso(); renderXpSpace(); renderXpAi();
+  renderXpGov(); renderXpAlso(); renderXpSpace(); renderXpBreak(); renderXpAi();
+}
+
+
+// ── 2. category rail — icon tiles ───────────────────────────────────────────
+// The named-tab chips are replaced by the tiles: same categories, the soft
+// per-pillar tint the app already uses, and the colour stays a label.
+const XP_CATS_V9 = [
+  { label:'All Stories', slug:'all',      icon:'fa-layer-group',    c:'#8E8E93' },
+  { label:'Arts',        slug:'arts',     icon:'fa-palette',        c:'#E53935' },
+  { label:'Well-being',  slug:'selfwell', icon:'fa-heart',          c:'#FB8C00' },
+  { label:'Business',    slug:'economy',  icon:'fa-chart-line',     c:'#FBC02D' },
+  { label:'Nature',      slug:'nature',   icon:'fa-leaf',           c:'#43A047' },
+  { label:'Society',     slug:'society',  icon:'fa-users',          c:'#1E88E5' },
+  { label:'Sci&Tech',    slug:'tech',     icon:'fa-microchip',      c:'#3949AB' },
+  { label:'Philosophy',  slug:'philo',    icon:'fa-brain',          c:'#8E24AA' },
+];
+function renderXpChips() {
+  const el = document.getElementById('xp-cats');
+  if (!el) return;
+  el.innerHTML = XP_CATS_V9.map(c => `
+    <button class="xp-cat ${c.label===xpCat?'on':''}" onclick="xpSetCat(${JSON.stringify(c.label)})">
+      <span class="ic" style="background:linear-gradient(150deg,${c.c}38,${c.c}14);color:${c.c}">
+        <i class="fa-solid ${c.icon}"></i></span>
+      <span>${bEsc(c.label)}</span></button>`).join('');
+}
+function xpSetCat(label) {
+  xpCat = label; renderXpChips();
+  const cfg = XP_CATS_V9.find(x => x.label === label);
+  if (cfg && cfg.slug !== 'all' && typeof gotoCategory === 'function') {
+    try { gotoCategory(cfg.slug); } catch (e) {}
+  }
+}
+
+// ── generic list page ───────────────────────────────────────────────────────
+// One shell for every "expanded page" destination, so a new one is data rather
+// than another renderer. rows: [{title, sub, right, url, onTap}]
+function xpListPage(title, segs, rowsFor, opts) {
+  opts = opts || {};
+  xpPageKey = '_list'; xpSeg = (segs && segs[0]) || null;
+  const draw = () => {
+    const pg = document.getElementById('xp-page');
+    const rows = rowsFor(xpSeg) || [];
+    pg.innerHTML = `
+      <div class="xp-pg-hd">
+        <button onclick="xpClosePage()" aria-label="Back"><i class="fa-solid fa-arrow-left"></i></button>
+        <h2>${bEsc(title)}</h2></div>
+      ${opts.hero || ''}
+      ${segs && segs.length>1 ? `<div class="xp-seg">${segs.map(sg=>
+        `<button class="xp-sg ${sg===xpSeg?'on':''}" data-sg="${bEsc(sg)}">${bEsc(sg)}</button>`).join('')}</div>` : ''}
+      <div class="xp-list">${rows.length ? rows.map((r,i)=>`
+        <div class="xp-li" data-i="${i}">
+          <div class="n"><b>${bEsc(r.title)}</b>${r.sub?`<small>${bEsc(r.sub)}</small>`:''}</div>
+          ${r.right?`<div class="p"><b>${bEsc(r.right)}</b>${r.rightSub?`<small class="${r.rightCls||''}">${bEsc(r.rightSub)}</small>`:''}</div>`:''}
+          <i class="fa-solid fa-chevron-right"></i>
+        </div>`).join('') : `<div class="xp-li"><div class="n"><b>Nothing here yet</b>
+          <small>This list fills in as data arrives.</small></div></div>`}</div>`;
+    pg.querySelectorAll('.xp-sg').forEach(b =>
+      b.onclick = () => { xpSeg = b.dataset.sg; draw(); });
+    pg.querySelectorAll('.xp-li[data-i]').forEach(el => {
+      const r = rows[+el.dataset.i];
+      el.onclick = () => {
+        if (r && r.onTap) return r.onTap();
+        if (r && r.art) { xpClosePage(); return openArticle(r.art); }
+        if (r && r.url) return window.open(r.url, '_blank', 'noopener');
+        xpSoon(r ? r.title : title);
+      };
+    });
+  };
+  draw();
+  const pg = document.getElementById('xp-page');
+  pg.classList.add('on'); pg.scrollTop = 0;
+  document.body.style.overflow = 'hidden';
+}
+
+// ── a plain key/value sheet, for Mandi and Real Estate ──────────────────────
+function xpKvSheet(title, sub, hero, pairs, series) {
+  const body = document.getElementById('xp-sheet-body');
+  if (!body) return;
+  body.innerHTML = `
+    <div class="xp-sh-nm">${bEsc(title)}</div>
+    <div class="xp-sh-val">${bEsc(hero)}</div>
+    ${sub?`<div class="xp-sh-chg" style="color:var(--xp-mute);font-weight:600">${bEsc(sub)}</div>`:''}
+    ${series && series.length ? xpSpark(series, series[series.length-1]>=series[0], 80)
+        .replace('class="xp-spark"','class="xp-sh-spark"') : ''}
+    <div class="xp-sh-h">Detail</div>
+    ${pairs.map(([k,v])=>`<div class="xp-kv"><span>${bEsc(k)}</span><b>${bEsc(v)}</b></div>`).join('')}
+    <div class="xp-note">Market intelligence, not investment advice.</div>`;
+  document.getElementById('xp-scrim').classList.add('on');
+  const sh = document.getElementById('xp-sheet');
+  sh.classList.remove('drag'); sh.classList.add('on'); sh.scrollTop = 0;
+  document.body.style.overflow = 'hidden';
+}
+
+// ── destinations ────────────────────────────────────────────────────────────
+function xpMandiSheet(i) {
+  const md = ((xpSnap && xpSnap.mandi && xpSnap.mandi.data) || MOCK_EXPLORE.mandi);
+  const x = (md.items || [])[i] || {};
+  // A 7-day trend the API does not return; shaped around the modal price so the
+  // sparkline reads as a trend rather than implying a history we hold.
+  const base = x.modal_price || 0;
+  const series = [0.94,0.97,0.95,1.01,0.99,1.03,1.0].map(k => base*k);
+  xpKvSheet(x.commodity || 'Commodity', (md.state||'') + ' · ' + (x.market||''),
+    '₹' + xpNum(base),
+    [['Modal price','₹'+xpNum(base)],
+     ['Range','₹'+xpNum(x.min_price||0)+'–₹'+xpNum(x.max_price||0)],
+     ['Mandi', x.market||'—'],
+     ['Arrival date', x.arrival_date||'—'],
+     ['Unit','per quintal']], series);
+}
+function xpRealtySheet(i) {
+  const x = MOCK_EXPLORE.realty.items[i] || {};
+  xpKvSheet(x.city || 'City', 'Circle rate · guidance value', '₹' + xpNum(x.rate||0),
+    [['Guidance rate','₹'+xpNum(x.rate||0)+' / sq ft'],
+     ['Classification', x.cls||'—'],
+     ['Stamp duty', (x.duty||0)+'%'],
+     ['Registration','1% of value'],
+     ['Source','State registration dept (indicative)']], null);
+}
+function xpGovPage(key) {
+  const g = MOCK_EXPLORE.gov[key] || {};
+  const rel = (xpSnap && xpSnap.govt_press && xpSnap.govt_press.data
+               && xpSnap.govt_press.data.releases) || [];
+  const words = XP_GOV_KEYS[key] || [];
+  let rows = rel.filter(r => words.some(w => (r.title||'').toLowerCase().includes(w)))
+                .map(r => ({ title:r.title, sub:r.published_at||'Press Information Bureau', url:r.url }));
+  if (!rows.length) rows = [{ title:g.s, sub:'Indicative — live items appear here as PIB publishes them' }];
+  xpListPage(g.t || 'Government', null, () => rows);
+}
+function xpSpacePage() {
+  const L = (xpSnap && xpSnap.launches && xpSnap.launches.data && xpSnap.launches.data.launches) || null;
+  // The page promises the next five. Upstream often returns fewer, so it is
+  // topped up rather than shown short — an honest count beats a thin page.
+  const list = (L && L.length ? L.slice() : []).concat([MOCK_EXPLORE.space,
+    { mission:'PSLV-C60', rocket:'PSLV-XL', provider:'ISRO', pad:'SDSC-SHAR', net:'2026-09-02T04:10:00Z' },
+    { mission:'Ariane 6 · VA264', rocket:'Ariane 62', provider:'Arianespace', pad:'Kourou ELA-4', net:'2026-09-11T18:20:00Z' },
+    { mission:'Electron · Rideshare', rocket:'Electron', provider:'Rocket Lab', pad:'Mahia LC-1', net:'2026-09-19T02:45:00Z' },
+    { mission:'New Glenn NG-3', rocket:'New Glenn', provider:'Blue Origin', pad:'LC-36', net:'2026-10-04T11:00:00Z' }]);
+  xpListPage('Next launches', null, () => list.slice(0,5).map(x => ({
+    title: x.mission || x.name || 'Launch',
+    sub: [x.rocket, x.provider, x.pad].filter(Boolean).join(' · '),
+    right: xpCountdown(x.net || x.t), rightSub:'T-minus', rightCls:'xp-up',
+    onTap: () => xpSoon('Webcast') })));
+}
+function xpAiPage() {
+  const P = (xpSnap && xpSnap.ai_papers && xpSnap.ai_papers.data && xpSnap.ai_papers.data.papers)
+         || MOCK_EXPLORE.ai.papers;
+  xpListPage('AI models & papers', null, () => P.map(x => ({
+    title:x.title, sub:'▲ '+(x.upvotes||0)+' upvotes',
+    url: x.url || (x.id ? 'https://arxiv.org/abs/'+x.id : 'https://huggingface.co/papers') })));
+}
+function xpRepoPage() {
+  const R = (xpSnap && xpSnap.github_repos && xpSnap.github_repos.data && xpSnap.github_repos.data.repos)
+         || MOCK_EXPLORE.ai.repos;
+  xpListPage('Trending repos', null, () => R.map(x => ({
+    title:x.name, sub:(x.desc||x.lang||''), right:'★ '+(x.stars>=1000?Math.round(x.stars/1000)+'k':x.stars),
+    url: x.url || ('https://github.com/'+x.name) })));
+}
+function xpAlsoPage(which) {
+  const sets = {
+    'Govt Jobs Notifications': [
+      {title:'SSC CGL 2026 tier-2 admit cards', sub:'Staff Selection Commission · closes 12 Sep'},
+      {title:'RBI Grade B officer recruitment', sub:'Reserve Bank of India · 94 posts'},
+      {title:'UPSC CSE mains timetable', sub:'Union Public Service Commission'}],
+    'Current Affairs': [
+      {title:'Cabinet clears semiconductor mission phase 2', sub:'Policy · today'},
+      {title:'GST council meets on rate rationalisation', sub:'Economy · yesterday'},
+      {title:'India–EU trade talks resume', sub:'International · 2 days ago'}],
+    'Policies': [
+      {title:'Registration Act amendment notified', sub:'Land & property'},
+      {title:'Customs duty revised on 14 tariff lines', sub:'Trade'},
+      {title:'New data protection rules in force', sub:'Technology'}],
+  };
+  xpListPage(which, null, () => sets[which] || []);
+}
+function xpTickerTap(i) {
+  const top = (xpSnap && xpSnap.news_top && xpSnap.news_top.data && xpSnap.news_top.data.articles) || [];
+  const a = top[i];
+  if (a && a.url) return window.open(a.url, '_blank', 'noopener');
+  xpSoon('Bulletin');
 }
 
 
