@@ -60,16 +60,32 @@ _SUFFIX_TOKENS = {
 _PUNCT_RE = re.compile(r"[^\w\s]", flags=re.UNICODE)
 _WS_RE = re.compile(r"\s+")
 
+# Possessives, stripped BEFORE punctuation is removed.
+#
+# Punctuation removal turns an apostrophe into a space, so "India's" normalized to
+# "india s" and sat in the graph as a SEPARATE entity from "India" — same for
+# "Fifa's" vs "FIFA". Every possessive form of a name was its own node, splitting
+# that name's co-occurrence counts across two ids and letting a detector pair an
+# entity with what is really itself.
+#
+# Both forms: singular ("India's") and plural ("Students'" / "Nations’").
+_POSSESSIVE_RE = re.compile(r"['’]s\b", flags=re.UNICODE)
+_PLURAL_POSSESSIVE_RE = re.compile(r"(\w)['’](?=\s|$)", flags=re.UNICODE)
+
 
 def normalize_name(raw: str) -> str:
     """Deterministic, idempotent canonical key for an entity surface form.
 
-    lowercase → '&'→'and' → strip punctuation → collapse whitespace →
-    drop a leading 'the' → drop trailing corporate suffix tokens.
+    lowercase → '&'→'and' → strip possessives → strip punctuation →
+    collapse whitespace → drop a leading 'the' → drop trailing corporate suffixes.
     """
     if not raw:
         return ""
     s = raw.strip().lower().replace("&", " and ")
+    # Before punctuation, or the apostrophe becomes a space and the possessive
+    # survives as a stray "s" token: "india s" is not "india".
+    s = _POSSESSIVE_RE.sub("", s)
+    s = _PLURAL_POSSESSIVE_RE.sub(r"\1", s)
     s = _PUNCT_RE.sub(" ", s)
     s = _WS_RE.sub(" ", s).strip()
     if not s:
@@ -149,7 +165,17 @@ _STOP_ENTITIES = set((
     # "We've" into "we"+"ve"; the stem is not a stopword on its own, so without these
     # the mention survives as an entity.
     "don doesn didn won wont cant couldn shouldn wouldn isn aren wasn weren "
-    "hasn haven hadn ain ve ll re nt im youre theyre"
+    "hasn haven hadn ain ve ll re nt im youre theyre "
+    # Discourse markers. A summariser starts a sentence with one, the sentence is
+    # Title-Cased in a headline or a summary bullet, and the word enters the graph
+    # as a named entity — "Moreover" was in the top ten patterns.
+    "moreover however meanwhile furthermore therefore nevertheless nonetheless "
+    "additionally consequently accordingly besides thus hence although though "
+    "whereas whilst while unless until since because despite instead rather "
+    "otherwise likewise similarly conversely overall finally firstly secondly "
+    "lastly meanwhile notably importantly specifically particularly essentially "
+    "basically actually certainly clearly obviously perhaps maybe indeed "
+    "according reportedly allegedly apparently supposedly presumably"
 ).split())
 
 # Generic common nouns that arrive Title-Cased in headlines and get mistaken for
@@ -180,7 +206,25 @@ _COMMON_NOUNS = set((
     "another every each many much several few lot lots couple "
     # Bare verbs/adverbs that survive Title-Casing in headline fragments.
     "says said told get got make made take took give gave come came going "
-    "here there back down over ahead amid despite across"
+    "here there back down over ahead amid despite across "
+    # Section labels, form words and evaluation nouns that arrive Title-Cased.
+    # "Test" reached the top ten. It is a cricket format too, and the cost is
+    # real: "series" was already generic here, so "Test Series" is dropped as
+    # all-generic. Qualified forms carrying a distinctive token still survive
+    # ("Boxing Day Test", "Border-Gavaskar Test"), which is where the cricket
+    # sense actually earns a node.
+    "test tests result results score scores total average rate level stage "
+    "list index chart table figure figures data note notes item items "
+    "example examples question questions answer answers reason reasons "
+    "issue issues problem problems solution options option choice choices "
+    "step steps stat stats detail details fact facts source sources link links "
+    "page pages section topic topics subject content summary preview review "
+    "edition version format model method feature features release "
+    "morning evening night afternoon weekend season period phase round "
+    "user users customer customers client clients staff worker workers "
+    "leader leaders official officials member members expert experts "
+    "student students parent parents doctor patient patients driver "
+    "record records event events meeting talks decision decisions"
 ).split())
 
 _WEEKDAYS = {"monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"}
@@ -191,7 +235,7 @@ _MONTHS = {"january", "february", "march", "april", "may", "june", "july", "augu
 
 # Build marker + live counters, so a run can PROVE which code is executing and how
 # many mentions the filter actually rejected (see backfill summary).
-RESOLVER_BUILD = "entity_resolver+contraction_filter/2026-07-31"
+RESOLVER_BUILD = "entity_resolver+possessive_merge/2026-08-27"
 _STATS = {"checked": 0, "filtered_out": 0}
 
 
@@ -244,6 +288,13 @@ def is_valid_mention(name: str, type: str = "MISC") -> bool:
         return True
 
     tokens = norm.split(" ")
+    # A name followed by a bare initial is a byline fragment, not an entity:
+    # "Kevin M", "Sarah J". The distinctive first token means the all-generic
+    # rule below never catches these, so they entered the graph as people who do
+    # not exist. Narrow on purpose — two tokens only, second a single letter — so
+    # a real name carrying an initial in the middle ("John F Kennedy") survives.
+    if len(tokens) == 2 and len(tokens[1]) == 1:
+        return _reject()
     # Reject when EVERY token is generic — a stopword, weekday, month, or common
     # noun. Catches "the", "Monday", "Man", and titles built entirely from common
     # words ("Brand New Day"), while keeping any name carrying at least one

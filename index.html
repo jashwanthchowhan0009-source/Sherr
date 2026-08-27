@@ -1894,6 +1894,46 @@ nav.compact .nb.on { flex: 0 0 auto; padding-left: 16px; padding-right: 16px; }
 .xp-rel button:active{transform:scale(.93)}
 .xp-note{font:500 .64rem/1.45 var(--f);color:var(--xp-faint);margin-top:18px}
 
+/* ── Connections (Sherr-I) ──
+   The one module whose content is a CLAIM rather than a number, so it reads as a
+   sentence first: the pair on top, the engine's own plain-English "why" beneath
+   it, and the evidence count last. Same surface, radius and hairline as the
+   other Explore slabs — this is another section of the page, not a feature box.
+   The arrow between the two entities is the whole idea in one glyph. */
+.xp-conn{display:flex;flex-direction:column;gap:9px;margin:0 16px}
+.xp-cn{background:var(--xp-surf);border:1px solid var(--xp-line);border-radius:18px;
+  padding:14px 15px;cursor:pointer;text-align:left;width:100%;display:block;
+  transition:transform .16s var(--spring),background .16s ease}
+.xp-cn:active{transform:scale(.985);background:var(--xp-surf2)}
+.xp-cn-pair{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.xp-cn-e{font:700 .92rem/1.25 var(--f);color:var(--xp-ink);letter-spacing:-.02em}
+/* A real character, not an icon font: this arrow IS the claim the card makes,
+   and when Font Awesome fails to load the pair collapses into two names with a
+   gap between them — the one element that must never go missing. */
+.xp-cn-ar{color:var(--accent);font-size:1rem;line-height:1;flex:0 0 auto;
+  opacity:.9;font-weight:700}
+.xp-cn-why{font:500 .78rem/1.5 var(--f);color:var(--xp-mute);margin-top:8px;
+  display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.xp-cn-ft{display:flex;align-items:center;gap:10px;margin-top:10px}
+.xp-cn-tag{font:700 .54rem/1 var(--f);letter-spacing:.13em;text-transform:uppercase;
+  color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,transparent);
+  border-radius:999px;padding:5px 9px}
+.xp-cn-ev{font:600 .62rem/1 var(--f);color:var(--xp-faint);letter-spacing:.04em;
+  font-variant-numeric:tabular-nums}
+.xp-cn-ev b{color:var(--xp-mute);font-weight:700}
+
+/* Sheet contents for one connection. */
+.xp-cn-sh-pair{font:700 1.35rem/1.25 var(--xf);color:var(--xp-ink);
+  letter-spacing:-.035em;margin-bottom:4px}
+.xp-cn-sh-pair span{color:var(--accent);margin:0 9px;font-weight:700}
+.xp-cn-sh-why{font:500 .87rem/1.6 var(--f);color:var(--xp-mute);margin-top:12px}
+.xp-cn-sh-ev{display:flex;flex-wrap:wrap;gap:7px;margin-top:14px}
+.xp-cn-sh-ev span{font:600 .64rem/1 var(--f);color:var(--xp-mute);
+  background:var(--xp-surf2);border:1px solid var(--xp-line);
+  border-radius:999px;padding:7px 11px}
+.xp-cn-empty{font:500 .74rem/1.5 var(--f);color:var(--xp-faint);
+  border:1px dashed var(--xp-line);border-radius:16px;padding:16px;text-align:center}
+
 /* Superseded by Explore v8: the Matrix of Markets replaced At a Glance, and the
    Live Data sections repeated it a third time. Hidden, not deleted — the
    renderers still run and still populate these nodes. */
@@ -3838,7 +3878,12 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
     <div class="xp-hd"><h3>AI &amp; Tech</h3></div>
     <div class="xp-ai" id="xp-ai"></div>
 
-    <!-- 11. closing line -->
+    <!-- 11. connections — Sherr-I pattern output -->
+    <div class="xp-hd" id="xp-conn-hd" style="display:none">
+      <h3>Connections</h3><span class="all" onclick="xpConnAll()">All</span></div>
+    <div class="xp-conn" id="xp-conn"></div>
+
+    <!-- 12. closing line -->
     <div class="xp-close">Exploring<br>the World</div>
   </div>
 
@@ -9669,8 +9714,149 @@ async function initExploreV8() {
   renderXpHero(arts);
   renderXpMatrix(); renderXpTal(); renderXpBTick();
   renderXpGov(); renderXpAlso(); renderXpSpace(); renderXpBreak(); renderXpAi();
+  // Not awaited: /patterns is the one section whose absence should not hold up
+  // the rest of the page, and the heading stays hidden until it answers.
+  renderXpConn();
 }
 
+
+// ── 11. Connections — Sherr-I pattern output ────────────────────────────────
+// /patterns carries `source`: "engine" is real detector output, "seed" is local
+// demo rows and "unavailable" is a configured engine that did not answer. Only
+// "engine" is shown — a demo pattern presented as a finding is worse than no
+// section at all, so anything else leaves the heading hidden.
+let xpConn = [];
+
+function xpConnPair(p) {
+  // entities[] is resolved server-side from entity_ids. A pattern whose two ids
+  // resolved to the same name is a duplicate the entity cleanup has not reached
+  // yet; showing "X connects to X" is exactly the noise this section must not
+  // have, so it is dropped at render rather than displayed.
+  const names = (p.entities || []).map(x => String(x || '').trim()).filter(Boolean);
+  const uniq = [...new Set(names.map(n => n.toLowerCase()))];
+  if (names.length < 2 || uniq.length < 2) return null;
+  return names.slice(0, 2);
+}
+
+function xpConnWhy(p) {
+  const e = p.explain_json || {};
+  return String(e.why || e.narrative || '').trim();
+}
+
+async function renderXpConn() {
+  const el = document.getElementById('xp-conn');
+  const hd = document.getElementById('xp-conn-hd');
+  if (!el) return;
+  let d = null;
+  try { d = await api('/patterns?limit=24', { timeout: 3000 }); } catch (e) { d = null; }
+
+  if (!d || d.source !== 'engine') {
+    // Hidden, not "no connections found": the engine being unreachable is not a
+    // statement about the world.
+    el.innerHTML = ''; if (hd) hd.style.display = 'none';
+    return;
+  }
+
+  xpConn = (d.patterns || [])
+    .map(p => ({ p, pair: xpConnPair(p), why: xpConnWhy(p) }))
+    .filter(x => x.pair && x.why)
+    .slice(0, 5);
+
+  if (!xpConn.length) { el.innerHTML = ''; if (hd) hd.style.display = 'none'; return; }
+  if (hd) hd.style.display = '';
+
+  el.innerHTML = xpConn.map((x, i) => {
+    const e = x.p.explain_json || {};
+    const srcs = Number(e.source_count || (e.top_sources || []).length || 0);
+    const arts = Number(e.article_count || 0);
+    const kind = String(x.p.type || '').replace(/_/g, ' ');
+    return `
+      <button class="xp-cn" onclick="xpConnOpen(${i})">
+        <div class="xp-cn-pair">
+          <span class="xp-cn-e">${bEsc(x.pair[0])}</span>
+          <span class="xp-cn-ar" aria-hidden="true">&rarr;</span>
+          <span class="xp-cn-e">${bEsc(x.pair[1])}</span>
+        </div>
+        <div class="xp-cn-why">${bEsc(x.why)}</div>
+        <div class="xp-cn-ft">
+          <span class="xp-cn-tag">${bEsc(kind)}</span>
+          <span class="xp-cn-ev">${srcs ? `<b>${srcs}</b> source${srcs===1?'':'s'}` : ''}${
+            srcs && arts ? ' · ' : ''}${arts ? `<b>${arts}</b> article${arts===1?'':'s'}` : ''}</span>
+        </div>
+      </button>`;
+  }).join('');
+}
+
+function xpConnOpen(i) {
+  const x = xpConn[i];
+  if (!x) return;
+  const e = x.p.explain_json || {};
+  const body = document.getElementById('xp-sheet-body');
+  if (!body) return;
+
+  const chips = [];
+  if (e.article_count) chips.push(`${e.article_count} article${e.article_count===1?'':'s'}`);
+  if (e.source_count) chips.push(`${e.source_count} source${e.source_count===1?'':'s'}`);
+  if (e.observations) chips.push(`${e.observations} observations`);
+  if (e.lag_days != null) chips.push(`${e.lag_days} day lag`);
+  if (e.confidence != null) chips.push(`confidence ${Math.round(e.confidence * 100)}%`);
+  if ((e.top_sources || []).length) chips.push((e.top_sources || []).slice(0, 4).join(' · '));
+
+  body.innerHTML = `
+    <div class="xp-sh-nm">${bEsc(String(x.p.type || '').replace(/_/g, ' '))}</div>
+    <div class="xp-cn-sh-pair">${bEsc(x.pair[0])}<span aria-hidden="true">&rarr;</span>${bEsc(x.pair[1])}</div>
+    <div class="xp-cn-sh-why">${bEsc(x.why)}</div>
+    ${chips.length ? `<div class="xp-cn-sh-ev">${chips.map(c=>`<span>${bEsc(c)}</span>`).join('')}</div>` : ''}
+    <div class="xp-sh-h">Articles behind it</div>
+    <div id="xp-cn-arts">${Array(2).fill(
+      '<div class="xp-why"><div class="xp-sk" style="height:14px;width:70%"></div></div>').join('')}</div>
+    <div class="xp-note">A detected correlation, not causation, and not a prediction.</div>`;
+
+  const sc = document.getElementById('xp-scrim'); if (sc) sc.classList.add('on');
+  const sh = document.getElementById('xp-sheet');
+  sh.classList.remove('drag'); sh.classList.add('on'); sh.scrollTop = 0;
+  document.body.style.overflow = 'hidden';
+  xpConnArticles(x);
+}
+
+// The insight stores counts and source NAMES, not article ids, so the stories
+// behind a pattern are looked up by its two entities. Both names, so what comes
+// back is the overlap the pattern is actually about rather than everything ever
+// written about the more famous one.
+async function xpConnArticles(x) {
+  const host = document.getElementById('xp-cn-arts');
+  if (!host) return;
+  let rows = [];
+  try {
+    const d = await api('/search?q=' + encodeURIComponent(x.pair.join(' ')), { timeout: 3000 });
+    rows = (d.articles || []).slice(0, 4).map(a => {
+      const n = normalizeArticle(a);
+      return { t: n.title, s: (n.source || '') + ' · ' + timeAgo(n.published_at), art: n };
+    });
+  } catch (err) { rows = []; }
+  if (!rows.length) {
+    const srcs = (x.p.explain_json || {}).top_sources || [];
+    host.innerHTML = `<div class="xp-cn-empty">${srcs.length
+      ? 'Reported by ' + bEsc(srcs.slice(0, 4).join(', '))
+      : 'The stories behind this pattern are no longer in the feed.'}</div>`;
+    return;
+  }
+  host.innerHTML = rows.map((r, i) => `
+    <div class="xp-why" onclick="xpConnArtTap(${i})">
+      <i class="fa-solid fa-arrow-right ar"></i>
+      <div class="tx">${bEsc(r.t)}<small>${bEsc(r.s)}</small></div></div>`).join('');
+  host._rows = rows;
+}
+
+function xpConnArtTap(i) {
+  const h = document.getElementById('xp-cn-arts');
+  const r = h && h._rows && h._rows[i];
+  if (r && r.art) { closeEntity(); openArticle(r.art); }
+}
+
+function xpConnAll() {
+  if (typeof navTo === 'function') { try { return navTo('spie'); } catch (e) {} }
+}
 
 // ── 2. category rail — icon tiles ───────────────────────────────────────────
 // The named-tab chips are replaced by the tiles: same categories, the soft
