@@ -2864,6 +2864,90 @@ async def admin_replay_signals(
             "hint": "poll this same URL for progress"}
 
 
+# The entity cleanup in flight.
+_clean_task: Optional[asyncio.Task] = None
+_clean_result: dict = {}
+
+
+def _entity_cleanup():
+    """The engine's entity_cleanup worker, imported by path on first use."""
+    import sys as _sys
+    engine_root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sherrbyte")
+    if engine_root not in _sys.path:
+        _sys.path.insert(0, engine_root)
+    from app.workers import entity_cleanup
+    return entity_cleanup
+
+
+async def _run_entity_cleanup(dry_run: bool, days: int) -> None:
+    global _clean_result
+    try:
+        pool = await get_spie_pool()
+        if pool is None:
+            _clean_result = {"ok": False, "error": "engine Postgres not reachable"}
+            return
+        async with pool.acquire() as conn:
+            result = await _entity_cleanup().run(conn, dry_run=dry_run, days=days)
+        _clean_result = {"ok": True, **result}
+        log.info("[ENTITIES] cleanup: %s",
+                 {k: v for k, v in result.items() if not k.endswith("examples")})
+    except Exception as e:
+        _clean_result = {"ok": False, "error": f"{type(e).__name__}: {e}"}
+        log.error("[ENTITIES] cleanup failed: %s", e, exc_info=True)
+
+
+@app.get("/admin/clean-entities")
+async def admin_clean_entities(
+    x_admin_token: str = Header(""),
+    token: str = Query(""),
+    dry_run: int = Query(1),
+    days: int = Query(90, ge=1, le=3650),
+    restart: int = Query(0),
+):
+    """Re-apply the current resolver to entities already in the graph.
+
+    Tightening extraction only affects NEW mentions — everything already stored
+    keeps whatever the old rules produced, which is why /patterns still shows
+    "India's" beside "India" and "Moreover" as an entity. This merges the
+    duplicates, drops the junk, rebuilds co-occurrence from the corrected
+    signals, and prunes the insights that collapse to a single entity.
+
+    DRY RUN BY DEFAULT — it reports what would merge and what would be dropped
+    without touching anything. Pass &dry_run=0 to apply, once the lists look
+    right. Applying is destructive: merged and junk entities are deleted, and
+    the insights that referenced only those are pruned.
+
+        GET /admin/clean-entities?token=...              -> what would change
+        GET /admin/clean-entities?token=...&dry_run=0    -> apply
+        GET /admin/clean-entities?token=...&restart=1    -> run again
+
+    Idempotent: a second apply finds nothing to merge and nothing to drop.
+    """
+    _check_admin(x_admin_token or token)
+    global _clean_task, _clean_result
+
+    ec = _entity_cleanup()
+    running = _clean_task is not None and not _clean_task.done()
+
+    if running and not restart:
+        return {"status": "running", "progress": ec.progress()}
+
+    if _clean_task is not None and not running and not restart:
+        return {"status": "complete", "progress": ec.progress(),
+                "result": _clean_result}
+
+    if not SHERR_I_DATABASE_URL:
+        return {"status": "unconfigured",
+                "detail": "neither DATABASE_URL nor SHERR_I_DATABASE_URL is set."}
+
+    if running and restart:
+        _clean_task.cancel()
+    _clean_result = {}
+    _clean_task = asyncio.create_task(_run_entity_cleanup(bool(dry_run), days))
+    return {"status": "started", "dry_run": bool(dry_run), "days": days,
+            "hint": "poll this same URL; dry_run=0 applies"}
+
+
 @app.get("/admin/sherr-i-doctor")
 async def admin_sherr_i_doctor(
     x_admin_token: str = Header(""),
