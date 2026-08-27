@@ -13,19 +13,25 @@ from __future__ import annotations
 
 import logging
 
-from app.config import settings
-from app.db import db, run_migrations
-
 log = logging.getLogger("sherbyte.worker")
+
+# app.config and app.db are imported inside the functions that use them, not at
+# package level. Importing this package is what a caller does to reach ONE
+# worker, and a package-level `from app.config import settings` makes that pull
+# pydantic-settings — which the ROOT service does not ship. Keeping it lazy is
+# what lets main.py's /admin/replay-signals import app.workers.market_signals
+# and call its backfill directly, instead of the endpoint carrying its own copy
+# of the Signal shape. Both names are only ever used inside functions anyway.
 
 
 async def bootstrap() -> None:
+    from app.db import db, run_migrations
     await db.connect()
     await run_migrations()
 
 
 async def teardown() -> None:
-    from app.db import close_redis
+    from app.db import close_redis, db
     await close_redis()
     await db.disconnect()
 
@@ -43,6 +49,8 @@ def _arq_settings():
     """Build ARQ WorkerSettings lazily (arq import is optional for cron-only use)."""
     from arq import cron
     from arq.connections import RedisSettings
+
+    from app.config import settings
 
     from app.workers.als_worker import run as als_run
     from app.workers.embed_worker import run as embed_run
