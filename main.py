@@ -2770,6 +2770,100 @@ async def admin_backfill_ticks(
             "hint": "poll this same URL for progress"}
 
 
+# The signal replay in flight. Same one-at-a-time rule as the ticks backfill:
+# two concurrent runs would race the same delete-then-insert window.
+_replay_task: Optional[asyncio.Task] = None
+_replay_result: dict = {}
+
+
+def _market_signals():
+    """The engine's market_signals worker, imported by path on first use.
+
+    The endpoint runs THE WORKER — not a copy of it. A second implementation of
+    the Signal shape here is the one thing that must not exist: a different
+    entity name, source_id or ref_id and the replayed history resolves to
+    different entities than the daily job's, so the detector sees two shallow
+    series instead of one deep one.
+    """
+    import sys as _sys
+    engine_root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sherrbyte")
+    if engine_root not in _sys.path:
+        _sys.path.insert(0, engine_root)
+    from app.workers import market_signals
+    return market_signals
+
+
+async def _run_signal_replay(days: int) -> None:
+    global _replay_result
+    try:
+        pool = await get_spie_pool()
+        if pool is None:
+            _replay_result = {"ok": False, "error": "engine Postgres not reachable"}
+            return
+        # The pool this app already holds, rather than opening the engine's own —
+        # backfill_from_ticks takes any async context-manager factory.
+        result = await _market_signals().backfill_from_ticks(
+            days=days, conn_factory=pool.acquire)
+        _replay_result = {"ok": True, **result}
+        log.info("[REPLAY] market signals: %s", result)
+    except Exception as e:
+        _replay_result = {"ok": False, "error": f"{type(e).__name__}: {e}"}
+        log.error("[REPLAY] market signal replay failed: %s", e, exc_info=True)
+
+
+@app.get("/admin/replay-signals")
+async def admin_replay_signals(
+    x_admin_token: str = Header(""),
+    token: str = Query(""),
+    days: int = Query(90, ge=1, le=3650),
+    restart: int = Query(0),
+):
+    """Replay sherrbyte_app.market_ticks into domain_signals as domain='market'.
+
+    The endpoint form of `python -m app.workers.market_signals --from-ticks`,
+    for the same reason /admin/backfill-ticks exists: there is no shell on the
+    deployment, and GitHub Actions cannot reach the database — but Render's
+    DATABASE_URL can, which is how the tick rows got there in the first place.
+
+    Runs the worker's own backfill_from_ticks() over the pool this app already
+    holds. Starts on the first call and returns immediately; poll the same URL.
+
+        GET /admin/replay-signals?token=...            -> {"status": "started"}
+        GET /admin/replay-signals?token=...            -> {"status": "running", ...}
+        GET /admin/replay-signals?token=...            -> {"status": "complete", ...}
+        GET /admin/replay-signals?token=...&restart=1  -> run again
+        GET /admin/replay-signals?token=...&days=30
+
+    Idempotent: every replayed day is deleted and re-inserted by ref_id, so a
+    second run over the same window replaces rather than duplicates.
+    """
+    _check_admin(x_admin_token or token)          # ?token= for the address bar
+    global _replay_task, _replay_result
+
+    ms = _market_signals()
+    running = _replay_task is not None and not _replay_task.done()
+
+    if running and not restart:
+        return {"status": "running", "progress": ms.progress(),
+                "hint": "poll this URL; the result appears here when it finishes"}
+
+    if _replay_task is not None and not running and not restart:
+        return {"status": "complete", "progress": ms.progress(),
+                "result": _replay_result}
+
+    if not SHERR_I_DATABASE_URL:
+        return {"status": "unconfigured",
+                "detail": "neither DATABASE_URL nor SHERR_I_DATABASE_URL is set."}
+
+    if running and restart:
+        _replay_task.cancel()
+    _replay_result = {}
+    _replay_task = asyncio.create_task(_run_signal_replay(days))
+    return {"status": "started", "days": days,
+            "instruments": len(ms._TICK_SOURCES),
+            "hint": "poll this same URL for progress"}
+
+
 @app.get("/admin/sherr-i-doctor")
 async def admin_sherr_i_doctor(
     x_admin_token: str = Header(""),

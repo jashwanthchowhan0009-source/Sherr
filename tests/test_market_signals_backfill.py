@@ -96,7 +96,10 @@ def test_the_six_day_gate_is_reported_not_left_to_the_caller_to_work_out():
 
 
 def test_a_missing_price_store_is_reported_with_the_fix_not_as_a_crash():
-    """The common first-run state: the flag is used before the ticks backfill."""
+    """The common first-run state: the flag is used before the ticks backfill.
+
+    Injected through conn_factory rather than by patching the engine's pool —
+    the same seam /admin/replay-signals uses to pass the pool main.py holds."""
     import asyncio
 
     class _Conn:
@@ -107,11 +110,6 @@ def test_a_missing_price_store_is_reported_with_the_fix_not_as_a_crash():
         async def __aenter__(self): return _Conn()
         async def __aexit__(self, *a): return False
 
-    original = ms.db.acquire
-    ms.db.acquire = lambda: _Acquire()
-    try:
-        out = asyncio.run(ms.backfill_from_ticks(days=90))
-    finally:
-        ms.db.acquire = original
+    out = asyncio.run(ms.backfill_from_ticks(days=90, conn_factory=lambda: _Acquire()))
     assert out["written"] == 0
     assert "backfill_ticks" in out["detail"]

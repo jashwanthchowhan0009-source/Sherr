@@ -35,13 +35,40 @@ import argparse
 import asyncio
 import json
 import logging
+import time
 from datetime import datetime, timezone
 
 import httpx
 
-from app.db import db
-
 log = logging.getLogger("sherbyte.worker.market_signals")
+
+
+def _db():
+    """The engine's pool, imported on first use rather than at module import.
+
+    `from app.db import db` pulls app.config, which needs pydantic-settings —
+    not in the ROOT service's requirements.txt. Keeping it lazy is what lets
+    main.py's /admin/replay-signals import this module and call
+    backfill_from_ticks() with a connection of its own, instead of the endpoint
+    reimplementing the Signal shape (which is the whole thing that must not
+    drift between the two paths).
+    """
+    from app.db import db
+    return db
+
+
+# Live state of the replay in flight, so a caller with no shell can poll it.
+# Same shape as market_ticks.progress(). Reset at the start of every run.
+PROGRESS: dict = {}
+
+
+def progress() -> dict:
+    """A snapshot of the replay in flight (or the last one). Empty before any."""
+    p = dict(PROGRESS)
+    if p.get("started_at"):
+        end = p.get("finished_at") or time.time()
+        p["elapsed_s"] = round(end - p["started_at"], 1)
+    return p
 
 # (symbol, display name, asset class). Display names double as entity names, so they
 # are chosen to be distinctive — the junk filter drops bare common nouns.
@@ -149,6 +176,7 @@ async def run(dry_run: bool = False) -> dict:
                 "quotes": [{"name": q["name"], "change_pct": round(q["change_pct"], 2)}
                            for q in quotes]}
 
+    db = _db()
     async with db.acquire() as conn:
         # Idempotent per day: drop today's rows for these instruments first.
         await conn.execute(
@@ -181,6 +209,9 @@ _TICK_SOURCES: dict[str, tuple[str, str, str]] = {
     **{cid: (cid.upper(), name, "crypto") for cid, name in CRYPTO.items()},
 }
 
+# Chunk size for the persist loop — only so a poller sees the counter move.
+_CHUNK = 100
+
 _TICKS_SQL = """
     SELECT symbol, ts, change_24h
       FROM sherrbyte_app.market_ticks
@@ -191,7 +222,8 @@ _TICKS_SQL = """
 """
 
 
-async def backfill_from_ticks(days: int = 90, dry_run: bool = False) -> dict:
+async def backfill_from_ticks(days: int = 90, dry_run: bool = False,
+                              conn_factory=None) -> dict:
     """Replay stored daily closes as domain='market' signals.
 
     Same Signal shape, same ref_id, same delete-then-insert as run(), so the
@@ -201,76 +233,107 @@ async def backfill_from_ticks(days: int = 90, dry_run: bool = False) -> dict:
     Rows with change_24h IS NULL are skipped rather than treated as flat: that is
     the first bar of a series (no previous close) or an unrepresentable print,
     and a fabricated 0.0% would read to the detector as a genuinely flat day.
+
+    `conn_factory` is an async context-manager factory (db.acquire, or an
+    asyncpg pool's .acquire). It defaults to the engine's own pool; main.py's
+    /admin/replay-signals passes the pool it already holds, so the endpoint runs
+    THIS function rather than carrying a second copy of the Signal shape.
     """
     from app.spie.knowledge.adapters.base import direction, clamp
     from app.spie.knowledge.signals import persist_signals
     from app.models.signal import Signal, SignalEntity
 
+    acquire = conn_factory or _db().acquire
     symbols = sorted(_TICK_SOURCES)
-    async with db.acquire() as conn:
-        try:
-            rows = await conn.fetch(_TICKS_SQL, symbols, str(int(days)))
-        except Exception as e:
+
+    PROGRESS.clear()
+    PROGRESS.update({"running": True, "started_at": time.time(), "finished_at": None,
+                     "phase": "reading market_ticks", "days": days, "dry_run": dry_run,
+                     "signals": 0, "written": 0})
+
+    try:
+        async with acquire() as conn:
+            try:
+                rows = await conn.fetch(_TICKS_SQL, symbols, str(int(days)))
+            except Exception as e:
+                return {"collected": 0, "written": 0,
+                        "detail": f"cannot read sherrbyte_app.market_ticks: {e} — "
+                                  f"run scripts/backfill_ticks.py first"}
+
+        PROGRESS["phase"] = "building signals"
+        sigs, per_symbol = [], {}
+        for r in rows:
+            signal_symbol, name, cls = _TICK_SOURCES[r["symbol"]]
+            pct = float(r["change_24h"])
+            day = r["ts"].astimezone(timezone.utc)
+            sigs.append(Signal(
+                entities=[SignalEntity(name=name, type="MISC")],
+                domain="market",
+                ts=day,
+                magnitude=abs(pct),
+                direction=direction(pct),
+                sentiment=None,
+                source_id=f"yahoo:{cls}",
+                credibility=0.9,
+                confidence=clamp(0.6 + min(abs(pct), 10.0) / 20.0),
+                ref_id=f"market:{signal_symbol}:{day.date().isoformat()}",
+            ))
+            per_symbol[name] = per_symbol.get(name, 0) + 1
+        PROGRESS.update({"signals": len(sigs), "per_instrument": per_symbol})
+
+        if not sigs:
             return {"collected": 0, "written": 0,
-                    "detail": f"cannot read sherrbyte_app.market_ticks: {e} — "
-                              f"run scripts/backfill_ticks.py first"}
+                    "detail": "market_ticks has no usable rows for the engine's "
+                              "instruments — run scripts/backfill_ticks.py "
+                              "(or GET /admin/backfill-ticks) first",
+                    "symbols_looked_for": symbols}
 
-    sigs, per_symbol = [], {}
-    for r in rows:
-        signal_symbol, name, cls = _TICK_SOURCES[r["symbol"]]
-        pct = float(r["change_24h"])
-        day = r["ts"].astimezone(timezone.utc)
-        sigs.append(Signal(
-            entities=[SignalEntity(name=name, type="MISC")],
-            domain="market",
-            ts=day,
-            magnitude=abs(pct),
-            direction=direction(pct),
-            sentiment=None,
-            source_id=f"yahoo:{cls}",
-            credibility=0.9,
-            confidence=clamp(0.6 + min(abs(pct), 10.0) / 20.0),
-            ref_id=f"market:{signal_symbol}:{day.date().isoformat()}",
-        ))
-        per_symbol[name] = per_symbol.get(name, 0) + 1
+        if dry_run:
+            return {"collected": len(sigs), "written": 0, "dry_run": True,
+                    "days": days, "per_instrument": per_symbol}
 
-    if not sigs:
-        return {"collected": 0, "written": 0,
-                "detail": "market_ticks has no usable rows for the engine's "
-                          "instruments — run scripts/backfill_ticks.py "
-                          "(or GET /admin/backfill-ticks) first",
-                "symbols_looked_for": symbols}
+        written = 0
+        async with acquire() as conn:
+            # Same idempotency as run(), over the whole replayed window.
+            PROGRESS["phase"] = "clearing replaced days"
+            await conn.execute(
+                "DELETE FROM domain_signals WHERE domain='market' AND ref_id = ANY($1::text[])",
+                [s.ref_id for s in sigs])
+            # Persisted in chunks purely so the counter moves for a poller;
+            # persist_signals loops one signal at a time either way.
+            PROGRESS["phase"] = "persisting"
+            for i in range(0, len(sigs), _CHUNK):
+                written += await persist_signals(
+                    conn, sigs[i:i + _CHUNK], conn_factory=acquire)
+                PROGRESS["written"] = written
 
-    if dry_run:
-        return {"collected": len(sigs), "written": 0, "dry_run": True,
-                "days": days, "per_instrument": per_symbol}
-
-    async with db.acquire() as conn:
-        # Same idempotency as run(), over the whole replayed window.
-        await conn.execute(
-            "DELETE FROM domain_signals WHERE domain='market' AND ref_id = ANY($1::text[])",
-            [s.ref_id for s in sigs])
-        written = await persist_signals(conn, sigs, conn_factory=db.acquire)
-
-    # What the detector actually gates on: distinct days per instrument.
-    depth = await db.fetch(
-        """
-        SELECT COUNT(DISTINCT (ts AT TIME ZONE 'UTC')::date) AS days
-          FROM domain_signals
-         WHERE domain='market'
-         GROUP BY entity_ids
-         ORDER BY 1 DESC
-        """)
-    deepest = int(depth[0]["days"]) if depth else 0
-    return {
-        "collected": len(sigs), "written": written, "days": days,
-        "per_instrument": per_symbol,
-        "market_signals_total": int(
-            await db.fetchval("SELECT COUNT(*) FROM domain_signals WHERE domain='market'") or 0),
-        "deepest_instrument_days": deepest,
-        # min_history + 1 in market_reaction.run().
-        "enough_for_market_reaction": deepest >= 6,
-    }
+        # What the detector actually gates on: distinct days per instrument.
+        PROGRESS["phase"] = "measuring history depth"
+        async with acquire() as conn:
+            depth = await conn.fetch(
+                """
+                SELECT COUNT(DISTINCT (ts AT TIME ZONE 'UTC')::date) AS days
+                  FROM domain_signals
+                 WHERE domain='market'
+                 GROUP BY entity_ids
+                 ORDER BY 1 DESC
+                """)
+            total = await conn.fetchval(
+                "SELECT COUNT(*) FROM domain_signals WHERE domain='market'")
+        deepest = int(depth[0]["days"]) if depth else 0
+        result = {
+            "collected": len(sigs), "written": written, "days": days,
+            "per_instrument": per_symbol,
+            "market_signals_total": int(total or 0),
+            "deepest_instrument_days": deepest,
+            # min_history + 1 in market_reaction.run().
+            "enough_for_market_reaction": deepest >= 6,
+        }
+        PROGRESS["phase"] = "done"
+        return result
+    finally:
+        PROGRESS["running"] = False
+        PROGRESS["finished_at"] = time.time()
 
 
 async def _main() -> None:
