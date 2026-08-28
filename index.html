@@ -7583,6 +7583,9 @@ function navTo(name) {
   hBrand.style.display = 'flex'; hPage.style.display = 'none'; hSearch.style.display = 'none';
 
   if (name==='explore') {
+    // A boot that landed during a Render cold start may have failed or still be
+    // in flight; retry until it has rendered once, then leave it alone.
+    if (!xpConnLoaded && typeof renderXpConn === 'function') renderXpConn();
     hBrand.style.display='none'; hPage.style.display='block'; hPage.textContent='Explore';
     hSearch.style.display='flex';
   } else if (name==='feed') {
@@ -9714,9 +9717,6 @@ async function initExploreV8() {
   renderXpHero(arts);
   renderXpMatrix(); renderXpTal(); renderXpBTick();
   renderXpGov(); renderXpAlso(); renderXpSpace(); renderXpBreak(); renderXpAi();
-  // Not awaited: /patterns is the one section whose absence should not hold up
-  // the rest of the page, and the heading stays hidden until it answers.
-  renderXpConn();
 }
 
 
@@ -9726,6 +9726,7 @@ async function initExploreV8() {
 // "engine" is shown — a demo pattern presented as a finding is worse than no
 // section at all, so anything else leaves the heading hidden.
 let xpConn = [];
+let xpConnLoaded = false;
 
 function xpConnPair(p) {
   // entities[] is resolved server-side from entity_ids. A pattern whose two ids
@@ -9747,12 +9748,26 @@ async function renderXpConn() {
   const el = document.getElementById('xp-conn');
   const hd = document.getElementById('xp-conn-hd');
   if (!el) return;
-  let d = null;
-  try { d = await api('/patterns?limit=24', { timeout: 3000 }); } catch (e) { d = null; }
+  // 30s and one retry, NOT the 2-3s the cached sections use. Those read Upstash
+  // and are expected to answer instantly; /patterns queries Postgres, and on a
+  // free Render instance the first call after a sleep also pays a cold start and
+  // an asyncpg pool connect. At 3s that aborted every time, d came back null,
+  // and the section hid itself while the rest of the page — served from cache —
+  // looked perfectly healthy.
+  let d = null, err = null;
+  for (let attempt = 0; attempt < 2 && !d; attempt++) {
+    try { d = await api('/patterns?limit=24', { timeout: 30000 }); }
+    catch (e) { err = e; if (attempt === 0) await new Promise(r => setTimeout(r, 1500)); }
+  }
 
   if (!d || d.source !== 'engine') {
     // Hidden, not "no connections found": the engine being unreachable is not a
-    // statement about the world.
+    // statement about the world. Logged, though — a silently missing section is
+    // what made this take a screenshot and three guesses to find.
+    console.info('[connections] hidden:', !d
+      ? ('/patterns did not answer — ' + (err && err.message || 'unknown'))
+      : ('source is "' + d.source + '", not "engine"'
+         + (d.detail ? ' — ' + d.detail : '')));
     el.innerHTML = ''; if (hd) hd.style.display = 'none';
     return;
   }
@@ -9762,8 +9777,14 @@ async function renderXpConn() {
     .filter(x => x.pair && x.why)
     .slice(0, 5);
 
-  if (!xpConn.length) { el.innerHTML = ''; if (hd) hd.style.display = 'none'; return; }
+  if (!xpConn.length) {
+    console.info('[connections] hidden: ' + (d.patterns || []).length +
+      ' patterns returned, none usable — every one lacked two distinct ' +
+      'entities or an explain_json.why');
+    el.innerHTML = ''; if (hd) hd.style.display = 'none'; return;
+  }
   if (hd) hd.style.display = '';
+  xpConnLoaded = true;
 
   el.innerHTML = xpConn.map((x, i) => {
     const e = x.p.explain_json || {};
@@ -10264,6 +10285,11 @@ async function loadSnapshot() {
 
 function startMarketsPolling() {
   initExploreV8();   // Explore v8
+  // Started SEPARATELY, not appended to initExploreV8's tail. Nothing awaits
+  // initExploreV8, so a throw in any of the eight renderers it runs is swallowed
+  // and everything after it silently never runs — which is exactly how this
+  // section disappeared while every section above it rendered fine.
+  renderXpConn();
   renderGlance();     // show launcher tiles immediately; badges fill in on data
   loadSnapshot();     // eleven cached sections in one request
   loadMarkets();
