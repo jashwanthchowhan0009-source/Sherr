@@ -150,3 +150,31 @@ def test_the_candidate_query_targets_the_drains_own_fingerprint():
     assert "COALESCE(reprocessed,0)=0" in q
     assert "summary_60" in q and "source_summary" in q, \
         "the rewrite needs the surviving source text, not just full_body"
+
+
+# ─── the stub the drain actually writes ──────────────────────────────────────
+def test_both_placeholder_texts_are_recognised():
+    """There are TWO stubs, written by different code paths, and the first
+    version of this module knew only ai_processor's. The one the drain actually
+    wrote across the corpus — "SherrByte has not yet published…" — classified as
+    `original`, so the audit reported a healthy corpus and the rewrite skipped
+    exactly the rows it existed to fix."""
+    import sys as _s
+    _s.path.insert(0, os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts"))
+    from publish_pending import STUB as DRAIN_STUB
+    from ai_processor import _SAFE_BODY as AI_STUB
+
+    assert bs.is_stub(DRAIN_STUB)
+    assert bs.is_stub(AI_STUB)
+    # As stored: the drain appends a credit line and a URL.
+    assert bs.classify(DRAIN_STUB + "\n\nSource: The Hindu\nhttp://x", SOURCE) == bs.STUB
+
+
+def test_the_markers_are_derived_from_the_stubs_themselves():
+    """Retyping them here is how the two desynced in the first place."""
+    import sys as _s
+    _s.path.insert(0, os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts"))
+    from publish_pending import STUB as DRAIN_STUB
+    assert any(m in " ".join(DRAIN_STUB.split()).lower() for m in bs._STUB_MARKERS)

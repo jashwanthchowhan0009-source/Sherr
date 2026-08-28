@@ -29,6 +29,8 @@ from __future__ import annotations
 
 import logging
 
+import os
+
 from app.spie.discovery.anomaly_math import ewma, mad, mad_zscore
 from app.spie.discovery.base import write_insight, names_for
 from app.spie.knowledge import instrument_map
@@ -48,6 +50,49 @@ _STORY_KEY = "COALESCE(ds.cluster_id, -ds.id)"
 # MIN_BUCKETS_FOR_Z it is not computed at all and ranking falls back to raw % change.
 MIN_BUCKETS_FOR_Z = 2
 PROVISIONAL_BASELINE_POINTS = 4
+
+# ─── what makes a move worth a card ──────────────────────────────────────────
+# There was NO significance test here. _movers returned every instrument whose
+# move was non-zero, run() took the top N by |z|, and the card said the move was
+# "unusual for this instrument" — so a 0.04% Bitcoin day reached the page
+# claiming to be unusual at z = -1.32. A NEGATIVE z means the move was SMALLER
+# than that instrument's own baseline: the card asserted the exact opposite of
+# what its own number said.
+#
+# Two ways to qualify, and a move must clear one of them:
+#
+#   z    — the move is far from this instrument's own baseline. This is the real
+#          test, and it needs a baseline worth measuring against, hence the
+#          separate minimum on baseline points. Only POSITIVE z counts; a move
+#          quieter than usual is not an anomaly.
+#   pct  — a move large in absolute terms. This is the fallback for an
+#          instrument with too little history for a z, and it is deliberately
+#          well clear of ordinary daily noise.
+#
+# Nothing qualifying is a normal, correct outcome: markets have quiet days, and
+# the page shows nothing rather than manufacturing something.
+OBSERVATION_Z_MIN = float(os.getenv("SHERR_I_OBSERVATION_Z_MIN", "2.0"))
+OBSERVATION_PCT_MIN = float(os.getenv("SHERR_I_OBSERVATION_PCT_MIN", "1.5"))
+OBSERVATION_MIN_BASELINE = int(os.getenv("SHERR_I_OBSERVATION_MIN_BASELINE", "5"))
+
+
+def is_significant(move_pct: float, z: float | None,
+                   baseline_points: int | None) -> tuple[bool, str]:
+    """Does this move deserve a card? Returns (verdict, the reason to print).
+
+    The reason is what the UI renders, so it can never disagree with the numbers
+    that produced it — the previous card text was written independently of the
+    test and said "unusual" for a move that was not.
+    """
+    pct = abs(float(move_pct or 0.0))
+    if (z is not None and z >= OBSERVATION_Z_MIN
+            and (baseline_points or 0) >= OBSERVATION_MIN_BASELINE):
+        return True, (f"{pct:.2f}% is far outside this instrument's own recent "
+                      f"range (z {z:.2f} over {baseline_points} days)")
+    if pct >= OBSERVATION_PCT_MIN:
+        return True, (f"a {pct:.2f}% move, large in absolute terms"
+                      + (f" (z {z:.2f})" if z is not None else ""))
+    return False, ""
 
 LAST_RUN: dict = {}
 
@@ -134,8 +179,12 @@ async def _movers(conn, *, history_days: int = 60) -> list[dict]:
             z = round(mad_zscore(abs(move), ewma(history, 0.3), mad(history)), 2)
             points = len(history)
 
+        significant, why_significant = is_significant(move, z, points)
+        if not significant:
+            continue
         magnitude, ranked_by = rank_key(move, z)
         movers.append({
+            "significance": why_significant,
             "type": "market_move", "entity_id": r["eid"],
             "asset_class": _asset_class(latest["source_id"]),
             "move_pct": round(move, 3), "direction": 1 if move > 0 else -1,

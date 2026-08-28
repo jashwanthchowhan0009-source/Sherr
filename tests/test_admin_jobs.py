@@ -99,11 +99,16 @@ def test_the_reprocess_refuses_to_rewrite_without_an_ai_provider(monkeypatch):
     monkeypatch.setattr(main, "get_db", lambda: _EmptyConn())
     out = main._reprocess_bodies_sync(10, 5)
     assert out["ok"] is False
-    assert "no AI provider" in out["detail"]
+    # BLOCKED, not a quiet "detail": the whole failure mode here was a corpus
+    # full of placeholders and nothing anywhere saying why nothing improved.
+    assert "NO AI PROVIDER" in out["BLOCKED"]
+    assert "GEMINI_API_KEY" in out["BLOCKED"]
+    assert out["ai"]["primary"] == "rule-based"
 
 
 class _EmptyConn:
     def execute(self, *a, **k): return self
+    def keys(self): return []
     def fetchall(self): return []
     def fetchone(self): return None
     def commit(self): pass
@@ -175,3 +180,40 @@ def test_the_detector_job_is_scheduled_after_the_market_ticks_job():
     fields = {j.id: str(j.trigger) for j in s.get_jobs()}
     assert "hour='1', minute='30'" in fields["market_ticks_daily"]
     assert "hour='2', minute='10'" in fields["sherr_i_detectors"]
+
+
+# ─── observation significance (problem 3) ────────────────────────────────────
+def test_a_trivial_move_never_produces_an_observation_card():
+    """The exact card that shipped: "Bitcoin rose 0.04%" labelled "unusual for
+    this instrument (z -1.32)". A negative z means the move was QUIETER than the
+    instrument's own baseline — the card asserted the opposite of its number."""
+    sys.path.insert(0, os.path.join(ROOT, "sherrbyte"))
+    from app.spie.discovery.observation import is_significant
+    ok, why = is_significant(0.04, -1.32, 30)
+    assert ok is False and why == ""
+
+
+def test_a_high_z_needs_a_baseline_worth_measuring_against():
+    """A z computed from two prior days is arithmetic, not evidence."""
+    sys.path.insert(0, os.path.join(ROOT, "sherrbyte"))
+    from app.spie.discovery.observation import is_significant
+    assert is_significant(1.1, 3.1, 2)[0] is False
+    assert is_significant(1.1, 3.1, 30)[0] is True
+
+
+def test_a_large_move_qualifies_without_any_baseline():
+    """The fallback for an instrument with too little history for a z."""
+    sys.path.insert(0, os.path.join(ROOT, "sherrbyte"))
+    from app.spie.discovery.observation import is_significant
+    ok, why = is_significant(-2.8, None, None)
+    assert ok is True and "2.80%" in why
+
+
+def test_the_card_text_is_the_detectors_own_reason():
+    """The UI used to write its own sentence, independently of the test that
+    made the card — which is how the words came to contradict the numbers."""
+    ok, why = None, None
+    sys.path.insert(0, os.path.join(ROOT, "sherrbyte"))
+    from app.spie.discovery.observation import is_significant
+    ok, why = is_significant(1.1, 3.1, 30)
+    assert ok and "z 3.10" in why and "30 days" in why

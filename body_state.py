@@ -47,12 +47,59 @@ STATES = (ORIGINAL, STUB, SOURCE_TEXT, EMPTY)
 # Rewriteable states, in the order a report should read them.
 NEEDS_REWRITE = (SOURCE_TEXT, STUB, EMPTY)
 
-# Substrings unique to the placeholder, matched rather than compared whole: the
-# drain appends a credit line and a URL, and ai_processor's copy differs from
-# main.py's by a sentence. Both start with the same clause.
-_STUB_MARKERS = (
+# THE PLACEHOLDER TEXTS, TAKEN FROM THEIR SOURCE OF TRUTH.
+#
+# There are two, written by different code paths, and hardcoding one of them
+# here is what made the first version of this module useless in production: it
+# knew ai_processor's "Sherr AI is preparing…" and had never heard of the
+# drain's "SherrByte has not yet published…" — which is the one the drain
+# actually wrote across the corpus. Every one of those rows classified as
+# `original`, the audit reported a healthy corpus, and the rewrite pass skipped
+# exactly the rows it existed to fix.
+#
+# So they are imported, not retyped. A third stub added anywhere else still
+# needs adding here, but an EDIT to either of these can no longer silently
+# desync the classifier from the thing it classifies.
+def _stub_sources() -> list:
+    out = []
+    try:
+        from ai_processor import _SAFE_BODY, _SAFE_SUMMARY
+        out += [_SAFE_BODY, _SAFE_SUMMARY]
+    except Exception:                                       # pragma: no cover
+        pass
+    try:
+        import os as _os
+        import sys as _sys
+        _scripts = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "scripts")
+        if _scripts not in _sys.path:
+            _sys.path.insert(0, _scripts)
+        from publish_pending import STUB as _DRAIN_STUB
+        out.append(_DRAIN_STUB)
+    except Exception:                                       # pragma: no cover
+        pass
+    return [t for t in out if t]
+
+
+def _markers_from(texts: list) -> tuple:
+    """The first clause of each stub, lowercased. Matched as a substring because
+    the drain appends a credit line and a URL, so nothing is ever an exact
+    match, and because these sentences get reworded more often than this file
+    gets revisited."""
+    out = []
+    for t in texts:
+        head = " ".join(t.split())[:60].lower().strip()
+        if head:
+            out.append(head)
+    return tuple(out)
+
+
+# Literal fallbacks: if an import above ever fails, the classifier must still
+# recognise both known stubs rather than quietly passing them as original.
+_STUB_MARKERS = _markers_from(_stub_sources()) + (
     "sherr ai is preparing",
+    "sherrbyte has not yet published",
     "will appear here shortly",
+    "an original sherrbyte summary will replace this note",
 )
 
 # The aggregator credit the drain appends. Stripped before measuring, so a stub
