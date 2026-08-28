@@ -36,6 +36,10 @@ from text_utils import clean_html_fragments, title_fingerprint
 from originality import (
     MAX_CONTIGUOUS_RUN, MAX_NGRAM_OVERLAP, headline_is_original,
     originality_check)
+# What is actually in a body, and what a rewrite can be written FROM. The drain
+# overwrites full_body with a stub, so feeding full_body to the AI pass makes it
+# summarize its own placeholder — see body_state.py.
+import body_state
 
 # Which imagery the feed serves: stock | thumbnail | art. See image_service.py.
 IMAGE_MODE = (os.getenv("IMAGE_MODE") or "thumbnail").strip().lower()
@@ -90,6 +94,11 @@ COLLECT_INTERVAL_MIN = int(os.getenv("COLLECT_INTERVAL_MIN", "25"))
 # many. Set PENDING_DRAIN_THRESHOLD to a positive number to restore a floor, or
 # leave it at 0 for none. DISABLE_PENDING_DRAIN=1 turns the pass off entirely.
 PENDING_DRAIN_THRESHOLD = int(os.getenv("PENDING_DRAIN_THRESHOLD", "0"))
+# How many bodies the nightly rewrite sweep attempts. Bounded because the free
+# Gemini/Groq tiers are rate limited and a free Render instance should not spend
+# its whole night on AI calls; a full corpus pass is several nights, or several
+# calls to /admin/reprocess-bodies.
+BODY_REPROCESS_NIGHTLY = int(os.getenv("BODY_REPROCESS_NIGHTLY", "150"))
 # How long boot will wait for the drain before carrying on without it. The
 # server does not accept connections until lifespan returns, so this is also
 # the longest the health check can be left unable to connect.
@@ -1194,7 +1203,8 @@ async def run_ai_batch(conn):
         # source_name and url are here for the aggregator fallback: a credit
         # line and an outbound link are what make it aggregation rather than
         # a bare reproduction, so they are not optional.
-        "SELECT id, headline, source_headline, full_body, pillar_id, micro_tags, "
+        "SELECT id, headline, source_headline, full_body, summary_60, "
+        "source_summary, pillar_id, micro_tags, "
         "source_name, url FROM articles WHERE ai_processed=0 "
         "ORDER BY collected_at DESC LIMIT ?",
         (AI_BATCH_SIZE,)
@@ -1213,7 +1223,12 @@ async def run_ai_batch(conn):
         fallback_slug = PILLARS.get(row["pillar_id"], PILLARS[3])["slug"]
         batch_input.append({
             "title": row["headline"],
-            "body": row["full_body"],
+            # NOT row["full_body"]: on a row the startup drain already released,
+            # that is our own stub, and summarizing a stub yields another stub.
+            # source_material() prefers the longest surviving publisher text.
+            "body": body_state.source_material(
+                row["headline"], row["summary_60"], row["source_summary"],
+                row["full_body"]),
             "fallback_category": fallback_slug,
         })
 
@@ -1537,6 +1552,28 @@ async def lifespan(app: FastAPI):
         market_ticks.register_jobs(scheduler)
     except Exception as e:
         log.error("market ticks job not started: %s", e)
+    # The Sherr-I detector pass, in THIS process. The engine's own scheduler is
+    # in sherrbyte/app/main.py, which render.yaml does not start, and the GitHub
+    # Actions cron cannot reach the database — so nothing had ever run the
+    # detectors in production and every insight carried the seed date. 02:10 UTC
+    # is after market_ticks_daily (01:30), which is one of the inputs.
+    try:
+        scheduler.add_job(detectors_job, "cron", hour=2, minute=10,
+                          id="sherr_i_detectors", replace_existing=True,
+                          max_instances=1)
+        log.info("Sherr-I detectors scheduled @ 02:10 UTC")
+    except Exception as e:
+        log.error("detector job not started: %s", e)
+    # Bodies still holding the drain's stub or the publisher's own text. Nightly
+    # and bounded; /admin/reprocess-bodies is the same pass on demand.
+    try:
+        scheduler.add_job(body_reprocess_job, "cron", hour=3, minute=20,
+                          id="body_reprocess", replace_existing=True,
+                          max_instances=1)
+        log.info("Body reprocess scheduled @ 03:20 UTC (%d/run)",
+                 BODY_REPROCESS_NIGHTLY)
+    except Exception as e:
+        log.error("body reprocess job not started: %s", e)
     scheduler.start()
     log.info("Scheduler: collect every %d min", COLLECT_INTERVAL_MIN)
     # Inline, because the point is that the feed is servable by the time the first
@@ -1561,6 +1598,19 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         log.error("[DRAIN] boot drain failed: %s", e)
     log.info("AI providers: %s", available_providers())
+    # One census at boot: "how many articles still show a stub" is the number
+    # this deployment has had no way to see.
+    try:
+        _c = get_db()
+        try:
+            _a = body_state.audit(_c)
+            log.info("[BODY] census: %s | needs rewrite: %d of %d published",
+                     _a["published_by_state"], _a["needs_rewrite"],
+                     sum(_a["published_by_state"].values()))
+        finally:
+            _c.close()
+    except Exception as e:
+        log.warning("[BODY] census failed: %s", e)
     yield
     scheduler.shutdown()
 
@@ -2506,7 +2556,8 @@ async def admin_reprocess(
         # source_name/url: same reason as the batch pass — the aggregator
         # fallback needs a credit line and a link, and _apply_aggregator_posture
         # reads them off this row.
-        "SELECT id, headline, full_body, pillar_id, micro_tags, source_name, url "
+        "SELECT id, headline, full_body, summary_60, source_summary, pillar_id, "
+        "micro_tags, source_name, url "
         "FROM articles WHERE ai_processed=1 AND status='published' "
         "AND COALESCE(reprocessed,0)=0 ORDER BY id ASC LIMIT ?",
         (limit,)
@@ -2519,7 +2570,9 @@ async def admin_reprocess(
 
     batch_input = [{
         "title": r["headline"],
-        "body": r["full_body"],
+        # Same reason as run_ai_batch: full_body on a drained row is our stub.
+        "body": body_state.source_material(
+            r["headline"], r["summary_60"], r["source_summary"], r["full_body"]),
         "fallback_category": PILLARS.get(r["pillar_id"], PILLARS[3])["slug"],
     } for r in rows]
 
@@ -2946,6 +2999,348 @@ async def admin_clean_entities(
     _clean_task = asyncio.create_task(_run_entity_cleanup(bool(dry_run), days))
     return {"status": "started", "dry_run": bool(dry_run), "days": days,
             "hint": "poll this same URL; dry_run=0 applies"}
+
+
+# ─── body reprocess: replace stubs and source text with our own words ────────
+_body_task: Optional[asyncio.Task] = None
+_body_result: dict = {}
+_body_progress: dict = {}
+
+
+def body_progress() -> dict:
+    p = dict(_body_progress)
+    if p.get("started_at"):
+        p["elapsed_s"] = round((p.get("finished_at") or time.time()) - p["started_at"], 1)
+    return p
+
+
+def _reprocess_bodies_sync(limit: int, batch: int) -> dict:
+    """Rewrite published rows whose body is a stub, the publisher's text, or empty.
+
+    Runs the SAME AI pass the pipeline uses, over the surviving source text — not
+    over full_body, which on a drained row is the stub itself.
+
+    Synchronous because get_db()/pgcompat is a sync driver; the caller runs it in
+    an executor so the event loop keeps serving.
+    """
+    conn = get_db()
+    try:
+        before = body_state.audit(conn)
+        _body_progress.update({"phase": "auditing", "before": before["published_by_state"]})
+        log.info("[BODY] before: %s", before["published_by_state"])
+
+        providers = available_providers()
+        if providers["primary"] == "rule-based":
+            return {"ok": False, "before": before,
+                    "detail": "no AI provider configured — set GEMINI_API_KEY or "
+                              "GROQ_API_KEY; refusing to rewrite without one"}
+
+        done = failed = skipped = 0
+        # Every id this run has already tried. A row that fails the originality
+        # gate keeps reprocessed=0 ON PURPOSE — so the next run retries it — but
+        # that means the candidate query keeps returning it, and without this the
+        # loop re-selects the same failing batch forever. Progress cannot be
+        # measured by done+skipped alone for the same reason.
+        attempted: set = set()
+        _body_progress.update({"phase": "rewriting", "done": 0, "target": limit})
+        while len(attempted) < limit:
+            take = min(batch, limit - len(attempted))
+            rows = [r for r in conn.execute(
+                        body_state.SELECT_NEEDING_REWRITE, (take + len(attempted),)
+                    ).fetchall() if r["id"] not in attempted][:take]
+            if not rows:
+                break
+            attempted.update(r["id"] for r in rows)
+
+            # reprocessed=0 is only the candidate marker; the body itself decides.
+            work = [r for r in rows if body_state.classify_row(r) in body_state.NEEDS_REWRITE]
+            for r in rows:
+                if r not in work:
+                    # Already original — flag it so the query stops returning it.
+                    conn.execute("UPDATE articles SET reprocessed=1 WHERE id=?", (r["id"],))
+                    skipped += 1
+            if not work:
+                conn.commit()
+                continue
+
+            batch_input = [{
+                "title": r["headline"],
+                "body": body_state.source_material(
+                    r["headline"], r["summary_60"], r["source_summary"], r["full_body"]),
+                "fallback_category": PILLARS.get(r["pillar_id"], PILLARS[3])["slug"],
+            } for r in work]
+
+            try:
+                results = asyncio.run(process_batch(batch_input, concurrency=AI_CONCURRENCY))
+            except Exception as e:
+                log.error("[BODY] batch failed: %s", e)
+                failed += len(work)
+                break
+
+            for row, result in zip(work, results):
+                try:
+                    # A rewrite that came back as the stub is not a rewrite. Leave
+                    # the row unflagged so the next run tries it again rather than
+                    # marking it done with the same placeholder.
+                    if body_state.is_stub(result.get("full_body", "")):
+                        failed += 1
+                        continue
+                    src_head = row["source_headline"] or row["headline"] or ""
+                    source = body_state.source_material(
+                        row["headline"], row["summary_60"], row["source_summary"], "")
+
+                    # THE BODY AND THE HEADLINE ARE GATED SEPARATELY HERE.
+                    #
+                    # _gate_article answers "may this article be published at
+                    # all", and it parks the row when EITHER half fails. That is
+                    # right at publish time. It is wrong for this pass: the row is
+                    # already published, and refusing to replace a stub body
+                    # because the rewritten headline happened to resemble the
+                    # publisher's leaves the reader looking at the placeholder —
+                    # the exact failure this exists to clear.
+                    #
+                    # So: the body is written whenever it passes the originality
+                    # check, and the new headline is taken only if it is itself
+                    # original. Neither is ever the publisher's text.
+                    body_ok, body_m = originality_check(result["full_body"], source)
+                    head_ok, head_m = headline_is_original(
+                        result["refined_title"], src_head)
+                    audit = {"pass": "body_reprocess", "body": body_m,
+                             "headline": head_m, "headline_replaced": bool(head_ok),
+                             "at": datetime.now(timezone.utc).isoformat()}
+                    if not body_ok:
+                        # The rewrite reproduced the source. Left unflagged so the
+                        # next run tries again; never written.
+                        audit["status"] = "rejected_body_overlap"
+                        failed += 1
+                        continue
+                    headline = result["refined_title"] if head_ok else row["headline"]
+                    audit["status"] = "published"
+                    conn.execute("""
+                        UPDATE articles SET headline=?, summary_60=?, full_body=?,
+                            ai_processed=1, reprocessed=1, status='published',
+                            originality_json=?, originality_overlap=?,
+                            originality_run=?, originality_checked_at=?
+                        WHERE id=?""", (
+                        headline, result["summary"], result["full_body"],
+                        json.dumps(audit), body_m["overlap"], body_m["longest_run"],
+                        datetime.now(timezone.utc).isoformat(), row["id"]))
+                    done += 1
+                except Exception as e:
+                    log.warning("[BODY] update failed for id %s: %s", row["id"], e)
+                    failed += 1
+            conn.commit()
+            _body_progress.update({"done": done, "failed": failed,
+                                   "skipped": skipped, "attempted": len(attempted)})
+
+        after = body_state.audit(conn)
+        log.info("[BODY] rewrote %d, failed %d, already-original %d | after: %s",
+                 done, failed, skipped, after["published_by_state"])
+        return {"ok": True, "rewritten": done, "failed": failed,
+                "already_original": skipped, "attempted": len(attempted),
+                "before": before["published_by_state"],
+                "after": after["published_by_state"],
+                "remaining": after["needs_rewrite"]}
+    finally:
+        conn.close()
+
+
+async def _run_body_reprocess(limit: int, batch: int) -> None:
+    global _body_result
+    _body_progress.clear()
+    _body_progress.update({"running": True, "started_at": time.time(),
+                           "finished_at": None, "phase": "starting"})
+    try:
+        _body_result = await asyncio.get_event_loop().run_in_executor(
+            None, _reprocess_bodies_sync, limit, batch)
+    except Exception as e:
+        _body_result = {"ok": False, "error": f"{type(e).__name__}: {e}"}
+        log.error("[BODY] reprocess failed: %s", e, exc_info=True)
+    finally:
+        _body_progress["running"] = False
+        _body_progress["finished_at"] = time.time()
+
+
+async def body_reprocess_job() -> None:
+    """Scheduled sweep. Bounded per run so a free-tier instance is not spending
+    its whole night on AI calls, and so the free AI tiers are not blown."""
+    if _body_task is not None and not _body_task.done():
+        return
+    try:
+        await _run_body_reprocess(BODY_REPROCESS_NIGHTLY, AI_BATCH_SIZE)
+    except Exception as e:
+        log.error("[BODY] nightly job failed: %s", e, exc_info=True)
+
+
+@app.get("/admin/body-audit")
+async def admin_body_audit(x_admin_token: str = Header(""), token: str = Query("")):
+    """What is actually in every article body, counted by state.
+
+    original    — AI-written, ours
+    stub        — "Sherr AI is preparing…", the startup drain's placeholder
+    source_text — the publisher's own prose (a live copyright exposure)
+    empty       — nothing, or too short to be a summary
+
+    Read-only. This is the number to watch while /admin/reprocess-bodies runs.
+    """
+    _check_admin(x_admin_token or token)
+    conn = get_db()
+    try:
+        return body_state.audit(conn)
+    finally:
+        conn.close()
+
+
+@app.get("/admin/reprocess-bodies")
+async def admin_reprocess_bodies(
+    x_admin_token: str = Header(""),
+    token: str = Query(""),
+    limit: int = Query(200, ge=1, le=5000),
+    batch: int = Query(0, ge=0, le=200),
+    restart: int = Query(0),
+):
+    """Rewrite published bodies that are still a stub or the publisher's text.
+
+    The startup drain released the corpus with a placeholder body AND set
+    ai_processed=1 — the very column run_ai_batch filters on — so those rows
+    became permanently invisible to the pass meant to rewrite them. This is that
+    pass, selecting on what the body CONTAINS rather than on the flag.
+
+        GET /admin/reprocess-bodies?token=...            -> {"status": "started"}
+        GET /admin/reprocess-bodies?token=...            -> progress
+        GET /admin/reprocess-bodies?token=...&limit=500  -> a bigger sweep
+        GET /admin/body-audit?token=...                  -> counts, any time
+
+    Bounded per call: the free AI tiers are rate limited, so a full corpus pass
+    is several runs rather than one. Also runs nightly on its own.
+    """
+    _check_admin(x_admin_token or token)
+    global _body_task, _body_result
+
+    running = _body_task is not None and not _body_task.done()
+    if running and not restart:
+        return {"status": "running", "progress": body_progress()}
+    if _body_task is not None and not running and not restart:
+        return {"status": "complete", "progress": body_progress(),
+                "result": _body_result}
+
+    if running and restart:
+        _body_task.cancel()
+    _body_result = {}
+    _body_task = asyncio.create_task(
+        _run_body_reprocess(limit, batch or AI_BATCH_SIZE))
+    return {"status": "started", "limit": limit,
+            "hint": "poll this URL; /admin/body-audit shows the counts"}
+
+
+# ─── detectors on demand ─────────────────────────────────────────────────────
+_detect_task: Optional[asyncio.Task] = None
+_detect_result: dict = {}
+
+
+async def _run_detectors(only: str) -> None:
+    global _detect_result
+    try:
+        pool = await get_spie_pool()
+        if pool is None:
+            _detect_result = {"ok": False, "error": "engine Postgres not reachable"}
+            return
+        import sys as _sys
+        engine_root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sherrbyte")
+        if engine_root not in _sys.path:
+            _sys.path.insert(0, engine_root)
+        # app.workers.detectors imports app.db (pydantic-settings, not shipped
+        # here), so the REGISTRY is driven directly — the detectors themselves
+        # take a connection and depend on nothing but stdlib.
+        from app.spie.discovery import REGISTRY
+        from app.spie.graph import cooccurrence
+        from app.spie.decision import rules as decision_rules
+
+        out: dict = {}
+        async with pool.acquire() as conn:
+            try:
+                await cooccurrence.compute_npmi(conn)
+            except Exception as e:
+                log.warning("[DETECT] npmi refresh failed: %s", e)
+            for name, fn in REGISTRY.items():
+                if only and name != only:
+                    continue
+                try:
+                    out[name] = await fn(conn)
+                except Exception as e:
+                    log.error("[DETECT] %s failed: %s", name, e, exc_info=True)
+                    out[name] = -1
+            if not only or only == "cross_domain_chain":
+                try:
+                    out["cross_domain_chain"] = await decision_rules.run(conn)
+                except Exception as e:
+                    log.error("[DETECT] chain rules failed: %s", e)
+                    out["cross_domain_chain"] = -1
+            if not only or only == "reasoned":
+                try:
+                    from app.spie.reasoning import engine as reasoning_engine
+                    out["reasoned"] = await reasoning_engine.run(conn)
+                except Exception as e:
+                    log.error("[DETECT] reasoning failed: %s", e)
+                    out["reasoned"] = -1
+            out["insights_total"] = int(
+                await conn.fetchval("SELECT COUNT(*) FROM insights") or 0)
+        _detect_result = {"ok": True, **out}
+        log.info("[DETECT] %s", out)
+    except Exception as e:
+        _detect_result = {"ok": False, "error": f"{type(e).__name__}: {e}"}
+        log.error("[DETECT] run failed: %s", e, exc_info=True)
+
+
+async def detectors_job() -> None:
+    """Nightly detector pass, in-process.
+
+    The engine's own scheduler lives in sherrbyte/app/main.py, which render.yaml
+    does not start, and the GitHub Actions cron cannot reach the database. So the
+    detectors had never run in production: every insight was dated the day the
+    corpus was seeded.
+    """
+    if _detect_task is not None and not _detect_task.done():
+        return
+    try:
+        await _run_detectors("")
+    except Exception as e:
+        log.error("[DETECT] nightly job failed: %s", e, exc_info=True)
+
+
+@app.get("/admin/run-detectors")
+async def admin_run_detectors(
+    x_admin_token: str = Header(""),
+    token: str = Query(""),
+    only: str = Query(""),
+    restart: int = Query(0),
+):
+    """Run the Sherr-I detector pass now, and report what each one wrote.
+
+        GET /admin/run-detectors?token=...                    -> started
+        GET /admin/run-detectors?token=...                    -> progress/result
+        GET /admin/run-detectors?token=...&only=market_reaction
+        GET /admin/run-detectors?token=...&restart=1
+
+    Also runs nightly at 02:10 UTC from this app's scheduler.
+    """
+    _check_admin(x_admin_token or token)
+    global _detect_task, _detect_result
+
+    running = _detect_task is not None and not _detect_task.done()
+    if running and not restart:
+        return {"status": "running"}
+    if _detect_task is not None and not running and not restart:
+        return {"status": "complete", "result": _detect_result}
+    if not SHERR_I_DATABASE_URL:
+        return {"status": "unconfigured",
+                "detail": "neither DATABASE_URL nor SHERR_I_DATABASE_URL is set."}
+    if running and restart:
+        _detect_task.cancel()
+    _detect_result = {}
+    _detect_task = asyncio.create_task(_run_detectors(only))
+    return {"status": "started", "only": only or "all",
+            "hint": "poll this same URL for the per-detector counts"}
 
 
 @app.get("/admin/sherr-i-doctor")
