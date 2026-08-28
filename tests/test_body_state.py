@@ -178,3 +178,80 @@ def test_the_markers_are_derived_from_the_stubs_themselves():
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts"))
     from publish_pending import STUB as DRAIN_STUB
     assert any(m in " ".join(DRAIN_STUB.split()).lower() for m in bs._STUB_MARKERS)
+
+
+# ─── the summary column (BUG 1) ──────────────────────────────────────────────
+def _safe_summary():
+    from ai_processor import _SAFE_SUMMARY
+    return _SAFE_SUMMARY
+
+
+def test_a_row_with_an_original_body_but_a_stub_summary_is_not_healthy():
+    """The bug exactly: classify() judged full_body alone, so a rewritten body
+    passed as `original` while summary_60 still held the placeholder — and
+    summary_60 is what the Home card renders. The audit reported 17,017 healthy
+    articles while every card said "Sherr AI is preparing an original summary"."""
+    row = {"full_body": ORIGINAL, "summary_60": _safe_summary(),
+           "source_summary": SOURCE}
+    assert bs.classify_row(row) == bs.ORIGINAL          # the body really is fine
+    assert bs.classify_row_summary(row) == bs.STUB      # the summary is not
+    assert bs.row_is_healthy(row) is False              # so the row is not
+
+
+def test_a_row_is_healthy_only_when_both_columns_are_original():
+    row = {"full_body": ORIGINAL, "summary_60": "Readings passed the severe "
+           "threshold at several sites; advisories now cover outdoor activity.",
+           "source_summary": SOURCE}
+    assert bs.row_is_healthy(row) is True
+
+
+def test_an_empty_summary_is_caught_even_with_a_good_body():
+    row = {"full_body": ORIGINAL, "summary_60": "", "source_summary": SOURCE}
+    assert bs.classify_row_summary(row) == bs.EMPTY
+    assert bs.row_is_healthy(row) is False
+
+
+def test_a_short_summary_is_not_penalised_for_being_short():
+    """A summary is SUPPOSED to be brief — the minimum-word rule that guards a
+    body would reject every legitimate one."""
+    row = {"full_body": ORIGINAL, "summary_60": "Air quality worsened sharply "
+           "across the capital.", "source_summary": SOURCE}
+    assert bs.classify_row_summary(row) == bs.ORIGINAL
+
+
+def test_a_summary_copied_from_the_publisher_is_flagged():
+    row = {"full_body": ORIGINAL, "summary_60": SOURCE, "source_summary": SOURCE}
+    assert bs.classify_row_summary(row) == bs.SOURCE_TEXT
+    assert bs.row_is_healthy(row) is False
+
+
+def test_the_audit_reports_the_summary_column_separately():
+    """Without its own block, a corpus of stub summaries is invisible."""
+    rows = [
+        _Row(id=1, full_body=ORIGINAL, summary_60=_safe_summary(),
+             source_summary=SOURCE, status="published", reprocessed=1),
+        _Row(id=2, full_body=ORIGINAL, summary_60="Readings passed the severe "
+             "threshold at several sites this week.",
+             source_summary=SOURCE, status="published", reprocessed=1),
+    ]
+    out = bs.audit(_Conn(rows))
+    assert out["published_by_state"][bs.ORIGINAL] == 2   # both bodies fine
+    assert out["summary_by_state"][bs.STUB] == 1         # one summary is not
+    assert out["healthy"] == 1, "healthy must require BOTH columns"
+    assert out["needs_rewrite"] == 1
+
+
+def test_a_rewritten_summary_is_not_used_as_the_publisher_reference():
+    """summary_60 starts as publisher text but the rewrite replaces it with
+    ours. Using it as the reference would compare a fixed body against our own
+    summary of it and could flag the article as a copy of itself."""
+    row = {"full_body": ORIGINAL,
+           "summary_60": ORIGINAL[:90],        # our summary, echoes our body
+           "source_summary": SOURCE[:200]}     # the publisher's, untouched
+    assert bs.classify_row(row) == bs.ORIGINAL
+
+
+def test_the_publishers_text_is_still_caught_via_source_summary():
+    row = {"full_body": SOURCE, "summary_60": "Our own short line about it.",
+           "source_summary": SOURCE[:200]}
+    assert bs.classify_row(row) == bs.SOURCE_TEXT
