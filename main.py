@@ -3031,9 +3031,15 @@ def _reprocess_bodies_sync(limit: int, batch: int) -> dict:
 
         providers = available_providers()
         if providers["primary"] == "rule-based":
-            return {"ok": False, "before": before,
-                    "detail": "no AI provider configured — set GEMINI_API_KEY or "
-                              "GROQ_API_KEY; refusing to rewrite without one"}
+            log.error("[BODY] REFUSING: no AI provider. %d published article(s) "
+                      "are on a placeholder and cannot be rewritten until "
+                      "GEMINI_API_KEY or GROQ_API_KEY is set.",
+                      before["needs_rewrite"])
+            return {"ok": False, "before": before["published_by_state"],
+                    "needs_rewrite": before["needs_rewrite"], "ai": providers,
+                    "BLOCKED": "NO AI PROVIDER CONFIGURED — set GEMINI_API_KEY "
+                               "or GROQ_API_KEY. Rewriting without one would "
+                               "write the same placeholder back."}
 
         done = failed = skipped = 0
         # Every id this run has already tried. A row that fails the originality
@@ -3186,16 +3192,33 @@ async def admin_body_audit(x_admin_token: str = Header(""), token: str = Query("
     _check_admin(x_admin_token or token)
     conn = get_db()
     try:
-        return body_state.audit(conn)
+        out = body_state.audit(conn)
     finally:
         conn.close()
+
+    # WHICH AI, IF ANY. Without this the audit could report a corpus full of
+    # stubs and give no hint that the reason nothing improves is that no key is
+    # configured — the rewrite refuses to run, correctly, but silently.
+    providers = available_providers()
+    out["ai"] = providers
+    if providers.get("primary") == "rule-based":
+        out["BLOCKED"] = (
+            "NO AI PROVIDER CONFIGURED. Set GEMINI_API_KEY or GROQ_API_KEY on "
+            "the service. Until then /admin/reprocess-bodies will refuse to run "
+            "and every one of the %d article(s) below stays on a placeholder — "
+            "rewriting without a provider would only write the placeholder again."
+            % out["needs_rewrite"])
+    elif out["needs_rewrite"]:
+        out["next"] = ("GET /admin/reprocess-bodies?token=...&limit=%d"
+                       % min(out["needs_rewrite"], 3000))
+    return out
 
 
 @app.get("/admin/reprocess-bodies")
 async def admin_reprocess_bodies(
     x_admin_token: str = Header(""),
     token: str = Query(""),
-    limit: int = Query(200, ge=1, le=5000),
+    limit: int = Query(500, ge=1, le=20000),
     batch: int = Query(0, ge=0, le=200),
     restart: int = Query(0),
 ):

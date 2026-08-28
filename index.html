@@ -758,8 +758,29 @@ header {
   color: var(--t1); line-height: 1.35; letter-spacing: -0.3px; margin-bottom: 14px;
 }
 .ao-text { margin-bottom: 16px; }
-.ao-p { font-size: 0.95rem; color: var(--t1); line-height: 1.72; margin-bottom: 14px; }
+/* Reading type. 0.95rem at 1.72 is UI text, not article text — this is the one
+   screen a reader stays on for minutes, so it gets a size and a rhythm chosen
+   for continuous prose rather than for fitting a card. */
+.ao-p { font-size: 1.06rem; color: var(--t1); line-height: 1.78; margin-bottom: 19px;
+  letter-spacing: -0.003em; max-width: 68ch; }
 .ao-p:last-child { margin-bottom: 0; }
+/* The opening paragraph carries the reader in. */
+.ao-p:first-child { font-size: 1.12rem; line-height: 1.72; color: var(--t1); }
+
+/* Reading time, beside the timestamp. Already computed for the activity
+   tracker; there was no reason a reader could not see it too. */
+.ao-read-time { font-size: 0.7rem; color: var(--t3); font-weight: 600;
+  display: inline-flex; align-items: center; gap: 5px; }
+.ao-read-time::before { content: ""; width: 3px; height: 3px; border-radius: 50%;
+  background: currentColor; opacity: .6; }
+
+/* Source attribution — a block that names the publisher, not a bare link. */
+.ao-attrib { margin: 22px 0 4px; padding: 14px 15px; border-radius: 16px;
+  background: var(--surface-2); border: 1px solid var(--line, rgba(128,128,128,.14)); }
+.ao-attrib-k { font-size: 0.6rem; font-weight: 800; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--t3); }
+.ao-attrib-n { font-size: 0.95rem; font-weight: 700; color: var(--t1); margin-top: 6px; }
+.ao-attrib-s { font-size: 0.76rem; line-height: 1.5; color: var(--t3); margin-top: 5px; }
 .ao-readmore { background: var(--surface-2); color: var(--accent); border: none;
   border-radius: 100px; padding: 9px 18px; font-size: 0.82rem; font-weight: 700;
   cursor: pointer; margin: 4px 0 2px; display: inline-flex; align-items: center; gap: 7px; }
@@ -3688,6 +3709,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
         <div class="ao-src-dot" id="ao-src-dot"></div>
         <span class="ao-src-name" id="ao-src-name"></span>
         <span class="ao-src-time" id="ao-src-time"></span>
+        <span class="ao-read-time" id="ao-read-time"></span>
       </div>
       <div class="ao-main-title" id="ao-main-title"></div>
       <div id="ao-tldr-box" class="ao-tldr" style="display:none"></div>
@@ -4573,8 +4595,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   <div class="spie-wrap">
     <div class="spie-head">
       <div class="spie-badge"><i class="fa-solid fa-satellite-dish"></i> Sherr-I</div>
-      <h2 class="spie-title">Sherr-I — Pattern<br>Intelligence</h2>
-      <p class="spie-sub">Connections the engine has observed across news and markets.</p>
+      <h2 class="spie-title">Sherr-I</h2>
       <div class="spie-controls">
         <!-- chips are rendered from SHERR_I_TYPES so no insight type is ever hidden -->
         <div class="spie-chips" id="spie-chips"></div>
@@ -6269,6 +6290,10 @@ function openArticle(rawA) {
   var _by = document.getElementById('ao-byline');   // byline lives below the article now
   if (_by) _by.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> Written by SherrByte';
   document.getElementById('ao-src-time').textContent = timeAgo(a.published_at) || '';
+  // _readSec is already computed above for the activity tracker; showing it
+  // costs nothing and tells the reader what they are committing to.
+  const _rt = document.getElementById('ao-read-time');
+  if (_rt) _rt.textContent = Math.max(1, Math.round(_readSec / 60)) + ' min read';
   document.getElementById('ao-main-title').textContent = a.title;
   const body = a.body_ai || a.preview || a.summary || '';
   renderArticleBody(body);
@@ -6285,10 +6310,26 @@ function openArticle(rawA) {
     const sources = (Array.isArray(a.sources) && a.sources.length)
       ? a.sources
       : ((a.url || a.orig_url) ? [{ url: a.url || a.orig_url }] : []);
+    // Names the publisher rather than saying only "the original report". The
+    // write-up is ours; the reporting is theirs, and attribution that does not
+    // say whose is not attribution.
+    // orig_source, NOT source: normalizeArticle sets `source` to "SherrByte
+    // News" on purpose, because the write-up above is ours. The publisher is
+    // kept in orig_source, and reading the wrong one made this block credit
+    // SherrByte for the reporting — the precise opposite of attribution.
+    const pubName = a.orig_source || a.source_name || '';
+    const attrib = `
+      <div class="ao-attrib">
+        <div class="ao-attrib-k">Reported by</div>
+        <div class="ao-attrib-n">${bEsc(pubName || 'the original publisher')}</div>
+        <div class="ao-attrib-s">SherrByte wrote the summary above from this
+          reporting. Open the source for the publisher's own full account.</div>
+      </div>`;
     srcWrap.innerHTML = sources.length ? `
-      <div class="ao-sources-hdr">Verify — read the original report</div>
+      ${attrib}
       ${sources.map(s => `<a class="ao-source-link tap" href="${s.url || s}" target="_blank" rel="noopener noreferrer">
-        <i class="fa-solid fa-arrow-up-right-from-square"></i><span>Read the original report</span></a>`).join('')}` : '';
+        <i class="fa-solid fa-arrow-up-right-from-square"></i><span>Read the original report${
+          pubName ? ' at ' + bEsc(pubName) : ''}</span></a>`).join('')}` : attrib;
   }
 
   const likeEl = document.getElementById('ao-like');
@@ -7205,7 +7246,7 @@ async function saveProfile() {
 
 // ── NAV ──
 // ── Sherr-I — SherrByte Pattern Intelligence Engine (raw output) ──
-let spiePatternType = '';
+let spiePatternType = 'observation';   // no "All" tab — see SHERR_I_TYPES
 // Embedded fallback so the section always shows something if the engine isn't
 // reachable yet (backend redeploying / not connected). Matches the seed shape.
 const SHERR_I_SAMPLE = [
@@ -7233,13 +7274,16 @@ async function loadPatterns(type) {
   if (!list) return;
   list.innerHTML = '<div class="spie-loading"><i class="fa-solid fa-satellite-dish"></i> Scanning patterns…</div>';
   renderSpieChips();
-  const filt = arr => spiePatternType ? arr.filter(p => p.type === spiePatternType) : arr;
+  // Excluded types are dropped BEFORE the tab filter, so no code path — a tab,
+  // a default, or a future "All" — can put them back on the page.
+  const filt = arr => (arr || [])
+    .filter(p => !SHERR_I_EXCLUDED.has(p.type))
+    .filter(p => !spiePatternType || p.type === spiePatternType);
   // banner: null (real data), or {cls, text} shown ABOVE the cards so demo/broken
   // states are never mistaken for live intelligence.
-  // Reasoned cards lead: they carry evidence about market moves, while emergence
-  // is a bare co-occurrence observation. Within each group the API's order stands.
-  const rank = p => (p.type === 'reasoned' ? 0 : p.type === 'observation' ? 1
-                   : p.type === 'market_reaction' ? 2 : 3);
+  // Reasoned cards lead: they carry evidence about a market move, where an
+  // observation is a single instrument's day. Within a group the API order stands.
+  const rank = p => (p.type === 'reasoned' ? 0 : p.type === 'observation' ? 1 : 2);
   const order = arr => arr.slice().sort((a, b) => rank(a) - rank(b));
   const paint = (raw, banner) => {
     const arr = order(raw);
@@ -7288,31 +7332,30 @@ async function loadPatterns(type) {
 // Short human-language title for a pattern (raw JSON lives in the Details expander).
 // Type registry — label, colour and badge for every insight type the engine emits.
 // Types with no data yet still get a chip and an empty state (never hidden).
+// TWO TABS, AND NO "ALL".
+//
+// The page used to carry a chip per insight type on the principle that no type
+// should ever be unreachable. In practice that surfaced whatever the engine
+// happened to hold — including 319 emergence rows all stamped 2026-07-30, which
+// is a seeding artefact rather than a finding, and a reader has no way to tell
+// those apart from today's output.
+//
+// Emergence is gone from the page entirely (see SHERR_I_EXCLUDED: it is also
+// filtered out of the response, so an "All" view could not bring it back —
+// which is the other reason there is no longer an All).
 const SHERR_I_TYPES = [
-  { key: '',                     label: 'All',             icon: 'fa-layer-group' },
-  { key: 'reasoned',             label: 'Market Intelligence', icon: 'fa-brain',       color: '#F59E0B' },
-  { key: 'observation',          label: 'Observation',     icon: 'fa-eye',             color: '#38BDF8' },
-  // Hidden pending the market-history backfill: with one daily bucket per instrument
-  // the MAD baseline is not computable, so the tab could only ever show an empty
-  // state. The detector still runs and still writes — this is surfacing only, and
-  // re-enabling is uncommenting this line.
-  // { key: 'market_reaction',   label: 'Market Reaction', icon: 'fa-chart-line',      color: '#22C55E' },
-  { key: 'emergence',            label: 'Emergence',       icon: 'fa-diagram-project', color: '#22C55E' },
-  { key: 'temporal_correlation', label: 'Temporal',        icon: 'fa-timeline',        color: '#A855F7' },
-  { key: 'volume_anomaly',       label: 'Anomaly',         icon: 'fa-bolt',            color: '#EAB308' },
-  { key: 'cross_domain_chain',   label: 'Chain',           icon: 'fa-link',            color: '#64D2FF' },
+  { key: 'observation',  label: 'Observation',         icon: 'fa-eye',   color: '#38BDF8' },
+  { key: 'reasoned',     label: 'Market Intelligence', icon: 'fa-brain', color: '#F59E0B' },
 ];
+
+// Types the page never renders, whatever the API returns.
+const SHERR_I_EXCLUDED = new Set(['emergence']);
 const SHERR_I_TYPE_LABEL = Object.fromEntries(SHERR_I_TYPES.map(t => [t.key, t.label]));
 const SHERR_I_EMPTY_HINT = {
   // Honest monitoring state — the engine is running and found nothing worth
   // reporting. Never dressed up as a result.
-  reasoned:             'Monitoring — no significant market-linked events in the current window.',
-  observation:          'Appears once market signals and related news exist for the same day.',
-  market_reaction:      'Needs a few days of market history plus related news in the same window.',
-  temporal_correlation: 'Needs several weeks of daily signals before a lag can be established.',
-  volume_anomaly:       'Appears when an entity’s story volume spikes above its own baseline.',
-  cross_domain_chain:   'Fires when signals from different domains line up on a shared entity.',
-  emergence:            'Appears when two entities start co-occurring for the first time.',
+  reasoned:    'Monitoring — no significant market-linked events in the current window.',
+  observation: 'Appears when an instrument moves far enough from its own baseline to be worth reporting.',
 };
 
 // Chips are built from the registry so every type is always reachable — a type
@@ -7381,14 +7424,36 @@ function renderReasoned(p) {
   const cls = f.asset_class ? ` · ${f.asset_class}` : '';
 
   // 1. THE MOVE
+// The line under the percentage. It renders the SAME sentence the detector used
+// to decide the card was worth making (focal.significance), so the words cannot
+// contradict the numbers beside them.
+//
+// They previously could, and did: this printed "unusual for this instrument"
+// whenever a z existed at all, so a 0.04% Bitcoin day appeared as unusual at
+// z = -1.32 — a negative z, meaning the move was QUIETER than that
+// instrument's own baseline. The card asserted the opposite of its own number.
+function spieSignificance(f) {
+  if (f.significance) {
+    return `<div class="spie-move-seq">${bEsc(f.significance)}${
+      f.baseline_note ? ' — ' + bEsc(f.baseline_note) : ''}</div>`;
+  }
+  // Older rows, written before the detector carried its reason. Describe only
+  // what the number actually supports; never call a move unusual on their behalf.
+  if (f.z != null && Number(f.z) >= 2) {
+    return `<div class="spie-move-seq">far outside this instrument's own recent range (z ${
+      bEsc(f.z)}${f.baseline_note ? ' — ' + bEsc(f.baseline_note) : ''})</div>`;
+  }
+  if (f.ranked_by === 'abs_pct_change') {
+    return `<div class="spie-move-seq">ranked on size of move — not enough history for a baseline yet</div>`;
+  }
+  return '';
+}
+
   const move = `
     <div class="spie-move ${up ? 'is-up' : 'is-down'}">
       <div class="spie-move-inst">${bEsc((f.instrument || '') + cls)}</div>
       <div class="spie-move-pct"><i class="fa-solid fa-arrow-${up ? 'up' : 'down'}"></i> ${bEsc(pct)}</div>
-      ${f.z != null ? `<div class="spie-move-seq">unusual for this instrument (z ${bEsc(f.z)} vs its own baseline${
-          f.baseline_note ? ' — ' + bEsc(f.baseline_note) : ''})</div>`
-        : (f.ranked_by === 'abs_pct_change'
-           ? `<div class="spie-move-seq">ranked on size of move — not enough history for a baseline yet</div>` : '')}
+      ${spieSignificance(f)}
     </div>`;
 
   // 2. THE NEWS BEHIND IT (+ the M2 lag finding, only when its guards passed)
@@ -9204,6 +9269,30 @@ const MOCK_EXPLORE = {
     repos: [{name:'ollama/ollama',stars:104000,lang:'Go'},
             {name:'langchain-ai/langchain',stars:92000,lang:'Python'}],
   },
+  // No upstream for these two yet, so they carry their own rows rather than an
+  // empty page. Same shape the live sections use, so wiring a feed later is a
+  // change of source, not of renderer.
+  sports: { fixtures:[
+      {t:'India vs Australia · 2nd Test', s:'Day 3 · Adelaide Oval', r:'IND 284/6', rs:'trail by 62'},
+      {t:'Mumbai City vs Bengaluru FC',   s:'ISL · Mumbai Football Arena', r:'2–1', rs:'FT'},
+      {t:'Manchester City vs Arsenal',    s:'Premier League · Etihad', r:'Tomorrow', rs:'21:00 IST'},
+      {t:'Australia vs England',          s:'ODI series · Perth', r:'AUS won', rs:'by 5 wickets'},
+      {t:'PBKS vs RR',                    s:'IPL warm-up · Mohali', r:'Sat', rs:'19:30 IST'}],
+    standings:[
+      {t:'India', s:'World Test Championship', r:'1st', rs:'68.5%'},
+      {t:'Australia', s:'World Test Championship', r:'2nd', rs:'62.5%'},
+      {t:'Mohun Bagan', s:'ISL table', r:'1st', rs:'34 pts'},
+      {t:'Liverpool', s:'Premier League', r:'1st', rs:'51 pts'}] },
+  movies: { releases:[
+      {t:'Kalki 2898 AD — Part Two', s:'Telugu · Sci-fi', r:'12 Sep', rs:'In theatres'},
+      {t:'Singham Again',            s:'Hindi · Action',  r:'26 Sep', rs:'In theatres'},
+      {t:'Dune: Part Three',         s:'English · Sci-fi', r:'3 Oct', rs:'IMAX'},
+      {t:'Manjummel Boys 2',         s:'Malayalam · Drama', r:'17 Oct', rs:'In theatres'}],
+    streaming:[
+      {t:'Panchayat S4',      s:'Prime Video · Comedy drama', r:'Streaming', rs:'8 episodes'},
+      {t:'Mirzapur S4',       s:'Prime Video · Crime',        r:'Streaming', rs:'10 episodes'},
+      {t:'The Night Manager', s:'Disney+ Hotstar · Thriller', r:'Streaming', rs:'Season 2'},
+      {t:'Heeramandi',        s:'Netflix · Period drama',     r:'Streaming', rs:'Limited series'}] },
   break_: { q:'The world is louder than it is clear.',
             b:'SherrByte reads 55+ sources so a day takes five minutes, not fifty.' },
   // Fallback "why" lines — used only when the corpus search returns nothing.
@@ -9338,7 +9427,7 @@ function renderXpMatrix() {
 // ── 5. take a look ──────────────────────────────────────────────────────────
 function renderXpTal() {
   const tabs = document.getElementById('xp-tal-tabs');
-  if (tabs) tabs.innerHTML = ['Mandi','Real Estate'].map(t =>
+  if (tabs) tabs.innerHTML = ['Mandi','Real Estate','Sports','Movies'].map(t =>
     `<button class="xp-tab ${t===xpTal?'on':''}" onclick="xpSetTal(${JSON.stringify(t)})">${t}</button>`).join('');
   const el = document.getElementById('xp-tal');
   if (!el) return;
@@ -9351,24 +9440,48 @@ function renderXpTal() {
         <div class="v">₹${xpNum(x.modal_price||0)}</div>
         <div class="s">${bEsc(x.market||'')}</div></div>`;
     el.innerHTML = `<div class="xp-band"><div class="xp-tal">
-      <div class="big" onclick="xpSoon('Mandi')">
+      <div class="big" onclick="xpMandiPage()">
         <div class="k">${bEsc(a.commodity||'Onion')} · ${bEsc(md.state||'')}</div>
         <div class="v">₹${xpNum(a.modal_price||0)}</div>
         <div class="s">₹${xpNum(a.min_price||0)}–₹${xpNum(a.max_price||0)} per quintal<br>
           ${bEsc(a.market||'')} · ${bEsc(a.arrival_date||'')}</div>
       </div>${sm(b,1)}${sm(c,2)}</div></div>`;
-  } else {
+  } else if (xpTal === 'Real Estate') {
     const rt = MOCK_EXPLORE.realty.items;
     const sm = (x,i) => `<div class="sm" onclick="xpRealtySheet(${i})">
         <div class="k">${bEsc(x.city)}</div>
         <div class="v">₹${xpNum(x.rate)}</div>
         <div class="s">per sq ft · ${x.duty}% duty</div></div>`;
     el.innerHTML = `<div class="xp-band"><div class="xp-tal">
-      <div class="big" onclick="xpRealtySheet(0)">
+      <div class="big" onclick="xpRealtyPage()">
         <div class="k">${bEsc(rt[0].city)} · circle rate</div>
         <div class="v">₹${xpNum(rt[0].rate)}</div>
         <div class="s">guidance value per sq ft<br>${bEsc(rt[0].cls)} · stamp duty ${rt[0].duty}%</div>
       </div>${sm(rt[1],1)}${sm(rt[2],2)}</div></div>`;
+  } else if (xpTal === 'Sports') {
+    const f = MOCK_EXPLORE.sports.fixtures;
+    const sm = (x) => `<div class="sm" onclick="xpSportsPage()">
+        <div class="k">${bEsc((x.t||'').split(' · ')[0])}</div>
+        <div class="v" style="font-size:1rem">${bEsc(x.r||'')}</div>
+        <div class="s">${bEsc(x.rs||'')}</div></div>`;
+    el.innerHTML = `<div class="xp-band"><div class="xp-tal">
+      <div class="big" onclick="xpSportsPage()">
+        <div class="k">${bEsc(f[0].t)}</div>
+        <div class="v" style="font-size:1.5rem">${bEsc(f[0].r)}</div>
+        <div class="s">${bEsc(f[0].s)}<br>${bEsc(f[0].rs)}</div>
+      </div>${sm(f[1])}${sm(f[2])}</div></div>`;
+  } else {
+    const m = MOCK_EXPLORE.movies.releases;
+    const sm = (x) => `<div class="sm" onclick="xpMoviesPage()">
+        <div class="k">${bEsc((x.t||'').split(' —')[0])}</div>
+        <div class="v" style="font-size:1rem">${bEsc(x.r||'')}</div>
+        <div class="s">${bEsc((x.s||'').split(' · ')[0])}</div></div>`;
+    el.innerHTML = `<div class="xp-band"><div class="xp-tal">
+      <div class="big" onclick="xpMoviesPage()">
+        <div class="k">${bEsc(m[0].t)}</div>
+        <div class="v" style="font-size:1.4rem">${bEsc(m[0].r)}</div>
+        <div class="s">${bEsc(m[0].s)}<br>${bEsc(m[0].rs)}</div>
+      </div>${sm(m[1])}${sm(m[2])}</div></div>`;
   }
 }
 function xpSetTal(t){ xpTal = t; renderXpTal(); }
@@ -9994,15 +10107,92 @@ function xpRealtySheet(i) {
      ['Registration','1% of value'],
      ['Source','State registration dept (indicative)']], null);
 }
+// ── Government: one page per tile, two segments ─────────────────────────────
+// PIB is the live source. "This tile" filters its releases by that tile's own
+// keywords; "All releases" is the unfiltered feed, so a tile whose keywords
+// match nothing today still opens onto something real rather than a dead end.
 function xpGovPage(key) {
   const g = MOCK_EXPLORE.gov[key] || {};
   const rel = (xpSnap && xpSnap.govt_press && xpSnap.govt_press.data
                && xpSnap.govt_press.data.releases) || [];
   const words = XP_GOV_KEYS[key] || [];
-  let rows = rel.filter(r => words.some(w => (r.title||'').toLowerCase().includes(w)))
-                .map(r => ({ title:r.title, sub:r.published_at||'Press Information Bureau', url:r.url }));
-  if (!rows.length) rows = [{ title:g.s, sub:'Indicative — live items appear here as PIB publishes them' }];
-  xpListPage(g.t || 'Government', null, () => rows);
+  const asRow = r => ({ title:r.title, sub:r.published_at || 'Press Information Bureau',
+                        url:r.url });
+  const mine = rel.filter(r => words.some(w => (r.title||'').toLowerCase().includes(w)));
+
+  xpListPage(g.t || 'Government', ['This tile', 'All releases'], seg => {
+    if (seg === 'All releases') {
+      return rel.length ? rel.map(asRow)
+        : [{ title:'PIB releases are not loaded yet',
+             sub:'They appear here on the next refresh' }];
+    }
+    if (mine.length) return mine.map(asRow);
+    // Nothing matched today. Say so, and still offer the wider feed rather than
+    // leaving the reader on an empty screen.
+    return [{ title:'No PIB release mentions this today', sub: g.s || '' },
+            ...(rel.length ? [{ title:'See all ' + rel.length + ' releases',
+                                sub:'Press Information Bureau',
+                                onTap:() => { xpSeg = 'All releases'; xpGovPage(key); } }] : [])];
+  });
+}
+
+// ── Mandi: every commodity the API returned, with its price band ───────────
+function xpMandiPage() {
+  const md = ((xpSnap && xpSnap.mandi && xpSnap.mandi.data) || MOCK_EXPLORE.mandi);
+  const items = md.items || [];
+  const rows = items.map((x, i) => ({
+    title: x.commodity || 'Commodity',
+    sub: [x.market, x.arrival_date].filter(Boolean).join(' · '),
+    right: '₹' + xpNum(x.modal_price || 0), rightSub: 'per quintal',
+    onTap: () => { xpClosePage(); xpMandiSheet(i); },
+  }));
+  xpListPage('Mandi prices' + (md.state ? ' · ' + md.state : ''), null, () => rows);
+}
+
+// ── Real estate: guidance rates, split by how the city is classified ───────
+function xpRealtyPage() {
+  const items = MOCK_EXPLORE.realty.items || [];
+  const segs = ['All', ...[...new Set(items.map(x => x.cls).filter(Boolean))]];
+  xpListPage('Circle rates', segs, seg => items
+    .filter(x => seg === 'All' || x.cls === seg)
+    .map((x) => ({
+      title: x.city, sub: (x.cls || '') + ' · stamp duty ' + (x.duty || 0) + '%',
+      right: '₹' + xpNum(x.rate || 0), rightSub: 'per sq ft',
+      onTap: () => { xpClosePage();
+                     xpRealtySheet(items.findIndex(y => y.city === x.city)); },
+    })));
+}
+
+// ── Opportunities: the macro series behind the snapshot tile ───────────────
+function xpOppsPage() {
+  const d = (xpSnap && xpSnap.opportunities && xpSnap.opportunities.data) || {};
+  const pack = (obj, prefix) => Object.entries(obj || {}).map(([k, v]) => ({
+    title: prefix + ' · ' + (v.indicator || k.replace(/_/g, ' ')),
+    sub: v.year ? String(v.year) : (v.date || ''),
+    right: v.value + (/rate|yield|unemployment|inflation|growth/.test(k) ? '%' : ''),
+  }));
+  const india = pack(d.india, 'India'), us = pack(d.us, 'US');
+  xpListPage('Opportunities', ['India', 'US'], seg => {
+    const rows = seg === 'US' ? us : india;
+    return rows.length ? rows
+      : [{ title:'Not loaded yet', sub:'World Bank and FRED series appear here on the next refresh' }];
+  });
+}
+
+// ── Sports ─────────────────────────────────────────────────────────────────
+function xpSportsPage() {
+  const S = MOCK_EXPLORE.sports;
+  xpListPage('Sports', ['Fixtures', 'Standings'], seg =>
+    (seg === 'Standings' ? S.standings : S.fixtures).map(x => ({
+      title:x.t, sub:x.s, right:x.r, rightSub:x.rs })));
+}
+
+// ── Movies ─────────────────────────────────────────────────────────────────
+function xpMoviesPage() {
+  const M = MOCK_EXPLORE.movies;
+  xpListPage('Movies & shows', ['In theatres', 'Streaming'], seg =>
+    (seg === 'Streaming' ? M.streaming : M.releases).map(x => ({
+      title:x.t, sub:x.s, right:x.r, rightSub:x.rs })));
 }
 function xpSpacePage() {
   const L = (xpSnap && xpSnap.launches && xpSnap.launches.data && xpSnap.launches.data.launches) || null;
@@ -10017,22 +10207,39 @@ function xpSpacePage() {
     title: x.mission || x.name || 'Launch',
     sub: [x.rocket, x.provider, x.pad].filter(Boolean).join(' · '),
     right: xpCountdown(x.net || x.t), rightSub:'T-minus', rightCls:'xp-up',
-    onTap: () => xpSoon('Webcast') })));
+    // The launch feed carries no webcast URL, so this opened a "coming soon"
+    // toast. The provider's own page is real and one tap away.
+    url: x.url || x.webcast ||
+         ('https://nextspaceflight.com/launches/?search=' +
+          encodeURIComponent(x.mission || x.name || '')) })));
 }
-function xpAiPage() {
+// One page with two segments rather than two single-list pages: the module on
+// Explore is one card ("AI & Tech"), and splitting it in two made each half look
+// thinner than it is. Both halves keep their own entry point.
+function xpAiTechPage(startSeg) {
   const P = (xpSnap && xpSnap.ai_papers && xpSnap.ai_papers.data && xpSnap.ai_papers.data.papers)
          || MOCK_EXPLORE.ai.papers;
-  xpListPage('AI models & papers', null, () => P.map(x => ({
-    title:x.title, sub:'▲ '+(x.upvotes||0)+' upvotes',
-    url: x.url || (x.id ? 'https://arxiv.org/abs/'+x.id : 'https://huggingface.co/papers') })));
-}
-function xpRepoPage() {
   const R = (xpSnap && xpSnap.github_repos && xpSnap.github_repos.data && xpSnap.github_repos.data.repos)
          || MOCK_EXPLORE.ai.repos;
-  xpListPage('Trending repos', null, () => R.map(x => ({
-    title:x.name, sub:(x.desc||x.lang||''), right:'★ '+(x.stars>=1000?Math.round(x.stars/1000)+'k':x.stars),
-    url: x.url || ('https://github.com/'+x.name) })));
+  const k = n => n >= 1000 ? Math.round(n/1000)+'k' : String(n);
+  const segs = ['Papers', 'Repos'];
+  xpListPage('AI & Tech', segs, seg => seg === 'Repos'
+    ? R.map(x => ({ title:x.name, sub:(x.desc || x.lang || ''),
+                    right:'★ ' + k(x.stars || 0), rightSub:x.lang || '',
+                    url: x.url || ('https://github.com/' + x.name) }))
+    : P.map(x => ({ title:x.title, sub:'Hugging Face daily papers',
+                    right:'▲ ' + k(x.upvotes || 0), rightSub:'upvotes',
+                    url: x.url || (x.id ? 'https://huggingface.co/papers/' + x.id
+                                        : 'https://huggingface.co/papers') })));
+  if (startSeg && segs.includes(startSeg)) { xpSeg = startSeg; xpAiTechRedraw(); }
 }
+// xpListPage draws once on open; switching the starting segment needs a redraw.
+function xpAiTechRedraw() {
+  const btn = document.querySelector('#xp-page .xp-sg[data-sg="' + xpSeg + '"]');
+  if (btn) btn.click();
+}
+function xpAiPage()   { xpAiTechPage('Papers'); }
+function xpRepoPage() { xpAiTechPage('Repos'); }
 function xpAlsoPage(which) {
   const sets = {
     'Govt Jobs Notifications': [
@@ -10062,6 +10269,13 @@ function xpTickerTap(i) {
 // One cached read gives eleven sections. Each renderer takes the section's `data`
 // and returns rows; the wrapper handles the title, the age badge, and the three
 // states every section can be in — missing, empty, or populated.
+// Snapshot sections that have a full page behind them.
+const SNAP_PAGES = {
+  opportunities: 'xpOppsPage()',
+  markets: "xpOpenPage('stocks')",
+  forex: "xpOpenPage('forex')",
+};
+
 const SNAP_SECTIONS = [
   { key:'markets',      title:'Markets',     icon:'fa-chart-line',   colour:'#22C55E' },
   { key:'forex',        title:'Currency',    icon:'fa-money-bill-transfer', colour:'#5E5CE6' },
@@ -10275,9 +10489,15 @@ async function loadSnapshot() {
         ? rendered
         : `<div class="snap-empty">No entries right now.</div>`;
     }
+    // Sections with a real detail page get a header link rather than a whole
+    // tappable card: the rows inside are already interactive in places, and a
+    // card-wide tap would swallow those.
+    const more = SNAP_PAGES[cfg.key]
+      ? `<button class="exp-sec-hdr-link" style="margin-left:auto;background:none;border:0"
+           onclick="${SNAP_PAGES[cfg.key]}">View all</button>` : '';
     return `<div class="snap-sec snap-slab" style="--tc:${cfg.colour}">
       <div class="snap-hd"><i class="fa-solid ${cfg.icon}"></i>
-        <span class="snap-t">${bEsc(cfg.title)}</span>${_snapAge(sec)}</div>
+        <span class="snap-t">${bEsc(cfg.title)}</span>${_snapAge(sec)}${more}</div>
       ${body}
     </div>`;
   }).join('');
