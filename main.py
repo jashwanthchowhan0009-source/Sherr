@@ -166,24 +166,54 @@ async def get_spie_pool():
     return _spie_pool
 
 
-async def _spie_patterns(type: str, limit: int, offset: int) -> Optional[dict]:
+# Nothing older than this reaches the page. An insight is a claim about what is
+# happening NOW — "FIFA and X are newly connected" stops being that the moment
+# it is three days old, and the 2026-07-30 seed rows were still surfacing months
+# later as though they were today's findings.
+#
+# 72 hours because the detectors run nightly: two missed runs still leave a
+# populated page, three means the engine has genuinely stopped and an empty page
+# is the honest answer.
+PATTERN_MAX_AGE_HOURS = int(os.getenv("PATTERN_MAX_AGE_HOURS", "72"))
+
+
+async def _spie_patterns(type: str, limit: int, offset: int,
+                         max_age_hours: int = None) -> Optional[dict]:
     """Read real insights from the engine's Postgres, resolving entity ids to
-    canonical names. Returns None when the DB isn't usable."""
+    canonical names. Returns None when the DB isn't usable.
+
+    FILTERED IN SQL, NOT IN THE UI. A client-side filter still ships the stale
+    rows over the wire, still counts them in `total`, and is one forgotten
+    caller away from putting them back on screen — and /patterns has more than
+    one caller (the Sherr-I page and Explore's Connections section).
+    """
     pool = await get_spie_pool()
     if pool is None:
         return None
+    # 0 disables the window — for an admin reading the raw table, never the app.
+    hours = PATTERN_MAX_AGE_HOURS if max_age_hours is None else int(max_age_hours)
+
+    # Built once and used for BOTH the page and the count. `total` used to be a
+    # bare COUNT(*) over the whole table, so a filtered request reported a
+    # number that had nothing to do with the rows beside it — the page saying
+    # "319 patterns detected" above four cards is exactly that bug.
+    where, args = [], []
+    if type:
+        args.append(type)
+        where.append(f"type=${len(args)}")
+    if hours > 0:
+        args.append(str(int(hours)))
+        where.append(f"created_at >= now() - (${len(args)} || ' hours')::interval")
+    clause = (" WHERE " + " AND ".join(where)) if where else ""
+
     try:
         async with pool.acquire() as conn:
-            if type:
-                rows = await conn.fetch(
-                    "SELECT * FROM insights WHERE type=$1 "
-                    "ORDER BY score DESC, created_at DESC LIMIT $2 OFFSET $3",
-                    type, limit, offset)
-            else:
-                rows = await conn.fetch(
-                    "SELECT * FROM insights ORDER BY score DESC, created_at DESC "
-                    "LIMIT $1 OFFSET $2", limit, offset)
-            total = await conn.fetchval("SELECT COUNT(*) FROM insights")
+            rows = await conn.fetch(
+                f"SELECT * FROM insights{clause} ORDER BY score DESC, created_at DESC "
+                f"LIMIT ${len(args) + 1} OFFSET ${len(args) + 2}",
+                *args, limit, offset)
+            total = await conn.fetchval(
+                f"SELECT COUNT(*) FROM insights{clause}", *args)
 
             out = [dict(r) for r in rows]
             ids = {str(i) for d in out for i in (d.get("entity_ids") or [])}
@@ -2236,6 +2266,7 @@ async def patterns(
     type: str = Query(""),
     limit: int = Query(30, le=100),
     offset: int = Query(0, ge=0),
+    max_age_hours: int = Query(None, ge=0, le=8760),
 ):
     """Sherr-I pattern output — the Intelligence Engine's insights, most significant
     first. Optional ?type=emergence|temporal_correlation.
@@ -2251,7 +2282,7 @@ async def patterns(
     """
     # 1. Same-service path: read the real insights straight from Supabase.
     if SHERR_I_DATABASE_URL:
-        data = await _spie_patterns(type, limit, offset)
+        data = await _spie_patterns(type, limit, offset, max_age_hours)
         if data is not None:
             return data
         if not ENGINE_URL:
@@ -2281,14 +2312,19 @@ async def patterns(
                 "engine_url": ENGINE_URL, "detail": detail}
 
     conn = get_db()
-    q = "SELECT * FROM insights"
-    p = []
+    # Same window on the local path: a stale demo row is exactly as wrong on
+    # screen as a stale real one.
+    hours = PATTERN_MAX_AGE_HOURS if max_age_hours is None else int(max_age_hours)
+    where, p = [], []
     if type:
-        q += " WHERE type=?"; p.append(type)
-    q += " ORDER BY score DESC, created_at DESC LIMIT ? OFFSET ?"
-    p += [limit, offset]
-    rows = conn.execute(q, p).fetchall()
-    total = conn.execute("SELECT COUNT(*) AS c FROM insights").fetchone()["c"]
+        where.append("type=?"); p.append(type)
+    if hours > 0:
+        where.append("created_at >= datetime('now', ?)"); p.append(f"-{int(hours)} hours")
+    clause = (" WHERE " + " AND ".join(where)) if where else ""
+    q = ("SELECT * FROM insights" + clause
+         + " ORDER BY score DESC, created_at DESC LIMIT ? OFFSET ?")
+    rows = conn.execute(q, p + [limit, offset]).fetchall()
+    total = conn.execute("SELECT COUNT(*) AS c FROM insights" + clause, p).fetchone()["c"]
     conn.close()
     return {"patterns": [insight_row_to_dict(r) for r in rows], "total": total,
             "source": "seed",
@@ -2296,14 +2332,12 @@ async def patterns(
 
 
 @app.get("/patterns/type/{ptype}")
-async def patterns_by_type(ptype: str, limit: int = Query(30, le=100)):
-    conn = get_db()
-    rows = conn.execute(
-        "SELECT * FROM insights WHERE type=? ORDER BY score DESC, created_at DESC LIMIT ?",
-        (ptype, limit),
-    ).fetchall()
-    conn.close()
-    return {"patterns": [insight_row_to_dict(r) for r in rows]}
+async def patterns_by_type(ptype: str, limit: int = Query(30, le=100),
+                           max_age_hours: int = Query(None, ge=0, le=8760)):
+    """Second door to the same table — so it carries the same window. A filter
+    only one endpoint enforces is a filter one caller can walk around."""
+    return await patterns(type=ptype, limit=limit, offset=0,
+                          max_age_hours=max_age_hours)
 
 
 @app.get("/article/{article_id}")

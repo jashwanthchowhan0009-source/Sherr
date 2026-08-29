@@ -2232,8 +2232,21 @@ body.dp-open > header, body.dp-open #hdr { display:none !important }
 .spie-badge i { font-size: 0.7rem; }
 .spie-title { font: 800 1.5rem/1.18 var(--fd); color: var(--t1); letter-spacing: -0.02em; margin: 14px 0 6px; }
 .spie-sub { font: 500 0.82rem/1.5 var(--f); color: var(--t3); margin: 0 0 16px; }
-.spie-controls { display: flex; align-items: flex-start; gap: 8px; }
-/* Horizontally scrollable so every type stays reachable on a phone. */
+/* The chip row used to fill this; with the tabs gone it holds only the refresh
+   button, so it no longer reserves a row of its own. */
+.spie-controls { display: flex; align-items: center; justify-content: flex-end;
+  margin-top: -34px; }
+/* ── One page, two stacked sections ── */
+.spie-win { font: 700 .58rem/1 var(--f); letter-spacing: .16em; text-transform: uppercase;
+  color: var(--t3); margin: 0 0 18px; }
+.spie-sec { margin-bottom: 30px; }
+.spie-sec:last-child { margin-bottom: 8px; }
+.spie-sec-hd { display: flex; align-items: baseline; gap: 9px; margin: 0 0 12px; }
+.spie-sec-hd h3 { font: 700 1.02rem/1.2 var(--f); color: var(--t1); margin: 0;
+  letter-spacing: -.022em; }
+.spie-sec-n { font: 700 .7rem/1 var(--f); color: var(--t3);
+  font-variant-numeric: tabular-nums; }
+
 .spie-chips { display: flex; gap: 8px; flex: 1; overflow-x: auto; padding-bottom: 2px;
   scrollbar-width: none; }
 .spie-chips::-webkit-scrollbar { display: none; }
@@ -2247,6 +2260,7 @@ body.dp-open > header, body.dp-open #hdr { display:none !important }
 .spie-refresh { margin-left: auto; width: 38px; height: 38px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center; cursor: pointer;
   background: var(--bgcard); border: 1px solid var(--line2); color: var(--t2); }
+.spie-refresh { font-size: 1.15rem; line-height: 1; }
 .spie-refresh:active { transform: rotate(180deg); }
 .spie-list { display: flex; flex-direction: column; gap: 12px; }
 .spie-loading, .spie-empty { text-align: center; color: var(--t3); font: 500 0.86rem/1.6 var(--f); padding: 40px 20px; }
@@ -4727,11 +4741,13 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
       <div class="spie-badge"><i class="fa-solid fa-satellite-dish"></i> Sherr-I</div>
       <h2 class="spie-title">Sherr-I</h2>
       <div class="spie-controls">
-        <!-- chips are rendered from SHERR_I_TYPES so no insight type is ever hidden -->
-        <div class="spie-chips" id="spie-chips"></div>
-        <button class="spie-refresh tap" onclick="loadPatterns(spiePatternType)" aria-label="Refresh"><i class="fa-solid fa-rotate"></i></button>
+        <button class="spie-refresh tap" onclick="loadPatterns()" aria-label="Refresh"><span aria-hidden="true">&#8635;</span></button>
       </div>
     </div>
+    <!-- ONE PAGE, TWO STACKED SECTIONS. The chip row was a tab switcher: it
+         hid half the engine's output behind a control most readers never
+         touch, and made an empty tab look like a broken page rather than a
+         quiet one. Both sections are always on screen, in order. -->
     <div id="spie-list" class="spie-list"></div>
   </div>
 </div>
@@ -7443,7 +7459,11 @@ async function saveProfile() {
 
 // ── NAV ──
 // ── Sherr-I — SherrByte Pattern Intelligence Engine (raw output) ──
-let spiePatternType = 'observation';   // no "All" tab — see SHERR_I_TYPES
+// No tab state: Sherr-I is one scrolling page with two stacked sections.
+// SHERR_I_WINDOW_H mirrors the server's PATTERN_MAX_AGE_HOURS so the page can
+// SAY what window it is showing; it never filters on it. Freshness is enforced
+// in SQL, and a second filter here would only hide a server-side regression.
+const SHERR_I_WINDOW_H = 72;
 // Embedded fallback so the section always shows something if the engine isn't
 // reachable yet (backend redeploying / not connected). Matches the seed shape.
 const SHERR_I_SAMPLE = [
@@ -7463,62 +7483,62 @@ const SHERR_I_SAMPLE = [
       article_count: 7, source_count: 5, confidence: 0.7 } },
 ];
 
-async function loadPatterns(type) {
-  spiePatternType = type || '';
-  document.querySelectorAll('.spie-chip').forEach(c =>
-    c.classList.toggle('on', (c.getAttribute('data-t') || '') === spiePatternType));
+async function loadPatterns() {
   const list = document.getElementById('spie-list');
   if (!list) return;
   list.innerHTML = skelCard(3) + skelCard(3) + skelCard(2);
-  renderSpieChips();
-  // Excluded types are dropped BEFORE the tab filter, so no code path — a tab,
-  // a default, or a future "All" — can put them back on the page.
-  const filt = arr => (arr || [])
-    .filter(p => !SHERR_I_EXCLUDED.has(p.type))
-    .filter(p => !spiePatternType || p.type === spiePatternType);
-  // banner: null (real data), or {cls, text} shown ABOVE the cards so demo/broken
-  // states are never mistaken for live intelligence.
-  // Reasoned cards lead: they carry evidence about a market move, where an
-  // observation is a single instrument's day. Within a group the API order stands.
-  const rank = p => (p.type === 'reasoned' ? 0 : p.type === 'observation' ? 1 : 2);
-  const order = arr => arr.slice().sort((a, b) => rank(a) - rank(b));
-  const paint = (raw, banner) => {
-    const arr = order(raw);
-    const head = arr.length
-      ? `<div class="spie-count">${arr.length} pattern${arr.length === 1 ? '' : 's'} detected</div>`
-      : '';
-    // Empty is a real state, not a hidden one: name the type and say what it needs.
-    const empty = () => {
-      const label = SHERR_I_TYPE_LABEL[spiePatternType] || 'patterns';
-      const hint = SHERR_I_EMPTY_HINT[spiePatternType] || '';
-      return `<div class="spie-empty">
-        <div class="spie-empty-t">No ${bEsc(label.toLowerCase())} insights yet</div>
-        ${hint ? `<div class="spie-empty-h">${bEsc(hint)}</div>` : ''}
-      </div>`;
-    };
-    list.innerHTML = (banner ? `<div class="spie-banner ${banner.cls}">${bEsc(banner.text)}</div>` : '')
-      + head
-      + (arr.length ? arr.map(renderPattern).join('') : empty());
+
+  // Excluded types are dropped before anything else, so no code path can put
+  // them back on the page.
+  const usable = arr => (arr || []).filter(p => !SHERR_I_EXCLUDED.has(p.type));
+
+  // One page, two sections, always in this order: a reasoned card carries
+  // evidence about a market move, where an observation is a single
+  // instrument's day.
+  const SECTIONS = [
+    { key: 'reasoned',    label: 'Market Intelligence' },
+    { key: 'observation', label: 'Observation' },
+  ];
+
+  const section = (cfg, arr) => {
+    const rows = arr.filter(p => p.type === cfg.key);
+    const body = rows.length
+      ? rows.map(renderPattern).join('')
+      // An empty section stays on the page and says what it is waiting for.
+      // Hiding it would make a quiet engine look like a missing feature.
+      : `<div class="spie-empty">
+           <div class="spie-empty-t">Nothing in the last ${SHERR_I_WINDOW_H} hours</div>
+           <div class="spie-empty-h">${bEsc(SHERR_I_EMPTY_HINT[cfg.key] || '')}</div>
+         </div>`;
+    return `<section class="spie-sec">
+      <div class="spie-sec-hd">
+        <h3>${bEsc(cfg.label)}</h3>
+        <span class="spie-sec-n">${rows.length || ''}</span>
+      </div>${body}</section>`;
   };
+
+  const paint = (raw, banner) => {
+    const arr = usable(raw);
+    list.innerHTML =
+      (banner ? `<div class="spie-banner ${banner.cls}">${bEsc(banner.text)}</div>` : '')
+      + `<div class="spie-win">Last ${SHERR_I_WINDOW_H} hours</div>`
+      + SECTIONS.map(cfg => section(cfg, arr)).join('');
+  };
+
   try {
-    const q = spiePatternType ? ('?type=' + encodeURIComponent(spiePatternType)) : '';
-    const data = await api('/patterns' + q);
+    // No ?type= — the page asks for everything once and splits it into
+    // sections locally. Freshness is the SERVER's filter, applied in SQL.
+    const data = await api('/patterns?limit=60', { timeout: 30000 });
     const items = data.patterns || [];
     const src = data.source || 'engine';
 
-    if (src === 'engine') {
-      // Real engine — show exactly what it returned, including "none yet".
-      paint(items, null);
-      return;
-    }
+    if (src === 'engine') { paint(items, null); return; }
     if (src === 'unavailable') {
-      // Engine configured but not answering. Say so; do NOT substitute demo rows.
       paint([], { cls: 'is-error',
                   text: 'Engine unreachable — no live insights. ' + (data.detail || '') });
       return;
     }
-    // src === 'seed' (or unknown): local demo rows. Show them, clearly labelled.
-    paint(items.length ? items : filt(SHERR_I_SAMPLE),
+    paint(items.length ? items : usable(SHERR_I_SAMPLE),
           { cls: 'is-sample',
             text: 'SAMPLE DATA — not live. Set ENGINE_URL to connect the Sherr-I engine.' });
   } catch (e) {
@@ -7540,6 +7560,8 @@ async function loadPatterns(type) {
 // Emergence is gone from the page entirely (see SHERR_I_EXCLUDED: it is also
 // filtered out of the response, so an "All" view could not bring it back —
 // which is the other reason there is no longer an All).
+// Labels for the card badge. This was the tab registry; the tabs are gone, and
+// the sections are declared inside loadPatterns() where they are rendered.
 const SHERR_I_TYPES = [
   { key: 'observation',  label: 'Observation',         icon: 'fa-eye',   color: '#38BDF8' },
   { key: 'reasoned',     label: 'Market Intelligence', icon: 'fa-brain', color: '#F59E0B' },
@@ -7557,21 +7579,6 @@ const SHERR_I_EMPTY_HINT = {
 
 // Chips are built from the registry so every type is always reachable — a type
 // with no data shows its own empty state rather than disappearing from the UI.
-function renderSpieChips() {
-  const wrap = document.getElementById('spie-chips');
-  if (!wrap) return;
-  wrap.innerHTML = SHERR_I_TYPES.map(t => {
-    const on = (t.key || '') === (spiePatternType || '');
-    const style = (t.color && on) ? ` style="--tc:${t.color}"` : '';
-    return `<button class="spie-chip${on ? ' on' : ''}"${style} data-t="${t.key}"
-      onclick="loadPatterns('${t.key}')"><i class="fa-solid ${t.icon}"></i> ${t.label}</button>`;
-  }).join('');
-  // Keep the selected type visible — the chip row scrolls horizontally.
-  const active = wrap.querySelector('.spie-chip.on');
-  if (active && active.scrollIntoView) {
-    active.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
-  }
-}
 
 function patternHeadline(p) {
   const e = p.explain_json || {};
@@ -7856,7 +7863,7 @@ function navTo(name) {
     hBrand.style.display='none'; hPage.style.display='block'; hPage.textContent='Bytes';
   } else if (name==='spie') {
     hBrand.style.display='none'; hPage.style.display='block'; hPage.textContent='Sherr-I';
-    loadPatterns(spiePatternType);
+    loadPatterns();
   } else if (['profile','bookmarks','notifs'].includes(name)) {
     hBrand.style.display='none'; hPage.style.display='block';
     const lbls = { profile:'Profile', bookmarks:'Bookmarks', notifs:'Notifications' };
