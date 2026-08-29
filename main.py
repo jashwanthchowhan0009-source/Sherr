@@ -40,6 +40,9 @@ from originality import (
 # overwrites full_body with a stub, so feeding full_body to the AI pass makes it
 # summarize its own placeholder — see body_state.py.
 import body_state
+# One canonical shape for articles.published_at. Four formats used to reach that
+# column; see timestamps.py for the two bugs that produced.
+import timestamps
 
 # Which imagery the feed serves: stock | thumbnail | art. See image_service.py.
 IMAGE_MODE = (os.getenv("IMAGE_MODE") or "thumbnail").strip().lower()
@@ -638,6 +641,12 @@ CREATE TABLE IF NOT EXISTS articles (
     scope TEXT DEFAULT 'global',
     is_trending INTEGER DEFAULT 0,
     sentiment TEXT DEFAULT 'neutral',
+    -- Left as datetime('now') ON PURPOSE. pgcompat translates this one; it has
+    -- no rule for strftime, so a "canonical" DDL default silently failed the
+    -- whole CREATE TABLE on Postgres and the articles table was never created.
+    -- The default is a fallback nothing reaches anyway — both ingest paths pass
+    -- an explicit canonical value — and after normalise_published_at() runs the
+    -- Postgres default becomes now() on a real timestamptz column.
     published_at TEXT DEFAULT (datetime('now')),
     collected_at TEXT DEFAULT (datetime('now')),
     ai_processed INTEGER DEFAULT 0,
@@ -831,6 +840,94 @@ def get_db():
     return conn
 
 
+# ─── published_at normalisation ──────────────────────────────────────────────
+# `ORDER BY published_at DESC` on a TEXT column is a byte comparison, and this
+# column carried four different formats — see timestamps.py. Two bugs came out
+# of it: the feed sorted a six-hour-old article above a four-hour-old one, and
+# every naive stamp was read by the browser as local time, adding the reader's
+# UTC offset to every age.
+#
+# Run at boot, idempotent, and safe on both backends. On Postgres it finishes by
+# making the column a real timestamptz, after which the database does the
+# comparison and no format can drift back in.
+_PA_BACKFILL_SQL_PG = """
+UPDATE articles
+   SET published_at = to_char(published_at::timestamptz AT TIME ZONE 'UTC',
+                              'YYYY-MM-DD"T"HH24:MI:SS') || '+00:00'
+ WHERE published_at IS NOT NULL AND published_at <> ''
+   AND published_at !~ '^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\+00:00$'
+   AND published_at ~ '^\\d{4}-\\d{2}-\\d{2}'
+"""
+
+
+def normalise_published_at(conn) -> dict:
+    """Rewrite every non-canonical published_at, then make the column
+    timestamptz on Postgres. Returns what it did, for the boot log."""
+    out = {"backend": "postgres" if USE_POSTGRES else "sqlite",
+           "rewritten": 0, "column_type": None, "altered": False}
+    try:
+        if USE_POSTGRES:
+            # Type FIRST. Once the column is timestamptz the text backfill below
+            # is not just unnecessary, it is invalid — `published_at <> ''`
+            # against a timestamptz raises, and every boot would log an error
+            # that reads like a failure while nothing was actually wrong.
+            row = conn.execute(
+                "SELECT data_type FROM information_schema.columns "
+                "WHERE table_schema='sherrbyte_app' AND table_name='articles' "
+                "AND column_name='published_at'").fetchone()
+            current = (row or {}).get("data_type") if row else None
+            out["column_type"] = current
+            if current and current.lower() != "text":
+                return out                      # already migrated, nothing to do
+
+            cur = conn.execute(_PA_BACKFILL_SQL_PG)
+            out["rewritten"] = getattr(cur, "rowcount", 0) or 0
+            # ALTER ... USING aborts the whole statement on one unparseable
+            # row, so those are resolved first — but NOT to NULL. Postgres sorts
+            # NULLS FIRST under DESC, so a row with an unreadable stamp would
+            # have been promoted to the TOP of the feed. It falls back to
+            # collected_at, and to the epoch when even that is unusable: we do
+            # not know when it was published, so it must not lead the feed.
+            conn.execute(
+                "UPDATE articles SET published_at = COALESCE("
+                "  NULLIF(regexp_replace(COALESCE(collected_at,''), "
+                "         '^(\\d{4}-\\d{2}-\\d{2})[T ](\\d{2}:\\d{2}:\\d{2}).*$', "
+                "         '\\1T\\2+00:00'), COALESCE(collected_at,'')), "
+                "  '1970-01-01T00:00:00+00:00') "
+                "WHERE published_at IS NULL OR published_at = '' "
+                "   OR published_at !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'")
+            if True:
+                # The DROP DEFAULT is required, not tidiness: the column carries
+                # a text default (now()::text), and Postgres refuses the type
+                # change with "default ... cannot be cast automatically" while
+                # it is attached.
+                conn.execute("ALTER TABLE articles ALTER COLUMN published_at "
+                             "DROP DEFAULT")
+                conn.execute("ALTER TABLE articles ALTER COLUMN published_at "
+                             "TYPE timestamptz USING published_at::timestamptz")
+                conn.execute("ALTER TABLE articles ALTER COLUMN published_at "
+                             "SET DEFAULT now()")
+                out["altered"] = True
+                out["column_type"] = "timestamp with time zone"
+        else:
+            # sqlite has no timestamp type, so the canonical string IS the fix.
+            rows = conn.execute(
+                "SELECT id, published_at FROM articles "
+                "WHERE published_at IS NOT NULL AND published_at <> ''").fetchall()
+            for r in rows:
+                canon = timestamps.to_canonical(r["published_at"])
+                if canon and canon != r["published_at"]:
+                    conn.execute("UPDATE articles SET published_at=? WHERE id=?",
+                                 (canon, r["id"]))
+                    out["rewritten"] += 1
+            out["column_type"] = "text"
+        conn.commit()
+    except Exception as e:
+        log.warning("[PUBLISHED_AT] normalisation skipped: %s", e)
+        out["error"] = str(e)
+    return out
+
+
 def init_db():
     conn = get_db()
     conn.executescript(CREATE_TABLES)
@@ -842,6 +939,15 @@ def init_db():
             # first. Postgres raises its own error type, not sqlite3's, so this
             # cannot stay narrowed to OperationalError.
             pass
+    # published_at must be one shape before anything sorts on it. Idempotent:
+    # a second boot finds every row already canonical and rewrites none.
+    try:
+        pa = normalise_published_at(conn)
+        if pa.get("rewritten") or pa.get("altered"):
+            log.info("[PUBLISHED_AT] %s", pa)
+    except Exception as e:
+        log.warning("[PUBLISHED_AT] failed: %s", e)
+
     # P0.1 backfill: null out every publisher-hosted hero already on disk. Idempotent,
     # and cheap enough to run on every boot — the alternative is a one-shot script
     # somebody forgets to run before a deploy.
@@ -1008,10 +1114,14 @@ async def fetch_feed_async(feed_url: str, source_name: str, client: httpx.AsyncC
             scope = classify_scope(title, clean)
             img = extract_image(entry, pid)
 
-            pub_date = datetime.now().isoformat()
+            # Canonical from the start: feedparser's published_parsed is a UTC
+            # struct_time, and datetime.now() here was SERVER-LOCAL — two
+            # different meanings written into one column.
+            pub_date = timestamps.now_canonical()
             if hasattr(entry, "published_parsed") and entry.published_parsed:
                 try:
-                    pub_date = datetime(*entry.published_parsed[:6]).isoformat()
+                    pub_date = timestamps.to_canonical(
+                        datetime(*entry.published_parsed[:6], tzinfo=timezone.utc))
                 except Exception:
                     pass
 
@@ -1115,7 +1225,8 @@ async def collect_newsapi() -> list[dict]:
                         "pillar_id": pid,
                         "micro_tags": json.dumps(tags),
                         "scope": scope,
-                        "published_at": a.get("publishedAt", datetime.now().isoformat()),
+                        "published_at": timestamps.to_canonical(
+                            a.get("publishedAt")) or timestamps.now_canonical(),
                         "ai_processed": 0,
                     })
                 await asyncio.sleep(0.3)
@@ -1530,12 +1641,16 @@ def compute_feed_for_user(user_id: int):
         pillar_score = pref_pillars.get(art["pillar_id"], 0)
         tags = json.loads(art["micro_tags"] or "[]")
         tag_score = sum(pref_topics.get(t.lower(), 0) for t in tags)
-        try:
-            pub = datetime.fromisoformat(art["published_at"])
-            hours_ago = (datetime.now() - pub).total_seconds() / 3600
-            recency = 1.0 / (1.0 + math.log1p(hours_ago / 4))
-        except Exception:
+        # Both sides AWARE. This was fromisoformat() against a naive
+        # datetime.now(): once published_at carries an offset that subtraction
+        # raises, the except swallows it, and every article silently scores the
+        # same 0.5 recency — the ranking quietly stops ranking.
+        pub = timestamps.parse(art["published_at"])
+        if pub is None:
             recency = 0.5
+        else:
+            hours_ago = max(0.0, (datetime.now(timezone.utc) - pub).total_seconds() / 3600)
+            recency = 1.0 / (1.0 + math.log1p(hours_ago / 4))
         engagement_boost = math.log1p(art["engagement"]) * 0.1
         trending_boost = 0.5 if art["is_trending"] else 0
         serendipity = 0.1 * (abs(hash(str(art["id"]) + str(user_id))) % 100) / 100
@@ -1687,6 +1802,14 @@ def require_user(authorization: str = "") -> int:
 
 def article_row_to_dict(row) -> dict:
     d = dict(row)
+    # One shape on the wire whatever the column now holds: a datetime once the
+    # ALTER has run on Postgres, a canonical string on sqlite. The client parses
+    # this with new Date(), which needs the explicit offset — a naive value is
+    # read as the READER's local time, which is what made every card read
+    # "1d ago" for an IST reader.
+    for _k in ("published_at", "collected_at"):
+        if d.get(_k) is not None:
+            d[_k] = timestamps.to_iso(d[_k]) or ""
     pid = d.get("pillar_id", 1)
     pillar = PILLARS.get(pid, PILLARS[1])
     d["pillar_name"]  = pillar["name"]
@@ -3214,6 +3337,66 @@ async def body_reprocess_job() -> None:
         await _run_body_reprocess(BODY_REPROCESS_NIGHTLY, AI_BATCH_SIZE)
     except Exception as e:
         log.error("[BODY] nightly job failed: %s", e, exc_info=True)
+
+
+@app.get("/admin/published-at")
+async def admin_published_at(x_admin_token: str = Header(""), token: str = Query("")):
+    """Is ingest stalled, or was the feed just mis-sorted?
+
+    The newest published_at answers that directly: a stamp from minutes ago
+    means ingest is running and the ordering was the problem; a stamp from days
+    ago means nothing new is arriving and no amount of sorting will help.
+
+    Also reports the format census, because a non-zero `non_canonical` after a
+    boot means the normalisation did not run.
+    """
+    _check_admin(x_admin_token or token)
+    conn = get_db()
+    try:
+        out = {"column_type": None, "total": 0, "newest": None, "oldest": None,
+               "non_canonical": 0, "distinct_shapes": []}
+        try:
+            row = conn.execute(
+                "SELECT data_type FROM information_schema.columns "
+                "WHERE table_name='articles' AND column_name='published_at'").fetchone()
+            out["column_type"] = (row or {}).get("data_type") if row else "text"
+        except Exception:
+            out["column_type"] = "text"
+
+        agg = conn.execute(
+            "SELECT COUNT(*) AS c, MAX(published_at) AS newest, "
+            "MIN(published_at) AS oldest FROM articles").fetchone()
+        out["total"] = agg["c"]
+        out["newest"] = timestamps.to_iso(agg["newest"]) or str(agg["newest"] or "")
+        out["oldest"] = timestamps.to_iso(agg["oldest"]) or str(agg["oldest"] or "")
+
+        newest = timestamps.parse(agg["newest"])
+        if newest:
+            age_h = (datetime.now(timezone.utc) - newest).total_seconds() / 3600
+            out["newest_age_hours"] = round(age_h, 2)
+            out["verdict"] = (
+                "Ingest is running — the ordering was the problem."
+                if age_h < 6 else
+                f"Newest article is {age_h:.1f}h old. Ingest looks STALLED; "
+                f"sorting cannot fix an empty pipeline.")
+
+        # Only meaningful while the column is still text.
+        if (out["column_type"] or "text").lower() == "text":
+            rows = conn.execute(
+                "SELECT published_at FROM articles WHERE published_at IS NOT NULL "
+                "ORDER BY id DESC LIMIT 2000").fetchall()
+            shapes = {}
+            for r in rows:
+                v = r["published_at"]
+                if not timestamps.is_canonical(v):
+                    out["non_canonical"] += 1
+                key = ("T" if "T" in str(v) else "space") + (
+                    "+offset" if ("+" in str(v)[10:] or str(v).endswith("Z")) else "+naive")
+                shapes[key] = shapes.get(key, 0) + 1
+            out["distinct_shapes"] = sorted(shapes.items(), key=lambda kv: -kv[1])
+        return out
+    finally:
+        conn.close()
 
 
 @app.get("/admin/body-audit")
