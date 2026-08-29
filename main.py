@@ -3404,6 +3404,128 @@ async def admin_run_detectors(
             "hint": "poll this same URL for the per-detector counts"}
 
 
+# ─── Sherr-I cards ───────────────────────────────────────────────────────────
+# The read path is cached because the pipeline calls an LLM: an uncached
+# endpoint would re-run the cascade for every reader, and the same card would
+# cost a provider call per request.
+_SHERR_I_CACHE_S = int(os.getenv("SHERR_I_CACHE_SECONDS", "900"))   # 15 minutes
+_sherr_i_cache: dict = {"at": 0.0, "payload": None}
+
+
+def _sherr_i_engine():
+    """The spie package, imported by path. app/spie/* needs only stdlib +
+    pydantic; app.config and app.db are NOT touched, so this works in the root
+    service, which ships neither pydantic-settings nor pgvector."""
+    import sys as _sys
+    root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sherrbyte")
+    if root not in _sys.path:
+        _sys.path.insert(0, root)
+    from app.spie.discovery import pipeline
+    return pipeline
+
+
+async def _sherr_i_cards(force: bool = False) -> dict:
+    now = time.time()
+    cached = _sherr_i_cache["payload"]
+    if cached is not None and not force and (now - _sherr_i_cache["at"]) < _SHERR_I_CACHE_S:
+        return {**cached, "cached": True,
+                "age_seconds": round(now - _sherr_i_cache["at"], 1)}
+
+    pool = await get_spie_pool()
+    if pool is None:
+        return {"cards": [], "funnel": {}, "source": "unavailable",
+                "detail": "engine Postgres not reachable"}
+    async with pool.acquire() as conn:
+        out = await _sherr_i_engine().run(conn)
+    payload = {**out, "source": "engine",
+               "generated_at": datetime.now(timezone.utc).isoformat()}
+    _sherr_i_cache.update({"at": now, "payload": payload})
+    return {**payload, "cached": False, "age_seconds": 0}
+
+
+@app.get("/api/sherr-i/patterns")
+async def sherr_i_patterns(force: int = Query(0)):
+    """Today's decision cards, newest first. Cached for 15 minutes.
+
+    AN EMPTY LIST IS A VALID RESPONSE, and the common one. A card exists only
+    where a move cleared the statistical test AND at least two real articles
+    corroborated it; markets have quiet days, and the honest answer then is
+    nothing. `funnel` says which stage stopped, so an empty page is explainable
+    rather than mysterious.
+
+    Nothing older than 72 hours is returned — same window as /patterns.
+    """
+    out = await _sherr_i_cards(force=bool(force))
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=PATTERN_MAX_AGE_HOURS)
+    fresh = []
+    for c in out.get("cards", []):
+        ts = (c.get("anomaly") or {}).get("ts")
+        try:
+            when = datetime.fromisoformat(str(ts)) if ts else None
+        except ValueError:
+            when = None
+        if when is None:
+            continue
+        if when.tzinfo is None:
+            when = when.replace(tzinfo=timezone.utc)
+        if when >= cutoff:
+            fresh.append(c)
+    fresh.sort(key=lambda c: (c.get("anomaly") or {}).get("ts") or "", reverse=True)
+    return {**out, "cards": fresh, "count": len(fresh),
+            "max_age_hours": PATTERN_MAX_AGE_HOURS}
+
+
+@app.get("/admin/sherr-i-status")
+async def admin_sherr_i_status(x_admin_token: str = Header(""),
+                               token: str = Query("")):
+    """Is the engine able to say anything, and if not, which stage stopped it.
+
+    Reads through the pipeline's own funnel rather than re-deriving it, so this
+    reports what actually ran rather than what should have.
+    """
+    _check_admin(x_admin_token or token)
+    pool = await get_spie_pool()
+    if pool is None:
+        return {"ok": False, "detail": "engine Postgres not reachable"}
+
+    engine = _sherr_i_engine()
+    import sys as _sys
+    from app.spie.discovery import tick_anomaly
+    from app.spie.reasoning import card as card_mod
+
+    async with pool.acquire() as conn:
+        cov = await tick_anomaly.coverage(conn)
+        anomalies = await tick_anomaly.scan(conn)
+        try:
+            edges_n = int(await conn.fetchval("SELECT COUNT(*) FROM entity_edges") or 0)
+        except Exception:
+            edges_n = 0
+        try:
+            ticks = int(await conn.fetchval(
+                "SELECT COUNT(*) FROM sherrbyte_app.market_ticks") or 0)
+        except Exception:
+            ticks = 0
+
+    return {
+        "ok": True,
+        "ticks_rows": ticks,
+        "symbols_total": cov["symbols_total"],
+        "symbols_scoreable": cov["symbols_scoreable"],
+        "min_observations": cov["min_observations"],
+        "too_short": cov["too_short"],
+        "anomalies_today": len(anomalies),
+        "anomalies": [a.as_dict() for a in anomalies[:20]],
+        "entity_edges": edges_n,
+        "cards_last_run": engine.LAST_RUN.get("cards"),
+        "funnel_last_run": dict(engine.LAST_RUN),
+        "llm_calls": dict(card_mod.LLM_CALLS),
+        "signal_strength": card_mod.explain_signal_strength(),
+        "thresholds": {"z": tick_anomaly.Z_THRESHOLD,
+                       "window": tick_anomaly.WINDOW,
+                       "min_observations": tick_anomaly.MIN_OBSERVATIONS},
+    }
+
+
 @app.get("/admin/sherr-i-doctor")
 async def admin_sherr_i_doctor(
     x_admin_token: str = Header(""),
