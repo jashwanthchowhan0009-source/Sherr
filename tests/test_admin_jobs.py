@@ -69,25 +69,34 @@ def test_the_body_audit_counts_a_real_sqlite_corpus(tmp_path):
             conn.execute(stmt)
         except sqlite3.OperationalError:
             pass    # already present
-    for i, (body, status) in enumerate((
-            (SOURCE, "published"),           # the publisher's prose
-            (STUB, "published"),             # the drain's placeholder
-            ("Officials in the capital said readings had passed the severe "
-             "threshold at several sites this week, and advisories now cover "
-             "outdoor activity while curbs are reviewed.", "published"),
-            ("", "pending_rewrite"))):
+    OWN = ("Officials in the capital said readings had passed the severe "
+           "threshold at several sites this week, and advisories now cover "
+           "outdoor activity while curbs are reviewed.")
+    OWN_SUM = "Readings passed the severe threshold at several sites."
+    # (full_body, summary_60, status)
+    for i, (body, summary, status) in enumerate((
+            (SOURCE, OWN_SUM, "published"),   # body is the publisher's prose
+            (STUB,   OWN_SUM, "published"),   # body is the drain's placeholder
+            (OWN,    OWN_SUM, "published"),   # both columns ours — the healthy row
+            (OWN,    SOURCE,  "published"),   # body fine, SUMMARY is the source
+            ("",     "",      "pending_rewrite"))):
         conn.execute(
             "INSERT INTO articles (url, headline, full_body, summary_60, "
             "source_summary, status) VALUES (?,?,?,?,?,?)",
-            (f"http://x/{i}", f"H{i}", body, SOURCE, SOURCE[:200], status))
+            (f"http://x/{i}", f"H{i}", body, summary, SOURCE[:200], status))
     conn.commit()
     out = bs.audit(conn)
     conn.close()
 
     assert out["by_state"][bs.SOURCE_TEXT] == 1
     assert out["by_state"][bs.STUB] == 1
-    assert out["by_state"][bs.ORIGINAL] == 1
-    assert out["needs_rewrite"] == 2, "the unpublished row must not be counted"
+    # Row 3 and row 4 both have an original BODY.
+    assert out["by_state"][bs.ORIGINAL] == 2
+    # ...but row 4's summary is the publisher's, so only row 3 is healthy.
+    assert out["summary_by_state"][bs.SOURCE_TEXT] == 1
+    assert out["healthy"] == 1
+    assert out["needs_rewrite"] == 3, \
+        "bad body, bad summary and stub all count; the unpublished row does not"
 
 
 def test_the_reprocess_refuses_to_rewrite_without_an_ai_provider(monkeypatch):

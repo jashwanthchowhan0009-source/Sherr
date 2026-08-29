@@ -3059,7 +3059,10 @@ def _reprocess_bodies_sync(limit: int, batch: int) -> dict:
             attempted.update(r["id"] for r in rows)
 
             # reprocessed=0 is only the candidate marker; the body itself decides.
-            work = [r for r in rows if body_state.classify_row(r) in body_state.NEEDS_REWRITE]
+            # EITHER column failing is work. A row whose body was rewritten but
+            # whose summary_60 is still the stub renders that stub on the Home
+            # card, which is the first and often only text a reader sees.
+            work = [r for r in rows if not body_state.row_is_healthy(r)]
             for r in rows:
                 if r not in work:
                     # Already original — flag it so the query stops returning it.
@@ -3088,7 +3091,8 @@ def _reprocess_bodies_sync(limit: int, batch: int) -> dict:
                     # A rewrite that came back as the stub is not a rewrite. Leave
                     # the row unflagged so the next run tries it again rather than
                     # marking it done with the same placeholder.
-                    if body_state.is_stub(result.get("full_body", "")):
+                    if (body_state.is_stub(result.get("full_body", ""))
+                            or body_state.is_stub(result.get("summary", ""))):
                         failed += 1
                         continue
                     src_head = row["source_headline"] or row["headline"] or ""

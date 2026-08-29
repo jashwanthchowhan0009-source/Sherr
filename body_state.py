@@ -140,6 +140,34 @@ def source_material(headline: str = "", summary_60: str = "",
     return best
 
 
+def classify_summary(summary_60: str, source_summary: str = "") -> str:
+    """The state of the SUMMARY column, judged on its own.
+
+    summary_60 is what the Home card renders — it is the text a reader meets
+    first, and for most articles the only text they ever read. It was never
+    checked: classify() judged full_body alone, so a row whose body had been
+    rewritten passed as `original` while summary_60 still held
+    ai_processor._SAFE_SUMMARY. That is how the audit could report 17,017
+    healthy articles while the app showed "Sherr AI is preparing an original
+    summary of this story."
+
+    Note the asymmetry with a body: a summary is SUPPOSED to be short, so the
+    minimum-word rule that guards full_body would reject every legitimate one.
+    Emptiness and stub text are the only failures here.
+    """
+    text = _strip_credit(summary_60)
+    if not text:
+        return EMPTY
+    if is_stub(summary_60):
+        return STUB
+    source = (source_summary or "").strip()
+    if source:
+        ok, _ = originality_check(text, source)
+        if not ok:
+            return SOURCE_TEXT
+    return ORIGINAL
+
+
 def classify(full_body: str, summary_60: str = "", source_summary: str = "") -> str:
     """Which of STATES this row's body is in.
 
@@ -154,7 +182,13 @@ def classify(full_body: str, summary_60: str = "", source_summary: str = "") -> 
     if is_stub(full_body):
         return STUB
 
-    source = (summary_60 or "").strip() or (source_summary or "").strip()
+    # source_summary FIRST. It always holds the publisher's text (clean[:200] at
+    # ingest) and nothing rewrites it. summary_60 started out as publisher text
+    # too — which is why it was the reference here — but the rewrite pass now
+    # replaces it with OUR summary, so once a row is fixed, using it would
+    # compare our body against our own summary and could flag a perfectly
+    # consistent article as a reproduction of itself.
+    source = (source_summary or "").strip() or (summary_60 or "").strip()
     if source:
         ok, _ = originality_check(body, source)
         if not ok:
@@ -167,16 +201,31 @@ def classify(full_body: str, summary_60: str = "", source_summary: str = "") -> 
     return ORIGINAL
 
 
+def _get(row, key):
+    try:
+        return (row[key] if key in row.keys() else "") or ""
+    except AttributeError:                # dict / Record
+        return (row.get(key) if hasattr(row, "get") else "") or ""
+    except (KeyError, IndexError):
+        return ""
+
+
 def classify_row(row) -> str:
-    """classify() over a DB row (sqlite3.Row / dict / asyncpg Record)."""
-    def get(key):
-        try:
-            return (row[key] if key in row.keys() else "") or ""
-        except AttributeError:            # dict / Record
-            return (row.get(key) if hasattr(row, "get") else "") or ""
-        except (KeyError, IndexError):
-            return ""
-    return classify(get("full_body"), get("summary_60"), get("source_summary"))
+    """The row's BODY state (sqlite3.Row / dict / asyncpg Record)."""
+    return classify(_get(row, "full_body"), _get(row, "summary_60"),
+                    _get(row, "source_summary"))
+
+
+def classify_row_summary(row) -> str:
+    """The row's SUMMARY state."""
+    return classify_summary(_get(row, "summary_60"), _get(row, "source_summary"))
+
+
+def row_is_healthy(row) -> bool:
+    """Both columns original. A row is only healthy when nothing a reader can
+    reach is a placeholder — and the summary is the part they reach first."""
+    return (classify_row(row) == ORIGINAL
+            and classify_row_summary(row) == ORIGINAL)
 
 
 # ─── corpus-level audit ──────────────────────────────────────────────────────
@@ -194,9 +243,12 @@ def audit(conn, *, published_only: bool = False) -> dict:
 
     by_state: dict = {s: 0 for s in STATES}
     published: dict = {s: 0 for s in STATES}
+    summary_published: dict = {s: 0 for s in STATES}
     unreprocessed = 0
+    healthy = 0
     for r in rows:
         st = classify_row(r)
+        sm = classify_row_summary(r)
         by_state[st] += 1
         try:
             is_pub = (r["status"] or "published") == "published"
@@ -204,17 +256,30 @@ def audit(conn, *, published_only: bool = False) -> dict:
             is_pub = True
         if is_pub:
             published[st] += 1
-            if st in NEEDS_REWRITE and not r["reprocessed"]:
+            summary_published[sm] += 1
+            if st == ORIGINAL and sm == ORIGINAL:
+                healthy += 1
+            if (st in NEEDS_REWRITE or sm in NEEDS_REWRITE) and not r["reprocessed"]:
                 unreprocessed += 1
+
+    # A row needs work if EITHER column does. Counting only bodies is what let
+    # the audit report a healthy corpus while every Home card showed the stub
+    # summary — summary_60 is the text a reader meets first.
+    needs = sum(1 for r in rows
+                if (classify_row(r) in NEEDS_REWRITE
+                    or classify_row_summary(r) in NEEDS_REWRITE)
+                and (_get(r, "status") or "published") == "published")
 
     return {
         "total": len(rows),
         "by_state": by_state,
         "published_by_state": published,
-        # What the reprocess job will actually pick up.
-        "needs_rewrite": sum(published[s] for s in NEEDS_REWRITE),
+        # The column the Home card actually renders.
+        "summary_by_state": summary_published,
+        "needs_rewrite": needs,
         "needs_rewrite_unflagged": unreprocessed,
-        "healthy": published[ORIGINAL],
+        # Both columns original — not just the body.
+        "healthy": healthy,
     }
 
 

@@ -11,6 +11,8 @@ import re
 from typing import Optional
 import httpx
 
+import key_pool
+
 from text_utils import (
     clean_html_fragments,
     extract_sentences,
@@ -21,10 +23,21 @@ from text_utils import (
 
 log = logging.getLogger("sherbyte.ai")
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-GROK_API_KEY   = os.getenv("GROK_API_KEY", "")
 GEMINI_MODEL   = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 GROQ_MODEL     = os.getenv("GROQ_MODEL",   "llama-3.1-8b-instant")
+OPENAI_MODEL   = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+GROK_MODEL     = os.getenv("GROK_MODEL",   "grok-2-latest")
+
+# Every key the environment carries, per provider, collected once at import.
+# GEMINI_API_KEY_4 / GEMINI_API_KEY_9 / GROQ_API_KEY_4 / GPT_API_KEY_4 were all
+# invisible before this: the module read one fixed name per provider, so the
+# spares were dead weight and a single 429 took the whole rewrite pass down.
+KEYS = key_pool.PoolSet()
+
+# Back-compat: a few call sites and tests read these names directly. They are
+# now "the first key in the pool" rather than "the only key".
+GEMINI_API_KEY = KEYS.get("gemini").current() or ""
+GROK_API_KEY   = KEYS.get("grok").current() or ""
 
 # Copyright-safe placeholders. When no AI rewrite is available we NEVER fall back
 # to the source article's text — we show these neutral, original strings instead.
@@ -125,12 +138,16 @@ STRICT RULES:
 Output the JSON object only. No markdown. No commentary."""
 
 
-async def _call_gemini(title: str, body: str, client: httpx.AsyncClient) -> Optional[dict]:
-    if not GEMINI_API_KEY:
-        return None
+# ─── provider calls ───────────────────────────────────────────────────────────
+# Each takes an explicit key and returns (result, status):
+#   result — the parsed dict, or None
+#   status — the HTTP status, so the pool wrapper can tell "this key is rate
+#            limited" (rotate) from "the service is down" (do not rotate, the
+#            next key would fail identically and spend the pool for nothing).
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
-
+async def _gemini_once(key: str, title: str, body: str, client) -> tuple:
+    url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
+           f"{GEMINI_MODEL}:generateContent?key={key}")
     payload = {
         "systemInstruction": {"parts": [{"text": SYSTEM_INSTRUCTION}]},
         "contents": [{
@@ -144,34 +161,31 @@ async def _call_gemini(title: str, body: str, client: httpx.AsyncClient) -> Opti
             "responseSchema": _GEMINI_SCHEMA,
         }
     }
-
     try:
         r = await client.post(url, json=payload, timeout=30)
         if r.status_code != 200:
-            log.warning("Gemini HTTP %d: %s", r.status_code, r.text[:250])
-            return None
-        data = r.json()
-        candidates = data.get("candidates", [])
+            log.warning("Gemini HTTP %d: %s", r.status_code, r.text[:200])
+            return None, r.status_code
+        candidates = (r.json() or {}).get("candidates", [])
         if not candidates:
             log.warning("Gemini returned no candidates")
-            return None
+            return None, 200
         parts = candidates[0].get("content", {}).get("parts", [])
         if not parts:
-            return None
-        text = parts[0].get("text", "").strip()
-        return json.loads(text)
+            return None, 200
+        return json.loads(parts[0].get("text", "").strip()), 200
     except json.JSONDecodeError as e:
         log.warning("Gemini JSON parse failed: %s", e)
-        return None
+        return None, 200
     except Exception as e:
         log.warning("Gemini call failed: %s", e)
-        return None
+        return None, 0
 
 
-async def _call_groq(title: str, body: str, client: httpx.AsyncClient) -> Optional[dict]:
-    if not GROK_API_KEY:
-        return None
-
+async def _openai_chat_once(key: str, title: str, body: str, client, *,
+                            url: str, model: str, label: str) -> tuple:
+    """Groq, OpenAI and Grok all speak the OpenAI chat-completions shape, so they
+    share one caller and differ only by endpoint, model and key."""
     prompt = SYSTEM_INSTRUCTION + f"""
 
 ARTICLE TITLE: {title}
@@ -179,33 +193,90 @@ ARTICLE TITLE: {title}
 ARTICLE BODY: {body[:2000]}
 
 Return ONLY a single JSON object matching the schema. No markdown, no code fences."""
-
     try:
         r = await client.post(
-            "https://api.groq.com/openai/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {GROK_API_KEY}",
-                "Content-Type":  "application/json",
-            },
-            json={
-                "model":           GROQ_MODEL,
-                "messages":        [{"role": "user", "content": prompt}],
-                "temperature":     0.35,
-                "max_tokens":      900,
-                "response_format": {"type": "json_object"},
-            },
+            url,
+            headers={"Authorization": f"Bearer {key}",
+                     "Content-Type": "application/json"},
+            json={"model": model,
+                  "messages": [{"role": "user", "content": prompt}],
+                  "temperature": 0.35,
+                  "max_tokens": 900,
+                  "response_format": {"type": "json_object"}},
             timeout=25,
         )
         if r.status_code != 200:
-            log.warning("Groq HTTP %d: %s", r.status_code, r.text[:200])
-            return None
-        data = r.json()
-        text = data["choices"][0]["message"]["content"].strip()
+            log.warning("%s HTTP %d: %s", label, r.status_code, r.text[:200])
+            return None, r.status_code
+        text = (r.json()["choices"][0]["message"]["content"] or "").strip()
         text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text).strip()
-        return json.loads(text)
+        return json.loads(text), 200
     except Exception as e:
-        log.warning("Groq fallback failed: %s", e)
+        log.warning("%s call failed: %s", label, e)
+        return None, 0
+
+
+# provider -> a coroutine (key, title, body, client) -> (result, status)
+_PROVIDER_CALLS = {
+    "gemini": _gemini_once,
+    "groq":   lambda k, t, b, c: _openai_chat_once(
+        k, t, b, c, url="https://api.groq.com/openai/v1/chat/completions",
+        model=GROQ_MODEL, label="Groq"),
+    "openai": lambda k, t, b, c: _openai_chat_once(
+        k, t, b, c, url="https://api.openai.com/v1/chat/completions",
+        model=OPENAI_MODEL, label="OpenAI"),
+    # xAI, NOT Groq. The code used to read GROK_API_KEY and post it to
+    # api.groq.com, so whichever of the two keys existed, one provider was
+    # always being called with the other's credential.
+    "grok":   lambda k, t, b, c: _openai_chat_once(
+        k, t, b, c, url="https://api.x.ai/v1/chat/completions",
+        model=GROK_MODEL, label="Grok"),
+}
+
+
+async def _call_provider(provider: str, title: str, body: str, client):
+    """Try every key in one provider's pool, rotating on key-specific failures.
+
+    Rotation happens ONLY on 401/403/429 — the statuses that mean this key is
+    the problem. On anything else the next key would fail identically, and
+    burning the pool to learn that costs the fallback its keys too.
+    """
+    pool = KEYS.get(provider)
+    if not pool.size:
         return None
+    fn = _PROVIDER_CALLS[provider]
+    pool.reset()
+    for _ in range(pool.size):
+        key = pool.current()
+        if not key:
+            return None
+        result, status = await fn(key, title, body, client)
+        if result:
+            return result
+        if status in key_pool.ROTATE_STATUSES:
+            if not pool.rotate(f"HTTP {status}"):
+                log.warning("%s: all %d key(s) exhausted (last HTTP %d)",
+                            provider, pool.size, status)
+                return None
+            continue
+        return None
+    return None
+
+
+async def _call_cascade(title: str, body: str, client):
+    """Every configured provider in order, each with its own key rotation."""
+    for provider in KEYS.configured():
+        result = await _call_provider(provider, title, body, client)
+        if result:
+            return result
+    return None
+
+
+# NOTE: there are deliberately no per-provider _call_gemini / _call_groq
+# wrappers any more. Nothing outside this module called them, and leaving them
+# meant a test could monkeypatch _call_gemini, watch the patch have no effect
+# because the cascade dispatches through _PROVIDER_CALLS, and still pass.
+# Patch _PROVIDER_CALLS[provider] for one provider, or _call_cascade for all.
 
 
 # Pillar ids the keyword classifier returns, mapped onto the category slugs this
@@ -336,18 +407,16 @@ async def process_article(title: str, body: str, fallback_category: str = "tech"
     body_clean = clean_html_fragments(body)
 
     async with httpx.AsyncClient() as client:
-        result = await _call_gemini(title, body_clean, client)
+        result = await _call_cascade(title, body_clean, client)
         if result:
             return _validate_and_fix(result, title, body_clean, fallback_category)
 
-        result = await _call_groq(title, body_clean, client)
-        if result:
-            return _validate_and_fix(result, title, body_clean, fallback_category)
-
-    # Both providers failed — a 4xx on a retired model id, a 429, an outage, or no
-    # key at all. Parking the row here is what emptied the feed, so classify by
-    # keyword and publish on the aggregator posture instead.
-    log.warning("both AI providers failed for %r — rule-based fallback", (title or "")[:60])
+    # Every configured provider failed, each having spent its own keys — a 4xx on
+    # a retired model id, an outage, or no key at all. Parking the row here is
+    # what emptied the feed, so classify by keyword and publish on the
+    # aggregator posture instead.
+    log.warning("all AI providers failed for %r (%s) — rule-based fallback",
+                (title or "")[:60], KEYS.describe())
     return _rule_based_fallback(title, body_clean, fallback_category, publishable=True)
 
 
@@ -367,9 +436,7 @@ async def process_batch(articles: list[dict], concurrency: int = 5) -> list[dict
                 body     = clean_html_fragments(article.get("body", ""))
                 fallback = article.get("fallback_category", "tech")
                 try:
-                    r = await _call_gemini(title, body, client)
-                    if not r:
-                        r = await _call_groq(title, body, client)
+                    r = await _call_cascade(title, body, client)
                     if not r:
                         r = _rule_based_fallback(title, body, fallback)
                     results[idx] = _validate_and_fix(r, title, body, fallback)
@@ -382,11 +449,27 @@ async def process_batch(articles: list[dict], concurrency: int = 5) -> list[dict
     return [r for r in results if r is not None]
 
 
+_MODEL_FOR = {"gemini": lambda: GEMINI_MODEL, "groq": lambda: GROQ_MODEL,
+              "openai": lambda: OPENAI_MODEL, "grok": lambda: GROK_MODEL}
+
+
 def available_providers() -> dict:
-    """For /health endpoint — which AI providers are configured."""
+    """Which providers are configured, and how DEEP each pool is.
+
+    Sizes rather than booleans: "gemini: true" was the same answer whether one
+    key was configured or three, which is exactly the difference between a 429
+    ending the pass and a 429 costing one retry. A size is still truthy, so
+    callers testing `if providers["gemini"]` keep working.
+    """
+    sizes = KEYS.sizes()
+    configured = KEYS.configured()
+    primary = configured[0] if configured else "rule-based"
     return {
-        "gemini":    bool(GEMINI_API_KEY),
-        "groq":      bool(GROK_API_KEY),
-        "primary":   "gemini" if GEMINI_API_KEY else ("groq" if GROK_API_KEY else "rule-based"),
-        "model":     GEMINI_MODEL if GEMINI_API_KEY else (GROQ_MODEL if GROK_API_KEY else "none"),
+        **sizes,
+        "total_keys": sum(sizes.values()),
+        "primary":    primary,
+        "model":      _MODEL_FOR[primary]() if primary in _MODEL_FOR else "none",
+        # The order a request actually walks, so a log line about a fallback can
+        # be checked against what was configured.
+        "cascade":    configured or ["rule-based"],
     }

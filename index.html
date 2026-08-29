@@ -761,6 +761,118 @@ header {
 /* Reading type. 0.95rem at 1.72 is UI text, not article text — this is the one
    screen a reader stays on for minutes, so it gets a size and a rhythm chosen
    for continuous prose rather than for fitting a card. */
+/* ── Detail pages: Stocks / Mandi / Real Estate ── */
+.dp-hero { padding: 18px 18px 6px; }
+.dp-hero-k { font: 700 .6rem/1 var(--f); letter-spacing: .15em; text-transform: uppercase;
+  color: var(--t3); }
+.dp-hero-v { font: 700 2.3rem/1.05 var(--xf, var(--f)); letter-spacing: -.045em;
+  color: var(--t1); margin-top: 8px; font-variant-numeric: tabular-nums; }
+.dp-hero-c { font: 600 .9rem/1 var(--f); margin-top: 8px; font-variant-numeric: tabular-nums; }
+.dp-up { color: #22C55E } .dp-dn { color: #F0546B }
+.dp-chart { margin: 12px 16px 0; padding: 12px 10px 6px; border-radius: 16px;
+  background: var(--surface-2); }
+.dp-chart svg { display: block; width: 100%; height: 132px; overflow: visible; }
+.dp-range { display: flex; gap: 6px; margin: 10px 16px 0; }
+.dp-range button { flex: 1; background: var(--surface-2); color: var(--t2); border: 0;
+  border-radius: 10px; padding: 8px 0; font: 700 .74rem/1 var(--f); cursor: pointer; }
+.dp-range button.on { background: var(--accent); color: #fff; }
+.dp-h { font: 700 .6rem/1 var(--f); letter-spacing: .15em; text-transform: uppercase;
+  color: var(--t3); margin: 22px 18px 8px; }
+.dp-row { display: flex; align-items: center; gap: 12px; padding: 12px 18px;
+  border-top: 1px solid var(--line, rgba(255,255,255,.06)); cursor: pointer; }
+.dp-row .n { min-width: 0; flex: 1 }
+.dp-row .n b { display: block; font: 700 .88rem/1.3 var(--f); color: var(--t1);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dp-row .n small { display: block; font: 500 .72rem/1.35 var(--f); color: var(--t3);
+  margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dp-row .p { text-align: right; flex: 0 0 auto }
+.dp-row .p b { display: block; font: 700 .88rem/1.3 var(--f); color: var(--t1);
+  font-variant-numeric: tabular-nums; }
+.dp-row .p small { display: block; font: 700 .72rem/1.3 var(--f); margin-top: 3px;
+  font-variant-numeric: tabular-nums; }
+.dp-chips { display: flex; gap: 7px; overflow-x: auto; padding: 10px 16px 2px;
+  -ms-overflow-style: none; scrollbar-width: none; }
+.dp-chips::-webkit-scrollbar { display: none }
+.dp-chips button { flex: 0 0 auto; background: var(--surface-2); color: var(--t2);
+  border: 0; border-radius: 999px; padding: 8px 14px; font: 600 .76rem/1 var(--f);
+  cursor: pointer; white-space: nowrap; }
+.dp-chips button.on { background: var(--accent); color: #fff }
+.dp-stat { display: flex; gap: 10px; padding: 0 16px; margin-top: 12px }
+.dp-stat div { flex: 1; background: var(--surface-2); border-radius: 14px; padding: 12px }
+.dp-stat .k { font: 700 .58rem/1 var(--f); letter-spacing: .12em; text-transform: uppercase;
+  color: var(--t3) }
+.dp-stat .v { font: 700 1.12rem/1.2 var(--f); color: var(--t1); margin-top: 7px;
+  font-variant-numeric: tabular-nums }
+
+/* ── Home: one card per screen (Inshorts pattern) ──
+   The feed was a scrolling list of cards, so a reader skimmed past everything.
+   One card per viewport with scroll-snap makes each story a deliberate stop:
+   image, headline, ~60 words, source and time, then swipe up for the next.
+
+   Snap lives on the SCROLL CONTAINER (#v-home), not on a wrapper, so the
+   existing scroll listeners, the nav hide-on-scroll and the infinite loader all
+   keep working untouched. */
+#v-home.ins-mode { scroll-snap-type: y mandatory; overscroll-behavior-y: contain; }
+/* The rail is a sibling INSIDE the snap container, so a snap scrolled it out of
+   sight and left it half-tucked behind the header. Sticky keeps it in place and
+   makes the cards snap beneath it — the rail is navigation, not a first card. */
+#v-home.ins-mode #chip-row { position: sticky; top: 0; z-index: 6;
+  background: var(--bg); padding-top: 6px; padding-bottom: 6px;
+  box-shadow: 0 8px 16px -12px rgba(0,0,0,.9); }
+#v-home.ins-mode #home-feed { display: block; }
+#v-home.ins-mode .nc {
+  scroll-snap-align: start; scroll-snap-stop: always;
+  /* One viewport minus the chip rail, so the next card's top edge is never
+     peeking — that peek is what turns a snap feed back into a list. */
+  min-height: calc(100dvh - var(--ins-chrome, 118px));
+  height:     calc(100dvh - var(--ins-chrome, 118px));
+  scroll-margin-top: 0;
+  display: flex; flex-direction: column;
+  margin: 0 0 0 0; border-radius: 0; border-left: 0; border-right: 0;
+  padding: 0 0 var(--nav-clear); box-shadow: none;
+  background: var(--bg);
+}
+#v-home.ins-mode .nc-hero-image,
+#v-home.ins-mode .nc-hero { width: 100%; height: 42vh; min-height: 200px;
+  max-height: 46vh; object-fit: cover; border-radius: 0; flex: 0 0 auto; }
+#v-home.ins-mode .nc-title { font-size: 1.42rem; line-height: 1.24;
+  letter-spacing: -0.028em; padding: 0 18px; margin-top: 14px; }
+#v-home.ins-mode .nc-desc { font-size: 1.01rem; line-height: 1.62;
+  padding: 0 18px; margin-top: 12px; color: var(--t2);
+  display: -webkit-box; -webkit-line-clamp: 8; -webkit-box-orient: vertical;
+  overflow: hidden; }
+#v-home.ins-mode .nc-meta { padding: 0 18px; }
+#v-home.ins-mode .nc-acts-row { padding: 0 18px; margin-top: auto;
+  padding-bottom: 6px; }
+/* The affordance. Shown on the first card only — after one swipe the reader
+   knows, and a permanent hint is clutter. */
+.ins-hint { position: absolute; left: 0; right: 0; bottom: calc(var(--nav-clear) + 4px);
+  text-align: center; font-size: .68rem; font-weight: 600; letter-spacing: .04em;
+  color: var(--t3); pointer-events: none; animation: ins-bob 1.9s ease-in-out infinite; }
+@keyframes ins-bob { 0%,100% { transform: translateY(0); opacity: .55 }
+                     50% { transform: translateY(-5px); opacity: .95 } }
+
+/* ── Skeletons ── */
+@keyframes sk-shimmer { 0% { background-position: -400px 0 } 100% { background-position: 400px 0 } }
+.sk-line { background: linear-gradient(90deg,
+    var(--surface-2) 25%, rgba(255,255,255,.07) 37%, var(--surface-2) 63%);
+  background-size: 800px 100%; animation: sk-shimmer 1.25s linear infinite;
+  margin-bottom: 9px; }
+.sk-line:last-child { margin-bottom: 0; }
+.sk-card { padding: 14px 15px; border-radius: 16px; background: var(--surface-1, var(--surface-2));
+  margin-bottom: 10px; }
+.sk-row { display: flex; align-items: center; gap: 12px; padding: 12px 2px; }
+.sk-row .sk-line { margin-bottom: 0; }
+.sk-row .sk-line:last-child { margin-left: auto; }
+
+/* Cards must clear the floating nav and the FAB. Scroll containers get the
+   space as padding rather than a spacer element, so it cannot be scrolled past
+   and left behind. */
+:root { --nav-clear: calc(76px + env(safe-area-inset-bottom, 0px) + 18px); }
+#v-home, #v-explore, #v-bytes, #v-profile, #v-bookmarks,
+#v-notifs, #v-feed, #v-spie { padding-bottom: var(--nav-clear); }
+.xp-page, .ao-body { padding-bottom: var(--nav-clear); }
+
 .ao-p { font-size: 1.06rem; color: var(--t1); line-height: 1.78; margin-bottom: 19px;
   letter-spacing: -0.003em; max-width: 68ch; }
 .ao-p:last-child { margin-bottom: 0; }
@@ -1837,12 +1949,23 @@ nav.compact .nb.on { flex: 0 0 auto; padding-left: 16px; padding-right: 16px; }
 /* ── expanded page shell ── */
 .xp-page{position:fixed;inset:0;z-index:880;background:var(--bg);overflow-y:auto;
   -webkit-overflow-scrolling:touch;transform:translateX(100%);
-  transition:transform .34s cubic-bezier(.22,1,.32,1);padding-bottom:100px}
+  transition:transform .34s cubic-bezier(.22,1,.32,1);
+  padding-bottom:var(--nav-clear)}
+/* The app header sat ON TOP of a full-screen detail page, covering that page's
+   own back arrow — so there was no visible way out of it.
+   z-index did not help: #xp-page lives inside #v-explore, whose own stacking
+   context traps its 880 below the header's 500 in the root context. Rather than
+   restructure the DOM, the app header is hidden while a page is open. It is
+   redundant there anyway: the page has its own header, with the back arrow. */
+body.dp-open > header, body.dp-open #hdr { display:none !important }
 .xp-page.on{transform:translateX(0)}
 .xp-pg-hd{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:12px;
   padding:14px 16px;background:var(--bg);border-bottom:1px solid var(--xp-line)}
+/* A real character, not an icon font. This button is the ONLY way out of a
+   full-screen detail page — if Font Awesome fails to load it becomes an
+   invisible tap target, and the reader is stuck on a page with no exit. */
 .xp-pg-hd button{border:0;background:transparent;cursor:pointer;color:var(--xp-ink);
-  font-size:1rem;padding:2px 4px}
+  font:700 1.35rem/1 var(--f);padding:0 6px 2px;min-width:34px;text-align:left}
 .xp-pg-hd h2{font:700 .93rem/1 var(--f);color:var(--xp-ink);margin:0;letter-spacing:-.02em}
 .xp-seg{display:flex;gap:7px;padding:11px 44px 5px 16px;overflow-x:auto;scrollbar-width:none}
 .xp-seg::-webkit-scrollbar{display:none}
@@ -3769,7 +3892,10 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
       <div class="mc-sub" id="mc-sub">Live market data</div>
     </div>
   </div>
-  <div class="mc-body"><div class="mc-grid" id="mc-grid"><div class="mc-empty">Loading…</div></div><div class="mc-about" id="mc-about"></div></div>
+  <div class="mc-body"><div class="mc-grid" id="mc-grid"><div class="sk-card">
+      <div class="sk-line" style="height:14px;width:62%"></div>
+      <div class="sk-line" style="height:11px;width:92%"></div>
+      <div class="sk-line" style="height:11px;width:48%"></div></div></div><div class="mc-about" id="mc-about"></div></div>
 </div>
 
 <!-- INTELLIGENCE MODULE OVERLAY -->
@@ -3845,7 +3971,9 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 <div id="v-explore" class="view">
   <div class="live-ticker">
     <div class="ticker-inner" id="ticker-inner">
-      <span class="tick-item" style="opacity:.55">● Live market data loading…</span>
+      <span class="tick-item"><span class="sk-line" style="height:9px;width:120px;display:inline-block;vertical-align:middle;margin:0"></span></span>
+      <span class="tick-item"><span class="sk-line" style="height:9px;width:90px;display:inline-block;vertical-align:middle;margin:0"></span></span>
+      <span class="tick-item"><span class="sk-line" style="height:9px;width:110px;display:inline-block;vertical-align:middle;margin:0"></span></span>
     </div>
   </div>
 
@@ -3921,7 +4049,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
       <div>
         <div class="bw-loc" id="bw-loc"><i class="fa-solid fa-location-dot" style="font-size:0.6rem"></i> Locating…</div>
         <div class="bw-temp" id="bw-temp">—°</div>
-        <div class="bw-desc" id="bw-desc">Loading…</div>
+        <div class="bw-desc" id="bw-desc"><span class="sk-line" style="height:11px;width:70%"></span></div>
       </div>
       <div class="bw-icon" id="bw-icon"><i class="fa-solid fa-cloud-sun"></i></div>
     </div>
@@ -4315,7 +4443,9 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
       if(usd){P('mk-usd','₹'+f(usd.price));C('mc-usd',usd.change_pct);S('ms-usd',usd.spark,usd.change_pct>=0);}
       var t=document.getElementById('bw-temp'), c=document.getElementById('bw-desc'), bt=document.getElementById('bt-temp'), bc=document.getElementById('bt-cond');
       if(t&&bt&&t.textContent&&t.textContent.indexOf('-')<0){ bt.innerHTML=t.textContent.replace('°','')+'<small>°</small>'; }
-      if(c&&bc&&c.textContent&&c.textContent!=='Loading…'){ bc.textContent=c.textContent; }
+      // The skeleton has no text, so "has text" IS the readiness signal now;
+      // it used to compare against the literal "Loading…" that lived here.
+      if(c&&bc&&c.textContent&&c.textContent.trim()){ bc.textContent=c.textContent; }
       // ── state engine: clear loading once real data lands; reflect connectivity ──
       var off=(typeof navigator!=='undefined' && navigator.onLine===false);
       function st(id,ready){ var e=document.getElementById(id); if(!e) return;
@@ -4763,6 +4893,62 @@ function clipWords(t, max) {
 
 // Backend (v6) returns headline/source_name/summary/full_body/category.
 // Frontend expects title/source/preview/body_ai/category.
+// ── Home: Inshorts mode ─────────────────────────────────────────────────────
+// The class is applied at boot rather than hardcoded into the markup so the mode
+// can be turned off in one place, and so --ins-chrome can be measured from the
+// real chip rail instead of guessed — the rail wraps to two lines on a narrow
+// screen, and a guessed height is what leaves the next card peeking.
+function insApply() {
+  const home = document.getElementById('v-home');
+  if (!home) return;
+  home.classList.add('ins-mode');
+  const chips = document.getElementById('chip-row');
+  const chrome = (chips ? chips.getBoundingClientRect().height : 56) + 8;
+  home.style.setProperty('--ins-chrome', Math.round(chrome) + 'px');
+}
+window.addEventListener('resize', () => { try { insApply(); } catch (e) {} });
+
+// ── Skeletons, and the rule that no placeholder ever reaches a reader ───────
+// A shimmering block says "this is arriving" without asking the reader to read
+// the word "Loading". Text loading states did the opposite: they occupied the
+// exact place the content would go, in the same type, so the app looked like it
+// had shipped the word "Loading…" as content.
+function skel(h, w, r) {
+  return `<div class="sk-line" style="height:${h||12}px;width:${w||'100%'};` +
+         `border-radius:${r||6}px"></div>`;
+}
+function skelCard(lines) {
+  const n = lines || 3;
+  return `<div class="sk-card">${skel(14, '62%')}` +
+    Array.from({length:n}, (_, i) => skel(11, (i === n - 1 ? '48%' : '92%'))).join('') +
+    `</div>`;
+}
+function skelRows(n, h) {
+  return Array.from({length:n||3}, () =>
+    `<div class="sk-row">${skel(h||13, '70%')}${skel(h||13, '18%')}</div>`).join('');
+}
+
+// The placeholder strings the pipeline can leave in a body or a summary. A card
+// must NEVER print one: the reader has no idea what "Sherr AI is preparing an
+// original summary" refers to, and it reads as the app being broken — which,
+// when it appears on every card, is a fair reading.
+const PLACEHOLDER_RE =
+  /sherr ai is preparing|sherrbyte has not yet published|will appear here shortly|an original sherrbyte summary will replace/i;
+
+function isPlaceholderText(t) {
+  return !t || !String(t).trim() || PLACEHOLDER_RE.test(String(t));
+}
+
+// What a card shows when the summary is a placeholder or missing. Never the
+// placeholder, and never a blank: the headline is real, and the source and time
+// are real, so the card still says something true.
+function cardSummary(a) {
+  const t = a && a.preview;
+  if (!isPlaceholderText(t)) return t;
+  const bits = [a && a.orig_source, a && timeAgo(a.published_at)].filter(Boolean);
+  return bits.length ? bits.join(' · ') : '';
+}
+
 function normalizeArticle(a) {
   return {
     ...a,
@@ -5395,7 +5581,8 @@ async function buildByteCard(a) {
   for (const ln of lines) { ctx.fillText(ln, 64, ty); ty += 70; }
 
   // full summary — the complete text, not a cut-off sentence
-  const sub = (a.summary || a.preview || a.source_name || '').toString().trim();
+  const _s = (a.summary || a.preview || '').toString().trim();
+  const sub = (isPlaceholderText(_s) ? (a.source_name || a.orig_source || '') : _s).trim();
   if (sub) {
     ctx.fillStyle = 'rgba(255,255,255,0.66)';
     ctx.font = '400 33px -apple-system, system-ui, sans-serif';
@@ -5434,7 +5621,8 @@ async function shareArticleCard(a) {
     const blob = await buildByteCard(a);
     if (!blob) throw new Error('no blob');
     const file = new File([blob], 'sherrbyte-article.png', { type: 'image/png' });
-    const summary = (a.summary || a.preview || '').toString().trim();
+    const _sum = (a.summary || a.preview || '').toString().trim();
+    const summary = isPlaceholderText(_sum) ? '' : _sum;
     const text = a.title + (summary ? '\n\n' + summary : '') + '\n\nvia SherrByte';
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
       await navigator.share({ files: [file], text });
@@ -5618,6 +5806,7 @@ function renderStandardCard(rawA, container) {
   const d = document.createElement('div');
   d.className = 'nc fadein';
   d.dataset.aid = a.id;
+  d.style.position = 'relative';
   d.onclick = () => openArticle(a);
   d.innerHTML = `
     ${articleImage(a, 'nc-hero-image')}
@@ -5631,7 +5820,9 @@ function renderStandardCard(rawA, container) {
       <span class="nc-src" style="margin-left:auto">${a.source} · ${timeAgo(a.published_at)}</span>
     </div>
     <div class="nc-title">${a.title}</div>
-    <div class="nc-desc">${a.preview}</div>
+    <div class="nc-desc">${bEsc(cardSummary(a))}</div>
+    ${container.children.length === 0
+      ? `<div class="ins-hint">Swipe up for the next story</div>` : ''}
   `;
   d.querySelector('.nc-like').addEventListener('click', e => { e.stopPropagation(); feedLike(a, e.currentTarget); });
   d.querySelector('.nc-comment').addEventListener('click', e => { e.stopPropagation(); openArticle(a); });
@@ -5665,7 +5856,7 @@ async function loadArticleComments(id) {
   const inp = document.getElementById('ao-cmt-input');
   if (inp) inp.placeholder = 'Add a comment…';
   const cnt = document.getElementById('ao-cmt-count');
-  list.innerHTML = '<div class="ao-cmt-empty"><div class="ao-cmt-empty-s">Loading…</div></div>';
+  list.innerHTML = skelRows(3, 12);
   try {
     const res = await api('/signal/comments/' + encodeURIComponent(id));
     const cs = (res && res.comments) || [];
@@ -5833,6 +6024,9 @@ async function loadFeed(reset = false) {
     document.getElementById('home-feed').innerHTML = '';
   }
   feedLoading = true;
+  // Applied here, not only in startMarketsPolling: that runs on the first
+  // Explore visit, so a reader who never left Home never got the mode.
+  try { insApply(); } catch (e) {}
   const c = document.getElementById('home-feed');
   // Watchdog: feedLoading is a mutex, and a stranded one is indistinguishable from
   // a slow network — every later loadFeed() returns at the guard and the skeleton
@@ -6295,7 +6489,10 @@ function openArticle(rawA) {
   const _rt = document.getElementById('ao-read-time');
   if (_rt) _rt.textContent = Math.max(1, Math.round(_readSec / 60)) + ' min read';
   document.getElementById('ao-main-title').textContent = a.title;
-  const body = a.body_ai || a.preview || a.summary || '';
+  // renderArticleBody's own empty state is honest and useful; the placeholder
+  // is neither, so it is turned into that empty state rather than printed.
+  const _b = a.body_ai || a.preview || a.summary || '';
+  const body = isPlaceholderText(_b) ? '' : _b;
   renderArticleBody(body);
   const _tb = document.getElementById('ao-tldr-box'); if (_tb) { _tb.style.display = 'none'; _tb.innerHTML = ''; }
   document.getElementById('ao-keypoints').innerHTML = '';
@@ -6518,7 +6715,7 @@ async function showExpCat(cat, scrollTo) {
     const hdr = feed.previousElementSibling;
     if (ev && hdr) ev.scrollTo({ top: Math.max(0, hdr.offsetTop - 64), behavior: 'smooth' });
   }
-  feed.innerHTML = '<div class="exp-cat-load">Loading…</div>';
+  feed.innerHTML = skelCard(2) + skelCard(2);
   const counts = await _ensureExpCounts();
   if (_expCurCat !== cat) return;            // user switched while counts loaded
   // Every pillar row shows the SAME number of stories. The server clamps to what the
@@ -6550,7 +6747,7 @@ async function renderExpCatSection(cat, feed, count) {
        <span class="exp-cat-sec-title" style="color:${cc.hex}">${cc.icon} <span style="color:var(--t1)">${cc.short}</span>${count!=null?` <em class="exp-cat-sec-count">${count}</em>`:''}</span>
        <span class="exp-cat-sec-all tap">See all</span>
      </div>
-     <div class="exp-srow"><div class="exp-cat-load">Loading…</div></div>`;
+     <div class="exp-srow">${skelCard(2)}</div>`;
   feed.appendChild(sec);
   sec.querySelector('.exp-cat-sec-all').onclick = () => gotoCategory(cat);
   const row = sec.querySelector('.exp-srow');
@@ -6687,7 +6884,7 @@ function answerQuiz(el, idx, ans) {
 // ── BOOKMARKS ──
 async function renderBM() {
   const c = document.getElementById('bm-feed');
-  c.innerHTML = '<div style="text-align:center;color:var(--t3);padding:30px;font-size:0.8rem">Loading...</div>';
+  c.innerHTML = skelCard(3) + skelCard(3);
   let savedArticles = [];
   if (ST.token) {
     try {
@@ -6825,7 +7022,7 @@ async function sendTestPush() {
 }
 async function renderNotifs() {
   const c = document.getElementById('notifs-feed');
-  c.innerHTML = '<div style="text-align:center;color:var(--t3);padding:28px;font-size:0.82rem">Loading…</div>';
+  c.innerHTML = skelCard(3) + skelCard(3);
   let items = [];
   try { const data = await api('/notifications'); items = data.notifications || []; } catch (e) {}
   // Fallback: surface the freshest stories from the loaded feed as "new for you".
@@ -7272,7 +7469,7 @@ async function loadPatterns(type) {
     c.classList.toggle('on', (c.getAttribute('data-t') || '') === spiePatternType));
   const list = document.getElementById('spie-list');
   if (!list) return;
-  list.innerHTML = '<div class="spie-loading"><i class="fa-solid fa-satellite-dish"></i> Scanning patterns…</div>';
+  list.innerHTML = skelCard(3) + skelCard(3) + skelCard(2);
   renderSpieChips();
   // Excluded types are dropped BEFORE the tab filter, so no code path — a tab,
   // a default, or a future "All" — can put them back on the page.
@@ -9269,6 +9466,82 @@ const MOCK_EXPLORE = {
     repos: [{name:'ollama/ollama',stars:104000,lang:'Go'},
             {name:'langchain-ai/langchain',stars:92000,lang:'Python'}],
   },
+  // ── Detail-page data ──
+  // One object, at the top of the script, so swapping any block for a live
+  // endpoint later is a change of source and nothing else. Numbers are plausible
+  // Indian market values, not round placeholders — a chart of 100,110,120 reads
+  // as fake at a glance and teaches the reader to distrust the real ones.
+  stocksDetail: {
+    indices: {
+      NIFTY:  { name:'NIFTY 50',  value:24231.85, chg:-134.20, pct:-0.55 },
+      SENSEX: { name:'BSE SENSEX', value:77528.10, chg:-483.60, pct:-0.62 },
+      BANKNIFTY:{ name:'Bank Nifty', value:51204.35, chg:-211.05, pct:-0.41 },
+    },
+    // Close series per range. Real indices wander; these do too.
+    series: {
+      '1D': [24366,24352,24318,24290,24305,24274,24248,24231],
+      '1W': [24410,24388,24301,24355,24280,24262,24231],
+      '1M': [23980,24105,24220,24188,24402,24515,24468,24330,24276,24231],
+      '1Y': [21850,22190,22040,22610,23180,23020,23540,23990,24310,24180,24402,24231],
+    },
+    gainers: [
+      ['ADANIPORTS','Adani Ports','1,462.30',3.84],['TATAMOTORS','Tata Motors','1,024.55',2.91],
+      ['SBIN','State Bank of India','842.10',2.44],['HINDALCO','Hindalco','688.75',2.02],
+      ['ONGC','ONGC','284.60',1.78]],
+    losers: [
+      ['INFY','Infosys','1,846.90',-2.68],['TCS','TCS','4,102.35',-2.21],
+      ['HDFCBANK','HDFC Bank','1,678.40',-1.94],['WIPRO','Wipro','562.15',-1.60],
+      ['TECHM','Tech Mahindra','1,690.05',-1.35]],
+  },
+  mandiDetail: {
+    states: { Telangana:['Hyderabad','Warangal','Karimnagar'],
+              Maharashtra:['Pune','Nashik','Nagpur'],
+              Karnataka:['Bengaluru','Belagavi','Hubballi'] },
+    items: [
+      { commodity:'Onion',    market:'Bowenpally',   state:'Telangana',   district:'Hyderabad',
+        modal:2400, min:1800, max:2900, chg:4.3,
+        history:[2180,2240,2195,2310,2280,2365,2400] },
+      { commodity:'Tomato',   market:'Gudimalkapur', state:'Telangana',   district:'Hyderabad',
+        modal:1180, min:900,  max:1600, chg:-6.8,
+        history:[1420,1385,1310,1265,1240,1205,1180] },
+      { commodity:'Potato',   market:'Malakpet',     state:'Telangana',   district:'Hyderabad',
+        modal:1850, min:1500, max:2200, chg:1.1,
+        history:[1795,1810,1828,1802,1834,1841,1850] },
+      { commodity:'Green Chilli', market:'Nashik',   state:'Maharashtra', district:'Nashik',
+        modal:5620, min:4800, max:6400, chg:2.6,
+        history:[5290,5340,5410,5385,5470,5545,5620] },
+      { commodity:'Cotton',   market:'Nagpur',       state:'Maharashtra', district:'Nagpur',
+        modal:7340, min:6900, max:7800, chg:-0.9,
+        history:[7480,7455,7402,7420,7385,7362,7340] },
+      { commodity:'Ragi',     market:'Bengaluru',    state:'Karnataka',   district:'Bengaluru',
+        modal:3480, min:3100, max:3900, chg:0.6,
+        history:[3410,3428,3445,3432,3461,3470,3480] },
+    ],
+  },
+  realtyDetail: {
+    cities: [
+      { city:'Mumbai',    rate:29400, chg:6.2, yield_:3.1, cls:'Metro',
+        history:[24800,25600,26400,27100,27900,28600,29400],
+        localities:[['Powai',26800,5.4],['Andheri West',31200,6.8],['Chembur',24500,4.9],
+                    ['Bandra West',48600,7.1],['Thane West',15900,8.2]] },
+      { city:'Bengaluru', rate:12800, chg:9.4, yield_:3.8, cls:'Metro',
+        history:[10200,10700,11150,11600,12050,12420,12800],
+        localities:[['Whitefield',9800,11.2],['Indiranagar',18400,7.6],['Sarjapur Road',10600,12.4],
+                    ['Hebbal',11200,8.9],['JP Nagar',13100,6.3]] },
+      { city:'Hyderabad', rate:8900,  chg:7.8, yield_:4.2, cls:'Metro',
+        history:[7300,7620,7940,8210,8480,8690,8900],
+        localities:[['Gachibowli',9600,10.8],['Kondapur',8800,9.1],['Kokapet',11400,13.6],
+                    ['Miyapur',6200,7.4],['Banjara Hills',17800,5.2]] },
+      { city:'Pune',      rate:9600,  chg:5.1, yield_:3.9, cls:'Tier 1',
+        history:[8400,8680,8910,9080,9290,9450,9600],
+        localities:[['Hinjewadi',8200,9.6],['Kharadi',10400,8.3],['Baner',11100,6.9],
+                    ['Wakad',8900,7.7],['Kothrud',12200,5.4]] },
+      { city:'Jaipur',    rate:4700,  chg:4.4, yield_:4.6, cls:'Tier 2',
+        history:[4050,4180,4290,4380,4490,4600,4700],
+        localities:[['Vaishali Nagar',5100,5.8],['Mansarovar',4400,4.9],['Jagatpura',4200,6.4]] },
+    ],
+  },
+
   // No upstream for these two yet, so they carry their own rows rather than an
   // empty page. Same shape the live sections use, so wiring a feed later is a
   // change of source, not of renderer.
@@ -9414,7 +9687,7 @@ function renderXpMatrix() {
   if (!el) return;
   const d = xpMatrixData();
   el.innerHTML = Object.entries(d).map(([k,v])=>`
-    <div class="xp-mt ${v.tint} ${v.pct>=0?'up':'dn'}" onclick="xpOpenPage('${k}')">
+    <div class="xp-mt ${v.tint} ${v.pct>=0?'up':'dn'}" onclick="xpMatrixTap('${k}')">
       <div class="nm">${bEsc(v.label)}</div>
       <div class="val">${bEsc(v.value)}</div>
       <div class="chg">${xpPct(v.pct)}</div>
@@ -9435,12 +9708,12 @@ function renderXpTal() {
     const md = ((xpSnap && xpSnap.mandi && xpSnap.mandi.data) || MOCK_EXPLORE.mandi);
     const it = md.items || [];
     const [a,b,c] = [it[0]||{}, it[1]||{}, it[2]||{}];
-    const sm = (x,i) => `<div class="sm" onclick="xpMandiSheet(${i})">
+    const sm = (x,i) => `<div class="sm" onclick="dpMandi(${JSON.stringify(x.commodity||'')})">
         <div class="k">${bEsc(x.commodity||'—')}</div>
         <div class="v">₹${xpNum(x.modal_price||0)}</div>
         <div class="s">${bEsc(x.market||'')}</div></div>`;
     el.innerHTML = `<div class="xp-band"><div class="xp-tal">
-      <div class="big" onclick="xpMandiPage()">
+      <div class="big" onclick="dpMandi()">
         <div class="k">${bEsc(a.commodity||'Onion')} · ${bEsc(md.state||'')}</div>
         <div class="v">₹${xpNum(a.modal_price||0)}</div>
         <div class="s">₹${xpNum(a.min_price||0)}–₹${xpNum(a.max_price||0)} per quintal<br>
@@ -9448,12 +9721,12 @@ function renderXpTal() {
       </div>${sm(b,1)}${sm(c,2)}</div></div>`;
   } else if (xpTal === 'Real Estate') {
     const rt = MOCK_EXPLORE.realty.items;
-    const sm = (x,i) => `<div class="sm" onclick="xpRealtySheet(${i})">
+    const sm = (x,i) => `<div class="sm" onclick="dpRealty(${JSON.stringify(x.city||'')})">
         <div class="k">${bEsc(x.city)}</div>
         <div class="v">₹${xpNum(x.rate)}</div>
         <div class="s">per sq ft · ${x.duty}% duty</div></div>`;
     el.innerHTML = `<div class="xp-band"><div class="xp-tal">
-      <div class="big" onclick="xpRealtyPage()">
+      <div class="big" onclick="dpRealty()">
         <div class="k">${bEsc(rt[0].city)} · circle rate</div>
         <div class="v">₹${xpNum(rt[0].rate)}</div>
         <div class="s">guidance value per sq ft<br>${bEsc(rt[0].cls)} · stamp duty ${rt[0].duty}%</div>
@@ -9660,11 +9933,13 @@ function xpOpenPage(key) {
   xpRenderPage();
   const pg = document.getElementById('xp-page');
   pg.classList.add('on'); pg.scrollTop = 0;
+  document.body.classList.add('dp-open');
   document.body.style.overflow = 'hidden';
 }
 function xpClosePage() {
   const pg = document.getElementById('xp-page');
   if (pg) pg.classList.remove('on');
+  document.body.classList.remove('dp-open');
   document.body.style.overflow = '';
   xpPageKey = null;
 }
@@ -9692,7 +9967,7 @@ function xpRenderPage() {
   }
   pg.innerHTML = `
     <div class="xp-pg-hd">
-      <button onclick="xpClosePage()" aria-label="Back"><i class="fa-solid fa-arrow-left"></i></button>
+      <button onclick="xpClosePage()" aria-label="Back"><span aria-hidden="true">&#8592;</span></button>
       <h2>${bEsc(cfg.title)}</h2></div>
     ${cfg.segs.length>1 ? `<div class="xp-seg">${cfg.segs.map(s=>
       `<button class="xp-sg ${s===xpSeg?'on':''}" onclick="xpSetSeg(${JSON.stringify(s)})">${bEsc(s)}</button>`).join('')}</div>` : ''}
@@ -10033,7 +10308,7 @@ function xpListPage(title, segs, rowsFor, opts) {
     const rows = rowsFor(xpSeg) || [];
     pg.innerHTML = `
       <div class="xp-pg-hd">
-        <button onclick="xpClosePage()" aria-label="Back"><i class="fa-solid fa-arrow-left"></i></button>
+        <button onclick="xpClosePage()" aria-label="Back"><span aria-hidden="true">&#8592;</span></button>
         <h2>${bEsc(title)}</h2></div>
       ${opts.hero || ''}
       ${segs && segs.length>1 ? `<div class="xp-seg">${segs.map(sg=>
@@ -10060,6 +10335,7 @@ function xpListPage(title, segs, rowsFor, opts) {
   draw();
   const pg = document.getElementById('xp-page');
   pg.classList.add('on'); pg.scrollTop = 0;
+  document.body.classList.add('dp-open');
   document.body.style.overflow = 'hidden';
 }
 
@@ -10107,6 +10383,213 @@ function xpRealtySheet(i) {
      ['Registration','1% of value'],
      ['Source','State registration dept (indicative)']], null);
 }
+// The Matrix of Markets stocks tile gets the full Stocks page (value, ranges,
+// gainers, losers, real related news); the other five keep the instrument list
+// they already had, which is the right shape for a basket of pairs or metals.
+function xpMatrixTap(key) {
+  if (key === 'stocks') return dpStocks();
+  return xpOpenPage(key);
+}
+
+// ── Detail pages ────────────────────────────────────────────────────────────
+// One shell (dpPage) so all three share the back header, and the same chrome as
+// every other Explore page. Live data where an endpoint exists — /markets for
+// index values, /explore/snapshot for mandi, /search for related news — and
+// MOCK_EXPLORE for everything with no upstream yet.
+let dpState = {};
+
+function dpPage(title, html) {
+  const pg = document.getElementById('xp-page');
+  if (!pg) return;
+  xpPageKey = '_detail';
+  pg.innerHTML = `
+    <div class="xp-pg-hd">
+      <button onclick="xpClosePage()" aria-label="Back"><span aria-hidden="true">&#8592;</span></button>
+      <h2>${bEsc(title)}</h2></div>
+    ${html}`;
+  pg.classList.add('on'); pg.scrollTop = 0;
+  document.body.classList.add('dp-open');
+  document.body.style.overflow = 'hidden';
+}
+
+// A filled line chart. Plain SVG on a 0..100 viewBox with preserveAspectRatio
+// off, so it stretches to any width without the caller measuring anything.
+function dpChart(series, up) {
+  const v = (series || []).filter(n => typeof n === 'number');
+  if (v.length < 2) return `<div class="dp-chart">${skel(120)}</div>`;
+  const lo = Math.min(...v), hi = Math.max(...v), span = (hi - lo) || 1;
+  const x = i => (i / (v.length - 1)) * 100;
+  const y = n => 96 - ((n - lo) / span) * 88;
+  const line = v.map((n, i) => `${i ? 'L' : 'M'}${x(i).toFixed(2)},${y(n).toFixed(2)}`).join(' ');
+  const col = up ? '#22C55E' : '#F0546B';
+  const id = 'g' + Math.random().toString(36).slice(2, 8);
+  return `<div class="dp-chart"><svg viewBox="0 0 100 100" preserveAspectRatio="none"
+      role="img" aria-label="Price trend">
+    <defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="${col}" stop-opacity=".28"/>
+      <stop offset="100%" stop-color="${col}" stop-opacity="0"/></linearGradient></defs>
+    <path d="${line} L100,100 L0,100 Z" fill="url(#${id})"/>
+    <path d="${line}" fill="none" stroke="${col}" stroke-width="1.6"
+      vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/>
+  </svg></div>`;
+}
+
+const dpPct = n => `<small class="${n >= 0 ? 'dp-up' : 'dp-dn'}">${
+  (n >= 0 ? '▲ ' : '▼ ') + Math.abs(Number(n) || 0).toFixed(2)}%</small>`;
+const dpRows = rows => rows.map(r => `
+  <div class="dp-row" ${r.tap ? `onclick="${r.tap}"` : ''}>
+    <div class="n"><b>${bEsc(r.a)}</b>${r.b ? `<small>${bEsc(r.b)}</small>` : ''}</div>
+    <div class="p"><b>${bEsc(r.c)}</b>${r.d != null ? dpPct(r.d) : ''}</div>
+  </div>`).join('');
+
+// ── STOCKS ─────────────────────────────────────────────────────────────────
+function dpStocks(sym) {
+  const M = MOCK_EXPLORE.stocksDetail;
+  dpState.stock = sym || dpState.stock || 'NIFTY';
+  dpState.range = dpState.range || '1D';
+  const idx = M.indices[dpState.stock] || M.indices.NIFTY;
+  // Live value from /markets when the cache has it; the mock only fills the gap.
+  const live = (xpSnap && xpSnap.markets && xpSnap.markets.data
+                && xpSnap.markets.data[dpState.stock]) || null;
+  const value = live && live.price ? live.price : idx.value;
+  const pct = live && live.change_pct != null ? live.change_pct : idx.pct;
+  const series = M.series[dpState.range] || M.series['1D'];
+
+  dpPage(idx.name, `
+    <div class="dp-hero">
+      <div class="dp-hero-k">${bEsc(dpState.stock)}${live ? '' : ' · indicative'}</div>
+      <div class="dp-hero-v">${xpNum(Math.round(value))}</div>
+      <div class="dp-hero-c ${pct >= 0 ? 'dp-up' : 'dp-dn'}">${
+        (pct >= 0 ? '▲ ' : '▼ ') + Math.abs(pct).toFixed(2)}% today</div>
+    </div>
+    ${dpChart(series, pct >= 0)}
+    <div class="dp-range">${['1D','1W','1M','1Y'].map(r =>
+      `<button class="${r === dpState.range ? 'on' : ''}"
+        onclick="dpState.range=${JSON.stringify(r)};dpStocks()">${r}</button>`).join('')}</div>
+    <div class="dp-chips">${Object.keys(M.indices).map(k =>
+      `<button class="${k === dpState.stock ? 'on' : ''}"
+        onclick="dpStocks(${JSON.stringify(k)})">${bEsc(M.indices[k].name)}</button>`).join('')}</div>
+    <div class="dp-h">Top gainers</div>
+    ${dpRows(M.gainers.map(([sy, nm, v, c]) => ({ a:nm, b:sy, c:'₹'+v, d:c })))}
+    <div class="dp-h">Top losers</div>
+    ${dpRows(M.losers.map(([sy, nm, v, c]) => ({ a:nm, b:sy, c:'₹'+v, d:c })))}
+    <div class="dp-h">Related news</div>
+    <div id="dp-news">${skelRows(3)}</div>`);
+  dpNews(idx.name + ' ' + dpState.stock, 'dp-news');
+}
+
+// Related news comes from the REAL corpus — /search over the article store —
+// not from mock rows. An index page whose news is invented is worse than one
+// with none, because the reader cannot tell.
+async function dpNews(q, hostId) {
+  const host = document.getElementById(hostId);
+  if (!host) return;
+  let arts = [];
+  try {
+    const d = await api('/search?q=' + encodeURIComponent(q), { timeout: 8000 });
+    arts = (d.articles || []).slice(0, 5).map(normalizeArticle).filter(a => a.title);
+  } catch (e) { arts = []; }
+  if (!arts.length) {
+    host.innerHTML = `<div class="dp-row"><div class="n">
+      <b>No stories matched yet</b><small>Related coverage appears here as it is published</small>
+    </div></div>`;
+    return;
+  }
+  host.innerHTML = arts.map((a, i) => `
+    <div class="dp-row" data-n="${i}">
+      <div class="n"><b>${bEsc(a.title)}</b><small>${
+        bEsc((a.orig_source || '') + ' · ' + (timeAgo(a.published_at) || ''))}</small></div>
+      <i class="fa-solid fa-chevron-right" style="color:var(--t3);font-size:.72rem"></i>
+    </div>`).join('');
+  host.querySelectorAll('.dp-row[data-n]').forEach(el => {
+    el.onclick = () => { xpClosePage(); openArticle(arts[+el.dataset.n]); };
+  });
+}
+
+// ── MANDI ──────────────────────────────────────────────────────────────────
+function dpMandi(commodity) {
+  const M = MOCK_EXPLORE.mandiDetail;
+  // Live rows from /explore/snapshot where the API returned them, merged over
+  // the mock so a live commodity always wins its own row.
+  const liveItems = (xpSnap && xpSnap.mandi && xpSnap.mandi.data
+                     && xpSnap.mandi.data.items) || [];
+  const liveState = (xpSnap && xpSnap.mandi && xpSnap.mandi.data
+                     && xpSnap.mandi.data.state) || '';
+  const merged = M.items.map(m => {
+    const hit = liveItems.find(l => (l.commodity || '') === m.commodity);
+    return hit ? { ...m, modal: hit.modal_price || m.modal, min: hit.min_price || m.min,
+                   max: hit.max_price || m.max, market: hit.market || m.market,
+                   state: liveState || m.state, live: true } : m;
+  });
+
+  if (commodity) {
+    const x = merged.find(m => m.commodity === commodity) || merged[0];
+    return dpPage(x.commodity, `
+      <div class="dp-hero">
+        <div class="dp-hero-k">${bEsc(x.market)} · ${bEsc(x.state)}${x.live ? '' : ' · indicative'}</div>
+        <div class="dp-hero-v">₹${xpNum(x.modal)}</div>
+        <div class="dp-hero-c ${x.chg >= 0 ? 'dp-up' : 'dp-dn'}">${
+          (x.chg >= 0 ? '▲ ' : '▼ ') + Math.abs(x.chg).toFixed(2)}% this week · per quintal</div>
+      </div>
+      ${dpChart(x.history, x.chg >= 0)}
+      <div class="dp-stat">
+        <div><div class="k">Min</div><div class="v">₹${xpNum(x.min)}</div></div>
+        <div><div class="k">Modal</div><div class="v">₹${xpNum(x.modal)}</div></div>
+        <div><div class="k">Max</div><div class="v">₹${xpNum(x.max)}</div></div>
+      </div>
+      <div class="dp-h">Other commodities</div>
+      ${dpRows(merged.filter(m => m.commodity !== x.commodity).map(m => ({
+        a:m.commodity, b:m.market + ' · ' + m.state, c:'₹'+xpNum(m.modal), d:m.chg,
+        tap:`dpMandi(${JSON.stringify(m.commodity)})` })))}`);
+  }
+
+  dpState.mandiState = dpState.mandiState || 'All';
+  const states = ['All', ...Object.keys(M.states)];
+  const rows = merged.filter(m => dpState.mandiState === 'All'
+                                  || m.state === dpState.mandiState);
+  dpPage('Mandi prices', `
+    <div class="dp-chips">${states.map(st =>
+      `<button class="${st === dpState.mandiState ? 'on' : ''}"
+        onclick="dpState.mandiState=${JSON.stringify(st)};dpMandi()">${bEsc(st)}</button>`).join('')}</div>
+    <div class="dp-h">${rows.length} commodit${rows.length === 1 ? 'y' : 'ies'} · per quintal</div>
+    ${dpRows(rows.map(m => ({ a:m.commodity,
+      // Many mandis are named for their district, so joining them blindly
+      // printed "Nashik · Nashik" — which reads as a rendering bug.
+      b:[m.market, m.district].filter((v, i, arr) => v && arr.indexOf(v) === i).join(' · '),
+      c:'₹'+xpNum(m.modal), d:m.chg, tap:`dpMandi(${JSON.stringify(m.commodity)})` })))}`);
+}
+
+// ── REAL ESTATE ────────────────────────────────────────────────────────────
+function dpRealty(city) {
+  const C = MOCK_EXPLORE.realtyDetail.cities;
+  dpState.city = city || dpState.city || C[0].city;
+  const x = C.find(c => c.city === dpState.city) || C[0];
+  dpPage('Real estate', `
+    <div class="dp-chips">${C.map(c =>
+      `<button class="${c.city === x.city ? 'on' : ''}"
+        onclick="dpRealty(${JSON.stringify(c.city)})">${bEsc(c.city)}</button>`).join('')}</div>
+    <div class="dp-hero">
+      <div class="dp-hero-k">${bEsc(x.city)} · ${bEsc(x.cls)} · indicative</div>
+      <div class="dp-hero-v">₹${xpNum(x.rate)}</div>
+      <div class="dp-hero-c ${x.chg >= 0 ? 'dp-up' : 'dp-dn'}">${
+        (x.chg >= 0 ? '▲ ' : '▼ ') + Math.abs(x.chg).toFixed(1)}% year on year · per sq ft</div>
+    </div>
+    ${dpChart(x.history, x.chg >= 0)}
+    <div class="dp-stat">
+      <div><div class="k">Rental yield</div><div class="v">${x.yield_.toFixed(1)}%</div></div>
+      <div><div class="k">1 BHK · 600 sqft</div><div class="v">₹${
+        xpNum(Math.round(x.rate * 600 / 100000))}L</div></div>
+      <div><div class="k">YoY</div><div class="v ${x.chg >= 0 ? 'dp-up' : 'dp-dn'}">${
+        (x.chg >= 0 ? '+' : '') + x.chg.toFixed(1)}%</div></div>
+    </div>
+    <div class="dp-h">Top localities</div>
+    ${dpRows(x.localities.map(([n, r, g]) => ({
+      a:n, b:'per sq ft', c:'₹'+xpNum(r), d:g })))}
+    <div class="dp-h">Related news</div>
+    <div id="dp-news">${skelRows(3)}</div>`);
+  dpNews(x.city + ' real estate property', 'dp-news');
+}
+
 // ── Government: one page per tile, two segments ─────────────────────────────
 // PIB is the live source. "This tile" filters its releases by that tile's own
 // keywords; "All releases" is the unfiltered feed, so a tile whose keywords
@@ -10504,6 +10987,7 @@ async function loadSnapshot() {
 }
 
 function startMarketsPolling() {
+  try { insApply(); } catch (e) {}
   initExploreV8();   // Explore v8
   // Started SEPARATELY, not appended to initExploreV8's tail. Nothing awaits
   // initExploreV8, so a throw in any of the eight renderers it runs is swallowed
