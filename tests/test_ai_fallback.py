@@ -25,11 +25,15 @@ import ai_processor as ai  # noqa: E402
 
 @pytest.fixture
 def both_down(monkeypatch):
-    """Neither provider answers — the exact 4xx/5xx/no-key case."""
+    """No provider answers — the exact 4xx/5xx/no-key case.
+
+    Patches _call_cascade, which is the seam the cascade actually runs through.
+    This used to patch _call_gemini and _call_groq; once key rotation made the
+    cascade dispatch through _PROVIDER_CALLS those names stopped being called,
+    so the patch quietly did nothing and the test passed for the wrong reason."""
     async def dead(*a, **k):
         return None
-    monkeypatch.setattr(ai, "_call_gemini", dead)
-    monkeypatch.setattr(ai, "_call_groq", dead)
+    monkeypatch.setattr(ai, "_call_cascade", dead)
 
 
 TITLE = "RBI holds the repo rate steady as inflation cools"
@@ -63,7 +67,7 @@ def test_an_unusable_provider_response_is_treated_as_a_failure(monkeypatch):
     """A 200 carrying junk is a provider failure like any other — publish, not park."""
     async def junk(*a, **k):
         return "not a dict"
-    monkeypatch.setattr(ai, "_call_gemini", junk)
+    monkeypatch.setattr(ai, "_call_cascade", junk)
     r = asyncio.run(ai.process_article(TITLE, BODY))
     assert r.get("publish_as_aggregator") is True
 
@@ -84,7 +88,7 @@ def test_a_healthy_provider_is_not_marked_for_the_fallback(monkeypatch):
                 "summary": " ".join(["word"] * 30),
                 "full_body": " ".join(["original"] * 60),
                 "category": "economy"}
-    monkeypatch.setattr(ai, "_call_gemini", ok)
+    monkeypatch.setattr(ai, "_call_cascade", ok)
     r = asyncio.run(ai.process_article(TITLE, BODY))
     assert "publish_as_aggregator" not in r
     assert r.get("ai_fallback") is not True
