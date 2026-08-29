@@ -46,3 +46,28 @@ def mad_zscore(x: float, center: float, mad_scale: float) -> float:
     score up on a one-off ±1 wobble."""
     scale = mad_scale if mad_scale and mad_scale > 1.0 else 1.0
     return _MAD_TO_SIGMA * (x - center) / scale
+
+
+def robust_z(x: float, history: list) -> float:
+    """Modified z-score of `x` against `history`, centred on the MEDIAN.
+
+        z = 0.6745 * (x - median) / MAD
+
+    Distinct from mad_zscore above, which centres on an EWMA. EWMA is right for a
+    news-volume baseline, where the recent level genuinely is the expectation.
+    It is wrong for daily RETURNS: a run of large moves drags the EWMA toward
+    them, so the run stops looking unusual exactly when it matters most. The
+    median does not move.
+
+    MAD is NOT floored here. anomaly_math.mad_zscore floors it at 1.0 because its
+    unit is "stories per day"; a return series is measured in percent, where 1.0
+    would be an enormous floor and would suppress every real signal. Callers
+    guard the zero-MAD case instead — see tick_anomaly.MIN_MAD.
+    """
+    if not history:
+        return 0.0
+    centre = median(history)
+    scale = mad(history)
+    if not scale:
+        return 0.0
+    return _MAD_TO_SIGMA * (x - centre) / scale
