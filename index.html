@@ -825,6 +825,17 @@ header {
 #v-notifs, #v-feed, #v-spie { padding-bottom: var(--nav-clear); }
 .xp-page, .ao-body { padding-bottom: var(--nav-clear); }
 
+/* The honest empty state for an article we have not rewritten yet. It replaced
+   "Full context for this story is being generated", which promised the reader
+   something that no action of theirs would ever produce. */
+.ao-nobody { margin: 18px 0 4px; padding: 16px; border-radius: 16px;
+  background: var(--surface-2); border: 1px solid var(--line, rgba(128,128,128,.14)); }
+.ao-nobody-t { font: 700 .92rem/1.35 var(--f); color: var(--t1); }
+.ao-nobody-s { font: 500 .82rem/1.5 var(--f); color: var(--t3); margin-top: 6px; }
+.ao-nobody-a { display: inline-flex; margin-top: 12px; padding: 10px 15px;
+  border-radius: 999px; background: var(--accent); color: #fff;
+  font: 700 .82rem/1 var(--f); text-decoration: none; }
+
 .ao-p { font-size: 1.06rem; color: var(--t1); line-height: 1.78; margin-bottom: 19px;
   letter-spacing: -0.003em; max-width: 68ch; }
 .ao-p:last-child { margin-bottom: 0; }
@@ -837,6 +848,9 @@ header {
   display: inline-flex; align-items: center; gap: 5px; }
 .ao-read-time::before { content: ""; width: 3px; height: 3px; border-radius: 50%;
   background: currentColor; opacity: .6; }
+/* An empty chip must take no space and draw no separator — otherwise an article
+   with no read time shows a dangling dot after the timestamp. */
+.ao-read-time:empty { display: none; }
 
 /* Source attribution — a block that names the publisher, not a bare link. */
 .ao-attrib { margin: 22px 0 4px; padding: 14px 15px; border-radius: 16px;
@@ -3813,20 +3827,14 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
         </div>
         <div class="ao-string-track" id="ao-string-track"></div>
       </div>
+      <!-- Like and Comments removed app-wide. Both are social features with no
+           society: every count read 0, and an empty comment box under every
+           article is a standing invitation nobody accepts. Save, Summarize and
+           Share all work for a single reader. -->
       <div class="ao-acts">
-        <div class="ao-act tap" id="ao-like" style="--ac:#FF5B7F" onclick="aoLike()"><span class="disc"><i class="fa-regular fa-heart"></i></span><span class="lbl">Like</span></div>
         <div class="ao-act tap" id="ao-save" style="--ac:#F5A623" onclick="aoSave()"><span class="disc"><i class="fa-regular fa-bookmark"></i></span><span class="lbl">Save</span></div>
         <div class="ao-act tap" id="ao-tldr-btn" style="--ac:#A855F7" onclick="aoSummarize()"><span class="disc"><i class="fa-solid fa-wand-magic-sparkles"></i></span><span class="lbl">Summarize</span></div>
         <div class="ao-act tap ao-act-share" id="ao-share" style="--ac:#3B9EFF" onclick="shareArticleCard(currentArticle)"><span class="disc"><i class="fa-solid fa-paper-plane"></i></span><span class="lbl">Share</span></div>
-      </div>
-
-      <div class="ao-cmt-sec">
-        <div class="ao-cmt-hdr">Comments <span id="ao-cmt-count"></span></div>
-        <div class="ao-cmt-bar">
-          <input id="ao-cmt-input" class="ao-cmt-input" maxlength="1000" placeholder="Add a comment…">
-          <button class="ao-cmt-post tap" onclick="postArticleComment()" aria-label="Post comment"><i class="fa-solid fa-paper-plane"></i></button>
-        </div>
-        <div id="ao-cmt-list"></div>
       </div>
 
       <div class="ao-related-hdr">Related Stories</div>
@@ -4892,14 +4900,15 @@ function isPlaceholderText(t) {
   return !t || !String(t).trim() || PLACEHOLDER_RE.test(String(t));
 }
 
-// What a card shows when the summary is a placeholder or missing. Never the
-// placeholder, and never a blank: the headline is real, and the source and time
-// are real, so the card still says something true.
+// The card's summary line, or "" when there is nothing real to show.
+//
+// This used to fall back to "source · time" — which is the EXACT text already
+// rendered in the meta row two lines above, so a card with a placeholder
+// summary printed its byline twice and looked broken. A headline that stands
+// alone is fine; a duplicated byline is not.
 function cardSummary(a) {
   const t = a && a.preview;
-  if (!isPlaceholderText(t)) return t;
-  const bits = [a && a.orig_source, a && timeAgo(a.published_at)].filter(Boolean);
-  return bits.length ? bits.join(' · ') : '';
+  return isPlaceholderText(t) ? '' : t;
 }
 
 function normalizeArticle(a) {
@@ -5762,9 +5771,10 @@ function renderStandardCard(rawA, container) {
   d.onclick = () => openArticle(a);
   d.innerHTML = `
     ${articleImage(a, 'nc-hero-image')}
+    <!-- Like and comment removed: both read 0 on every card, which is worse
+         than absent — an empty counter says nobody is here. Share stays, since
+         it does something without needing an audience. -->
     <div class="nc-acts-row">
-      <div class="nc-pill nc-like ${liked?'on':''}"><i class="fa-${liked?'solid':'regular'} fa-heart"></i> <span>${likeN}</span></div>
-      <div class="nc-pill nc-comment"><i class="fa-regular fa-comment"></i> <span>${cmtN}</span></div>
       <div class="nc-pill nc-share"><i class="fa-solid fa-arrow-up-from-bracket"></i></div>
     </div>
     <div class="nc-meta" style="margin-top:12px">
@@ -5772,10 +5782,8 @@ function renderStandardCard(rawA, container) {
       <span class="nc-src" style="margin-left:auto">${a.source} · ${timeAgo(a.published_at)}</span>
     </div>
     <div class="nc-title">${a.title}</div>
-    <div class="nc-desc">${bEsc(cardSummary(a))}</div>
+    ${cardSummary(a) ? `<div class="nc-desc">${bEsc(cardSummary(a))}</div>` : ''}
   `;
-  d.querySelector('.nc-like').addEventListener('click', e => { e.stopPropagation(); feedLike(a, e.currentTarget); });
-  d.querySelector('.nc-comment').addEventListener('click', e => { e.stopPropagation(); openArticle(a); });
   d.querySelector('.nc-share').addEventListener('click', e => { e.stopPropagation(); shareArticleCard(a); });
   container.appendChild(d);
 }
@@ -5785,6 +5793,9 @@ async function hydrateFeedCounts() {
   const cards = Array.from(document.querySelectorAll('.nc[data-aid]:not([data-eng])')).slice(0, 100);
   if (!cards.length) return;
   cards.forEach(c => c.dataset.eng = '1');
+  // The like and comment pills are gone from the card, so there is nothing left
+  // to hydrate — and a request whose result cannot be rendered is just latency.
+  if (!document.querySelector('.nc-like span, .nc-comment span')) return;
   const ids = cards.map(c => c.dataset.aid);
   try {
     const res = await api('/signal/counts?ids=' + encodeURIComponent(ids.join(',')));
@@ -5801,7 +5812,11 @@ async function hydrateFeedCounts() {
 
 // ── Article comments (read + post) ──
 async function loadArticleComments(id) {
+  // Retained as a no-op: the comments section is removed from the article view,
+  // and the API it called still exists. Deleting the function would break any
+  // caller added later; leaving it live would query a node that cannot exist.
   const list = document.getElementById('ao-cmt-list');
+  if (!list) return;
   if (!list) return;
   const inp = document.getElementById('ao-cmt-input');
   if (inp) inp.placeholder = 'Add a comment…';
@@ -5835,7 +5850,7 @@ async function postArticleComment() {
   try {
     await api('/signal/comment', { method: 'POST', body: JSON.stringify({ info_object_id: currentArticle.id, body }) });
     inp.value = ''; toast('💬 Comment posted');
-    loadArticleComments(currentArticle.id);
+    // comments removed app-wide
   } catch (e) { toast('Could not post comment'); }
   finally { inp.disabled = false; }
 }
@@ -6300,7 +6315,25 @@ function renderArticleBody(text){
   const el = document.getElementById('ao-text');
   if (!el) return;
   const paras = _toParagraphs(text);
-  if (!paras.length){ el.innerHTML = '<p class="ao-p">Full context for this story is being generated. Tap the source below to read the original report.</p>'; return; }
+  if (!paras.length){
+    // Nothing of ours to show. Do not tell the reader a body is "being
+    // generated" — that promises something no request of theirs will deliver.
+    // Show the real summary if there is one, and make the source the action.
+    const sum = (currentArticle && !isPlaceholderText(currentArticle.preview))
+      ? currentArticle.preview : '';
+    const url = (currentArticle && (currentArticle.url || currentArticle.orig_url)) || '';
+    const who = (currentArticle && currentArticle.orig_source) || 'the publisher';
+    el.innerHTML =
+      (sum ? `<p class="ao-p">${bEsc(sum)}</p>` : '')
+      + `<div class="ao-nobody">
+           <div class="ao-nobody-t">SherrByte has not written this one up yet.</div>
+           <div class="ao-nobody-s">${sum ? 'The summary above is ours. ' : ''}The
+             full report is ${bEsc(who)}'s.</div>
+           ${url ? `<a class="ao-nobody-a" href="${bEsc(url)}" target="_blank"
+              rel="noopener noreferrer">Read it at ${bEsc(who)} &rarr;</a>` : ''}
+         </div>`;
+    return;
+  }
   const VISIBLE = 4;
   const head = paras.slice(0, VISIBLE).map(p => `<p class="ao-p">${bEsc(p)}</p>`).join('');
   if (paras.length <= VISIBLE){ el.innerHTML = head; return; }
@@ -6433,8 +6466,13 @@ function openArticle(rawA) {
   document.getElementById('ao-src-time').textContent = timeAgo(a.published_at) || '';
   // _readSec is already computed above for the activity tracker; showing it
   // costs nothing and tells the reader what they are committing to.
+  // No body of ours means no read time. "1 min read" above an empty article is
+  // the app describing something it does not have.
   const _rt = document.getElementById('ao-read-time');
-  if (_rt) _rt.textContent = Math.max(1, Math.round(_readSec / 60)) + ' min read';
+  if (_rt) {
+    const _real = !isPlaceholderText(a.body_ai) || !isPlaceholderText(a.preview);
+    _rt.textContent = _real ? Math.max(1, Math.round(_readSec / 60)) + ' min read' : '';
+  }
   document.getElementById('ao-main-title').textContent = a.title;
   // renderArticleBody's own empty state is honest and useful; the placeholder
   // is neither, so it is turned into that empty state rather than printed.
@@ -6476,10 +6514,11 @@ function openArticle(rawA) {
           pubName ? ' at ' + bEsc(pubName) : ''}</span></a>`).join('')}` : attrib;
   }
 
-  const likeEl = document.getElementById('ao-like');
+  // #ao-like is gone; only Save remains stateful. Guarded rather than assumed —
+  // an unguarded getElementById on a removed node throws inside openArticle and
+  // takes the WHOLE article view down, which is how this first showed up.
   const saveEl = document.getElementById('ao-save');
-  likeEl.className = 'ao-act tap' + (ST.likes.includes(a.id) ? ' liked' : '');
-  likeEl.querySelector('i').className = ST.likes.includes(a.id) ? 'fa-solid fa-heart' : 'fa-regular fa-heart';
+  if (!saveEl) return;
   saveEl.className = 'ao-act tap' + (ST.saves.includes(a.id) ? ' saved' : '');
   saveEl.querySelector('i').className = ST.saves.includes(a.id) ? 'fa-solid fa-bookmark' : 'fa-regular fa-bookmark';
 
@@ -6514,7 +6553,7 @@ function openArticle(rawA) {
     rc.appendChild(d);
   });
 
-  loadArticleComments(a.id);
+  // comments removed app-wide
 
   document.getElementById('ao-scroll').scrollTop = 0;
   document.getElementById('article-overlay').classList.add('open');

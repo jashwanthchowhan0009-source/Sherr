@@ -247,6 +247,10 @@ async def _spie_patterns(type: str, limit: int, offset: int,
 
 # Story-thread ("string") linking window — how far back we cluster related news.
 STORY_WINDOW_DAYS = int(os.getenv("STORY_WINDOW_DAYS", "45"))
+# Above this a "story thread" is an over-merged cluster, not a story. A real
+# running story is a few dozen updates at the very most; thousands means the
+# clustering collapsed and the thread is noise.
+MAX_THREAD_SIZE = int(os.getenv("MAX_THREAD_SIZE", "40"))
 
 # ─── TAXONOMY: 9 PILLARS ─────────────────────────────────────────────────────
 PILLARS = {
@@ -860,6 +864,39 @@ UPDATE articles
 """
 
 
+def repair_blank_headlines(conn) -> dict:
+    """Restore headlines that a failed AI pass blanked.
+
+    process_batch's rule-based fallback returned refined_title="" whenever both
+    providers were down, and run_ai_batch wrote that into `headline` — so those
+    articles render as a card with an image, a byline and NOTHING ELSE. The
+    publisher's headline is still in source_headline (kept for the originality
+    diff), which is exactly what the aggregator posture publishes anyway:
+    their headline, under credit, with our body.
+
+    Idempotent. Rows with no source_headline either are unrecoverable and are
+    unpublished rather than left as blank cards in the feed.
+    """
+    out = {"restored": 0, "unpublished": 0}
+    try:
+        cur = conn.execute(
+            "UPDATE articles SET headline = source_headline "
+            "WHERE COALESCE(TRIM(headline), '') = '' "
+            "AND COALESCE(TRIM(source_headline), '') <> ''")
+        out["restored"] = getattr(cur, "rowcount", 0) or 0
+        # Nothing to show and nothing to restore from: a titleless card is worse
+        # than one fewer card.
+        cur = conn.execute(
+            "UPDATE articles SET status = 'pending_rewrite' "
+            "WHERE COALESCE(TRIM(headline), '') = '' AND status = 'published'")
+        out["unpublished"] = getattr(cur, "rowcount", 0) or 0
+        conn.commit()
+    except Exception as e:
+        log.warning("[HEADLINE] repair skipped: %s", e)
+        out["error"] = str(e)
+    return out
+
+
 def normalise_published_at(conn) -> dict:
     """Rewrite every non-canonical published_at, then make the column
     timestamptz on Postgres. Returns what it did, for the boot log."""
@@ -939,6 +976,15 @@ def init_db():
             # first. Postgres raises its own error type, not sqlite3's, so this
             # cannot stay narrowed to OperationalError.
             pass
+    # A card with no headline is the worst thing the feed can show. Repair
+    # before anything is served.
+    try:
+        hp = repair_blank_headlines(conn)
+        if hp.get("restored") or hp.get("unpublished"):
+            log.info("[HEADLINE] %s", hp)
+    except Exception as e:
+        log.warning("[HEADLINE] repair failed: %s", e)
+
     # published_at must be one shape before anything sorts on it. Idempotent:
     # a second boot finds every row already canonical and rewrites none.
     try:
@@ -1407,7 +1453,14 @@ async def run_ai_batch(conn):
                     originality_run=?, originality_checked_at=?
                 WHERE id=?
             """, (
-                result["refined_title"],
+                # A headline is the ONE field a card cannot render without.
+                # process_batch's fallback returned refined_title="" whenever the
+                # providers were down, and this wrote it straight in — which is
+                # why the feed showed cards with an image, a byline and NO TITLE.
+                # Never blank it; keep whatever the row already had.
+                (result.get("refined_title") or "").strip()
+                    or (row["headline"] or "").strip()
+                    or (row["source_headline"] or "").strip(),
                 result["summary"],
                 result["full_body"],
                 result["summary"],  # kept for back-compat with source_summary field
@@ -2046,12 +2099,14 @@ async def get_feed(
         rows = conn.execute(q, p).fetchall()
         if len(rows) < 5:
             rows = conn.execute(
-                "SELECT *, 1.0 as score FROM articles WHERE ai_processed=1 AND status='published' ORDER BY published_at DESC, id DESC LIMIT ? OFFSET ?",
+                "SELECT *, 1.0 as score FROM articles WHERE ai_processed=1 AND status='published' "
+        "AND COALESCE(TRIM(headline),'') <> '' ORDER BY published_at DESC, id DESC LIMIT ? OFFSET ?",
                 (limit + 1, offset)
             ).fetchall()
     else:
         rows = conn.execute(
-            "SELECT *, 1.0 as score FROM articles WHERE ai_processed=1 AND status='published' ORDER BY published_at DESC, id DESC LIMIT ? OFFSET ?",
+            "SELECT *, 1.0 as score FROM articles WHERE ai_processed=1 AND status='published' "
+        "AND COALESCE(TRIM(headline),'') <> '' ORDER BY published_at DESC, id DESC LIMIT ? OFFSET ?",
             (limit + 1, offset)
         ).fetchall()
 
@@ -2758,7 +2813,9 @@ async def admin_reprocess(
                     originality_run=?, originality_checked_at=?
                 WHERE id=?
             """, (
-                result["refined_title"], result["summary"], result["full_body"],
+                (result.get("refined_title") or "").strip()
+                    or (row["headline"] or "").strip(),
+                result["summary"], result["full_body"],
                 result["summary"], result.get("when_info", ""),
                 result.get("where_info", "Not specified"), new_pid,
                 json.dumps(all_tags), 1 if result["is_trending"] else 0,
@@ -3281,7 +3338,10 @@ def _reprocess_bodies_sync(limit: int, batch: int) -> dict:
                         audit["status"] = "rejected_body_overlap"
                         failed += 1
                         continue
-                    headline = result["refined_title"] if head_ok else row["headline"]
+                    headline = ((result.get("refined_title") or "").strip()
+                                if head_ok else "") \
+                        or (row["headline"] or "").strip() \
+                        or (row["source_headline"] or "").strip()
                     audit["status"] = "published"
                     conn.execute("""
                         UPDATE articles SET headline=?, summary_60=?, full_body=?,
@@ -3337,6 +3397,76 @@ async def body_reprocess_job() -> None:
         await _run_body_reprocess(BODY_REPROCESS_NIGHTLY, AI_BATCH_SIZE)
     except Exception as e:
         log.error("[BODY] nightly job failed: %s", e, exc_info=True)
+
+
+@app.get("/admin/why-empty")
+async def admin_why_empty(x_admin_token: str = Header(""), token: str = Query("")):
+    """One call that answers "why does the app look broken".
+
+    Four independent things make a card look wrong, and they have four different
+    fixes. Guessing between them from a screenshot is what has cost the most
+    time here, so each is counted separately with the action that clears it.
+    """
+    _check_admin(x_admin_token or token)
+    conn = get_db()
+    try:
+        one = lambda q, p=(): conn.execute(q, p).fetchone()["c"]
+        total = one("SELECT COUNT(*) c FROM articles WHERE status='published'")
+        body = body_state.audit(conn)
+        no_img = one("SELECT COUNT(*) c FROM articles WHERE status='published' "
+                     "AND COALESCE(image_url,'')='' AND COALESCE(source_image_url,'')=''")
+        with_img = total - no_img
+        newest = conn.execute(
+            "SELECT MAX(published_at) AS m FROM articles").fetchone()["m"]
+        newest_dt = timestamps.parse(newest)
+        age_h = ((datetime.now(timezone.utc) - newest_dt).total_seconds() / 3600
+                 if newest_dt else None)
+        mega = one("SELECT COUNT(*) c FROM (SELECT story_id FROM articles "
+                   "WHERE story_id<>0 GROUP BY story_id HAVING COUNT(*) > ?) t",
+                   (MAX_THREAD_SIZE,))
+        providers = available_providers()
+
+        problems = []
+        if body["needs_rewrite"]:
+            problems.append({
+                "problem": "articles open on a placeholder",
+                "count": body["needs_rewrite"],
+                "fix": ("no AI key configured — set GEMINI_API_KEY"
+                        if providers.get("primary") == "rule-based"
+                        else "GET /admin/reprocess-bodies?token=...&limit=3000")})
+        if no_img:
+            problems.append({
+                "problem": "articles with no image at all (neither ours nor the publisher's)",
+                "count": no_img,
+                "fix": ("the RSS entries carried no image. Newly ingested rows "
+                        "store source_image_url; older rows cannot be recovered "
+                        "without re-crawling.")})
+        if age_h is not None and age_h > 6:
+            problems.append({
+                "problem": "nothing new is arriving",
+                "newest_age_hours": round(age_h, 1),
+                "fix": "ingest is stalled — check the collect_news job and the feed list"})
+        if mega:
+            problems.append({
+                "problem": "over-merged story threads (the String shows unrelated articles)",
+                "count": mega,
+                "fix": (f"threads larger than {MAX_THREAD_SIZE} are now ignored at "
+                        f"read time; POST /admin/relink rebuilds them")})
+
+        return {
+            "published_total": total,
+            "bodies": body["published_by_state"],
+            "summaries": body["summary_by_state"],
+            "healthy_articles": body["healthy"],
+            "with_image": with_img, "without_image": no_img,
+            "newest_published_at": timestamps.to_iso(newest) or str(newest or ""),
+            "newest_age_hours": round(age_h, 2) if age_h is not None else None,
+            "over_merged_threads": mega,
+            "ai": providers,
+            "problems": problems or [{"problem": "none found", "fix": ""}],
+        }
+    finally:
+        conn.close()
 
 
 @app.get("/admin/published-at")
@@ -3894,7 +4024,21 @@ async def get_story(article_id: int):
         conn.close()
         raise HTTPException(404, "Article not found")
 
+    # A REAL story thread is a handful of articles about one event. When
+    # link_stories over-merges — which it does when bodies are placeholders and
+    # the only signal left is generic tags — every article in a pillar can land
+    # on one story_id, and the reader gets "2319 UPDATES" of unrelated stories
+    # under a headline they were reading. A thread that large is not a thread,
+    # so it is discarded and the live term-overlap path is used instead.
     sid = (art["story_id"] or 0) if "story_id" in art.keys() else 0
+    if sid:
+        n = conn.execute(
+            "SELECT COUNT(*) AS c FROM articles WHERE story_id=? AND "
+            "ai_processed=1 AND status='published'", (sid,)).fetchone()["c"]
+        if n > MAX_THREAD_SIZE:
+            log.info("[STORY] story_id=%s has %d members — over-merged, "
+                     "falling back to live matching", sid, n)
+            sid = 0
     if sid:
         rows = conn.execute(
             "SELECT * FROM articles WHERE story_id=? AND ai_processed=1 AND status='published' "
