@@ -864,6 +864,39 @@ UPDATE articles
 """
 
 
+def repair_blank_headlines(conn) -> dict:
+    """Restore headlines that a failed AI pass blanked.
+
+    process_batch's rule-based fallback returned refined_title="" whenever both
+    providers were down, and run_ai_batch wrote that into `headline` — so those
+    articles render as a card with an image, a byline and NOTHING ELSE. The
+    publisher's headline is still in source_headline (kept for the originality
+    diff), which is exactly what the aggregator posture publishes anyway:
+    their headline, under credit, with our body.
+
+    Idempotent. Rows with no source_headline either are unrecoverable and are
+    unpublished rather than left as blank cards in the feed.
+    """
+    out = {"restored": 0, "unpublished": 0}
+    try:
+        cur = conn.execute(
+            "UPDATE articles SET headline = source_headline "
+            "WHERE COALESCE(TRIM(headline), '') = '' "
+            "AND COALESCE(TRIM(source_headline), '') <> ''")
+        out["restored"] = getattr(cur, "rowcount", 0) or 0
+        # Nothing to show and nothing to restore from: a titleless card is worse
+        # than one fewer card.
+        cur = conn.execute(
+            "UPDATE articles SET status = 'pending_rewrite' "
+            "WHERE COALESCE(TRIM(headline), '') = '' AND status = 'published'")
+        out["unpublished"] = getattr(cur, "rowcount", 0) or 0
+        conn.commit()
+    except Exception as e:
+        log.warning("[HEADLINE] repair skipped: %s", e)
+        out["error"] = str(e)
+    return out
+
+
 def normalise_published_at(conn) -> dict:
     """Rewrite every non-canonical published_at, then make the column
     timestamptz on Postgres. Returns what it did, for the boot log."""
@@ -943,6 +976,15 @@ def init_db():
             # first. Postgres raises its own error type, not sqlite3's, so this
             # cannot stay narrowed to OperationalError.
             pass
+    # A card with no headline is the worst thing the feed can show. Repair
+    # before anything is served.
+    try:
+        hp = repair_blank_headlines(conn)
+        if hp.get("restored") or hp.get("unpublished"):
+            log.info("[HEADLINE] %s", hp)
+    except Exception as e:
+        log.warning("[HEADLINE] repair failed: %s", e)
+
     # published_at must be one shape before anything sorts on it. Idempotent:
     # a second boot finds every row already canonical and rewrites none.
     try:
@@ -1411,7 +1453,14 @@ async def run_ai_batch(conn):
                     originality_run=?, originality_checked_at=?
                 WHERE id=?
             """, (
-                result["refined_title"],
+                # A headline is the ONE field a card cannot render without.
+                # process_batch's fallback returned refined_title="" whenever the
+                # providers were down, and this wrote it straight in — which is
+                # why the feed showed cards with an image, a byline and NO TITLE.
+                # Never blank it; keep whatever the row already had.
+                (result.get("refined_title") or "").strip()
+                    or (row["headline"] or "").strip()
+                    or (row["source_headline"] or "").strip(),
                 result["summary"],
                 result["full_body"],
                 result["summary"],  # kept for back-compat with source_summary field
@@ -2050,12 +2099,14 @@ async def get_feed(
         rows = conn.execute(q, p).fetchall()
         if len(rows) < 5:
             rows = conn.execute(
-                "SELECT *, 1.0 as score FROM articles WHERE ai_processed=1 AND status='published' ORDER BY published_at DESC, id DESC LIMIT ? OFFSET ?",
+                "SELECT *, 1.0 as score FROM articles WHERE ai_processed=1 AND status='published' "
+        "AND COALESCE(TRIM(headline),'') <> '' ORDER BY published_at DESC, id DESC LIMIT ? OFFSET ?",
                 (limit + 1, offset)
             ).fetchall()
     else:
         rows = conn.execute(
-            "SELECT *, 1.0 as score FROM articles WHERE ai_processed=1 AND status='published' ORDER BY published_at DESC, id DESC LIMIT ? OFFSET ?",
+            "SELECT *, 1.0 as score FROM articles WHERE ai_processed=1 AND status='published' "
+        "AND COALESCE(TRIM(headline),'') <> '' ORDER BY published_at DESC, id DESC LIMIT ? OFFSET ?",
             (limit + 1, offset)
         ).fetchall()
 
@@ -2762,7 +2813,9 @@ async def admin_reprocess(
                     originality_run=?, originality_checked_at=?
                 WHERE id=?
             """, (
-                result["refined_title"], result["summary"], result["full_body"],
+                (result.get("refined_title") or "").strip()
+                    or (row["headline"] or "").strip(),
+                result["summary"], result["full_body"],
                 result["summary"], result.get("when_info", ""),
                 result.get("where_info", "Not specified"), new_pid,
                 json.dumps(all_tags), 1 if result["is_trending"] else 0,
@@ -3285,7 +3338,10 @@ def _reprocess_bodies_sync(limit: int, batch: int) -> dict:
                         audit["status"] = "rejected_body_overlap"
                         failed += 1
                         continue
-                    headline = result["refined_title"] if head_ok else row["headline"]
+                    headline = ((result.get("refined_title") or "").strip()
+                                if head_ok else "") \
+                        or (row["headline"] or "").strip() \
+                        or (row["source_headline"] or "").strip()
                     audit["status"] = "published"
                     conn.execute("""
                         UPDATE articles SET headline=?, summary_60=?, full_body=?,

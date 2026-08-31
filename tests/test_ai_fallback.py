@@ -148,3 +148,94 @@ def test_the_aggregator_body_survives_a_row_missing_those_columns(gate):
     result = {"full_body": ai._SAFE_BODY}
     gate._apply_aggregator_posture(result, {})
     assert "the original publisher" in result["full_body"]
+
+
+# ─── the blank-headline bug ───────────────────────────────────────────────────
+def test_the_batch_fallback_keeps_a_headline():
+    """THE bug behind cards that rendered an image, a byline and nothing else.
+
+    process_batch called _rule_based_fallback WITHOUT publishable=True, so it
+    returned refined_title="" whenever both providers were down — and
+    run_ai_batch wrote that straight into `headline`. Every article processed
+    during an outage became an untitled card."""
+    async def dead(*a, **k):
+        return None
+    orig = ai._call_cascade
+    ai._call_cascade = dead
+    try:
+        out = asyncio.run(ai.process_batch(
+            [{"title": TITLE, "body": BODY, "fallback_category": "economy"}]))
+    finally:
+        ai._call_cascade = orig
+    assert out and out[0]["refined_title"].strip(), "a blank headline is unrenderable"
+    assert out[0]["refined_title"] == TITLE
+    assert out[0].get("publish_as_aggregator") is True
+
+
+def test_a_batch_item_that_raises_still_keeps_its_headline():
+    async def boom(*a, **k):
+        raise RuntimeError("provider exploded")
+    orig = ai._call_cascade
+    ai._call_cascade = boom
+    try:
+        out = asyncio.run(ai.process_batch(
+            [{"title": TITLE, "body": BODY, "fallback_category": "economy"}]))
+    finally:
+        ai._call_cascade = orig
+    assert out and out[0]["refined_title"].strip()
+
+
+def test_no_write_path_can_blank_a_headline():
+    """Defence in depth: even if a future fallback returns an empty title, the
+    row keeps the one it had.
+
+    Asserts the GUARD is present rather than the absence of the raw field —
+    _gate_article and headline_is_original legitimately read refined_title, and
+    a bare substring check flags those reads as if they were writes."""
+    import inspect
+    import main
+    for fn in (main.run_ai_batch, main.admin_reprocess, main._reprocess_bodies_sync):
+        src = " ".join(inspect.getsource(fn).split())
+        assert 'result.get("refined_title") or "").strip()' in src, (
+            f"{fn.__name__} does not guard the headline it writes")
+        assert 'or (row["headline"] or "").strip()' in src, (
+            f"{fn.__name__} has no fallback to the existing headline")
+
+
+def test_the_repair_restores_a_blanked_headline_from_the_source(tmp_path):
+    import sqlite3
+
+    import main
+    conn = sqlite3.connect(tmp_path / "h.db")
+    conn.row_factory = sqlite3.Row
+    conn.executescript(main.CREATE_TABLES)
+    for stmt in main._MIGRATIONS:
+        try:
+            conn.execute(stmt)
+        except sqlite3.OperationalError:
+            pass
+    conn.execute("INSERT INTO articles (url, headline, source_headline, status, "
+                 "ai_processed) VALUES ('u1','','RBI holds the repo rate','published',1)")
+    conn.execute("INSERT INTO articles (url, headline, source_headline, status, "
+                 "ai_processed) VALUES ('u2','','','published',1)")
+    conn.commit()
+
+    out = main.repair_blank_headlines(conn)
+    rows = {r["url"]: r for r in conn.execute(
+        "SELECT url, headline, status FROM articles").fetchall()}
+    conn.close()
+
+    assert out["restored"] == 1
+    assert rows["u1"]["headline"] == "RBI holds the repo rate"
+    # Nothing to restore from: better one fewer card than a titleless one.
+    assert out["unpublished"] == 1
+    assert rows["u2"]["status"] == "pending_rewrite"
+
+
+def test_the_feed_query_refuses_a_titleless_row():
+    """Belt and braces — the feed must not serve one even if a new path slips
+    a blank through."""
+    import inspect
+    import main
+    src = inspect.getsource(main.get_feed)
+    assert "COALESCE(TRIM(headline),'') <> ''" in src

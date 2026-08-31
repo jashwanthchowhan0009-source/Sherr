@@ -438,11 +438,20 @@ async def process_batch(articles: list[dict], concurrency: int = 5) -> list[dict
                 try:
                     r = await _call_cascade(title, body, client)
                     if not r:
-                        r = _rule_based_fallback(title, body, fallback)
+                        # publishable=True, exactly as process_article does.
+                        # Without it _rule_based_fallback returns
+                        # refined_title="" — and run_ai_batch writes that
+                        # straight into `headline`. Every article processed
+                        # while the providers were down got a BLANK TITLE, which
+                        # is why the feed showed cards with an image, a byline
+                        # and no headline at all.
+                        r = _rule_based_fallback(title, body, fallback,
+                                                 publishable=True)
                     results[idx] = _validate_and_fix(r, title, body, fallback)
                 except Exception as e:
                     log.warning("Batch item %d failed: %s", idx, e)
-                    results[idx] = _rule_based_fallback(title, body, fallback)
+                    results[idx] = _rule_based_fallback(title, body, fallback,
+                                                        publishable=True)
 
         await asyncio.gather(*[one(i, a) for i, a in enumerate(articles)])
 
