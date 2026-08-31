@@ -247,6 +247,10 @@ async def _spie_patterns(type: str, limit: int, offset: int,
 
 # Story-thread ("string") linking window — how far back we cluster related news.
 STORY_WINDOW_DAYS = int(os.getenv("STORY_WINDOW_DAYS", "45"))
+# Above this a "story thread" is an over-merged cluster, not a story. A real
+# running story is a few dozen updates at the very most; thousands means the
+# clustering collapsed and the thread is noise.
+MAX_THREAD_SIZE = int(os.getenv("MAX_THREAD_SIZE", "40"))
 
 # ─── TAXONOMY: 9 PILLARS ─────────────────────────────────────────────────────
 PILLARS = {
@@ -3339,6 +3343,76 @@ async def body_reprocess_job() -> None:
         log.error("[BODY] nightly job failed: %s", e, exc_info=True)
 
 
+@app.get("/admin/why-empty")
+async def admin_why_empty(x_admin_token: str = Header(""), token: str = Query("")):
+    """One call that answers "why does the app look broken".
+
+    Four independent things make a card look wrong, and they have four different
+    fixes. Guessing between them from a screenshot is what has cost the most
+    time here, so each is counted separately with the action that clears it.
+    """
+    _check_admin(x_admin_token or token)
+    conn = get_db()
+    try:
+        one = lambda q, p=(): conn.execute(q, p).fetchone()["c"]
+        total = one("SELECT COUNT(*) c FROM articles WHERE status='published'")
+        body = body_state.audit(conn)
+        no_img = one("SELECT COUNT(*) c FROM articles WHERE status='published' "
+                     "AND COALESCE(image_url,'')='' AND COALESCE(source_image_url,'')=''")
+        with_img = total - no_img
+        newest = conn.execute(
+            "SELECT MAX(published_at) AS m FROM articles").fetchone()["m"]
+        newest_dt = timestamps.parse(newest)
+        age_h = ((datetime.now(timezone.utc) - newest_dt).total_seconds() / 3600
+                 if newest_dt else None)
+        mega = one("SELECT COUNT(*) c FROM (SELECT story_id FROM articles "
+                   "WHERE story_id<>0 GROUP BY story_id HAVING COUNT(*) > ?) t",
+                   (MAX_THREAD_SIZE,))
+        providers = available_providers()
+
+        problems = []
+        if body["needs_rewrite"]:
+            problems.append({
+                "problem": "articles open on a placeholder",
+                "count": body["needs_rewrite"],
+                "fix": ("no AI key configured — set GEMINI_API_KEY"
+                        if providers.get("primary") == "rule-based"
+                        else "GET /admin/reprocess-bodies?token=...&limit=3000")})
+        if no_img:
+            problems.append({
+                "problem": "articles with no image at all (neither ours nor the publisher's)",
+                "count": no_img,
+                "fix": ("the RSS entries carried no image. Newly ingested rows "
+                        "store source_image_url; older rows cannot be recovered "
+                        "without re-crawling.")})
+        if age_h is not None and age_h > 6:
+            problems.append({
+                "problem": "nothing new is arriving",
+                "newest_age_hours": round(age_h, 1),
+                "fix": "ingest is stalled — check the collect_news job and the feed list"})
+        if mega:
+            problems.append({
+                "problem": "over-merged story threads (the String shows unrelated articles)",
+                "count": mega,
+                "fix": (f"threads larger than {MAX_THREAD_SIZE} are now ignored at "
+                        f"read time; POST /admin/relink rebuilds them")})
+
+        return {
+            "published_total": total,
+            "bodies": body["published_by_state"],
+            "summaries": body["summary_by_state"],
+            "healthy_articles": body["healthy"],
+            "with_image": with_img, "without_image": no_img,
+            "newest_published_at": timestamps.to_iso(newest) or str(newest or ""),
+            "newest_age_hours": round(age_h, 2) if age_h is not None else None,
+            "over_merged_threads": mega,
+            "ai": providers,
+            "problems": problems or [{"problem": "none found", "fix": ""}],
+        }
+    finally:
+        conn.close()
+
+
 @app.get("/admin/published-at")
 async def admin_published_at(x_admin_token: str = Header(""), token: str = Query("")):
     """Is ingest stalled, or was the feed just mis-sorted?
@@ -3894,7 +3968,21 @@ async def get_story(article_id: int):
         conn.close()
         raise HTTPException(404, "Article not found")
 
+    # A REAL story thread is a handful of articles about one event. When
+    # link_stories over-merges — which it does when bodies are placeholders and
+    # the only signal left is generic tags — every article in a pillar can land
+    # on one story_id, and the reader gets "2319 UPDATES" of unrelated stories
+    # under a headline they were reading. A thread that large is not a thread,
+    # so it is discarded and the live term-overlap path is used instead.
     sid = (art["story_id"] or 0) if "story_id" in art.keys() else 0
+    if sid:
+        n = conn.execute(
+            "SELECT COUNT(*) AS c FROM articles WHERE story_id=? AND "
+            "ai_processed=1 AND status='published'", (sid,)).fetchone()["c"]
+        if n > MAX_THREAD_SIZE:
+            log.info("[STORY] story_id=%s has %d members — over-merged, "
+                     "falling back to live matching", sid, n)
+            sid = 0
     if sid:
         rows = conn.execute(
             "SELECT * FROM articles WHERE story_id=? AND ai_processed=1 AND status='published' "
