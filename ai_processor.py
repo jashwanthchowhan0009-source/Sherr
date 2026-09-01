@@ -9,6 +9,7 @@ import asyncio
 import logging
 import re
 from typing import Optional
+from datetime import datetime, timezone
 import httpx
 
 import key_pool
@@ -165,10 +166,12 @@ async def _gemini_once(key: str, title: str, body: str, client) -> tuple:
         r = await client.post(url, json=payload, timeout=30)
         if r.status_code != 200:
             log.warning("Gemini HTTP %d: %s", r.status_code, r.text[:200])
+            _record_error("gemini", r.status_code, r.text)
             return None, r.status_code
         candidates = (r.json() or {}).get("candidates", [])
         if not candidates:
             log.warning("Gemini returned no candidates")
+            _record_error("gemini", 200, f"no candidates: {r.text[:300]}")
             return None, 200
         parts = candidates[0].get("content", {}).get("parts", [])
         if not parts:
@@ -176,10 +179,37 @@ async def _gemini_once(key: str, title: str, body: str, client) -> tuple:
         return json.loads(parts[0].get("text", "").strip()), 200
     except json.JSONDecodeError as e:
         log.warning("Gemini JSON parse failed: %s", e)
+        _record_error("gemini", 200, f"JSONDecodeError: {e}")
         return None, 200
     except Exception as e:
         log.warning("Gemini call failed: %s", e)
+        _record_error("gemini", 0, f"{type(e).__name__}: {e}")
         return None, 0
+
+
+# Every provider failure used to end at a log.warning and then vanish: the
+# cascade returned None, _rule_based_fallback supplied the placeholder, and the
+# caller had no way to learn which provider refused it or why. A pass that
+# rewrites nothing looked identical to one with nothing to rewrite.
+#
+# So each refusal is recorded here — provider, HTTP status, and the response
+# body verbatim — and /admin/body-audit reads it back.
+PROVIDER_ERRORS: list = []
+_MAX_PROVIDER_ERRORS = 20
+
+
+def _record_error(provider: str, status: int, detail: str) -> None:
+    PROVIDER_ERRORS.insert(0, {
+        "provider": provider,
+        "status": status,          # 0 == the request never got a response
+        "error": (detail or "")[:500],
+        "at": datetime.now(timezone.utc).isoformat(),
+    })
+    del PROVIDER_ERRORS[_MAX_PROVIDER_ERRORS:]
+
+
+def last_provider_errors(n: int = 5) -> list:
+    return PROVIDER_ERRORS[:n]
 
 
 async def _openai_chat_once(key: str, title: str, body: str, client, *,
@@ -207,12 +237,14 @@ Return ONLY a single JSON object matching the schema. No markdown, no code fence
         )
         if r.status_code != 200:
             log.warning("%s HTTP %d: %s", label, r.status_code, r.text[:200])
+            _record_error(label, r.status_code, r.text)
             return None, r.status_code
         text = (r.json()["choices"][0]["message"]["content"] or "").strip()
         text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text).strip()
         return json.loads(text), 200
     except Exception as e:
         log.warning("%s call failed: %s", label, e)
+        _record_error(label, 0, f"{type(e).__name__}: {e}")
         return None, 0
 
 
