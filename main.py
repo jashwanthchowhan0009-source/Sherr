@@ -190,6 +190,9 @@ async def _spie_patterns(type: str, limit: int, offset: int,
     caller away from putting them back on screen — and /patterns has more than
     one caller (the Sherr-I page and Explore's Connections section).
     """
+    # Reads public.insights — the engine's own table, over a raw asyncpg pool with
+    # the default search_path. Deliberate: this app's sherrbyte_app schema has no
+    # insights table (its seed-tier demo rows live in demo_insights).
     pool = await get_spie_pool()
     if pool is None:
         return None
@@ -693,10 +696,20 @@ CREATE TABLE IF NOT EXISTS bookmarks (
     UNIQUE(user_id, article_id)
 );
 
--- Sherr-I — SherrByte Pattern Intelligence Engine output. Mirrors the
--- engine's insights schema so the app renders real pattern output. (The full
--- engine runs on the Postgres stack, and this table lets the deployed app show it.)
-CREATE TABLE IF NOT EXISTS insights (
+-- Sherr-I demo rows for the "seed" tier, and NOTHING ELSE.
+--
+-- NAMED demo_insights, NOT insights, deliberately. This app runs its DDL through
+-- pgcompat with search_path=sherrbyte_app, while the engine writes and
+-- _spie_patterns reads public.insights over a raw asyncpg pool. Calling this
+-- table `insights` therefore created a SECOND table of that name, in a different
+-- schema, holding _SAMPLE_INSIGHTS demo rows — shadowing the real one on every
+-- production boot. Nothing read the shadow, so nothing failed; it just sat there
+-- waiting for someone to join the wrong one. Two same-named tables in two schemas
+-- is the two-database bug that has already cost this repo once.
+--
+-- The name is now unambiguous in both directions: `insights` is always the
+-- engine's table in public, `demo_insights` is always the local seed tier.
+CREATE TABLE IF NOT EXISTS demo_insights (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     type TEXT NOT NULL,
     entities TEXT DEFAULT '[]',
@@ -707,7 +720,7 @@ CREATE TABLE IF NOT EXISTS insights (
     created_at TEXT DEFAULT (datetime('now'))
 );
 
-CREATE INDEX IF NOT EXISTS idx_insights_type ON insights(type, score DESC);
+CREATE INDEX IF NOT EXISTS idx_demo_insights_type ON demo_insights(type, score DESC);
 CREATE INDEX IF NOT EXISTS idx_articles_pillar ON articles(pillar_id);
 CREATE INDEX IF NOT EXISTS idx_articles_published ON articles(published_at DESC);
 CREATE INDEX IF NOT EXISTS idx_articles_title_hash ON articles(title_hash);
@@ -1038,7 +1051,7 @@ def init_db():
     try:
         for ins in _SAMPLE_INSIGHTS:
             conn.execute(
-                "INSERT OR IGNORE INTO insights (type, entities, domains, score, explain_json, signature) "
+                "INSERT OR IGNORE INTO demo_insights (type, entities, domains, score, explain_json, signature) "
                 "VALUES (?,?,?,?,?,?)",
                 (ins["type"], json.dumps(ins["entities"]), json.dumps(ins["domains"]),
                  ins["score"], json.dumps(ins["explain_json"]), ins["signature"]),
@@ -2499,10 +2512,10 @@ async def patterns(
     if hours > 0:
         where.append("created_at >= datetime('now', ?)"); p.append(f"-{int(hours)} hours")
     clause = (" WHERE " + " AND ".join(where)) if where else ""
-    q = ("SELECT * FROM insights" + clause
+    q = ("SELECT * FROM demo_insights" + clause
          + " ORDER BY score DESC, created_at DESC LIMIT ? OFFSET ?")
     rows = conn.execute(q, p + [limit, offset]).fetchall()
-    total = conn.execute("SELECT COUNT(*) AS c FROM insights" + clause, p).fetchone()["c"]
+    total = conn.execute("SELECT COUNT(*) AS c FROM demo_insights" + clause, p).fetchone()["c"]
     conn.close()
     return {"patterns": [insight_row_to_dict(r) for r in rows], "total": total,
             "source": "seed",
@@ -3219,6 +3232,41 @@ async def admin_clean_entities(
 _body_task: Optional[asyncio.Task] = None
 _body_result: dict = {}
 _body_progress: dict = {}
+# Survives the run so /admin/body-audit can report why nothing happened. A job
+# that reports "complete, rewritten 0" with no error anywhere is the exact
+# failure mode this exists to make visible.
+_body_last: dict = {"ran_at": None, "fetched": 0, "candidates": 0, "sent_to_ai": 0,
+                    "ai_returned": 0, "written": 0, "failed": 0,
+                    "last_error": None, "errors": []}
+
+
+def _provider_summary() -> str:
+    try:
+        import ai_processor                                    # noqa: PLC0415
+        return ", ".join(f"{p}:{ai_processor.KEYS.get(p).size}"
+                         for p in ai_processor.KEYS.configured()) or "NONE CONFIGURED"
+    except Exception as e:                                     # noqa: BLE001
+        return f"unavailable ({e})"
+
+
+def _body_reason(reason: str, article_id=None) -> None:
+    """A rejection that is not an exception but still means no row was written."""
+    entry = {"stage": "rewrite", "type": reason, "error": reason,
+             "article_id": article_id}
+    _body_last["last_error"] = entry
+    _body_last["errors"] = ([entry] + _body_last.get("errors", []))[:10]
+    log.warning("[BODY] article %s not written: %s", article_id, reason)
+
+
+def _body_err(stage: str, exc: Exception, article_id=None) -> None:
+    """Record a real exception — type, text, and where it happened."""
+    entry = {"stage": stage, "type": type(exc).__name__,
+             "error": str(exc)[:400], "article_id": article_id}
+    _body_last["last_error"] = entry
+    _body_last["errors"] = ([entry] + _body_last.get("errors", []))[:10]
+    log.error("[BODY] %s failed%s: %s: %s", stage,
+              f" (article {article_id})" if article_id else "",
+              type(exc).__name__, str(exc)[:400])
 
 
 def body_progress() -> dict:
@@ -3237,11 +3285,17 @@ def _reprocess_bodies_sync(limit: int, batch: int) -> dict:
     Synchronous because get_db()/pgcompat is a sync driver; the caller runs it in
     an executor so the event loop keeps serving.
     """
+    for k in ("fetched", "candidates", "sent_to_ai", "ai_returned", "written", "failed"):
+        _body_last[k] = 0
+    _body_last.update({"ran_at": datetime.now(timezone.utc).isoformat(),
+                       "last_error": None, "errors": []})
+    log.info("[BODY] run starting: limit=%d batch=%d", limit, batch)
     conn = get_db()
     try:
         before = body_state.audit(conn)
         _body_progress.update({"phase": "auditing", "before": before["published_by_state"]})
-        log.info("[BODY] before: %s", before["published_by_state"])
+        log.info("[BODY] before: %s | needs_rewrite=%d",
+                 before["published_by_state"], before["needs_rewrite"])
 
         providers = available_providers()
         if providers["primary"] == "rule-based":
@@ -3265,10 +3319,29 @@ def _reprocess_bodies_sync(limit: int, batch: int) -> dict:
         _body_progress.update({"phase": "rewriting", "done": 0, "target": limit})
         while len(attempted) < limit:
             take = min(batch, limit - len(attempted))
-            rows = [r for r in conn.execute(
-                        body_state.SELECT_NEEDING_REWRITE, (take + len(attempted),)
-                    ).fetchall() if r["id"] not in attempted][:take]
+            try:
+                fetched = conn.execute(
+                    body_state.SELECT_NEEDING_REWRITE, (take + len(attempted),)
+                ).fetchall()
+            except Exception as e:
+                _body_err("select", e)
+                break
+            rows = [r for r in fetched if r["id"] not in attempted][:take]
+            _body_last["fetched"] += len(fetched)
+            log.info("[BODY] fetched %d candidate row(s), %d new this batch",
+                     len(fetched), len(rows))
             if not rows:
+                # The single most important log line here: the audit says work
+                # exists but the selector found none, which is a selector bug,
+                # not an empty backlog.
+                if before["needs_rewrite"] and not attempted:
+                    log.error("[BODY] SELECTOR RETURNED NOTHING while the audit "
+                              "reports %d article(s) needing a rewrite — the "
+                              "candidate query and the classifier disagree.",
+                              before["needs_rewrite"])
+                    _body_err("select", RuntimeError(
+                        f"selector found 0 rows but audit says "
+                        f"{before['needs_rewrite']} need rewriting"))
                 break
             attempted.update(r["id"] for r in rows)
 
@@ -3293,12 +3366,22 @@ def _reprocess_bodies_sync(limit: int, batch: int) -> dict:
                 "fallback_category": PILLARS.get(r["pillar_id"], PILLARS[3])["slug"],
             } for r in work]
 
+            _body_last["candidates"] += len(work)
+            _body_last["sent_to_ai"] += len(batch_input)
+            log.info("[BODY] sent %d article(s) to AI (providers: %s)",
+                     len(batch_input), _provider_summary())
             try:
                 results = asyncio.run(process_batch(batch_input, concurrency=AI_CONCURRENCY))
             except Exception as e:
-                log.error("[BODY] batch failed: %s", e)
+                # The whole batch died. This is where a bad key, an exhausted
+                # quota, or a network refusal surfaces — record it verbatim
+                # instead of losing it to a one-line warning.
+                _body_err("ai_batch", e)
                 failed += len(work)
                 break
+            _body_last["ai_returned"] += len(results)
+            log.info("[BODY] AI returned %d result(s) for %d sent",
+                     len(results), len(batch_input))
 
             for row, result in zip(work, results):
                 try:
@@ -3307,6 +3390,10 @@ def _reprocess_bodies_sync(limit: int, batch: int) -> dict:
                     # marking it done with the same placeholder.
                     if (body_state.is_stub(result.get("full_body", ""))
                             or body_state.is_stub(result.get("summary", ""))):
+                        # Every provider failed and the rule-based fallback
+                        # handed back the placeholder. Counted as a failure so
+                        # it cannot masquerade as a completed rewrite.
+                        _body_reason("ai_returned_stub", row["id"])
                         failed += 1
                         continue
                     src_head = row["source_headline"] or row["headline"] or ""
@@ -3336,6 +3423,7 @@ def _reprocess_bodies_sync(limit: int, batch: int) -> dict:
                         # The rewrite reproduced the source. Left unflagged so the
                         # next run tries again; never written.
                         audit["status"] = "rejected_body_overlap"
+                        _body_reason("rejected_body_overlap", row["id"])
                         failed += 1
                         continue
                     headline = ((result.get("refined_title") or "").strip()
@@ -3353,16 +3441,22 @@ def _reprocess_bodies_sync(limit: int, batch: int) -> dict:
                         json.dumps(audit), body_m["overlap"], body_m["longest_run"],
                         datetime.now(timezone.utc).isoformat(), row["id"]))
                     done += 1
+                    _body_last["written"] += 1
                 except Exception as e:
-                    log.warning("[BODY] update failed for id %s: %s", row["id"], e)
+                    _body_err("write", e, row["id"])
                     failed += 1
             conn.commit()
             _body_progress.update({"done": done, "failed": failed,
                                    "skipped": skipped, "attempted": len(attempted)})
 
         after = body_state.audit(conn)
-        log.info("[BODY] rewrote %d, failed %d, already-original %d | after: %s",
-                 done, failed, skipped, after["published_by_state"])
+        _body_last["failed"] = failed
+        log.info("[BODY] run finished: fetched=%d candidates=%d sent=%d returned=%d "
+                 "wrote=%d failed=%d already-original=%d | after: %s | last error: %s",
+                 _body_last["fetched"], _body_last["candidates"],
+                 _body_last["sent_to_ai"], _body_last["ai_returned"],
+                 done, failed, skipped, after["published_by_state"],
+                 _body_last["last_error"])
         return {"ok": True, "rewritten": done, "failed": failed,
                 "already_original": skipped, "attempted": len(attempted),
                 "before": before["published_by_state"],
@@ -3381,6 +3475,9 @@ async def _run_body_reprocess(limit: int, batch: int) -> None:
         _body_result = await asyncio.get_event_loop().run_in_executor(
             None, _reprocess_bodies_sync, limit, batch)
     except Exception as e:
+        # The executor call itself died — the run never reached its own
+        # error handling, so record it here or it is lost with the task.
+        _body_err("task", e)
         _body_result = {"ok": False, "error": f"{type(e).__name__}: {e}"}
         log.error("[BODY] reprocess failed: %s", e, exc_info=True)
     finally:
@@ -3552,6 +3649,38 @@ async def admin_body_audit(x_admin_token: str = Header(""), token: str = Query("
     # configured — the rewrite refuses to run, correctly, but silently.
     providers = available_providers()
     out["ai"] = providers
+
+    # WHY THE LAST RUN DID WHAT IT DID.
+    #
+    # The counts alone cannot distinguish "nothing needed rewriting" from
+    # "the selector matched nothing", "every provider returned 401", or "the
+    # rewrite came back as the placeholder again". Each of those leaves
+    # original at 0 and each needs a different fix, so the run's own stage
+    # counters and the last real exception are reported here — no redeploy and
+    # no log access required.
+    out["last_run"] = dict(_body_last)
+    out["running"] = bool(_body_progress.get("running"))
+    try:
+        import ai_processor                                    # noqa: PLC0415
+        out["provider_errors"] = ai_processor.last_provider_errors(5)
+    except Exception:                                          # noqa: BLE001
+        out["provider_errors"] = []
+
+    # A selector that disagrees with the classifier is the silent no-op that
+    # made this pass look successful while rewriting nothing. Say so outright.
+    lr = out["last_run"]
+    if lr.get("ran_at") and out["needs_rewrite"] and not lr.get("candidates"):
+        out["DIAGNOSIS"] = (
+            "The last run fetched %d row(s) and found %d to work on, yet the "
+            "audit says %d article(s) still need rewriting. The candidate query "
+            "and the classifier disagree — that is a selector bug, not an empty "
+            "backlog." % (lr.get("fetched", 0), lr.get("candidates", 0),
+                          out["needs_rewrite"]))
+    elif lr.get("sent_to_ai") and not lr.get("written"):
+        out["DIAGNOSIS"] = (
+            "The last run sent %d article(s) to the AI and wrote none. See "
+            "provider_errors and last_run.last_error for the actual failure."
+            % lr["sent_to_ai"])
     if providers.get("primary") == "rule-based":
         out["BLOCKED"] = (
             "NO AI PROVIDER CONFIGURED. Set GEMINI_API_KEY or GROQ_API_KEY on "
@@ -3596,7 +3725,7 @@ async def admin_reprocess_bodies(
         return {"status": "running", "progress": body_progress()}
     if _body_task is not None and not running and not restart:
         return {"status": "complete", "progress": body_progress(),
-                "result": _body_result}
+                "result": _body_result, "last_run": dict(_body_last)}
 
     if running and restart:
         _body_task.cancel()
@@ -3604,7 +3733,9 @@ async def admin_reprocess_bodies(
     _body_task = asyncio.create_task(
         _run_body_reprocess(limit, batch or AI_BATCH_SIZE))
     return {"status": "started", "limit": limit,
-            "hint": "poll this URL; /admin/body-audit shows the counts"}
+            "providers": _provider_summary(),
+            "hint": "poll this URL; /admin/body-audit shows the counts and, "
+                    "under last_run and provider_errors, why a run wrote nothing"}
 
 
 # ─── detectors on demand ─────────────────────────────────────────────────────

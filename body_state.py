@@ -283,12 +283,60 @@ def audit(conn, *, published_only: bool = False) -> dict:
     }
 
 
-SELECT_NEEDING_REWRITE = (
-    # Candidate set, narrowed in Python by classify(): reprocessed=0 is the
-    # drain's own fingerprint (it never sets the column the AI pass does), and
-    # the body check is what stops an already-rewritten row being redone.
-    "SELECT id, headline, source_headline, full_body, summary_60, source_summary, "
-    "pillar_id, micro_tags, source_name, url FROM articles "
-    "WHERE status='published' AND COALESCE(reprocessed,0)=0 "
-    "ORDER BY published_at DESC LIMIT ?"
-)
+# Candidate set, narrowed in Python by classify().
+#
+# THIS USED TO BE `WHERE reprocessed=0` ALONE, on the reasoning that reprocessed
+# is the drain's fingerprint because only the AI pass sets it. That was wrong,
+# and it made the whole rewrite a silent no-op:
+#
+#   run_ai_batch writes reprocessed=1 AND the stub body, in the same UPDATE,
+#   whenever the providers were down and _rule_based_fallback supplied
+#   _SAFE_BODY. So the corpus is full of rows that are stub AND reprocessed=1.
+#
+# audit() classifies by CONTENT and reported 21,655 needing a rewrite; the
+# selector filtered on the FLAG and returned zero. The job dutifully iterated an
+# empty list and reported "complete, rewritten 0" — no error, nothing in the
+# logs, and the count never moved.
+#
+# The flag is now one of several ways to qualify, not the gate. The stub
+# patterns come from the same strings the classifier uses, so a reworded
+# placeholder cannot desync the SQL from the Python again.
+def _sql_like_literal(marker: str) -> str:
+    """One marker as a quoted SQL LIKE pattern that matches it anywhere.
+
+    Three things have to be right, and each has bitten this file before:
+      * the markers are SUBSTRINGS (classify() uses `in`), so a prefix-only
+        pattern would silently never match one like "will appear here shortly";
+      * an apostrophe in a future marker would end the string literal and turn a
+        rewording into a SQL syntax error — which this pass would swallow;
+      * % and _ are LIKE wildcards, so a marker containing one must escape it.
+    """
+    escaped = (marker.replace("\\", "\\\\")
+                     .replace("%", "\\%")
+                     .replace("_", "\\_")
+                     .replace("'", "''"))
+    return f"'%{escaped}%' ESCAPE '\\'"
+
+
+def _stub_like_clause(column: str) -> str:
+    return " OR ".join(f"LOWER({column}) LIKE {_sql_like_literal(m)}"
+                       for m in _STUB_MARKERS)
+
+
+def _needing_rewrite_sql() -> str:
+    body = _stub_like_clause("full_body")
+    summ = _stub_like_clause("summary_60")
+    return (
+        "SELECT id, headline, source_headline, full_body, summary_60, "
+        "source_summary, pillar_id, micro_tags, source_name, url FROM articles "
+        "WHERE status='published' AND ("
+        "  COALESCE(reprocessed,0)=0"
+        f" OR {body}"
+        f" OR {summ}"
+        "  OR COALESCE(TRIM(full_body),'')=''"
+        "  OR COALESCE(TRIM(summary_60),'')=''"
+        ") ORDER BY published_at DESC LIMIT ?"
+    )
+
+
+SELECT_NEEDING_REWRITE = _needing_rewrite_sql()
