@@ -29,8 +29,17 @@ demo rows on every production boot, shadowing the engine's real one. Nothing
 read the shadow, so nothing ever failed — it simply waited for someone to join
 the wrong table. It is renamed so the name is unambiguous in both directions.
 
-**An unqualified `insights` in an asyncpg query means `public.insights`.** That
-is intentional. Do not "fix" it by adding a search_path.
+The orphan `sherrbyte_app.insights` left behind in production held exactly 3
+rows, all of them known `_SAMPLE_INSIGHTS` signatures, 0 unexpected — verified
+before removal, against `public.insights`'s 295 real rows. It is dropped by
+`scripts/oneoff_drop_legacy_insights.sql`, which is a **one-time manual
+cleanup, deliberately not a migration**: a migration would run forever on fresh
+environments where that table never existed, and 022/023 are reserved for the
+analog engine.
+
+**An unqualified `insights` in an asyncpg query means `public.insights`,
+permanently.** That is intentional. Do not "fix" it by adding a search_path,
+and do not reintroduce any table named `insights` in `sherrbyte_app`.
 
 ---
 
@@ -71,14 +80,45 @@ deliberately **not** a matcher term — having it in both places double-counts i
 - `022_event_library.sql`
 - `023_analog_reactions.sql`
 
-### The Phase 3 coverage gate is set after measurement, not before
+### The Phase 3 coverage gate is MET, and there is no `--years` flag
 
-Do not set the "N symbols with ≥5 years" threshold from the detector funnel's
-`with_enough_history`. That number comes from `domain_signals` (~10 headline
-instruments), not from `market_ticks`, and is not evidence about tick coverage.
+Measured, not assumed. `backfill_ticks.py --days 400` (2026-09-01) returned:
 
-Correct sequence: run `scripts/backfill_ticks.py`, run `verify_ticks.py`, then
-set the gate from the real per-symbol numbers.
+```
+18,830 rows | 51 symbols | 2025-01-08 -> 2026-09-01 | 46 symbols_ok
+stocks 7,157/18 · energy_stocks 2,800/7 · forex 2,711/7 · metals 1,654/5
+commodities 1,653/5 · rates 1,600/4 · crypto 455/5
+```
+
+**The "5 years / 25 symbols" gate is cancelled.** The analog engine can only
+match against our own news corpus, which is ~368 days deep. Price history
+therefore only has to cover about 400 days — 46 symbols already exceed that, so
+the gate is met. Depth beyond the corpus buys nothing an analog could use.
+
+**Do not build the `--years` flag.** It was scoped to reach 10 years of prices
+for a matcher that can never look further back than the news. `--days` is
+sufficient and already exists.
+
+Crypto is the one class that stays short: CoinGecko's keyless public tier caps
+history at 365 days, and adding a key or a paid tier is refused (it is on the
+non-commercial licensing audit list). Treat thin crypto analogs as a known
+limitation, not a bug to solve.
+
+### CoinGecko's public tier: two failure modes, both now handled
+
+A `--days 400` run lost all 11 crypto symbols — 5 with HTTP **401**, 6 with
+**429**. Neither was an auth problem:
+
+- **401** is how the public tier refuses a window wider than 365 days. It reads
+  as a credential failure and is not one. `coingecko_daily` now clamps to
+  `COINGECKO_MAX_DAYS` and logs the clamp per symbol, so a short crypto series
+  is never mistaken for missing data.
+- **429** is the rate limit. The old 1.5s gap was 40 calls a minute against a
+  documented ~5-15 ceiling. The gap is now 6s, with retry and exponential
+  backoff that honours `Retry-After`.
+
+The 401/429 split is explained by ordering: the rate-limited requests never
+reached range validation.
 
 ### Out of scope, permanently
 
