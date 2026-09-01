@@ -190,6 +190,9 @@ async def _spie_patterns(type: str, limit: int, offset: int,
     caller away from putting them back on screen — and /patterns has more than
     one caller (the Sherr-I page and Explore's Connections section).
     """
+    # Reads public.insights — the engine's own table, over a raw asyncpg pool with
+    # the default search_path. Deliberate: this app's sherrbyte_app schema has no
+    # insights table (its seed-tier demo rows live in demo_insights).
     pool = await get_spie_pool()
     if pool is None:
         return None
@@ -693,10 +696,20 @@ CREATE TABLE IF NOT EXISTS bookmarks (
     UNIQUE(user_id, article_id)
 );
 
--- Sherr-I — SherrByte Pattern Intelligence Engine output. Mirrors the
--- engine's insights schema so the app renders real pattern output. (The full
--- engine runs on the Postgres stack, and this table lets the deployed app show it.)
-CREATE TABLE IF NOT EXISTS insights (
+-- Sherr-I demo rows for the "seed" tier, and NOTHING ELSE.
+--
+-- NAMED demo_insights, NOT insights, deliberately. This app runs its DDL through
+-- pgcompat with search_path=sherrbyte_app, while the engine writes and
+-- _spie_patterns reads public.insights over a raw asyncpg pool. Calling this
+-- table `insights` therefore created a SECOND table of that name, in a different
+-- schema, holding _SAMPLE_INSIGHTS demo rows — shadowing the real one on every
+-- production boot. Nothing read the shadow, so nothing failed; it just sat there
+-- waiting for someone to join the wrong one. Two same-named tables in two schemas
+-- is the two-database bug that has already cost this repo once.
+--
+-- The name is now unambiguous in both directions: `insights` is always the
+-- engine's table in public, `demo_insights` is always the local seed tier.
+CREATE TABLE IF NOT EXISTS demo_insights (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     type TEXT NOT NULL,
     entities TEXT DEFAULT '[]',
@@ -707,7 +720,7 @@ CREATE TABLE IF NOT EXISTS insights (
     created_at TEXT DEFAULT (datetime('now'))
 );
 
-CREATE INDEX IF NOT EXISTS idx_insights_type ON insights(type, score DESC);
+CREATE INDEX IF NOT EXISTS idx_demo_insights_type ON demo_insights(type, score DESC);
 CREATE INDEX IF NOT EXISTS idx_articles_pillar ON articles(pillar_id);
 CREATE INDEX IF NOT EXISTS idx_articles_published ON articles(published_at DESC);
 CREATE INDEX IF NOT EXISTS idx_articles_title_hash ON articles(title_hash);
@@ -1038,7 +1051,7 @@ def init_db():
     try:
         for ins in _SAMPLE_INSIGHTS:
             conn.execute(
-                "INSERT OR IGNORE INTO insights (type, entities, domains, score, explain_json, signature) "
+                "INSERT OR IGNORE INTO demo_insights (type, entities, domains, score, explain_json, signature) "
                 "VALUES (?,?,?,?,?,?)",
                 (ins["type"], json.dumps(ins["entities"]), json.dumps(ins["domains"]),
                  ins["score"], json.dumps(ins["explain_json"]), ins["signature"]),
@@ -2499,10 +2512,10 @@ async def patterns(
     if hours > 0:
         where.append("created_at >= datetime('now', ?)"); p.append(f"-{int(hours)} hours")
     clause = (" WHERE " + " AND ".join(where)) if where else ""
-    q = ("SELECT * FROM insights" + clause
+    q = ("SELECT * FROM demo_insights" + clause
          + " ORDER BY score DESC, created_at DESC LIMIT ? OFFSET ?")
     rows = conn.execute(q, p + [limit, offset]).fetchall()
-    total = conn.execute("SELECT COUNT(*) AS c FROM insights" + clause, p).fetchone()["c"]
+    total = conn.execute("SELECT COUNT(*) AS c FROM demo_insights" + clause, p).fetchone()["c"]
     conn.close()
     return {"patterns": [insight_row_to_dict(r) for r in rows], "total": total,
             "source": "seed",

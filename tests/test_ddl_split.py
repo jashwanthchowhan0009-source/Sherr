@@ -35,10 +35,17 @@ def test_a_semicolon_inside_a_line_comment_does_not_split_the_statement():
 
 def test_the_real_schema_still_yields_one_intact_insights_statement():
     """A regression test against the live CREATE_TABLES, so re-introducing a
-    semicolon in any comment fails here rather than in production."""
+    semicolon in any comment fails here rather than in production.
+
+    The table this guards is now demo_insights: it was renamed from `insights`
+    because that name collided with the engine's public.insights, which
+    _spie_patterns reads over a separate asyncpg pool. The splitter behaviour
+    under test is unchanged — only the fixture's name.
+    """
     import main
     frags = pgcompat.split_statements(main.CREATE_TABLES)
-    creates = [f for f in frags if "CREATE TABLE IF NOT EXISTS insights" in f]
+    creates = [f for f in frags
+               if "CREATE TABLE IF NOT EXISTS demo_insights" in f]
     assert len(creates) == 1
     assert creates[0].rstrip().endswith(")")
     # No fragment may begin with prose — that is the signature of a bad split.
