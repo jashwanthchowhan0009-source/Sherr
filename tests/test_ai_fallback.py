@@ -193,12 +193,17 @@ def test_no_write_path_can_blank_a_headline():
     _gate_article and headline_is_original legitimately read refined_title, and
     a bare substring check flags those reads as if they were writes."""
     import inspect
+    import re
     import main
+    # The row variable is `row` in some of these and `r` in others — matching a
+    # literal name made this fail on a rename that fixed a real NameError.
+    # Assert the FALLBACK CHAIN, not the spelling of the loop variable.
+    fallback = re.compile(r'or \((row|r)\["headline"\] or ""\)\.strip\(\)')
     for fn in (main.run_ai_batch, main.admin_reprocess, main._reprocess_bodies_sync):
         src = " ".join(inspect.getsource(fn).split())
         assert 'result.get("refined_title") or "").strip()' in src, (
             f"{fn.__name__} does not guard the headline it writes")
-        assert 'or (row["headline"] or "").strip()' in src, (
+        assert fallback.search(src), (
             f"{fn.__name__} has no fallback to the existing headline")
 
 

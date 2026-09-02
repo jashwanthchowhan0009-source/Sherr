@@ -1457,9 +1457,25 @@ async def run_ai_batch(conn):
             if audit.get("posture") == "aggregator":
                 _apply_aggregator_posture(result, row)
 
+            # source_summary IS DELIBERATELY ABSENT FROM THIS UPDATE.
+            #
+            # It used to be set to result["summary"] — OUR text — under a
+            # comment reading "kept for back-compat". That overwrote the
+            # publisher's own words, and this schema keeps no other copy of
+            # them: ingest writes clean[:200] into source_summary and nothing
+            # else preserves the source.
+            #
+            # Two things broke as a result. body_state.classify uses
+            # source_summary as the ORIGINALITY REFERENCE, so once a row had
+            # been through this pass the gate was comparing our body against
+            # our own summary — checking text against itself. And
+            # source_material() had nothing left to rewrite FROM, so every
+            # retry regenerated the placeholder. Rows now reported as
+            # "no_source_material" are the ones this line destroyed; for those
+            # the publisher text is gone and only re-ingest recovers it.
             conn.execute("""
                 UPDATE articles SET
-                    headline=?, summary_60=?, full_body=?, source_summary=?,
+                    headline=?, summary_60=?, full_body=?,
                     when_info=?, where_info=?, pillar_id=?, micro_tags=?,
                     is_trending=?, sentiment=?, ai_processed=1, reprocessed=1,
                     status=?, originality_json=?, originality_overlap=?,
@@ -1476,7 +1492,6 @@ async def run_ai_batch(conn):
                     or (row["source_headline"] or "").strip(),
                 result["summary"],
                 result["full_body"],
-                result["summary"],  # kept for back-compat with source_summary field
                 result.get("when_info", ""),
                 result.get("where_info", "Not specified"),
                 new_pid,
@@ -2810,16 +2825,29 @@ async def admin_reprocess(
             existing_tags = json.loads(r["micro_tags"] or "[]")
             all_tags = list(dict.fromkeys(result["topic_tags"] + existing_tags))[:10]
             # ── 0.2 + 0.4: both gates run before anything can be published ──
-            src_head = row["source_headline"] or row["headline"] or ""
+            #
+            # `r`, NOT `row`. This block read a name that is never bound in this
+            # function, so every iteration raised NameError, was swallowed by the
+            # except below, and logged "[REPROCESS] update failed". The endpoint
+            # has never updated a single row.
+            src_head = r["source_headline"] or r["headline"] or ""
             status, audit = _gate_article(
                 result["refined_title"], result["full_body"], src_head,
-                row["full_body"] or "", ai_result=result)
+                r["full_body"] or "", ai_result=result)
             if audit.get("posture") == "aggregator":
-                _apply_aggregator_posture(result, row)
+                _apply_aggregator_posture(result, r)
 
+            # source_summary is absent here for the same reason as in
+            # run_ai_batch: it holds the publisher's only surviving text, and
+            # overwriting it destroys both the originality reference and the
+            # material a retry would rewrite from.
+            #
+            # The value list was also five short of the placeholders — status
+            # and the four originality columns were never supplied — so even
+            # with the name fixed this statement could not have run.
             conn.execute("""
                 UPDATE articles SET
-                    headline=?, summary_60=?, full_body=?, source_summary=?,
+                    headline=?, summary_60=?, full_body=?,
                     when_info=?, where_info=?, pillar_id=?, micro_tags=?,
                     is_trending=?, sentiment=?, ai_processed=1, reprocessed=1,
                     status=?, originality_json=?, originality_overlap=?,
@@ -2827,12 +2855,22 @@ async def admin_reprocess(
                 WHERE id=?
             """, (
                 (result.get("refined_title") or "").strip()
-                    or (row["headline"] or "").strip(),
-                result["summary"], result["full_body"],
-                result["summary"], result.get("when_info", ""),
-                result.get("where_info", "Not specified"), new_pid,
-                json.dumps(all_tags), 1 if result["is_trending"] else 0,
-                result["sentiment"], r["id"],
+                    or (r["headline"] or "").strip()
+                    or (r["source_headline"] or "").strip(),
+                result["summary"],
+                result["full_body"],
+                result.get("when_info", ""),
+                result.get("where_info", "Not specified"),
+                new_pid,
+                json.dumps(all_tags),
+                1 if result["is_trending"] else 0,
+                result["sentiment"],
+                status,
+                json.dumps(audit),
+                audit["body"]["overlap"],
+                audit["body"]["longest_run"],
+                datetime.now(timezone.utc).isoformat(),
+                r["id"],
             ))
             done += 1
         except Exception as e:
