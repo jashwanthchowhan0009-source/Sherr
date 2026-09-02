@@ -69,7 +69,7 @@ CREATE TABLE IF NOT EXISTS hist_events (
     -- backfill already filters these out; this stops a future writer
     -- reintroducing rows that can only ever be dead weight.
     CONSTRAINT hist_events_is_usable CHECK (
-        array_length(entity_ids, 1) >= 1 AND array_length(linked_symbols, 1) >= 1)
+        cardinality(entity_ids) >= 1 AND cardinality(linked_symbols) >= 1)
 );
 
 -- Phase 2's candidate query is "overlaps my symbols OR shares my class", so
@@ -85,3 +85,19 @@ CREATE INDEX IF NOT EXISTS idx_hist_events_class_time
     ON hist_events (event_class, occurred_at DESC);
 CREATE INDEX IF NOT EXISTS idx_hist_events_time
     ON hist_events (occurred_at DESC);
+
+-- ── constraint repair, idempotent ───────────────────────────────────────────
+-- The first version of hist_events_is_usable used array_length(x, 1), which
+-- returns NULL for an EMPTY array — and a CHECK that evaluates to NULL is
+-- SATISFIED in Postgres. So the constraint meant to guarantee "every row has at
+-- least one entity and one symbol" silently admitted rows with neither: exactly
+-- the dead-weight rows it existed to keep out.
+--
+-- cardinality() returns 0 for an empty array, so the comparison is real.
+--
+-- Dropped and re-added rather than left to CREATE TABLE IF NOT EXISTS, because
+-- that is a no-op on a database where 022 has already run — which includes
+-- production.
+ALTER TABLE hist_events DROP CONSTRAINT IF EXISTS hist_events_is_usable;
+ALTER TABLE hist_events ADD CONSTRAINT hist_events_is_usable CHECK (
+    cardinality(entity_ids) >= 1 AND cardinality(linked_symbols) >= 1);

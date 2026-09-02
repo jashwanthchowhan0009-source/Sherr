@@ -108,6 +108,22 @@ async def run(dsn: str, *, build: bool, dry_run: bool, migrate: bool) -> int:
         print("reaches at the same horizon. The rest are arithmetic, not evidence.")
         print("\nsignal_strength is a 0-100 RANKING integer. It is not a")
         print("confidence and not a probability. Never render it as a percentage.")
+        # ── phase 4 + 5: what a reader would actually be shown ──────────
+        _hr("phase 4 + 5 — the cards a reader would see")
+        from app.spie.analog import cards                          # noqa: PLC0415
+        built = await cards.build(conn, limit=10)
+        print("counts:", json.dumps(built["counts"]))
+        for c in built["analogs"][:5]:
+            mark = "CLEARS" if c["clears_noise"] else "below floor"
+            print(f"  [analog/{mark}] {c['headline']}")
+            print(f"      {c['detail']}")
+        for c in built["observations"][:5]:
+            print(f"  [observation] {c['headline']}")
+            print(f"      {c['detail']}")
+        if not built["analogs"] and not built["observations"]:
+            print("  nothing renderable — no analog cleared the floor and no")
+            print("  single-event move reached the significance bar.")
+
         print("\nThe floor column is the 95th percentile of signal_strength over")
         print("random walks with no relationship in them, measured by")
         print("app/spie/analog/calibration.py. z is scaled by sqrt(h), so the")

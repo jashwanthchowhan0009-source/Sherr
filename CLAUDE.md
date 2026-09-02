@@ -229,6 +229,61 @@ Re-derive both with `python -m app.spie.analog.calibration --seeds 200`. If the
 generator's parameters change, the published numbers must be re-measured — a
 floor that does not match what noise actually reaches is a lie to the reader.
 
+### Phase 1 gates on the SUMMARY, not the body
+
+`build()` requires `classify_summary(...) == ORIGINAL` and does **not** call
+`row_is_healthy`. The body requirement was self-imposed: nothing in Phase 1
+reads `full_body` except that check. Extraction runs on headline + `summary_60`
+— `linked_symbols()`, `_entities_for()` and `classify()` all take exactly those
+two — so a healthy body adds no information to any field the library stores,
+and demanding one excluded the entire corpus while the bodies were placeholders.
+
+The summary gate stays, and it is the one that matters: an event built on a
+placeholder summary would match on our own words rather than the story's.
+
+### `published_at` is TEXT *or* timestamptz — always cast before matching
+
+Migration 018 converts the column, so the same query has to work against both.
+`published_at ~ '...'` raises `operator does not exist: timestamp with time
+zone ~ unknown` and takes the whole pass down — that is how Phase 1 crashed on
+first contact with production. **`published_at::text ~ ...`** is a no-op on TEXT
+and always valid on timestamptz.
+
+Two modules carried the bug: `analog/event_library.py` and
+`discovery/news_match.py` — so the detector's news matching had been failing the
+same way, silently. `main.py`'s backfill is fine: it checks
+`information_schema` and returns early once the column is no longer text.
+
+`tests/test_analog_sql_executes.py` prepares every module-level SQL string in
+the analog package against a real server on each CI run, which is the only
+place this class of bug is visible before runtime.
+
+### Two card types, and why the second never suppresses
+
+`AnalogCard` is aggregate evidence and is often silent: below 5 analogs it does
+not exist, and at or below the measured noise floor it is labelled context
+rather than evidence. `ObservationCard` is one article, one instrument, one
+measured move — no sample floor, no suppression — so the surface is never blank
+while the library accumulates.
+
+They are different claims and the wording keeps them apart: an analog says
+"this happened before and here is how often"; an observation says only "here is
+what happened after this one article". Every generated string is a template,
+never a model, and every one passes `narrative.violates_language_rules` before
+it can reach a reader — the engine's own blocklist, not a second copy.
+
+### 019_watchlist.sql is NOT a user watchlist
+
+Its columns are `(entity_a, entity_b, kind, score, npmi)` — the emergence
+detector's parked entity pairs, connections it saw but judged not novel enough
+to publish. There is no `user_id`, so there is no per-user join to make.
+
+`cards.watchlist_symbols()` therefore returns "instruments connected to
+something the engine already flagged", which is a real filter but is not
+personalisation. Per-user personalisation needs a user→symbol table that does
+not exist yet; the endpoint's explicit `symbol=` parameter is the seam it plugs
+into.
+
 ### Out of scope, permanently
 
 FinBERT or any second sentiment model; probability/percentage outputs and price
