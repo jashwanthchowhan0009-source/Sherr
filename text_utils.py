@@ -92,6 +92,20 @@ def is_similar_title(a: str, b: str, threshold: float = 0.80) -> bool:
     return jaccard_similarity(a, b) >= threshold
 
 
+# THE MINIMUM LENGTH OF AN ORIGINAL BODY, IN WORDS.
+#
+# This lives here because TWO modules enforce it and they used to disagree:
+# ai_processor._validate_and_fix replaced anything under 40 words with the
+# placeholder, while body_state.classify accepted an original body at 25. A
+# genuine 30-word rewrite therefore satisfied the gate and was destroyed before
+# it could ever reach it — which is how a corpus of 25,714 articles ended up
+# with 0 healthy rows and every rewrite reported as "ai_returned_stub".
+#
+# text_utils is the right home: ai_processor and body_state both already import
+# from it, and it imports neither, so there is no cycle and no second copy.
+MIN_ORIGINAL_WORDS = 25
+
+
 def word_count(text: str) -> int:
     return len(text.split()) if text else 0
 
