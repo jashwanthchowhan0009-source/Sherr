@@ -3670,6 +3670,22 @@ async def admin_body_audit(x_admin_token: str = Header(""), token: str = Query("
     providers = available_providers()
     out["ai"] = providers
 
+    # A MODEL ID THAT NO LONGER EXISTS LOOKS EXACTLY LIKE A WORKING ONE FROM
+    # HERE — until the provider 404s and every article silently stays on its
+    # placeholder. gemini-2.5-flash and grok-2-latest both went that way. So the
+    # audit names the model each provider is actually using, and flags the ones
+    # still on a built-in default, because those are the ids that go stale
+    # without anyone editing anything.
+    defaulted = [p for p, m in (providers.get("models") or {}).items()
+                 if m.get("source") == "built-in default"]
+    if defaulted:
+        out["model_note"] = (
+            "%s using a built-in default model id (%s). Defaults go stale when a "
+            "provider retires a model; set the matching env var to pin one. If "
+            "provider_errors below shows 404/400, the id is the reason."
+            % (", ".join(defaulted),
+               ", ".join(providers["models"][p]["model"] for p in defaulted)))
+
     # WHY THE LAST RUN DID WHAT IT DID.
     #
     # The counts alone cannot distinguish "nothing needed rewriting" from
