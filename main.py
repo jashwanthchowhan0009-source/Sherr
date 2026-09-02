@@ -102,6 +102,29 @@ PENDING_DRAIN_THRESHOLD = int(os.getenv("PENDING_DRAIN_THRESHOLD", "0"))
 # its whole night on AI calls; a full corpus pass is several nights, or several
 # calls to /admin/reprocess-bodies.
 BODY_REPROCESS_NIGHTLY = int(os.getenv("BODY_REPROCESS_NIGHTLY", "150"))
+
+# ─── the continuous drain ────────────────────────────────────────────────────
+# The backlog is ~25,000 articles and the rewrite is rate limited, not compute
+# limited: Gemini's free tier allows 15 requests a minute, and ONE ARTICLE IS
+# ONE REQUEST. So the only way through the backlog is to keep going, slowly,
+# without anyone pressing a button.
+#
+# BODY_DRAIN_RPM is deliberately UNDER the ceiling. The published limit is 15;
+# 12 leaves room for the ingest pass, the nightly sweep and any manual run to
+# share the same quota without collectively breaching it. Raising this to 15
+# means three separate callers can each believe they are inside the limit while
+# together they are not.
+#
+# At 12 an hour clears ~720 articles, so a 25,000-row backlog is about 35 hours
+# of unattended running. That is the honest number: there is no faster path on
+# a free tier that does not involve breaking the terms.
+BODY_DRAIN_ENABLED = os.getenv("BODY_DRAIN_ENABLED", "1") not in ("0", "false", "no")
+BODY_DRAIN_RPM = int(os.getenv("BODY_DRAIN_RPM", "12"))
+BODY_DRAIN_INTERVAL_S = int(os.getenv("BODY_DRAIN_INTERVAL_S", "60"))
+# A 429 means the tier said no. Sitting out whole ticks is the only response
+# that actually reduces pressure; retrying sooner is what caused it.
+BODY_DRAIN_BACKOFF_TICKS = int(os.getenv("BODY_DRAIN_BACKOFF_TICKS", "5"))
+BODY_DRAIN_MAX_BACKOFF = int(os.getenv("BODY_DRAIN_MAX_BACKOFF", "60"))
 # How long boot will wait for the drain before carrying on without it. The
 # server does not accept connections until lifespan returns, so this is also
 # the longest the health check can be left unable to connect.
@@ -1793,6 +1816,20 @@ async def lifespan(app: FastAPI):
     # Bodies still holding the drain's stub or the publisher's own text. Nightly
     # and bounded; /admin/reprocess-bodies is the same pass on demand.
     try:
+        # THE CONTINUOUS DRAIN. An interval job, not a cron: the backlog is
+        # rate-limited work that has to keep going, and a once-a-night sweep
+        # would need 35 nights to clear 25,000 articles at the free tier's pace.
+        # Each tick is its own quota window, so the rate is bounded by the
+        # schedule rather than by hoping a batch finishes in time.
+        if BODY_DRAIN_ENABLED:
+            scheduler.add_job(body_drain_job, "interval",
+                              seconds=BODY_DRAIN_INTERVAL_S,
+                              id="body_drain", max_instances=1,
+                              coalesce=True, replace_existing=True)
+            log.info("[REWRITE] continuous drain on: %d articles / %ds "
+                     "(~%d per hour)", BODY_DRAIN_RPM, BODY_DRAIN_INTERVAL_S,
+                     BODY_DRAIN_RPM * 3600 // max(BODY_DRAIN_INTERVAL_S, 1))
+
         scheduler.add_job(body_reprocess_job, "cron", hour=3, minute=20,
                           id="body_reprocess", replace_existing=True,
                           max_instances=1)
@@ -3314,7 +3351,8 @@ def body_progress() -> dict:
     return p
 
 
-def _reprocess_bodies_sync(limit: int, batch: int) -> dict:
+def _reprocess_bodies_sync(limit: int, batch: int,
+                           concurrency: int = None) -> dict:
     """Rewrite published rows whose body is a stub, the publisher's text, or empty.
 
     Runs the SAME AI pass the pipeline uses, over the surviving source text — not
@@ -3429,7 +3467,13 @@ def _reprocess_bodies_sync(limit: int, batch: int) -> dict:
             log.info("[BODY] sent %d article(s) to AI (providers: %s)",
                      len(batch_input), _provider_summary())
             try:
-                results = asyncio.run(process_batch(batch_input, concurrency=AI_CONCURRENCY))
+                # concurrency is capped by the caller for the continuous
+                # drain: on a free tier the request RATE is the scarce
+                # resource, and five in flight at once is five requests
+                # against the same per-minute quota.
+                results = asyncio.run(process_batch(
+                    batch_input,
+                    concurrency=concurrency or AI_CONCURRENCY))
             except Exception as e:
                 # The whole batch died. This is where a bad key, an exhausted
                 # quota, or a network refusal surfaces — record it verbatim
@@ -3541,6 +3585,100 @@ async def _run_body_reprocess(limit: int, batch: int) -> None:
     finally:
         _body_progress["running"] = False
         _body_progress["finished_at"] = time.time()
+
+
+# Survives across ticks so /admin/body-audit can answer "is it working through
+# the backlog, and when will it next try" without anyone reading a log.
+_rewrite_drain: dict = {
+    "enabled": BODY_DRAIN_ENABLED, "rpm": BODY_DRAIN_RPM,
+    "ticks": 0, "rewritten_total": 0, "failed_total": 0, "skipped_ticks": 0,
+    "last_tick_at": None, "last_rewritten": 0, "last_failed": 0,
+    "backoff_ticks_left": 0, "backoff_reason": None, "consecutive_429": 0,
+    "remaining": None, "last_error": None,
+}
+
+
+def _seen_rate_limit() -> bool:
+    """Did the provider just say 429?
+
+    Read from ai_processor's recorded refusals rather than inferred from a
+    failure count: a rewrite can fail for reasons that have nothing to do with
+    the quota, and backing off for those would slow the drain for no reason.
+    """
+    try:
+        import ai_processor                                       # noqa: PLC0415
+        return any(e.get("status") == 429
+                   for e in ai_processor.last_provider_errors(5))
+    except Exception:                                             # noqa: BLE001
+        return False
+
+
+async def body_drain_job() -> None:
+    """One tick of the continuous rewrite drain.
+
+    Runs on an interval forever. Each tick takes at most BODY_DRAIN_RPM
+    articles, so the request rate is bounded by construction rather than by
+    hoping a batch finishes in time — the tick is the quota window.
+
+    It resumes on its own because the selector is content-based: it asks for
+    articles that are still placeholders, so whatever is left is what it picks
+    up next. There is no cursor to lose and nothing to reset after a restart.
+    """
+    if not BODY_DRAIN_ENABLED:
+        return
+    # Never contend with a manual or nightly run for the same quota.
+    if _body_task is not None and not _body_task.done():
+        _rewrite_drain["skipped_ticks"] += 1
+        _rewrite_drain["backoff_reason"] = "another reprocess run is in progress"
+        return
+
+    if _rewrite_drain["backoff_ticks_left"] > 0:
+        _rewrite_drain["backoff_ticks_left"] -= 1
+        _rewrite_drain["skipped_ticks"] += 1
+        return
+
+    providers = available_providers()
+    if providers["primary"] == "rule-based":
+        # Rewriting with no provider only writes the placeholder again.
+        _rewrite_drain["backoff_reason"] = "no AI provider configured"
+        _rewrite_drain["skipped_ticks"] += 1
+        return
+
+    _rewrite_drain["ticks"] += 1
+    _rewrite_drain["last_tick_at"] = datetime.now(timezone.utc).isoformat()
+    try:
+        res = await asyncio.get_event_loop().run_in_executor(
+            None, _reprocess_bodies_sync, BODY_DRAIN_RPM, BODY_DRAIN_RPM, 1)
+    except Exception as e:                                        # noqa: BLE001
+        _rewrite_drain["last_error"] = f"{type(e).__name__}: {e}"
+        log.error("[REWRITE] tick failed: %s", e)
+        return
+
+    _rewrite_drain["last_rewritten"] = res.get("rewritten", 0)
+    _rewrite_drain["last_failed"] = res.get("failed", 0)
+    _rewrite_drain["rewritten_total"] += res.get("rewritten", 0)
+    _rewrite_drain["failed_total"] += res.get("failed", 0)
+    _rewrite_drain["remaining"] = res.get("remaining")
+    _rewrite_drain["last_error"] = (_body_last.get("last_error") or {}).get("error")
+
+    if _seen_rate_limit():
+        # EXPONENTIAL, and capped. Each consecutive 429 doubles the wait, so a
+        # tier that is genuinely saturated is left alone rather than poked every
+        # minute; the cap stops it backing off into never trying again.
+        _rewrite_drain["consecutive_429"] += 1
+        wait = min(BODY_DRAIN_BACKOFF_TICKS * (2 ** (_rewrite_drain["consecutive_429"] - 1)),
+                   BODY_DRAIN_MAX_BACKOFF)
+        _rewrite_drain["backoff_ticks_left"] = wait
+        _rewrite_drain["backoff_reason"] = (
+            f"provider returned 429; sitting out {wait} tick(s)")
+        log.warning("[REWRITE] rate limited — backing off %d tick(s)", wait)
+    else:
+        _rewrite_drain["consecutive_429"] = 0
+        _rewrite_drain["backoff_reason"] = None
+
+    log.info("[REWRITE] tick %d: rewrote %d, failed %d, %s remaining",
+             _rewrite_drain["ticks"], res.get("rewritten", 0),
+             res.get("failed", 0), res.get("remaining"))
 
 
 async def body_reprocess_job() -> None:
@@ -3732,6 +3870,23 @@ async def admin_body_audit(x_admin_token: str = Header(""), token: str = Query("
     # original at 0 and each needs a different fix, so the run's own stage
     # counters and the last real exception are reported here — no redeploy and
     # no log access required.
+    # THE CONTINUOUS DRAIN'S PROGRESS. This is the answer to "is it working
+    # through the backlog on its own, and when will it next try" — without
+    # which the only way to know is to watch the counts and guess.
+    drain = dict(_rewrite_drain)
+    drain["remaining"] = out["needs_rewrite"]
+    if drain["rpm"] and BODY_DRAIN_INTERVAL_S:
+        per_hour = drain["rpm"] * 3600 // BODY_DRAIN_INTERVAL_S
+        drain["per_hour"] = per_hour
+        drain["hours_to_clear"] = (round(out["needs_rewrite"] / per_hour, 1)
+                                   if per_hour else None)
+    drain["status"] = (
+        "disabled" if not drain["enabled"] else
+        f"backing off ({drain['backoff_reason']})"
+        if drain["backoff_ticks_left"] else
+        drain["backoff_reason"] or "running")
+    out["drain"] = drain
+
     out["last_run"] = dict(_body_last)
     out["running"] = bool(_body_progress.get("running"))
     try:
