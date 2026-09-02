@@ -3349,12 +3349,32 @@ def _reprocess_bodies_sync(limit: int, batch: int) -> dict:
             # EITHER column failing is work. A row whose body was rewritten but
             # whose summary_60 is still the stub renders that stub on the Home
             # card, which is the first and often only text a reader sees.
-            work = [r for r in rows if not body_state.row_is_healthy(r)]
+            unhealthy = [r for r in rows if not body_state.row_is_healthy(r)]
+
+            # THE ORDER HERE MATTERS. Rows that are already original get flagged
+            # reprocessed=1 so the selector stops returning them. Rows that are
+            # merely STARVED of source text must NOT be flagged: they are not
+            # done, and marking them done is how work disappears silently — the
+            # exact failure this whole pass was built to end.
+            unhealthy_ids = {r["id"] for r in unhealthy}
             for r in rows:
-                if r not in work:
-                    # Already original — flag it so the query stops returning it.
-                    conn.execute("UPDATE articles SET reprocessed=1 WHERE id=?", (r["id"],))
+                if r["id"] not in unhealthy_ids:
+                    conn.execute("UPDATE articles SET reprocessed=1 WHERE id=?",
+                                 (r["id"],))
                     skipped += 1
+
+            # A row with no surviving publisher text cannot be rewritten, only
+            # invented. Skip it and say so, rather than spending a provider call
+            # to receive a fabrication or a placeholder. Left unflagged, so it
+            # comes back the moment the ingest gives it real text.
+            starved = [r for r in unhealthy
+                       if not body_state.has_usable_source(
+                           r["summary_60"], r["source_summary"], r["full_body"])]
+            for r in starved:
+                _body_reason("no_source_material", r["id"])
+            failed += len(starved)
+            starved_ids = {r["id"] for r in starved}
+            work = [r for r in unhealthy if r["id"] not in starved_ids]
             if not work:
                 conn.commit()
                 continue

@@ -62,7 +62,25 @@ DAILY_LOOKBACK_DAYS = int(os.getenv("MARKET_TICKS_DAILY_LOOKBACK", "5"))
 # answers 429 well below ten a second), so the two have separate budgets.
 YAHOO_CONCURRENCY = int(os.getenv("MARKET_TICKS_YAHOO_CONCURRENCY", "4"))
 COINGECKO_CONCURRENCY = int(os.getenv("MARKET_TICKS_COINGECKO_CONCURRENCY", "1"))
-COINGECKO_GAP_S = float(os.getenv("MARKET_TICKS_COINGECKO_GAP_S", "1.5"))
+# CoinGecko's keyless public tier is rate limited to roughly 5-15 calls a
+# minute — it does not publish one exact number, and the effective ceiling moves
+# with load. The old 1.5s gap is 40 calls a minute, which is why a --days 400 run
+# took 429s on 6 of 11 coins. 6s (10 a minute) sits at the conservative end of
+# the documented band. Raising it costs ~1 minute per full crypto pass; lowering
+# it costs the whole asset class.
+COINGECKO_GAP_S = float(os.getenv("MARKET_TICKS_COINGECKO_GAP_S", "6.0"))
+
+# The public tier refuses any window wider than a year. It answers 401 for that,
+# not 400 or 416, which reads as an auth failure and sent us looking for a
+# missing API key that was never the problem. Requests are clamped here so the
+# refusal cannot happen, and the clamp is logged per symbol so a short crypto
+# series is never mistaken for missing data.
+COINGECKO_MAX_DAYS = int(os.getenv("MARKET_TICKS_COINGECKO_MAX_DAYS", "365"))
+
+# A 429 is the tier working as intended, not an error: back off and retry rather
+# than dropping the symbol for the run.
+COINGECKO_RETRIES = int(os.getenv("MARKET_TICKS_COINGECKO_RETRIES", "3"))
+COINGECKO_BACKOFF_S = float(os.getenv("MARKET_TICKS_COINGECKO_BACKOFF_S", "20"))
 
 # Yahoo load-balances across these two and will often answer on one while
 # rate-limiting the other — the same failover markets.py already relies on.
@@ -261,11 +279,41 @@ async def coingecko_daily(client: httpx.AsyncClient, coin_id: str, days: int) ->
     hourly at exactly 90. Whatever granularity comes back is collapsed to one
     point per UTC day below, so both cases store the same thing.
     """
-    r = await client.get(
-        f"https://api.coingecko.com/api/v3/coins/{coin_id}/market_chart",
-        params={"vs_currency": "usd", "days": days}, timeout=30)
+    asked = days
+    days = min(days, COINGECKO_MAX_DAYS)
+    if days != asked:
+        log.info("coingecko %s: clamped %d days -> %d (public tier ceiling); "
+                 "this coin's series is capped at ~%d days by the provider",
+                 coin_id, asked, days, COINGECKO_MAX_DAYS)
+
+    r = None
+    for attempt in range(COINGECKO_RETRIES + 1):
+        r = await client.get(
+            f"https://api.coingecko.com/api/v3/coins/{coin_id}/market_chart",
+            params={"vs_currency": "usd", "days": days}, timeout=30)
+        if r.status_code != 429:
+            break
+        if attempt == COINGECKO_RETRIES:
+            raise RuntimeError(
+                f"HTTP 429 after {COINGECKO_RETRIES} retries — rate limited by "
+                f"CoinGecko's public tier, not a data problem")
+        # Honour Retry-After when the response carries one; it is authoritative.
+        wait = COINGECKO_BACKOFF_S * (2 ** attempt)
+        try:
+            wait = max(wait, float(r.headers.get("retry-after") or 0))
+        except ValueError:
+            pass
+        log.warning("coingecko %s: HTTP 429, retry %d/%d in %.0fs",
+                    coin_id, attempt + 1, COINGECKO_RETRIES, wait)
+        await asyncio.sleep(wait)
+
     if r.status_code != 200:
-        raise RuntimeError(f"HTTP {r.status_code}")
+        # 401 here means the request outlived the clamp — surface that plainly
+        # rather than letting it read as a missing credential.
+        hint = (" (public tier refuses windows over "
+                f"{COINGECKO_MAX_DAYS} days — this is a range refusal, not auth)"
+                if r.status_code == 401 else "")
+        raise RuntimeError(f"HTTP {r.status_code}{hint}")
     prices = (r.json() or {}).get("prices") or []
     if not prices:
         raise RuntimeError("no prices")

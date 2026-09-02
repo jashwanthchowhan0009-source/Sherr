@@ -15,6 +15,7 @@ import httpx
 import key_pool
 
 from text_utils import (
+    MIN_ORIGINAL_WORDS,
     clean_html_fragments,
     extract_sentences,
     truncate_to_words,
@@ -99,11 +100,21 @@ STRICT RULES:
    - Sentence 2: immediate consequence, context, or next step.
    - No rhetorical questions, no "read on", no "find out".
 
-3. full_body — 4-6 short paragraphs, 150-200 words total.
+3. full_body — 2-3 sentences, 40-70 words. ONE paragraph.
+
+   YOU ARE WORKING FROM A SHORT NEWS BLURB, NOT A FULL ARTICLE. Usually 30-40
+   words. Write ONLY what those words support.
+
    - ABSTRACTIVE, never extractive: synthesise the facts into new sentences.
-   - Cover WHO, WHAT, WHEN, WHERE, HOW.
-   - Factual only. No speculation, no editorial opinion.
-   - Use plain paragraphs separated by blank lines. No markdown.
+   - Cover only the WHO / WHAT / WHEN / WHERE the source actually states.
+   - NEVER INVENT. No detail, figure, quote, date, cause, consequence or
+     background that is not in the source. If the source does not say why
+     something happened, do not say why. A shorter, thinner body is CORRECT
+     when the source is thin — inventing detail to reach a word count is the
+     single worst thing you can do here.
+   - If the source gives you almost nothing, write one accurate sentence and
+     stop. Do not pad.
+   - Factual only. No speculation, no editorial opinion. No markdown.
 
 4. category — Choose EXACTLY ONE slug from this list. This is not a suggestion.
    - society  = politics, elections, governance, courts, diplomacy, protests, education policy, military conflict
@@ -414,8 +425,14 @@ def _validate_and_fix(result: dict, title: str, body: str, fallback_category: st
     if word_count(result["summary"]) > 65:
         result["summary"] = truncate_to_words(result["summary"], 55)
 
-    # Fill in empty full_body — never fall back to the source text.
-    if not result["full_body"] or word_count(result["full_body"]) < 40:
+    # Fill in an empty or too-short full_body — never fall back to the source
+    # text.
+    #
+    # THE FLOOR IS MIN_ORIGINAL_WORDS, NOT 40. It was 40, while body_state
+    # accepted an original body at 25, so a real 30-word rewrite was replaced
+    # with the placeholder here and then classified a stub downstream. Both
+    # modules now read the same constant; a test asserts they cannot drift.
+    if not result["full_body"] or word_count(result["full_body"]) < MIN_ORIGINAL_WORDS:
         result["full_body"] = _SAFE_BODY
 
     # Normalize tags

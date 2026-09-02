@@ -36,6 +36,7 @@ from __future__ import annotations
 import re
 
 from originality import originality_check
+from text_utils import word_count
 
 # ─── states ──────────────────────────────────────────────────────────────────
 EMPTY = "empty"              # nothing at all
@@ -107,8 +108,9 @@ _STUB_MARKERS = _markers_from(_stub_sources()) + (
 _CREDIT_RE = re.compile(r"\n+source:\s*.*$", re.I | re.S)
 
 # Below this many words, a body is not a summary of anything regardless of what
-# it overlaps with.
-_MIN_ORIGINAL_WORDS = 25
+# it overlaps with. Imported, never redefined: ai_processor enforces the same
+# floor, and the two drifting apart is what silently emptied the corpus.
+from text_utils import MIN_ORIGINAL_WORDS as _MIN_ORIGINAL_WORDS
 
 
 def _strip_credit(body: str) -> str:
@@ -124,20 +126,57 @@ def source_material(headline: str = "", summary_60: str = "",
                     source_summary: str = "", full_body: str = "") -> str:
     """The best surviving publisher text to write an original summary FROM.
 
-    Longest first: summary_60 holds clean[:400] and source_summary clean[:200],
-    both untouched by the drain. full_body is only used when it still holds the
-    raw ingest text (a row the drain never reached) — never when it is the stub,
-    which is what made the existing reprocess pass summarize its own placeholder.
+    Longest first: summary_60 holds clean[:400] and source_summary clean[:200].
+    A column is only usable when it still holds real publisher text — never when
+    it is the placeholder, which is what made an earlier reprocess pass
+    summarize its own stub.
+
+    THE STUB CHECK APPLIES TO EVERY COLUMN, NOT JUST full_body. It used to guard
+    full_body alone, so once summary_60 had also been replaced by the
+    placeholder — which is the state most of the corpus was in — a row with no
+    source_summary handed the model this:
+
+        "Brent crude climbs as OPEC+ signals deeper output cuts
+
+         Sherr AI is preparing an original summary of this story."
+
+    Nineteen words, ten of them ours, and the model was asked to write an
+    original article from it. Feeding a generator its own placeholder cannot
+    produce anything; it can only produce the placeholder again.
     """
-    candidates = []
-    if full_body and not is_stub(full_body):
-        candidates.append(full_body)
-    candidates += [summary_60 or "", source_summary or ""]
+    candidates = [c for c in (full_body, summary_60, source_summary)
+                  if c and not is_stub(c)]
     best = max((c.strip() for c in candidates), key=len, default="")
     head = (headline or "").strip()
     if head and head.lower() not in best.lower():
         best = f"{head}\n\n{best}".strip()
     return best
+
+
+# The least publisher text, BEYOND the headline, that a rewrite may be attempted
+# from. Below this the model would have to invent, and invention is the one
+# thing this product cannot do.
+#
+# This guard exists because two other changes made it necessary. The output
+# floor dropped from 40 words to 25, and the prompt now asks for 2-3 sentences
+# rather than 150-200 words — both correct, and together they mean a row whose
+# only surviving text is a nine-word headline could now produce a 25-word
+# fabrication that PASSES the gate. Refusing the row is the honest outcome: no
+# card is better than a confident invention.
+MIN_SOURCE_WORDS = 12
+
+
+def has_usable_source(summary_60: str = "", source_summary: str = "",
+                      full_body: str = "", min_words: int = None) -> bool:
+    """Is there real publisher text to write FROM, beyond the headline?
+
+    The headline is deliberately excluded. It is ours to restate, not evidence
+    to summarise, and counting it would let a bare headline authorise a rewrite.
+    """
+    floor = MIN_SOURCE_WORDS if min_words is None else int(min_words)
+    usable = [c for c in (full_body, summary_60, source_summary)
+              if c and not is_stub(c)]
+    return max((word_count(c) for c in usable), default=0) >= floor
 
 
 def classify_summary(summary_60: str, source_summary: str = "") -> str:
