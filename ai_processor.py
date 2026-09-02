@@ -25,10 +25,54 @@ from text_utils import (
 
 log = logging.getLogger("sherbyte.ai")
 
-GEMINI_MODEL   = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-GROQ_MODEL     = os.getenv("GROQ_MODEL",   "llama-3.1-8b-instant")
-OPENAI_MODEL   = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
-GROK_MODEL     = os.getenv("GROK_MODEL",   "grok-2-latest")
+# ─── model ids ───────────────────────────────────────────────────────────────
+# EVERY ONE OF THESE IS AN ENV VAR, AND HAS BEEN. The value below is only the
+# fallback when the variable is unset — so a model retirement is fixed by
+# setting GEMINI_MODEL on the service, with no deploy and no code change.
+#
+# A RETIRED MODEL IS THE WORST FAILURE THIS FILE HAS. The provider answers 404
+# or 400, _call_provider returns None, _rule_based_fallback supplies the
+# placeholder, and 25,000 articles quietly stay on it. Two things make that
+# visible now: the refusal is recorded in PROVIDER_ERRORS with its status and
+# body, and /admin/body-audit reports the model each provider is ACTUALLY using
+# so a stale id can be read off the endpoint instead of inferred from silence.
+#
+# Defaults verified 2026-09-02. THEY WILL GO STALE — that is the nature of the
+# thing, which is why the env var is the real answer and this is only a floor.
+# gemini-2.5-flash (retiring 2026-10-20) and grok-2-latest (does not exist) are
+# what these replaced.
+MODEL_DEFAULT = {
+    "gemini": "gemini-3.1-flash-lite",
+    "groq":   "llama-3.1-8b-instant",
+    "openai": "gpt-4o-mini",
+    "grok":   "grok-4.3",
+}
+
+# Which env var overrides which model, for the audit to report back. A provider
+# whose model is still the built-in default is worth seeing as such: it is the
+# one that goes stale without anyone touching it.
+MODEL_ENV_VAR = {"gemini": "GEMINI_MODEL", "groq": "GROQ_MODEL",
+                 "openai": "OPENAI_MODEL", "grok": "GROK_MODEL"}
+
+
+def model_for(provider: str) -> str:
+    """The model id this provider will actually be called with, read NOW.
+
+    Resolved per call rather than captured at import. Two reasons, and the
+    second is the one that matters: it means /admin/body-audit reports what a
+    request would really use rather than what the env looked like at boot, and
+    it means a test can set the variable without reloading the module — which
+    corrupts every other module holding a reference to this one.
+    """
+    return os.getenv(MODEL_ENV_VAR[provider], MODEL_DEFAULT[provider]).strip() \
+        or MODEL_DEFAULT[provider]
+
+
+# Module-level names kept for the call sites and tests that already read them.
+GEMINI_MODEL   = model_for("gemini")
+GROQ_MODEL     = model_for("groq")
+OPENAI_MODEL   = model_for("openai")
+GROK_MODEL     = model_for("grok")
 
 # Every key the environment carries, per provider, collected once at import.
 # GEMINI_API_KEY_4 / GEMINI_API_KEY_9 / GROQ_API_KEY_4 / GPT_API_KEY_4 were all
@@ -158,8 +202,10 @@ Output the JSON object only. No markdown. No commentary."""
 #            next key would fail identically and spend the pool for nothing).
 
 async def _gemini_once(key: str, title: str, body: str, client) -> tuple:
+    # model_for, not the boot-time constant: the audit reports model_for's
+    # answer, and the request must use the same one or the two disagree.
     url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
-           f"{GEMINI_MODEL}:generateContent?key={key}")
+           f"{model_for('gemini')}:generateContent?key={key}")
     payload = {
         "systemInstruction": {"parts": [{"text": SYSTEM_INSTRUCTION}]},
         "contents": [{
@@ -264,16 +310,16 @@ _PROVIDER_CALLS = {
     "gemini": _gemini_once,
     "groq":   lambda k, t, b, c: _openai_chat_once(
         k, t, b, c, url="https://api.groq.com/openai/v1/chat/completions",
-        model=GROQ_MODEL, label="Groq"),
+        model=model_for("groq"), label="Groq"),
     "openai": lambda k, t, b, c: _openai_chat_once(
         k, t, b, c, url="https://api.openai.com/v1/chat/completions",
-        model=OPENAI_MODEL, label="OpenAI"),
+        model=model_for("openai"), label="OpenAI"),
     # xAI, NOT Groq. The code used to read GROK_API_KEY and post it to
     # api.groq.com, so whichever of the two keys existed, one provider was
     # always being called with the other's credential.
     "grok":   lambda k, t, b, c: _openai_chat_once(
         k, t, b, c, url="https://api.x.ai/v1/chat/completions",
-        model=GROK_MODEL, label="Grok"),
+        model=model_for("grok"), label="Grok"),
 }
 
 
@@ -507,8 +553,9 @@ async def process_batch(articles: list[dict], concurrency: int = 5) -> list[dict
     return [r for r in results if r is not None]
 
 
-_MODEL_FOR = {"gemini": lambda: GEMINI_MODEL, "groq": lambda: GROQ_MODEL,
-              "openai": lambda: OPENAI_MODEL, "grok": lambda: GROK_MODEL}
+# Live lookups, not the boot-time constants: setting GEMINI_MODEL on the service
+# takes effect on the next request rather than the next restart.
+_MODEL_FOR = {p: (lambda p=p: model_for(p)) for p in MODEL_DEFAULT}
 
 
 def available_providers() -> dict:
@@ -526,7 +573,17 @@ def available_providers() -> dict:
         **sizes,
         "total_keys": sum(sizes.values()),
         "primary":    primary,
+        # The primary's model, kept for callers that already read this key.
         "model":      _MODEL_FOR[primary]() if primary in _MODEL_FOR else "none",
+        # EVERY configured provider's model, with whether it came from the
+        # environment or from the built-in default. One stale id in a fallback
+        # provider is invisible in "model" alone — and the fallback is exactly
+        # what gets used on the day the primary breaks.
+        "models":     {p: {"model": _MODEL_FOR[p](),
+                           "source": ("env:" + MODEL_ENV_VAR[p]
+                                      if os.getenv(MODEL_ENV_VAR[p])
+                                      else "built-in default")}
+                       for p in configured if p in _MODEL_FOR},
         # The order a request actually walks, so a log line about a fallback can
         # be checked against what was configured.
         "cascade":    configured or ["rule-based"],
