@@ -91,19 +91,27 @@ async def run(dsn: str, *, build: bool, dry_run: bool, migrate: bool) -> int:
 
         print()
         print(f"{'symbol':<12}{'class':<22}{'h':>3}{'n':>5}{'exc':>5}"
-              f"{'agree':>7}{'med|z|':>8}{'iqr':>8}{'rec':>6}{'strength':>9}")
+              f"{'agree':>7}{'med|z|':>8}{'iqr':>8}{'rec':>6}"
+              f"{'strength':>9}{'floor':>7}  verdict")
+        clearing = 0
         for r in sorted(rows, key=lambda r: -r["signal_strength"]):
+            clears = r["signal_strength"] > r["noise_floor"]
+            clearing += bool(clears)
             print(f"{r['symbol']:<12}{r['event_class']:<22}"
                   f"{r['horizon_days']:>3}{r['n_analogs']:>5}{r['n_exceeded']:>5}"
                   f"{r['sign_agreement']:>7.2f}{r['median_abs_z']:>8.2f}"
                   f"{r['dispersion']:>8.2f}{r['recency_weight']:>6.2f}"
-                  f"{r['signal_strength']:>9d}")
+                  f"{r['signal_strength']:>9d}{r['noise_floor']:>7d}  "
+                  + ("CLEARS NOISE" if clears else "at or below noise"))
 
+        print(f"\n{clearing} of {len(rows)} group(s) score above what pure noise")
+        print("reaches at the same horizon. The rest are arithmetic, not evidence.")
         print("\nsignal_strength is a 0-100 RANKING integer. It is not a")
         print("confidence and not a probability. Never render it as a percentage.")
-        print("\nCaveat on horizons: z divides the h-day return by the ONE-day")
-        print("MAD, not by sqrt(h), so n_exceeded rises with the horizon by")
-        print("construction. Compare within a horizon, not across.")
+        print("\nThe floor column is the 95th percentile of signal_strength over")
+        print("random walks with no relationship in them, measured by")
+        print("app/spie/analog/calibration.py. z is scaled by sqrt(h), so the")
+        print("horizons are comparable with each other.")
         return 0
     finally:
         await conn.close()

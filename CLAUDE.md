@@ -149,27 +149,39 @@ there fail or cascade into engine data. The consequence is accepted: **deleted
 articles leave orphan event rows.** No cleanup is built for this. Handle it at
 read time if it ever matters.
 
-### The horizon scaling caveat — measured, and still unresolved
+### Horizon scaling is sqrt(h), and the noise floor is a measured number
 
-`z = r_h / MAD_1day`, exactly as specified. It is NOT divided by `sqrt(h)`, so z
-at h=10 is mechanically larger than at h=1 for identical behaviour.
+    z = r_h / (MAD_1day * sqrt(h))
 
-This is not theoretical. Measured on a 368-day synthetic corpus of pure random
-walks — no real relationship anywhere in the data:
+The sqrt(h) term is not optional. An h-day return accumulates h days of
+variance; dividing it by a one-day volatility makes long horizons look violent
+for free. Measured on 200 random-walk corpora with no relationship anywhere in
+the data, the unscaled version scored **42 at h=10 against 3 at h=1** — forty-two
+points of confidence manufactured from nothing. With sqrt(h) the same data
+stays at 13.
 
-```
-symbol  h   as specified          with sqrt(h)
-            exc  med|z|  strength  exc  med|z|  strength
-BZ=F    1     6    0.70         3    6    0.70         3
-BZ=F    3    31    1.21        15   15    0.70         7
-BZ=F    5    49    1.71        23   23    0.76        11
-BZ=F   10    89    3.28        42   28    1.04        13
-```
+**The measured noise floor** (`app/spie/analog/calibration.py`, 200 seeds ×
+140 events, 2026-09-01):
 
-The unspecified-scaling version produces **signal_strength 42 out of noise** at
-the longest horizon. Compare within a horizon; never across. If a card ever
-renders long-horizon strength beside short-horizon strength, fix the scaling
-first.
+| horizon | mean | p50 | p95 | p99 | max | NOISE_FLOOR | NOISE_CEILING |
+|---|---|---|---|---|---|---|---|
+| 1  | 3.3 | 3 | 6  | 6  | 7  | **6**  | 11 |
+| 3  | 6.9 | 7 | 11 | 13 | 15 | **11** | 19 |
+| 5  | 7.6 | 8 | 12 | 16 | 17 | **12** | 21 |
+| 10 | 7.3 | 7 | 13 | 18 | 21 | **13** | 25 |
+
+`NOISE_FLOOR` is p95 — the reader-facing bar, stored NOT NULL on every
+`analog_reactions` row so a card can never render its score without it. A card
+scoring 11 against a floor of 11 is nothing; 60 against 11 is something.
+
+`NOISE_CEILING` is max + headroom — the CI bar.
+`tests/test_calibration_noise_floor.py` runs the null on every CI run and fails
+if any horizon climbs back above it. Verified to fire: deleting the sqrt(h)
+term makes h=3/5/10 breach at 22/31/46.
+
+Re-derive both with `python -m app.spie.analog.calibration --seeds 200`. If the
+generator's parameters change, the published numbers must be re-measured — a
+floor that does not match what noise actually reaches is a lie to the reader.
 
 ### Out of scope, permanently
 

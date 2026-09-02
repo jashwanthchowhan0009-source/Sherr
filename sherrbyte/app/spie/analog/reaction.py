@@ -20,15 +20,22 @@ A 0-100 integer for RANKING which past pattern is best evidenced. It is not a
 confidence, not a probability, and must never be rendered as a percentage. Its
 inputs are all frequencies and dispersions of things that already happened.
 
-A NOTE ON THE HORIZON SCALING, WHICH IS A REAL CAVEAT
-=====================================================
-z is the h-day return divided by the ONE-day MAD volatility, exactly as
-specified. It is not divided by sqrt(h). So z at h=10 is mechanically larger
-than z at h=1 for the same underlying behaviour, and n_exceeded therefore rises
-with the horizon by construction. The horizons rank honestly against each other
-WITHIN a horizon, but comparing counts ACROSS horizons overstates the long ones.
-The raw return and the MAD are both kept in the breakdown so this can be
-re-derived either way without recomputing anything.
+HORIZON SCALING: THE sqrt(h) TERM IS NOT OPTIONAL
+=================================================
+    z = r_h / (MAD_1day * sqrt(h))
+
+An h-day return accumulates variance over h days, so dividing it by a ONE-day
+volatility makes long horizons look violent for free. This was measured, not
+argued: on a corpus of pure random walks with no relationship anywhere in the
+data, the unscaled version reported signal_strength 42 at h=10 against 3 at
+h=1. With sqrt(h) the same data stays at 13. Forty-two points of confidence
+manufactured out of noise is exactly the failure this engine exists to avoid.
+
+test_calibration_noise_floor.py runs that null on every CI run and fails if any
+horizon ever climbs back above its measured ceiling.
+
+The raw return and the unscaled MAD are both kept in the breakdown, so anything
+downstream can re-derive either form without recomputing.
 """
 
 from __future__ import annotations
@@ -148,7 +155,13 @@ def measure(series: list, event_ts, horizon: int) -> dict:
     if r_h is None:
         return {"ok": False, "reason": "unusable prices at the horizon"}
 
-    return {"ok": True, "r": r_h, "z": r_h / sigma, "mad_sigma": sigma,
+    # sqrt(h): an h-day return has h days of variance in it. Without this the
+    # denominator is a one-day yardstick held against a ten-day move.
+    scaled = sigma * math.sqrt(horizon)
+
+    return {"ok": True, "r": r_h, "z": r_h / scaled,
+            "mad_sigma": sigma,            # unscaled, so z can be re-derived
+            "horizon_scale": math.sqrt(horizon),
             "anchor_ts": series[idx][0], "target_ts": series[target][0],
             "trailing_sessions": len(rets)}
 
@@ -200,7 +213,7 @@ def signal_strength(*, n_analogs: int, n_exceeded: int, sign_agreement: float,
     return int(round(max(0.0, min(100.0, base))))
 
 
-def aggregate(cells: list, *, min_analogs: int = None) -> dict:
+def aggregate(cells: list, *, min_analogs: int = None, horizon: int = None) -> dict:
     """Cells for one (symbol, horizon) into the stored statistics, or None.
 
     Returns None — not a zeroed row — when the sample is too thin. Silence is a
@@ -218,6 +231,11 @@ def aggregate(cells: list, *, min_analogs: int = None) -> dict:
     agreement = max(pos, neg) / n if n else 0.0
     recency = sum(recency_weight(c.get("age_days", 0.0)) for c in usable) / n
     n_exceeded = sum(1 for z in zs if abs(z) >= Z_EXCEEDED)
+    strength = signal_strength(n_analogs=n, n_exceeded=n_exceeded,
+                               sign_agreement=agreement, recency=recency)
+
+    from app.spie.analog.calibration import noise_floor         # noqa: PLC0415
+    floor = noise_floor(horizon) if horizon is not None else 0
 
     return {
         "n_analogs": n,
@@ -229,9 +247,11 @@ def aggregate(cells: list, *, min_analogs: int = None) -> dict:
         # hide exactly that.
         "dispersion": round(iqr(zs), 6),
         "recency_weight": round(recency, 6),
-        "signal_strength": signal_strength(
-            n_analogs=n, n_exceeded=n_exceeded,
-            sign_agreement=agreement, recency=recency),
+        "signal_strength": strength,
+        # The bar this score has to clear to mean anything. Travels WITH the
+        # row so no renderer can show the score without it.
+        "noise_floor": floor,
+        "clears_noise": strength > floor,
         "breakdown": [{
             "event_id": c.get("event_id"),
             "occurred_at": str(c.get("occurred_at")),
@@ -261,8 +281,9 @@ SELECT event_id, occurred_at, event_class, linked_symbols
 _UPSERT = """
 INSERT INTO analog_reactions
     (symbol, event_class, horizon_days, n_analogs, n_exceeded, sign_agreement,
-     median_abs_z, dispersion, recency_weight, signal_strength, breakdown)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb)
+     median_abs_z, dispersion, recency_weight, signal_strength, noise_floor,
+     breakdown)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb)
 ON CONFLICT (symbol, event_class, horizon_days) DO UPDATE
    SET n_analogs = EXCLUDED.n_analogs,
        n_exceeded = EXCLUDED.n_exceeded,
@@ -271,6 +292,7 @@ ON CONFLICT (symbol, event_class, horizon_days) DO UPDATE
        dispersion = EXCLUDED.dispersion,
        recency_weight = EXCLUDED.recency_weight,
        signal_strength = EXCLUDED.signal_strength,
+       noise_floor = EXCLUDED.noise_floor,
        breakdown = EXCLUDED.breakdown,
        computed_at = now()
 """
@@ -329,7 +351,7 @@ async def compute(conn, *, write: bool = True, horizons=HORIZONS) -> dict:
                 cell["age_days"] = (now - e["occurred_at"]).total_seconds() / 86400.0
                 cells.append(cell)
 
-            agg = aggregate(cells)
+            agg = aggregate(cells, horizon=h)
             if agg is None:
                 funnel["groups_suppressed"] += 1
                 continue
@@ -340,7 +362,7 @@ async def compute(conn, *, write: bool = True, horizons=HORIZONS) -> dict:
                     _UPSERT, sym, klass, h, agg["n_analogs"], agg["n_exceeded"],
                     agg["sign_agreement"], agg["median_abs_z"], agg["dispersion"],
                     agg["recency_weight"], agg["signal_strength"],
-                    json.dumps(agg["breakdown"]))
+                    agg["noise_floor"], json.dumps(agg["breakdown"]))
                 funnel["groups_written"] += 1
 
     funnel["diagnosis"] = _diagnose(funnel)

@@ -31,8 +31,19 @@ CREATE TABLE IF NOT EXISTS analog_reactions (
     dispersion      DOUBLE PRECISION NOT NULL,   -- IQR of z, NOT of |z|
     recency_weight  DOUBLE PRECISION NOT NULL,   -- mean exp(-age_days / 540)
 
-    -- ── the ranking integer ─────────────────────────────────────────────────
+    -- ── the ranking integer, and the bar it has to clear ────────────────────
     signal_strength INTEGER NOT NULL CHECK (signal_strength BETWEEN 0 AND 100),
+
+    -- What PURE NOISE scores at this horizon, 95% of the time — measured by
+    -- app/spie/analog/calibration.py against random walks with no relationship
+    -- in them at all.
+    --
+    -- Stored per row rather than looked up at render time, and NOT NULL, so a
+    -- card can never be shown without its bar. A reader seeing "11" cannot tell
+    -- whether that is anything; seeing "11, noise reaches 11 here" can. This is
+    -- the difference between a number and an auditable number.
+    noise_floor     INTEGER NOT NULL DEFAULT 0
+                    CHECK (noise_floor BETWEEN 0 AND 100),
 
     -- Per-analog cells: [{event_id, occurred_at, r, z, mad, age_days}, ...].
     -- This is what makes a card auditable — drop it and the score becomes an
