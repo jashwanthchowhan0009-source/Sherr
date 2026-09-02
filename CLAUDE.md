@@ -43,6 +43,52 @@ and do not reintroduce any table named `insights` in `sherrbyte_app`.
 
 ---
 
+## The publisher's text lives in `source_summary`, and nothing may overwrite it
+
+Ingest writes `clean[:200]` there. **It is the only copy of the source this
+schema keeps**, and two things depend on it:
+
+- `body_state.classify` uses it as the ORIGINALITY REFERENCE. Overwrite it with
+  our own summary and the gate compares our body against our own text.
+- `source_material()` rewrites FROM it. Overwrite it and a retry has nothing to
+  work with, so it regenerates the placeholder forever.
+
+Both AI write paths used to set `source_summary = result["summary"]` under a
+comment reading "kept for back-compat". Rows now reported `no_source_material`
+are the ones that line destroyed; for those the publisher text is gone and only
+re-ingest recovers it.
+
+`tests/test_source_summary_preserved.py` asserts no AI UPDATE names the column,
+and drives a full `run_ai_batch` to prove the value survives.
+
+Fixed in the same pass, both found by counting rather than reading:
+`/admin/reprocess` read `row` where the loop variable is `r` (NameError every
+iteration) and supplied 11 values for 16 placeholders. Both were swallowed by a
+bare `except` that logged "update failed", so that endpoint had never updated a
+row. It duplicates `/admin/reprocess-bodies` and is a candidate for deletion.
+
+## Branching: one branch per unit of work
+
+Adopted 2026-09-02, after work was stranded behind merged PRs three times
+(#189, #200, #201). A PR merges at whatever the branch head was; anything
+pushed to the same branch afterwards lands behind it and is silently left out.
+
+So: **branch fresh from `main` for each unit of work, push, open the PR, and do
+not push to that branch again.** The next unit gets a new branch.
+
+## Tests: two traps this repo has already fallen into
+
+- **Do not `importlib.reload`** a module other tests hold references to. It
+  passes in isolation and breaks the suite, because other modules keep the old
+  objects. Read configuration at call time instead — that removes the need.
+- **Patch the seam the code under test actually calls.** Several test modules
+  reload `main`, and under the full suite `main.process_batch is
+  ai_processor.process_batch` is False — so patching `ai_processor` never
+  reaches what `run_ai_batch` invokes, and the test silently measures the
+  fallback. It passed alone and failed only in the suite.
+
+---
+
 ## Sherr-I Historical Analog Engine (SHAE) — decisions
 
 ### The vector term is dropped from the analog matcher
