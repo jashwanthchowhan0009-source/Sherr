@@ -67,6 +67,41 @@ iteration) and supplied 11 values for 16 placeholders. Both were swallowed by a
 bare `except` that logged "update failed", so that endpoint had never updated a
 row. It duplicates `/admin/reprocess-bodies` and is a candidate for deletion.
 
+## The rewrite is rate-limited, so it runs continuously and slowly
+
+Gemini's free tier allows 15 requests a minute and **one article is one
+request**. The backlog is ~25,000 articles, so the constraint is the request
+rate, not compute — and a nightly sweep would need about 35 nights.
+
+`body_drain_job` is therefore an APScheduler **interval** job, not a cron:
+`BODY_DRAIN_RPM` (12) articles every `BODY_DRAIN_INTERVAL_S` (60s), ~720 an
+hour, so a 25,000-row backlog is roughly 35 hours of unattended running. That is
+the honest number; there is no faster path on a free tier that does not break
+the terms.
+
+Four properties make it safe to leave running, and each has a test:
+
+- **12, not 15.** The published ceiling is 15/min. The ingest pass, the nightly
+  sweep and any manual run share the same quota, and three callers each
+  believing they are inside the limit is how a limit gets breached.
+- **The tick is the quota window.** A tick takes at most `BODY_DRAIN_RPM`
+  articles, so the rate is bounded by the schedule rather than by hoping a
+  batch finishes in time. Concurrency is forced to 1 for the same reason —
+  five requests in flight is five against the same per-minute quota.
+- **No cursor.** The selector asks for rows that are still placeholders, so
+  whatever is left IS the state. A restart resumes with nothing to reset.
+- **Real backoff.** A 429 is read from `ai_processor.PROVIDER_ERRORS`, not
+  inferred from a failure count, and each consecutive one doubles the wait up
+  to `BODY_DRAIN_MAX_BACKOFF`. Failures that are not rate limits do not trigger
+  it — backing off for those would slow the drain for no reason.
+
+It yields to a manual or nightly run rather than doubling the rate, refuses to
+run with no provider configured (that only rewrites the placeholder again), and
+`BODY_DRAIN_ENABLED=0` switches it off.
+
+`/admin/body-audit` reports it under `drain`: ticks, cumulative rewritten and
+failed, remaining, per_hour, hours_to_clear, and the backoff reason.
+
 ## Branching: one branch per unit of work
 
 Adopted 2026-09-02, after work was stranded behind merged PRs three times
