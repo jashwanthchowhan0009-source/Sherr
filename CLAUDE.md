@@ -120,6 +120,57 @@ A `--days 400` run lost all 11 crypto symbols — 5 with HTTP **401**, 6 with
 The 401/429 split is explained by ordering: the rate-limited requests never
 reached range validation.
 
+### The symbol universe is ~13 instruments, and that is deliberate for now
+
+`linked_symbols` needs a ticker Phase 3 can join to `market_ticks`, and the only
+entity→ticker bridge is `instrument_map.SEED` (display names) ∩
+`market_signals.INSTRUMENTS`+`CRYPTO` (name→ticker). That intersection is ~13
+instruments, not the 57 in `market_ticks`. An article about a mid-cap stock
+resolves to entities fine, reaches no priced instrument, and gets no event row.
+
+Widening it is name→ticker data entry, not engineering. It is a **known
+post-Phase-3 task**, deliberately deferred: proving the loop end to end on 13
+symbols is worth more than debugging a wide pipeline that has never run.
+
+### No simhash, and no near-duplicate pass — clustering supersedes it
+
+Near-duplicates in this corpus are republished versions of one story. The
+matcher's 48h same-symbol cluster collapse already removes them: two rows for
+the same story land in the same window on the same symbol and only the
+higher-scoring one survives. Do not add a simhash column and do not compute one
+on the fly — that would be a second mechanism for a problem the first already
+solves.
+
+### hist_events.article_id has no foreign key — orphans are expected
+
+`sherrbyte_app.articles` is sqlite-shaped through pgcompat and its lifecycle
+belongs to the deployed app, so a cross-schema FK would let an article cleanup
+there fail or cascade into engine data. The consequence is accepted: **deleted
+articles leave orphan event rows.** No cleanup is built for this. Handle it at
+read time if it ever matters.
+
+### The horizon scaling caveat — measured, and still unresolved
+
+`z = r_h / MAD_1day`, exactly as specified. It is NOT divided by `sqrt(h)`, so z
+at h=10 is mechanically larger than at h=1 for identical behaviour.
+
+This is not theoretical. Measured on a 368-day synthetic corpus of pure random
+walks — no real relationship anywhere in the data:
+
+```
+symbol  h   as specified          with sqrt(h)
+            exc  med|z|  strength  exc  med|z|  strength
+BZ=F    1     6    0.70         3    6    0.70         3
+BZ=F    3    31    1.21        15   15    0.70         7
+BZ=F    5    49    1.71        23   23    0.76        11
+BZ=F   10    89    3.28        42   28    1.04        13
+```
+
+The unspecified-scaling version produces **signal_strength 42 out of noise** at
+the longest horizon. Compare within a horizon; never across. If a card ever
+renders long-horizon strength beside short-horizon strength, fix the scaling
+first.
+
 ### Out of scope, permanently
 
 FinBERT or any second sentiment model; probability/percentage outputs and price
