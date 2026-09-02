@@ -3961,6 +3961,56 @@ async def _sherr_i_cards(force: bool = False) -> dict:
     return {**payload, "cached": False, "age_seconds": 0}
 
 
+@app.get("/api/sherr-i/analogs")
+async def sherr_i_analogs(
+    symbol: str = Query("", description="comma-separated tickers"),
+    horizon: int = Query(0, description="1, 3, 5 or 10; 0 = any"),
+    limit: int = Query(25, ge=1, le=100),
+    watchlist: int = Query(0, description="filter to watchlisted instruments"),
+):
+    """Phase 4: historical analog cards, with single-event observations behind.
+
+    THREE-TIER SOURCE HONESTY, the same as /patterns. `engine` means these rows
+    came from the analog tables; `unavailable` means the engine's Postgres is
+    configured but unreachable. There is no seed tier here and there never will
+    be — a demo analog would be a fabricated claim about market history, which
+    is the one thing this engine must not produce.
+
+    Every analog card carries its noise_floor alongside its signal_strength, so
+    a reader can tell 11-against-11 from 60-against-11 without knowing anything
+    about the internals.
+
+    Observations render only when NO analog card clears the noise floor. They
+    are a narrower claim — one article, one instrument, one measured move — and
+    they are what keeps the surface from being blank while the library is still
+    accumulating.
+    """
+    pool = await get_spie_pool()
+    if pool is None:
+        return {"analogs": [], "observations": [], "source": "unavailable",
+                "detail": "engine Postgres not reachable"}
+    try:
+        import sys as _sys
+        engine_root = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                   "sherrbyte")
+        if engine_root not in _sys.path:
+            _sys.path.insert(0, engine_root)
+        from app.spie.analog import cards                          # noqa: PLC0415
+
+        syms = [s.strip() for s in (symbol or "").split(",") if s.strip()]
+        async with pool.acquire() as conn:
+            out = await cards.build(conn, symbols=syms or None,
+                                    horizon=horizon or None, limit=limit,
+                                    use_watchlist=bool(watchlist))
+        return {**out, "source": "engine",
+                "generated_at": datetime.now(timezone.utc).isoformat()}
+    except Exception as e:
+        log.warning("[ANALOG] cards failed: %s", e)
+        # Never a partial or invented payload — say it is unavailable.
+        return {"analogs": [], "observations": [], "source": "unavailable",
+                "detail": f"{type(e).__name__}: {e}"}
+
+
 @app.get("/api/sherr-i/patterns")
 async def sherr_i_patterns(force: int = Query(0)):
     """Today's decision cards, newest first. Cached for 15 minutes.

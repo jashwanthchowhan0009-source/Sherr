@@ -149,12 +149,15 @@ async def _check_constraints(asyncpg):
         await conn.execute(open(os.path.join(
             _ROOT, "sherrbyte/app/db/migrations/022_event_library.sql")).read())
 
-        # An unknown class must be refused.
+        # article_id is UNIQUE, and the test DSN is a database other things
+        # write to — a real backfill run had already taken ids 1 and 2, so these
+        # inserts raised UniqueViolation and the CHECK was never reached.
+        # Negative ids cannot collide with anything a backfill produces.
         with pytest.raises(asyncpg.CheckViolationError):
             await conn.execute(
                 "INSERT INTO hist_events (article_id, occurred_at, entity_ids,"
                 " event_class, linked_symbols) VALUES"
-                " (1, now(), ARRAY[gen_random_uuid()], 'not_a_class',"
+                " (-101, now(), ARRAY[gen_random_uuid()], 'not_a_class',"
                 " ARRAY['BZ=F'])")
 
         # A row with no symbol can never be an analog.
@@ -162,10 +165,11 @@ async def _check_constraints(asyncpg):
             await conn.execute(
                 "INSERT INTO hist_events (article_id, occurred_at, entity_ids,"
                 " event_class, linked_symbols) VALUES"
-                " (2, now(), ARRAY[gen_random_uuid()], 'earnings',"
+                " (-102, now(), ARRAY[gen_random_uuid()], 'earnings',"
                 " ARRAY[]::text[])")
     finally:
-        await conn.execute("DROP TABLE IF EXISTS hist_events")
+        # Not dropped: the DSN is shared with other tests.
+        await conn.execute("DELETE FROM hist_events WHERE article_id < 0")
         await conn.close()
 
 

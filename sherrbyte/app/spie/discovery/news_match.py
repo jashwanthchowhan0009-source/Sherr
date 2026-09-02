@@ -61,7 +61,13 @@ SELECT id, headline, summary_60, full_body, source_summary, source_name, url,
        published_at
   FROM sherrbyte_app.articles
  WHERE status = 'published'
-   AND published_at ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
+   -- published_at::text, NOT published_at. The column is TEXT under the
+   -- sqlite-shaped schema and timestamptz once migration 018 has run, and
+   -- this query must work against both. Applying ~ to a timestamptz raises
+   -- "operator does not exist: timestamp with time zone ~ unknown" and
+   -- takes the whole pass down. ::text is a no-op on TEXT and always valid
+   -- on timestamptz, so the guard means the same thing either way.
+   AND published_at::text ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
    AND published_at::timestamptz >= $1
    AND published_at::timestamptz <= $2
  ORDER BY published_at DESC

@@ -191,7 +191,13 @@ SELECT id, headline, summary_60, full_body, source_summary,
        published_at::timestamptz AS occurred_at
   FROM sherrbyte_app.articles
  WHERE status = 'published'
-   AND published_at ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
+   -- published_at::text, NOT published_at. The column is TEXT under the
+   -- sqlite-shaped schema and timestamptz once migration 018 has run, and
+   -- this query must work against both. Applying ~ to a timestamptz raises
+   -- "operator does not exist: timestamp with time zone ~ unknown" and
+   -- takes the whole pass down. ::text is a no-op on TEXT and always valid
+   -- on timestamptz, so the guard means the same thing either way.
+   AND published_at::text ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
    AND id > $1
  ORDER BY id
  LIMIT $2
@@ -275,12 +281,21 @@ async def build(conn, *, limit: int = None, batch: int = None) -> dict:
             headline = r["headline"] or ""
             summary = r["summary_60"] or ""
 
-            # A placeholder is not evidence — the same rule news_match applies.
-            # An analog whose text is a stub would match on nothing real.
-            if not bs.row_is_healthy({
-                    "full_body": r["full_body"] or "",
-                    "summary_60": summary,
-                    "source_summary": r["source_summary"] or ""}):
+            # THE GATE IS THE SUMMARY, NOT THE BODY.
+            #
+            # It used to be row_is_healthy, which demands BOTH columns. That was
+            # self-imposed: nothing in this function reads full_body except that
+            # check. Extraction runs on headline + summary_60 —
+            # linked_symbols(), _entities_for() and classify() all take exactly
+            # those two — so a healthy body adds no information to any field
+            # this library stores, and requiring one excluded the whole corpus
+            # while the bodies were still placeholders.
+            #
+            # The summary requirement stays, and it is the one that matters: a
+            # placeholder summary is not evidence, and an event built on one
+            # would match on our own words rather than the story's.
+            if bs.classify_summary(summary, r["source_summary"] or "") \
+                    != bs.ORIGINAL:
                 funnel["stub_skipped"] += 1
                 continue
 
