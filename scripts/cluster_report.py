@@ -50,6 +50,10 @@ def main() -> int:
                     help="only articles published in the last N days (0 = all)")
     ap.add_argument("--candidates-only", action="store_true",
                     help="restrict to rows the rewrite would actually pick up")
+    ap.add_argument("--pool", type=int, default=0,
+                    help="cluster only the newest N rows — set it to "
+                         "SYNTHESIS_POOL to reproduce exactly what a drain tick "
+                         "sees, or to 12 to reproduce what it used to see")
     args = ap.parse_args()
 
     try:
@@ -78,14 +82,59 @@ def main() -> int:
         rows = [r for r in conn.execute(
             body_state.SELECT_NEEDING_REWRITE, (20000,)).fetchall()]
 
+    if args.pool:
+        rows = rows[:args.pool]
     print(f"source: {where}")
     print(f"articles considered: {len(rows)}")
     if not rows:
         print("nothing to cluster.")
         return 1
 
-    clusters = synthesis.cluster_events(rows, window_hours=args.window)
+    # ── (b) IS THE SAMPLE EVEN CAPABLE OF HOLDING A PAIR? ───────────────────
+    # Ask this BEFORE looking at any threshold. A sample spanning minutes cannot
+    # contain a 24-hour-window pair however generous the threshold is, and
+    # loosening one to fix the other merges unrelated stories.
+    pool = synthesis.pool_report(rows, window_hours=args.window)
+    print("\n── (b) the sample ──")
+    for k in ("rows", "with_timestamp", "span_hours", "window_hours",
+              "sample_covers_window", "oldest", "newest", "eligible_pairs",
+              "max_possible_pairs"):
+        print(f"  {k:>20}: {pool[k]}")
+    print(f"  {'pillars':>20}: {pool['pillars']}")
+    if not pool["sample_covers_window"]:
+        print("  ^ the sample does NOT span the clustering window. Whatever the "
+              "overlap\n    distribution says below, it is measured on rows that "
+              "could not pair.")
+
+    stats: dict = {}
+    clusters = synthesis.cluster_events(rows, window_hours=args.window,
+                                        stats=stats)
     hist = synthesis.size_histogram(clusters)
+
+    # ── (a) THE TERM-OVERLAP DISTRIBUTION ───────────────────────────────────
+    print("\n── (a) term overlap across candidate pairs ──")
+    print(f"  pairs sharing at least one term: {stats.get('pairs_examined', 0)}")
+    print(f"  shared-term count -> pairs: "
+          f"{dict(sorted(stats.get('shared_histogram', {}).items(), key=lambda kv: int(kv[0])))}")
+    print("  overlap ratio -> pairs:")
+    for bucket, n in sorted(stats.get("ratio_histogram", {}).items()):
+        bar = "#" * min(50, n)
+        print(f"    {bucket:>12}  {n:>6}  {bar}")
+    print(f"  thresholds in force: shared >= {synthesis.EVENT_MIN_SHARED}, "
+          f"ratio >= {synthesis.EVENT_MIN_RATIO}")
+    print("  which gate stopped each pair:")
+    for reason, n in sorted(stats.get("stopped", {}).items(), key=lambda kv: -kv[1]):
+        print(f"    {reason:>20}: {n}")
+    if stats.get("best_pairs"):
+        print("\n  closest pairs — ARE THESE THE SAME STORY? (the question no "
+              "histogram answers)")
+        for pr in stats["best_pairs"]:
+            flag = "" if (pr["same_pillar"] and pr["in_window"]) else \
+                   f"  [pillar={pr['same_pillar']} window={pr['in_window']}]"
+            print(f"    ratio {pr['ratio']:.2f} shared {pr['shared']:>3}{flag}")
+            print(f"      A: {pr['headlines'][0]}")
+            print(f"      B: {pr['headlines'][1]}")
+    print("")
     total = len(clusters)
     multi = sum(n for size, n in hist.items() if size >= synthesis.MIN_CLUSTER)
     three = sum(n for size, n in hist.items() if size >= 3)
@@ -104,6 +153,8 @@ def main() -> int:
           f"({100.0 * covered / len(rows):.1f}% of the corpus)")
     print(f"\nrequests to clear these articles: "
           f"{total} (one per cluster) vs {len(rows)} one-at-a-time")
+    print(f"\nRerun with --pool 12 to see what a pre-fix drain tick saw, and "
+          f"--pool {synthesis.WINDOW_HOURS and 400} for what it sees now.")
     if three < multi / 2:
         print("\nVERDICT: most events carry 1-2 sources. MIN_CLUSTER=2 is the "
               "setting that matters here; a 3-source floor would idle.")

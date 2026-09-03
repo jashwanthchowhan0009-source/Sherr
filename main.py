@@ -3454,14 +3454,34 @@ SYNTHESIS_WINDOW_HOURS = int(os.getenv("SYNTHESIS_WINDOW_HOURS", "24"))
 # N articles into N or fewer requests, so this is a second belt on top of that.
 SYNTHESIS_MAX_CLUSTERS = int(os.getenv("SYNTHESIS_MAX_CLUSTERS", "6"))
 
+# THE CLUSTERING POOL IS NOT THE REQUEST BUDGET, AND CONFLATING THEM IS WHAT
+# MADE THE FIRST PRODUCTION RUN FIND NOTHING.
+#
+# The drain's tick is bounded by the free tier's REQUEST rate: 12 articles a
+# minute. The first version clustered exactly those 12 rows — so the pool was
+# 12 rows, ordered by published_at DESC, i.e. twelve CONSECUTIVE articles. A
+# feed ingesting ~100 articles an hour puts twelve consecutive rows inside about
+# seven minutes, while two publishers covering one event are routinely an hour
+# apart. The clusterer was asked to find 24-hour-window pairs inside a
+# seven-minute sample and correctly answered "there are none": clusters_seen 10,
+# size_histogram {"1": 10}. Not a threshold problem — a sample-size problem, and
+# lowering the threshold would only have started merging unrelated stories.
+#
+# So the pool is fetched separately and is large enough to actually SPAN the
+# window. Clustering 400 rows costs one extra SELECT a minute and no provider
+# calls at all; the request budget still governs how many clusters are written.
+SYNTHESIS_POOL = int(os.getenv("SYNTHESIS_POOL", "400"))
+
 # Per-run counters, reset by _reprocess_bodies_sync; folded into its totals.
 _synth_run: dict = {"clusters": 0, "written": 0, "merged": 0, "failed": 0,
-                    "sources_used": 0, "reasons": {}}
+                    "sources_used": 0, "reasons": {}, "pool": {}, "pairs": {},
+                    "near_misses": []}
 # Cumulative, survives across ticks so /admin/body-audit can show the pass working.
 _synth_stats: dict = {"clusters_seen": 0, "clusters_synthesised": 0,
                       "articles_written": 0, "articles_merged": 0,
                       "sources_used": 0, "failed": 0, "last_at": None,
-                      "size_histogram": {}, "last_error": None}
+                      "size_histogram": {}, "last_error": None,
+                      "last_pool": {}, "last_pairs": {}, "last_near_misses": []}
 
 
 def _synth_reason(reason: str) -> None:
@@ -3482,31 +3502,90 @@ def _synth_primary(group: list):
     return max(group, key=weight)
 
 
-def _synthesise_clusters(conn, work: list) -> list:
-    """Synthesise every multi-source cluster in `work`; return the leftover rows.
+def _synthesis_pool(conn, work: list) -> list:
+    """The rows to CLUSTER over: this tick's work plus enough context to pair it.
+
+    Same selector, bigger LIMIT, then the same two filters the tick applies to
+    its own rows — a healthy row is not a candidate, and a row with no surviving
+    publisher text cannot be synthesised from, only invented.
+    """
+    if SYNTHESIS_POOL <= len(work):
+        return list(work)
+    try:
+        fetched = conn.execute(body_state.SELECT_NEEDING_REWRITE,
+                               (SYNTHESIS_POOL,)).fetchall()
+    except Exception as e:                                        # noqa: BLE001
+        # A failed pool query degrades to clustering the tick's own rows — the
+        # old behaviour — rather than taking the whole rewrite down with it.
+        _body_err("synthesis_pool", e)
+        return list(work)
+    seen = {r["id"] for r in work}
+    extra = [r for r in fetched
+             if r["id"] not in seen
+             and not body_state.row_is_healthy(r)
+             and body_state.has_usable_source(r["summary_60"], r["source_summary"],
+                                              r["full_body"])]
+    return list(work) + extra
+
+
+def _synthesise_clusters(conn, work: list, budget: int = None) -> list:
+    """Synthesise the multi-source clusters around `work`; return the leftovers.
 
     The returned list is what the single-article rewrite still has to handle:
-    singletons, and the members of any cluster whose synthesis failed. Rows that
-    were written or merged are gone from it — never both paths for one row.
+    rows with no partner, and the members of any cluster whose synthesis failed.
+    Rows that were written or merged are gone from it — never both paths for one
+    row.
+
+    `budget` is the tick's REQUEST allowance. Clusters are drawn from a pool far
+    larger than it (see SYNTHESIS_POOL), but each one spends a request, so the
+    leftovers handed back are trimmed to what the allowance has left. A row
+    trimmed here is not lost: it keeps reprocessed=0 and is the next tick's
+    first candidate.
     """
-    if not SYNTHESIS_ENABLED or len(work) < synthesis.MIN_CLUSTER:
+    if not SYNTHESIS_ENABLED or len(work) < 1:
+        return work
+    budget = len(work) if budget is None else budget
+
+    pool = _synthesis_pool(conn, work)
+    if len(pool) < synthesis.MIN_CLUSTER:
         return work
 
+    stats: dict = {}
     clusters = synthesis.cluster_events(
-        work, window_hours=SYNTHESIS_WINDOW_HOURS)
+        pool, window_hours=SYNTHESIS_WINDOW_HOURS, stats=stats)
     hist = synthesis.size_histogram(clusters)
     for size, n in hist.items():
         key = str(size)
         _synth_stats["size_histogram"][key] = \
             _synth_stats["size_histogram"].get(key, 0) + n
     _synth_stats["clusters_seen"] += len(clusters)
+    # The diagnosis, kept per tick rather than averaged away: which gate stopped
+    # each pair, how the overlap ratios were actually distributed, and whether
+    # the sample spanned the window it is being clustered against.
+    _synth_run["pool"] = synthesis.pool_report(
+        pool, window_hours=SYNTHESIS_WINDOW_HOURS)
+    _synth_run["pairs"] = {k: v for k, v in stats.items() if k != "best_pairs"}
+    _synth_run["near_misses"] = stats.get("best_pairs", [])
+    _synth_stats["last_pool"] = _synth_run["pool"]
+    _synth_stats["last_pairs"] = _synth_run["pairs"]
+    _synth_stats["last_near_misses"] = _synth_run["near_misses"]
+
+    work_ids = {r["id"] for r in work}
+    handled: set = set()
+    # A cluster containing a row this tick already owes work on comes FIRST.
+    # The pool is mostly rows the tick was never going to touch, and spending
+    # the whole allowance on those would leave the tick's own backlog rows
+    # untouched while the audit reported progress.
+    ranked = sorted((g for g in clusters if len(g) >= synthesis.MIN_CLUSTER),
+                    key=lambda g: (0 if any(r["id"] in work_ids for r in g) else 1,
+                                   -len(g), min(r["id"] for r in g)))
+    max_clusters = max(1, min(SYNTHESIS_MAX_CLUSTERS, budget // 2))
 
     leftover: list = []
     spent = 0
-    for group in clusters:
-        if len(group) < synthesis.MIN_CLUSTER or spent >= SYNTHESIS_MAX_CLUSTERS:
-            leftover.extend(group)
-            continue
+    for group in ranked:
+        if spent >= max_clusters:
+            break
         # Widest coverage first inside the cluster, then capped: past five
         # sources the next one costs tokens and adds no new fact.
         group = sorted(group, key=lambda r: -len(
@@ -3526,7 +3605,6 @@ def _synthesise_clusters(conn, work: list) -> list:
         except Exception as e:                                    # noqa: BLE001
             _synth_stats["last_error"] = f"{type(e).__name__}: {e}"
             _body_err("synthesis", e)
-            leftover.extend(group)
             continue
         if not result:
             # The provider refused, or the answer failed validation. The rows are
@@ -3534,7 +3612,6 @@ def _synthesise_clusters(conn, work: list) -> list:
             # remain candidates after it, which is the honest state for a row
             # whose body is still a placeholder.
             _synth_reason("synthesis_call_failed")
-            leftover.extend(group)
             continue
 
         primary = _synth_primary(group)
@@ -3547,7 +3624,6 @@ def _synthesise_clusters(conn, work: list) -> list:
             # that source, whatever else went into it. Never written.
             _synth_reason("rejected_body_overlap")
             _synth_run["failed"] += 1
-            leftover.extend(group)
             continue
 
         src_head = primary["source_headline"] or primary["headline"] or ""
@@ -3595,6 +3671,7 @@ def _synthesise_clusters(conn, work: list) -> list:
             _synth_run["written"] += 1
             _synth_run["sources_used"] += len(group)
             _body_last["written"] += 1
+            handled.add(primary["id"])
 
             if SYNTHESIS_MERGE:
                 for r in group:
@@ -3607,15 +3684,29 @@ def _synthesise_clusters(conn, work: list) -> list:
                         "UPDATE articles SET status='merged', reprocessed=1, "
                         "story_id=? WHERE id=?", (primary["id"], r["id"]))
                     _synth_run["merged"] += 1
-            else:
-                leftover.extend([r for r in group if r["id"] != primary["id"]])
+                    handled.add(r["id"])
         except Exception as e:                                    # noqa: BLE001
             _body_err("synthesis_write", e, primary["id"])
             _synth_run["failed"] += 1
-            leftover.extend(group)
+            handled.discard(primary["id"])
             continue
 
     conn.commit()
+
+    # THE LEFTOVERS ARE THIS TICK'S ROWS ONLY. The pool is mostly rows the tick
+    # never owed work on; handing them to the single-article batch would spend
+    # the free tier's request rate on articles nobody asked for this minute.
+    #
+    # And what is left is trimmed to the allowance the clusters did not spend,
+    # because a cluster costs exactly one request — the same unit a single
+    # rewrite costs. A row trimmed here keeps reprocessed=0 and is the next
+    # tick's first candidate, so nothing is dropped, only deferred.
+    leftover = [r for r in work if r["id"] not in handled]
+    room = max(0, budget - spent)
+    if len(leftover) > room:
+        _synth_reason("deferred_to_next_tick")
+        leftover = leftover[:room]
+
     _synth_stats["clusters_synthesised"] += _synth_run["clusters"]
     _synth_stats["articles_written"] += _synth_run["written"]
     _synth_stats["articles_merged"] += _synth_run["merged"]
@@ -3643,7 +3734,8 @@ def _reprocess_bodies_sync(limit: int, batch: int,
     for k in ("fetched", "candidates", "sent_to_ai", "ai_returned", "written", "failed"):
         _body_last[k] = 0
     _synth_run.update({"clusters": 0, "written": 0, "merged": 0, "failed": 0,
-                       "sources_used": 0, "reasons": {}})
+                       "sources_used": 0, "reasons": {}, "pool": {},
+                       "pairs": {}, "near_misses": []})
     _body_last.update({"ran_at": datetime.now(timezone.utc).isoformat(),
                        "last_error": None, "errors": []})
     log.info("[BODY] run starting: limit=%d batch=%d", limit, batch)
@@ -3747,7 +3839,7 @@ def _reprocess_bodies_sync(limit: int, batch: int,
             # This SPENDS FEWER REQUESTS, not more: a cluster of five is one
             # provider call where the single-article path was five. The tick's
             # rate ceiling is therefore still honoured by construction.
-            work = _synthesise_clusters(conn, work)
+            work = _synthesise_clusters(conn, work, budget=take)
             if not work:
                 conn.commit()
                 _body_progress.update({"done": done, "failed": failed,
@@ -4123,6 +4215,62 @@ async def admin_published_at(x_admin_token: str = Header(""), token: str = Query
         conn.close()
 
 
+def _synthesis_diagnosis(synth: dict) -> str:
+    """Why the last pass produced what it produced, in one sentence.
+
+    "No clusters" has four causes with four different fixes and the raw
+    histograms do not distinguish them at a glance. This reads the stop-reason
+    counts and the pool span and says which one it is, so nobody has to
+    re-derive the argument from a JSON blob at 2am — and so a threshold is never
+    loosened to fix a sample-size problem, which would merge unrelated stories
+    and be strictly worse than producing nothing.
+    """
+    pool = synth.get("last_pool") or {}
+    pairs = synth.get("last_pairs") or {}
+    stopped = pairs.get("stopped") or {}
+    if not pool:
+        return ("The synthesis pass has not run yet — no tick has reached it. "
+                "Check drain.status first.")
+    if synth.get("articles_written"):
+        return (f"Working: {synth['articles_written']} article(s) written from "
+                f"{synth['sources_used']} source(s) in "
+                f"{synth['clusters_synthesised']} request(s).")
+    if pool.get("rows", 0) < synthesis.MIN_CLUSTER:
+        return ("The candidate pool is smaller than one cluster. There is "
+                "nothing left needing a rewrite, or the selector is returning "
+                "nothing — compare needs_rewrite above.")
+    if not pool.get("eligible_pairs"):
+        return (f"NO PAIR IN THE SAMPLE IS EVEN ELIGIBLE: {pool['rows']} rows "
+                f"spanning {pool['span_hours']}h against a "
+                f"{pool['window_hours']}h window, and no two share a pillar "
+                f"inside it. This is a SAMPLE problem, not a threshold problem "
+                f"— raise SYNTHESIS_POOL rather than lowering the ratio.")
+    if not pool.get("sample_covers_window"):
+        return (f"The sample spans {pool['span_hours']}h against a "
+                f"{pool['window_hours']}h clustering window, so most same-event "
+                f"pairs cannot be in it. Raise SYNTHESIS_POOL "
+                f"(currently {SYNTHESIS_POOL}) before touching any threshold.")
+    if not pairs.get("pairs_examined"):
+        return ("No two candidates share a single significant term. The corpus "
+                "in this window is genuinely unrelated stories.")
+    by_shared = stopped.get("shared_below_min", 0)
+    by_ratio = stopped.get("ratio_below_min", 0)
+    joined = stopped.get("joined", 0)
+    if joined:
+        return (f"{joined} pair(s) joined but no cluster was written — the "
+                f"provider or the originality gate stopped it. See "
+                f"last_run.reasons and provider_errors.")
+    if by_ratio and by_ratio >= by_shared:
+        return (f"{pairs['pairs_examined']} pairs examined, "
+                f"{by_ratio} stopped at the {synthesis.EVENT_MIN_RATIO} overlap "
+                f"ratio. Read last_near_misses: if those headlines are the SAME "
+                f"story the ratio is too strict; if they are different stories "
+                f"it is doing its job and the corpus has no multi-source events.")
+    return (f"{pairs['pairs_examined']} pairs examined, {by_shared} stopped "
+            f"below {synthesis.EVENT_MIN_SHARED} shared terms — the candidates "
+            f"share vocabulary but not enough of it to be one event.")
+
+
 @app.get("/admin/body-audit")
 async def admin_body_audit(x_admin_token: str = Header(""), token: str = Query("")):
     """What is actually in every article body, counted by state.
@@ -4204,6 +4352,10 @@ async def admin_body_audit(x_admin_token: str = Header(""), token: str = Query("
     synth["articles_per_request"] = (
         round((synth["articles_written"] + synth["articles_merged"]) / calls, 2)
         if calls else None)
+    synth["pool_target"] = SYNTHESIS_POOL
+    synth["min_shared_terms"] = synthesis.EVENT_MIN_SHARED
+    synth["min_overlap_ratio"] = synthesis.EVENT_MIN_RATIO
+    synth["DIAGNOSIS"] = _synthesis_diagnosis(synth)
     out["synthesis"] = synth
 
     out["last_run"] = dict(_body_last)
