@@ -58,6 +58,10 @@
 
   /* Structural */
   --hh: 48px;
+  /* Desktop only (see the single desktop breakpoint further down). Declared here so
+     the sidebar width and the reading column are one number each, not eleven. */
+  --sbw: 236px;   /* sidebar */
+  --col: 720px;   /* centre reading column */
   --nh: 70px;
   --r:        18px;   /* squircle cards — refined, a touch softer */
   --r-card:   18px;
@@ -3385,6 +3389,133 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 }
 .es-retry:active { transform: scale(0.93); }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   DESKTOP — ONE BLOCK, ONE BREAKPOINT
+   ═══════════════════════════════════════════════════════════════════════════
+   EVERY DESKTOP RULE IN THIS FILE IS INSIDE THIS ONE @media, AND THAT IS THE
+   POINT. The mobile app is the product; this is a second arrangement of the
+   same DOM. Because nothing outside this block changed, anything narrower than
+   1024px renders byte-for-byte what it rendered before — there is no shared
+   "responsive" rule that could drift, and no way for a desktop tweak to reach a
+   phone. If you are about to add a desktop rule somewhere else in this
+   stylesheet: don't. Add it here.
+
+   1024px, not 768px: a tablet in portrait is a big phone and the bottom nav is
+   right for it. The sidebar only earns its width once there is width to spare.
+
+   Three changes, no new markup:
+     * the floating bottom nav becomes a left sidebar (same <nav>, same tabs);
+     * every view keeps a ~720px reading column centred in what is left;
+     * the two grids that were built for one narrow column — the Matrix of
+       Markets and the Bytes feed — get the columns they always wanted.
+   ══════════════════════════════════════════════════════════════════════════ */
+@media (min-width: 1024px) {
+
+  /* The phone frame stops being a frame. */
+  .phone { max-width: none; left: 0; transform: none; width: 100vw; }
+
+  /* ── Sidebar ──────────────────────────────────────────────────────────────
+     The same <nav> element, re-laid out. Not a second nav: two navs would mean
+     two active-tab states, and they would disagree the first time either was
+     changed. */
+  nav {
+    top: 0; bottom: 0; left: 0;
+    width: var(--sbw); max-width: var(--sbw);
+    transform: none;
+    flex-direction: column; align-items: stretch; justify-content: flex-start;
+    gap: 10px; padding: calc(var(--hh) + 18px) 12px 18px;
+    border-right: 1px solid var(--glassB);
+  }
+  /* The scroll-away and the minimised pill are phone behaviours. A sidebar that
+     slid off-screen on scroll would take the app's only navigation with it. */
+  nav.hidden, nav.compact { transform: none; opacity: 1; pointer-events: auto; }
+  nav.compact .nb-tabs { flex: 1 1 auto; gap: 2px; }
+  nav.compact .nb:not(.on), nav.compact .nb.on {
+    flex: 0 0 auto; padding: 11px 14px; opacity: 1; width: auto;
+  }
+
+  .nb-tabs {
+    flex-direction: column; align-items: stretch; flex: 0 0 auto;
+    gap: 4px; padding: 8px; border-radius: 18px;
+  }
+  /* Icon beside the label, the way every desktop sidebar reads. */
+  .nb {
+    flex-direction: row; justify-content: flex-start; align-items: center;
+    gap: 12px; flex: 0 0 auto; padding: 11px 14px; border-radius: 12px;
+  }
+  .nb-icon { font-size: 1rem; }
+  .nb-lbl { font-size: 0.86rem; font-weight: 700; opacity: 1; }
+  .nb-scan {
+    width: auto; margin-top: auto; border-radius: 14px; padding: 13px 0;
+  }
+
+  /* ── Header sits to the right of the sidebar ─────────────────────────────── */
+  header { left: var(--sbw); width: calc(100vw - var(--sbw)); padding: 0 24px; }
+
+  /* ── The reading column ──────────────────────────────────────────────────
+     max() rather than a fixed inset: below ~1240px the free space is smaller
+     than the gutter, and a fixed one would push the column off the right edge
+     rather than simply narrowing it. */
+  .view {
+    left: var(--sbw);
+    padding-left:  max(24px, calc((100vw - var(--sbw) - var(--col)) / 2));
+    padding-right: max(24px, calc((100vw - var(--sbw) - var(--col)) / 2));
+  }
+  /* The nav no longer floats over the content, so the phone's bottom gutter is
+     dead space on a desktop screen. */
+  #v-home, #v-profile, #v-bookmarks, #v-notifs {
+    padding-bottom: 40px !important;
+  }
+
+  /* Overlays are full-bleed on top of everything and must NOT inherit the
+     column padding — they carry their own. */
+  #article-overlay, #search-overlay, #market-overlay, #module-overlay,
+  #mktcat-overlay, #topic-overlay, #atlas-overlay, #media-viewer,
+  #splash, #ob-screen { left: 0; padding-left: 0; padding-right: 0; }
+  /* …but their content still reads at column width rather than 1600px wide. */
+  #ao-scroll { max-width: calc(var(--col) + 120px); margin: 0 auto; }
+
+  /* ── Matrix of Markets: 3 x 2 ────────────────────────────────────────────
+     Six tiles in two columns was a phone compromise. Three across turns the
+     same six into one glance instead of a scroll. */
+  .xp-matrix { grid-template-columns: repeat(3, 1fr); margin: 0; }
+
+  /* ── Bytes: a scroll of cards, not one card per screen ───────────────────
+     Full-screen vertical snap is a phone gesture. On a desktop it wastes a
+     1440px-wide screen on one card and makes the wheel fight the snap, so the
+     snap comes off and the cards become a two-column scroll. */
+  .bytes-feed {
+    scroll-snap-type: none;
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px; align-content: start;
+    padding: calc(var(--hh) + 20px) 0 40px;
+  }
+  .byte {
+    height: auto; padding: 0;
+    scroll-snap-align: none; scroll-snap-stop: normal;
+  }
+  .byte-card {
+    height: auto; border-radius: 18px;
+    border: 1px solid var(--glassB);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.18);
+  }
+  .byte-media { height: 200px; min-height: 200px; }
+  .byte-body { flex: 0 0 auto; overflow: visible; min-height: 168px; }
+  .byte-headline { font-size: 1.18rem; }
+  .byte-what { font-size: 0.92rem; }
+  .bytes-empty { grid-column: 1 / -1; height: 50vh; }
+
+  /* Home's own feed reads as one column at this width — it is a list of
+     stories, and two columns of headlines is a portal, not a feed. */
+  #home-feed, #home-headlines, #bm-feed, #notifs-feed { max-width: var(--col); }
+}
+
+/* Wider still: a third Bytes column, and nothing else changes. */
+@media (min-width: 1600px) {
+  .bytes-feed { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+
 </style>
 </head>
 <body>
@@ -6557,7 +6688,12 @@ function openArticle(rawA) {
 
   document.getElementById('ao-scroll').scrollTop = 0;
   document.getElementById('article-overlay').classList.add('open');
-  if (!_navReplay) { try { history.pushState({ view: 'article' }, ''); } catch (e) {} }
+  if (!_navReplay) {
+    try {
+      history.pushState({ view: 'article', articleId: a.id }, '',
+                        '/bytes/' + articleSlug(a));
+    } catch (e) {}
+  }
   logInteract(a.id, a.category, 'read');
 }
 
@@ -6565,6 +6701,14 @@ function closeArticle() {
   ActivityTracker.closeArticle();
   document.getElementById('article-overlay').classList.remove('open');
   currentArticle = null;
+  // The X button closes without a history.back(), so the /bytes/<slug> path
+  // would otherwise stay in the address bar over a feed — and a refresh would
+  // reopen an article the reader had just dismissed.
+  if (!_navReplay && location.pathname.indexOf('/bytes/') === 0) {
+    const back = document.querySelector('.view.active');
+    const view = back ? String(back.id || '').replace(/^v-/, '') : 'home';
+    try { history.replaceState({ view }, '', pathForView(view)); } catch (e) {}
+  }
   document.querySelectorAll('.ao-body .explore-quiz-card').forEach(e=>e.remove());
 }
 
@@ -7876,8 +8020,72 @@ function navTo(name) {
     else if (typeof initBytes === 'function') initBytes();
   }
 
-  // Push a history entry so the device/hardware back button returns here.
-  if (!_navReplay) { try { history.pushState({ view: name }, ''); } catch (e) {} }
+  // Push a history entry so the device/hardware back button returns here — and
+  // a REAL PATH with it, so the address bar, a bookmark and a copied link all
+  // describe the screen the reader is actually looking at. Before this the app
+  // had one URL for every screen: a shared link opened the home feed whatever
+  // the sender was reading, and a refresh threw away where they were.
+  if (!_navReplay) {
+    try { history.pushState({ view: name }, '', pathForView(name)); } catch (e) {}
+  }
+}
+
+// ── Real URLs ───────────────────────────────────────────────────────────────
+// The server answers each of these paths with index.html (see the SPA section
+// of main.py), so they work on a cold load and a refresh, not just after an
+// in-app tap. The map is the single source of truth in both directions.
+const VIEW_PATHS = {
+  home: '/', explore: '/explore', bytes: '/bytes', profile: '/profile',
+  feed: '/feed', spie: '/spie', bookmarks: '/bookmarks', notifs: '/notifs'
+};
+function pathForView(name) { return VIEW_PATHS[name] || '/'; }
+function viewForPath(path) {
+  const first = String(path || '/').split('?')[0].split('/').filter(Boolean)[0] || '';
+  if (!first) return 'home';
+  for (const k in VIEW_PATHS) if (VIEW_PATHS[k] === '/' + first) return k;
+  return 'home';
+}
+
+// The slug the server builds, reproduced exactly. THE TRAILING ID IS WHAT
+// RESOLVES THE ARTICLE — the words in front are for readers and crawlers — so
+// a headline rewritten by a later synthesis pass never breaks a shared link.
+function articleSlug(a) {
+  const words = String(a.title || a.headline || '')
+    .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+    .split('-').filter(Boolean).slice(0, 9).join('-');
+  return words ? words + '-' + a.id : String(a.id);
+}
+function articleIdFromSlug(slug) {
+  const m = String(slug || '').match(/(\d+)$/);
+  return m ? parseInt(m[1], 10) : null;
+}
+
+// Boot-time routing: whatever path the browser arrived on decides the screen.
+async function routeFromPath() {
+  const parts = location.pathname.split('/').filter(Boolean);
+  if (parts[0] === 'bytes' && parts[1]) {
+    // A deep link to one story. Land on Bytes first so closing the article
+    // leaves the reader somewhere real rather than on a blank view, then open
+    // the article itself from the id in the slug.
+    _navReplay = true;
+    try { navTo('bytes'); } finally { _navReplay = false; }
+    try { history.replaceState({ view: 'bytes' }, '', location.pathname); } catch (e) {}
+    const id = articleIdFromSlug(parts[1]);
+    if (id) {
+      try {
+        const a = await api('/article/' + id);
+        if (a && a.id) { _navReplay = true; try { openArticle(a); } finally { _navReplay = false; } }
+      } catch (e) { /* the story is gone; the reader keeps the Bytes feed */ }
+    }
+    return;
+  }
+  const view = viewForPath(location.pathname);
+  // '/' is already the rendered state — v-home carries .active in the markup and
+  // obInit's guest path has its own loadFeed. Calling navTo('home') here would
+  // fire a second identical feed fetch on every cold open for no visible change.
+  const already = document.getElementById('v-' + view)?.classList.contains('active');
+  if (!already) { _navReplay = true; try { navTo(view); } finally { _navReplay = false; } }
+  try { history.replaceState({ view }, '', pathForView(view)); } catch (e) {}
 }
 
 // ── History routing: hardware/device back traverses in-app screens ──────────
@@ -7901,8 +8109,11 @@ window.addEventListener('popstate', (e) => {
     else                                          navTo((e.state && e.state.view) || 'home');
   } finally { _navReplay = false; }
 });
-// Seed the root route so navigation has a base entry to return to.
-try { history.replaceState({ view: 'home' }, ''); } catch (e) {}
+// Seed the route from the URL the browser actually arrived on, not from a
+// hardcoded 'home'. This is the half of real URLs that makes a refresh and a
+// pasted link work; the server serving index.html at these paths is the other.
+try { history.replaceState({ view: viewForPath(location.pathname) }, ''); } catch (e) {}
+document.addEventListener('DOMContentLoaded', () => { try { routeFromPath(); } catch (e) {} });
 
 // Apply a /me payload to the profile UI — real data only, no placeholders.
 function applyMe(me) {

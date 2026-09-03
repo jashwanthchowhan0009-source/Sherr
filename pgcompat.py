@@ -48,6 +48,7 @@ CAVEATS, stated rather than hidden:
 from __future__ import annotations
 
 import logging
+import os
 import re
 import threading
 from collections.abc import Mapping
@@ -441,6 +442,24 @@ def _configure(conn) -> None:
     conn.execute(SEARCH_PATH_SQL)
 
 
+# THE HARD CAP ON THIS PROCESS'S SHARE OF THE DATABASE.
+#
+# Supabase's transaction pooler and Render's free tier both allow connections in
+# the low tens, TOTAL, across every client. An uncapped pool does not degrade
+# under a reader crowd — it takes every slot, and then the scheduler, the admin
+# endpoints and the engine's own pool all fail to connect at once, which looks
+# like the database is down when it is only fully booked.
+#
+# 8 is deliberately small: FastAPI runs these sync calls in a threadpool, so 8
+# in-flight queries is already 8 concurrent readers reaching Postgres, and the
+# read cache in cache.py is what absorbs the other 2,992. Raise PG_POOL_MAX only
+# alongside a bigger database plan, never to make a slow endpoint feel faster.
+POOL_MAX = int(os.getenv("PG_POOL_MAX", "8"))
+# Queue rather than fail when all 8 are busy: a reader waiting 30s is bad, a
+# reader getting a 500 because the 9th slot did not exist is worse.
+POOL_TIMEOUT = float(os.getenv("PG_POOL_TIMEOUT", "30"))
+
+
 def _get_pool(dsn: str):
     """A small psycopg pool, created once. Import is lazy so a sqlite-only
     deployment never needs the driver installed."""
@@ -451,7 +470,7 @@ def _get_pool(dsn: str):
                 from psycopg_pool import ConnectionPool          # noqa: PLC0415
                 from psycopg.rows import dict_row                # noqa: PLC0415
                 _pool = ConnectionPool(
-                    sanitize_dsn(dsn), min_size=1, max_size=8,
+                    sanitize_dsn(dsn), min_size=1, max_size=POOL_MAX,
                     kwargs={
                         "row_factory": dict_row,
                         "autocommit": True,
@@ -463,7 +482,8 @@ def _get_pool(dsn: str):
                         "options": CONN_OPTIONS,
                     },
                     configure=_configure,
-                    open=True, timeout=30,
+                    open=True, timeout=POOL_TIMEOUT,
+                    max_waiting=int(os.getenv("PG_POOL_MAX_WAITING", "200")),
                 )
     return _pool
 

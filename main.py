@@ -40,12 +40,20 @@ from originality import (
 # overwrites full_body with a stub, so feeding full_body to the AI pass makes it
 # summarize its own placeholder — see body_state.py.
 import body_state
+import cache
+import synthesis
 # One canonical shape for articles.published_at. Four formats used to reach that
 # column; see timestamps.py for the two bugs that produced.
 import timestamps
 
 # Which imagery the feed serves: stock | thumbnail | art. See image_service.py.
 IMAGE_MODE = (os.getenv("IMAGE_MODE") or "thumbnail").strip().lower()
+# Imported as a MODULE as well as by name: _synthesise_clusters calls
+# ai_processor.synthesize through the module so a test can patch that one
+# seam. A from-import would bind the function here and the patch would
+# never reach what runs — the trap CLAUDE.md records for process_batch.
+import ai_processor
+import text_utils
 from ai_processor import process_batch, available_providers
 
 load_dotenv()
@@ -182,7 +190,12 @@ async def get_spie_pool():
         import asyncpg
         _spie_pool = await asyncpg.create_pool(
             dsn=_sanitize_pg_dsn(SHERR_I_DATABASE_URL),
-            min_size=1, max_size=4, timeout=20.0, command_timeout=20.0,
+            # Capped, and capped SMALL. This pool and pgcompat's share one
+            # database with a connection allowance in the low tens; four is
+            # this process's whole budget for engine reads, and the analog and
+            # pattern caches are what let four serve thousands of readers.
+            min_size=1, max_size=int(os.getenv("SPIE_POOL_MAX", "4")),
+            timeout=20.0, command_timeout=20.0,
             statement_cache_size=0,      # Supabase transaction pooler safety
         )
         log.info("Sherr-I Postgres pool ready (insights source)")
@@ -201,6 +214,19 @@ async def get_spie_pool():
 # populated page, three means the engine has genuinely stopped and an empty page
 # is the honest answer.
 PATTERN_MAX_AGE_HOURS = int(os.getenv("PATTERN_MAX_AGE_HOURS", "72"))
+
+# ─── READ-CACHE TTLs ─────────────────────────────────────────────────────────
+# Short on purpose. These are not correctness knobs — they are the ratio between
+# concurrent readers and database queries. 30s on the feed means a thousand
+# readers a minute reach Postgres twice. Nothing here updates faster than the
+# ingest schedule, which is measured in minutes, so a reader never sees data
+# these windows made stale in any way they could notice.
+FEED_CACHE_SECONDS = int(os.getenv("FEED_CACHE_SECONDS", "30"))
+PATTERNS_CACHE_SECONDS = int(os.getenv("PATTERNS_CACHE_SECONDS", "60"))
+ANALOG_CACHE_SECONDS = int(os.getenv("ANALOG_CACHE_SECONDS", "120"))
+# Rendered <head> blocks for /bytes/<slug>. A crawler fetch is a database read
+# for a row that changes once, when it is written.
+OG_CACHE_SECONDS = int(os.getenv("OG_CACHE_SECONDS", "600"))
 
 
 async def _spie_patterns(type: str, limit: int, offset: int,
@@ -787,6 +813,13 @@ _MIGRATIONS = [
     # shown is IMAGE_MODE's decision at render time; keeping it here means flipping
     # modes is an env-var change, not a re-crawl.
     "ALTER TABLE articles ADD COLUMN source_image_url TEXT DEFAULT ''",
+    # ── multi-source synthesis ────────────────────────────────────────────────
+    # A JSON array of the article ids whose facts this row was written from —
+    # itself included. THIS IS THE ATTRIBUTION TRAIL. A synthesised body is not
+    # traceable to any one publisher by inspection, so the only record of what it
+    # was built out of is this column; without it the pass would be unauditable.
+    # '' means the row was never synthesised (a single-source rewrite, or older).
+    "ALTER TABLE articles ADD COLUMN synthesis_sources TEXT DEFAULT ''",
 ]
 
 # Publisher image URLs are never persisted again (P0.1). Existing rows are scrubbed
@@ -1541,27 +1574,16 @@ async def run_ai_batch(conn):
 # Lightweight, embedding-free clustering: articles that share ≥2 significant
 # terms (proper-noun-ish tokens + AI topic tags) within a rolling window are
 # linked into one chronological thread. No external model needed at runtime.
-_STORY_STOPWORDS = set((
-    "the a an and or of to in on for with at by from as is are was were be been "
-    "being this that these those it its he she they them his her their our your "
-    "you we new say says said report reports amid over after before into out up "
-    "down off than then when what which who whom how why will would can could may "
-    "might must not no yes but if about first also more most other some such only "
-    "just very now get got make made back two one year years day days week weeks"
-).split())
+# Kept as thin aliases onto synthesis.py, which now owns both the stopword list
+# and the term extraction. Two copies of this table is how the story threads and
+# the synthesis clustering would have started disagreeing about what a
+# significant word is.
+_STORY_STOPWORDS = synthesis.STOPWORDS
 
 
 def _story_terms(headline: str, tags: list) -> set:
     """Significant terms used to decide if two articles belong to one thread."""
-    terms = set()
-    for t in (tags or []):
-        t = str(t).strip().lower()
-        if len(t) >= 3:
-            terms.add(t)
-    for w in re.findall(r"[a-z0-9]{4,}", (headline or "").lower()):
-        if w not in _STORY_STOPWORDS:
-            terms.add(w)
-    return terms
+    return synthesis.significant_terms(headline, tags)
 
 
 def link_stories(conn, window_days: int = STORY_WINDOW_DAYS) -> int:
@@ -1580,59 +1602,24 @@ def link_stories(conn, window_days: int = STORY_WINDOW_DAYS) -> int:
     if len(rows) < 2:
         return 0
 
-    # Threads stay within one category — a story only links articles of the
-    # same pillar, so unrelated stories that merely share a word don't merge.
-    pillar_of = {r["id"]: r["pillar_id"] for r in rows}
+    # ONE CLUSTERING IMPLEMENTATION, IN synthesis.py. This function and the
+    # synthesis pass ask the same question — "are these articles about one
+    # event?" — and answered it with two copies of the same union-find, which is
+    # how the two would have drifted apart the first time either was tuned.
+    #
+    # The only difference is the window: threads span STORY_WINDOW_DAYS (already
+    # applied by the SELECT above, so no pairwise limit is needed here), while
+    # synthesis insists on 24 hours because it is merging rows, not linking them.
+    groups = synthesis.cluster_articles(rows, window_hours=None,
+                                        same_pillar=True)
 
-    inverted: dict[str, list] = {}
-    for r in rows:
-        try:
-            tags = json.loads(r["micro_tags"] or "[]")
-        except Exception:
-            tags = []
-        for term in _story_terms(r["headline"], tags):
-            inverted.setdefault(term, []).append(r["id"])
-
-    parent = {r["id"]: r["id"] for r in rows}
-
-    def find(x):
-        while parent[x] != x:
-            parent[x] = parent[parent[x]]
-            x = parent[x]
-        return x
-
-    def union(a, b):
-        ra, rb = find(a), find(b)
-        if ra != rb:
-            parent[max(ra, rb)] = min(ra, rb)
-
-    # Count shared terms per co-occurring pair; skip terms that are too generic
-    # (would merge everything) or unique (link nothing).
-    pair_shared: dict[tuple, int] = {}
-    for term, ids in inverted.items():
-        if len(ids) < 2 or len(ids) > 40:
-            continue
-        for i in range(len(ids)):
-            for j in range(i + 1, len(ids)):
-                a, b = ids[i], ids[j]
-                key = (a, b) if a < b else (b, a)
-                pair_shared[key] = pair_shared.get(key, 0) + 1
-
-    MIN_SHARED = 2
-    for (a, b), shared in pair_shared.items():
-        if shared >= MIN_SHARED and pillar_of.get(a) == pillar_of.get(b):
-            union(a, b)
-
-    roots = {r["id"]: find(r["id"]) for r in rows}
-    sizes: dict[int, int] = {}
-    for root in roots.values():
-        sizes[root] = sizes.get(root, 0) + 1
-
-    for aid, root in roots.items():
-        sid = root if sizes[root] >= 2 else 0
-        conn.execute("UPDATE articles SET story_id=? WHERE id=?", (sid, aid))
+    for group in groups:
+        sid = min(r["id"] for r in group) if len(group) >= 2 else 0
+        for r in group:
+            conn.execute("UPDATE articles SET story_id=? WHERE id=?", (sid, r["id"]))
     conn.commit()
 
+    sizes = {i: len(g) for i, g in enumerate(groups)}
     threads = sum(1 for s in sizes.values() if s >= 2)
     log.info("[STORY] linked %d articles into %d threads", len(rows), threads)
     return threads
@@ -1770,7 +1757,8 @@ def compute_feed_for_user(user_id: int):
 
 
 # ─── FASTAPI APP ─────────────────────────────────────────────────────────────
-from fastapi import FastAPI, HTTPException, Header, Query, Request
+from fastapi import FastAPI, HTTPException, Header, Query, Request, Response
+from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -2139,13 +2127,31 @@ async def get_topics():
 
 @app.get("/feed")
 async def get_feed(
+    request: Request,
     page: int = Query(1, ge=1),
     limit: int = Query(20, le=50),
     scope: str = Query(""),
     pillar: int = Query(0),
     authorization: str = Header(""),
 ):
+    page_html = _spa_or_none(request)
+    if page_html is not None:
+        return page_html
     uid = get_current_user(authorization)
+    # ONE CACHE ENTRY PER (READER, PAGE, FILTER), FOR FEED_CACHE_SECONDS.
+    #
+    # The feed is the endpoint a crowd hits, and every uncached call is a query
+    # plus a personalised-score recompute. At a 30-second TTL a thousand readers
+    # a minute cost two of those instead of a thousand — and the cap matters more
+    # than the freshness, because ingest runs on a schedule measured in minutes.
+    #
+    # uid is part of the key because the personalised branch below returns a
+    # different feed per reader; anonymous readers all resolve to uid 1 and
+    # therefore share one entry, which is the case that carries the load.
+    ck = f"feed:{uid}:{page}:{limit}:{scope}:{pillar}"
+    hit = await cache.get(ck)
+    if hit is not None:
+        return hit
     offset = (page - 1) * limit
     conn = get_db()
     prefs = conn.execute("SELECT COUNT(*) as c FROM user_preferences WHERE user_id=?", (uid,)).fetchone()
@@ -2177,12 +2183,46 @@ async def get_feed(
 
     conn.close()
     has_more = len(rows) > limit
-    return {"articles": [article_row_to_dict(r) for r in rows[:limit]],
-            "page": page, "has_more": has_more, "has_preferences": has_p}
+    payload = {"articles": [article_row_to_dict(r) for r in rows[:limit]],
+               "page": page, "has_more": has_more, "has_preferences": has_p}
+    await cache.set(ck, payload, FEED_CACHE_SECONDS)
+    return payload
+
+
+# ─── One path, two audiences ─────────────────────────────────────────────────
+# /explore, /feed, /search and /bookmarks are BOTH an API endpoint and a screen
+# the reader can link to. The API came first and the shipped frontend calls it
+# by that exact path, so the route cannot simply be moved to /api/… without
+# breaking every client already in the wild.
+#
+# Content negotiation settles it, and it is not a trick: a browser NAVIGATING to
+# a URL sends `Accept: text/html,...`, while fetch() sends `*/*` unless told
+# otherwise (see api() in index.html, which sets only Content-Type). So the same
+# path can answer a person with the app and a program with JSON, and neither has
+# to know about the other.
+#
+# The check is deliberately strict — it requires text/html to be listed
+# EXPLICITLY. A wildcard `*/*` must never match, or every fetch() in the app
+# would start receiving 560KB of HTML where it expected an object.
+def _wants_html(request) -> bool:
+    try:
+        accept = (request.headers.get("accept") or "")
+    except Exception:                                             # noqa: BLE001
+        return False
+    return "text/html" in accept.lower()
+
+
+def _spa_or_none(request):
+    """The app's HTML when a browser asked for a page, else None."""
+    if not _wants_html(request):
+        return None
+    html = _index_html()
+    return HTMLResponse(html) if html else None
 
 
 @app.get("/explore")
 async def explore_feed(
+    request: Request,
     category: str = Query(""),
     pillar: int = Query(0),
     scope: str = Query(""),
@@ -2190,6 +2230,9 @@ async def explore_feed(
     limit: int = Query(30, le=100),
     authorization: str = Header(""),
 ):
+    page_html = _spa_or_none(request)
+    if page_html is not None:
+        return page_html
     get_current_user(authorization)
     offset = (page - 1) * limit
     conn = get_db()
@@ -2511,6 +2554,30 @@ async def patterns(
     offset: int = Query(0, ge=0),
     max_age_hours: int = Query(None, ge=0, le=8760),
 ):
+    """Cached front door. The resolution logic lives in _patterns_uncached.
+
+    The cache key carries every parameter that changes the answer, and the
+    payload is stored ONLY when it came from a real source — an `unavailable`
+    result is a transient database condition, and caching it would keep serving
+    "unavailable" for a minute after Postgres came back.
+    """
+    ck = f"patterns:{type}:{limit}:{offset}:{max_age_hours}"
+    hit = await cache.get(ck)
+    if hit is not None:
+        return hit
+    payload = await _patterns_uncached(type=type, limit=limit, offset=offset,
+                                       max_age_hours=max_age_hours)
+    if payload.get("source") != "unavailable":
+        await cache.set(ck, payload, PATTERNS_CACHE_SECONDS)
+    return payload
+
+
+async def _patterns_uncached(
+    type: str = "",
+    limit: int = 30,
+    offset: int = 0,
+    max_age_hours: int = None,
+):
     """Sherr-I pattern output — the Intelligence Engine's insights, most significant
     first. Optional ?type=emergence|temporal_correlation.
 
@@ -2638,7 +2705,11 @@ async def interact(req: InteractReq, authorization: str = Header("")):
 
 
 @app.get("/search")
-async def search(q: str = Query(""), authorization: str = Header("")):
+async def search(request: Request, q: str = Query(""),
+                 authorization: str = Header("")):
+    page_html = _spa_or_none(request)
+    if page_html is not None:
+        return page_html
     get_current_user(authorization)
     if not q:
         return {"articles": []}
@@ -2734,7 +2805,10 @@ async def update_topics(req: UpdateTopicsReq, authorization: str = Header("")):
 
 
 @app.get("/bookmarks")
-async def get_bookmarks(authorization: str = Header("")):
+async def get_bookmarks(request: Request, authorization: str = Header("")):
+    page_html = _spa_or_none(request)
+    if page_html is not None:
+        return page_html
     uid = get_current_user(authorization)
     conn = get_db()
     rows = conn.execute("""
@@ -3351,6 +3425,211 @@ def body_progress() -> dict:
     return p
 
 
+# ─── MULTI-SOURCE SYNTHESIS ──────────────────────────────────────────────────
+# The rewrite's unit of work is an EVENT, not an article.
+#
+# The single-article rewrite was asked to do something impossible: turn one
+# 200-character publisher blurb into an original 60-80 word body. There is no
+# such transformation. Everything it added beyond the blurb was invented and
+# everything it kept was a paraphrase — which is exactly what the originality
+# gate then rejected, run after run, while the rows stayed on the placeholder.
+#
+# Several blurbs about the same event are a solvable problem. The facts they
+# agree on are corroborated, their union is more than any one of them, and
+# writing a new briefing from that union is ordinary journalism.
+#
+# ONE CLUSTER PRODUCES ONE ARTICLE. The synthesised body is written to a single
+# primary row and the other members are marked status='merged', which takes them
+# out of every served query. That is deliberate: writing the same body to five
+# rows would put five identical cards in the feed. The merge is one column and
+# is reversible in one statement —
+#     UPDATE articles SET status='published' WHERE status='merged';
+# — and SYNTHESIS_MERGE=0 turns it off entirely, leaving the extra members as
+# they were (still on their placeholder, still candidates next tick).
+SYNTHESIS_ENABLED = os.getenv("SYNTHESIS_ENABLED", "1") not in ("0", "false", "no")
+SYNTHESIS_MERGE = os.getenv("SYNTHESIS_MERGE", "1") not in ("0", "false", "no")
+SYNTHESIS_WINDOW_HOURS = int(os.getenv("SYNTHESIS_WINDOW_HOURS", "24"))
+# How many clusters one call of _synthesise_clusters may spend requests on. The
+# drain gives it BODY_DRAIN_RPM articles a tick, and clustering only ever turns
+# N articles into N or fewer requests, so this is a second belt on top of that.
+SYNTHESIS_MAX_CLUSTERS = int(os.getenv("SYNTHESIS_MAX_CLUSTERS", "6"))
+
+# Per-run counters, reset by _reprocess_bodies_sync; folded into its totals.
+_synth_run: dict = {"clusters": 0, "written": 0, "merged": 0, "failed": 0,
+                    "sources_used": 0, "reasons": {}}
+# Cumulative, survives across ticks so /admin/body-audit can show the pass working.
+_synth_stats: dict = {"clusters_seen": 0, "clusters_synthesised": 0,
+                      "articles_written": 0, "articles_merged": 0,
+                      "sources_used": 0, "failed": 0, "last_at": None,
+                      "size_histogram": {}, "last_error": None}
+
+
+def _synth_reason(reason: str) -> None:
+    _synth_run["reasons"][reason] = _synth_run["reasons"].get(reason, 0) + 1
+
+
+def _synth_primary(group: list):
+    """Which row of the cluster carries the synthesised article.
+
+    The one with the MOST surviving publisher text. That row's source_summary is
+    what the originality gate compares the new body against, so picking the
+    thinnest member would be picking the weakest reference — and it is also the
+    row most likely to already carry a usable image and a real headline.
+    """
+    def weight(r):
+        return len(body_state.source_material(
+            r["headline"], r["summary_60"], r["source_summary"], "") or "")
+    return max(group, key=weight)
+
+
+def _synthesise_clusters(conn, work: list) -> list:
+    """Synthesise every multi-source cluster in `work`; return the leftover rows.
+
+    The returned list is what the single-article rewrite still has to handle:
+    singletons, and the members of any cluster whose synthesis failed. Rows that
+    were written or merged are gone from it — never both paths for one row.
+    """
+    if not SYNTHESIS_ENABLED or len(work) < synthesis.MIN_CLUSTER:
+        return work
+
+    clusters = synthesis.cluster_events(
+        work, window_hours=SYNTHESIS_WINDOW_HOURS)
+    hist = synthesis.size_histogram(clusters)
+    for size, n in hist.items():
+        key = str(size)
+        _synth_stats["size_histogram"][key] = \
+            _synth_stats["size_histogram"].get(key, 0) + n
+    _synth_stats["clusters_seen"] += len(clusters)
+
+    leftover: list = []
+    spent = 0
+    for group in clusters:
+        if len(group) < synthesis.MIN_CLUSTER or spent >= SYNTHESIS_MAX_CLUSTERS:
+            leftover.extend(group)
+            continue
+        # Widest coverage first inside the cluster, then capped: past five
+        # sources the next one costs tokens and adds no new fact.
+        group = sorted(group, key=lambda r: -len(
+            body_state.source_material(r["headline"], r["summary_60"],
+                                       r["source_summary"], "") or ""))
+        group = group[:synthesis.MAX_CLUSTER]
+        spent += 1
+        _synth_run["clusters"] += 1
+
+        prompt = synthesis.build_prompt(
+            group,
+            source_text_of=lambda r: body_state.source_material(
+                r["headline"], r["summary_60"], r["source_summary"], ""))
+        try:
+            result = asyncio.run(ai_processor.synthesize(
+                prompt, n_sources=len(group)))
+        except Exception as e:                                    # noqa: BLE001
+            _synth_stats["last_error"] = f"{type(e).__name__}: {e}"
+            _body_err("synthesis", e)
+            leftover.extend(group)
+            continue
+        if not result:
+            # The provider refused, or the answer failed validation. The rows are
+            # NOT flagged — they go back to the single-article path this tick and
+            # remain candidates after it, which is the honest state for a row
+            # whose body is still a placeholder.
+            _synth_reason("synthesis_call_failed")
+            leftover.extend(group)
+            continue
+
+        primary = _synth_primary(group)
+        source_ref = body_state.source_material(
+            primary["headline"], primary["summary_60"],
+            primary["source_summary"], "")
+        body_ok, body_m = originality_check(result["content"], source_ref)
+        if not body_ok:
+            # A synthesis that reproduces its widest source is a paraphrase of
+            # that source, whatever else went into it. Never written.
+            _synth_reason("rejected_body_overlap")
+            _synth_run["failed"] += 1
+            leftover.extend(group)
+            continue
+
+        src_head = primary["source_headline"] or primary["headline"] or ""
+        head_ok, head_m = headline_is_original(result["headline"], src_head)
+        headline = (result["headline"].strip() if head_ok else "") \
+            or (primary["headline"] or "").strip() \
+            or (primary["source_headline"] or "").strip()
+
+        # SORTED, not in the order the cluster happened to be ranked in. This
+        # is an audit trail; a stable order is what makes two runs comparable.
+        member_ids = sorted(r["id"] for r in group)
+        try:
+            existing = json.loads(primary["micro_tags"] or "[]")
+        except Exception:                                         # noqa: BLE001
+            existing = []
+        tags = list(dict.fromkeys(
+            [t for t in result["extracted_entities"] if t] + existing))[:10]
+
+        audit = {
+            "pass": "multi_source_synthesis",
+            "n_sources": len(group),
+            "source_article_ids": member_ids,
+            "primary_source_attribution": result["primary_source_attribution"],
+            "body": body_m, "headline": head_m,
+            "headline_replaced": bool(head_ok),
+            "at": datetime.now(timezone.utc).isoformat(),
+        }
+        try:
+            # summary_60 is a SHORTER CUT OF THE SAME SYNTHESISED TEXT, never
+            # the publisher's. The card on Home renders this field and nothing
+            # else, so leaving it on the placeholder while the body was rewritten
+            # is what made a "fixed" row still look broken.
+            summary = text_utils.truncate_to_words(result["content"], 45)
+            conn.execute("""
+                UPDATE articles SET headline=?, summary_60=?, full_body=?,
+                    micro_tags=?, synthesis_sources=?, ai_processed=1,
+                    reprocessed=1, status='published', originality_json=?,
+                    originality_overlap=?, originality_run=?,
+                    originality_checked_at=?
+                WHERE id=?""", (
+                headline, summary, result["content"], json.dumps(tags),
+                json.dumps(member_ids), json.dumps(audit),
+                body_m["overlap"], body_m["longest_run"],
+                datetime.now(timezone.utc).isoformat(), primary["id"]))
+            _synth_run["written"] += 1
+            _synth_run["sources_used"] += len(group)
+            _body_last["written"] += 1
+
+            if SYNTHESIS_MERGE:
+                for r in group:
+                    if r["id"] == primary["id"]:
+                        continue
+                    # story_id points at the row that now carries the story, so
+                    # the merge is traceable from BOTH directions: forward via
+                    # synthesis_sources, backward via this.
+                    conn.execute(
+                        "UPDATE articles SET status='merged', reprocessed=1, "
+                        "story_id=? WHERE id=?", (primary["id"], r["id"]))
+                    _synth_run["merged"] += 1
+            else:
+                leftover.extend([r for r in group if r["id"] != primary["id"]])
+        except Exception as e:                                    # noqa: BLE001
+            _body_err("synthesis_write", e, primary["id"])
+            _synth_run["failed"] += 1
+            leftover.extend(group)
+            continue
+
+    conn.commit()
+    _synth_stats["clusters_synthesised"] += _synth_run["clusters"]
+    _synth_stats["articles_written"] += _synth_run["written"]
+    _synth_stats["articles_merged"] += _synth_run["merged"]
+    _synth_stats["sources_used"] += _synth_run["sources_used"]
+    _synth_stats["failed"] += _synth_run["failed"]
+    _synth_stats["last_at"] = datetime.now(timezone.utc).isoformat()
+    if _synth_run["clusters"]:
+        log.info("[SYNTH] %d cluster(s) -> %d article(s) written from %d source(s), "
+                 "%d merged, %d failed", _synth_run["clusters"],
+                 _synth_run["written"], _synth_run["sources_used"],
+                 _synth_run["merged"], _synth_run["failed"])
+    return leftover
+
+
 def _reprocess_bodies_sync(limit: int, batch: int,
                            concurrency: int = None) -> dict:
     """Rewrite published rows whose body is a stub, the publisher's text, or empty.
@@ -3363,6 +3642,8 @@ def _reprocess_bodies_sync(limit: int, batch: int,
     """
     for k in ("fetched", "candidates", "sent_to_ai", "ai_returned", "written", "failed"):
         _body_last[k] = 0
+    _synth_run.update({"clusters": 0, "written": 0, "merged": 0, "failed": 0,
+                       "sources_used": 0, "reasons": {}})
     _body_last.update({"ran_at": datetime.now(timezone.utc).isoformat(),
                        "last_error": None, "errors": []})
     log.info("[BODY] run starting: limit=%d batch=%d", limit, batch)
@@ -3455,6 +3736,25 @@ def _reprocess_bodies_sync(limit: int, batch: int,
                 conn.commit()
                 continue
 
+            _body_last["candidates"] += len(work)
+
+            # ── MULTI-SOURCE SYNTHESIS RUNS FIRST ────────────────────────────
+            # One 200-character blurb cannot become an original article. Three
+            # can. So before anything is sent one-at-a-time, the candidates are
+            # clustered into events and every cluster of MIN_CLUSTER or more is
+            # written from its sources together.
+            #
+            # This SPENDS FEWER REQUESTS, not more: a cluster of five is one
+            # provider call where the single-article path was five. The tick's
+            # rate ceiling is therefore still honoured by construction.
+            work = _synthesise_clusters(conn, work)
+            if not work:
+                conn.commit()
+                _body_progress.update({"done": done, "failed": failed,
+                                       "skipped": skipped,
+                                       "attempted": len(attempted)})
+                continue
+
             batch_input = [{
                 "title": r["headline"],
                 "body": body_state.source_material(
@@ -3462,7 +3762,6 @@ def _reprocess_bodies_sync(limit: int, batch: int,
                 "fallback_category": PILLARS.get(r["pillar_id"], PILLARS[3])["slug"],
             } for r in work]
 
-            _body_last["candidates"] += len(work)
             _body_last["sent_to_ai"] += len(batch_input)
             log.info("[BODY] sent %d article(s) to AI (providers: %s)",
                      len(batch_input), _provider_summary())
@@ -3551,6 +3850,8 @@ def _reprocess_bodies_sync(limit: int, batch: int,
             _body_progress.update({"done": done, "failed": failed,
                                    "skipped": skipped, "attempted": len(attempted)})
 
+        done += _synth_run["written"]
+        failed += _synth_run["failed"]
         after = body_state.audit(conn)
         _body_last["failed"] = failed
         log.info("[BODY] run finished: fetched=%d candidates=%d sent=%d returned=%d "
@@ -3887,6 +4188,24 @@ async def admin_body_audit(x_admin_token: str = Header(""), token: str = Query("
         drain["backoff_reason"] or "running")
     out["drain"] = drain
 
+    # ── the synthesis pass ────────────────────────────────────────────────────
+    # articles_per_request is the number that says whether clustering is
+    # earning its place: 1.0 means every "cluster" was a singleton and the pass
+    # is doing nothing, and anything above it is articles cleared per unit of
+    # the free tier's scarce resource.
+    synth = dict(_synth_stats)
+    synth["enabled"] = SYNTHESIS_ENABLED
+    synth["merge_duplicates"] = SYNTHESIS_MERGE
+    synth["window_hours"] = SYNTHESIS_WINDOW_HOURS
+    synth["min_cluster"] = synthesis.MIN_CLUSTER
+    synth["max_cluster"] = synthesis.MAX_CLUSTER
+    synth["last_run"] = dict(_synth_run)
+    calls = synth["clusters_synthesised"] or 0
+    synth["articles_per_request"] = (
+        round((synth["articles_written"] + synth["articles_merged"]) / calls, 2)
+        if calls else None)
+    out["synthesis"] = synth
+
     out["last_run"] = dict(_body_last)
     out["running"] = bool(_body_progress.get("running"))
     try:
@@ -4140,6 +4459,10 @@ async def sherr_i_analogs(
     they are what keeps the surface from being blank while the library is still
     accumulating.
     """
+    ck = f"analogs:{symbol}:{horizon}:{limit}:{watchlist}"
+    hit = await cache.get(ck)
+    if hit is not None:
+        return hit
     pool = await get_spie_pool()
     if pool is None:
         return {"analogs": [], "observations": [], "source": "unavailable",
@@ -4157,8 +4480,12 @@ async def sherr_i_analogs(
             out = await cards.build(conn, symbols=syms or None,
                                     horizon=horizon or None, limit=limit,
                                     use_watchlist=bool(watchlist))
-        return {**out, "source": "engine",
-                "generated_at": datetime.now(timezone.utc).isoformat()}
+        payload = {**out, "source": "engine",
+                   "generated_at": datetime.now(timezone.utc).isoformat()}
+        # Only a real engine answer is cached. `unavailable` below is a
+        # reachability problem, and a cached one would outlive the outage.
+        await cache.set(ck, payload, ANALOG_CACHE_SECONDS)
+        return payload
     except Exception as e:
         log.warning("[ANALOG] cards failed: %s", e)
         # Never a partial or invented payload — say it is unavailable.
@@ -4561,6 +4888,301 @@ async def search_topics(q: str = Query("")):
         for t, pid in MICRO_TOPICS.items() if q_lower in t.lower()
     ]
     return {"topics": matches[:40]}
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# THE SPA, ITS REAL URLs, AND WHAT CRAWLERS SEE
+# ═════════════════════════════════════════════════════════════════════════════
+#
+# EVERYTHING IN THIS SECTION IS REGISTERED LAST, AND THAT IS LOAD-BEARING.
+# FastAPI matches routes in registration order, so the catch-all at the bottom
+# of this file would swallow /feed, /patterns, /api/* and /admin/* if it were
+# declared any earlier. Nothing may be added below it. The catch-all itself also
+# refuses the API prefixes outright rather than relying only on ordering — one
+# belt for today's routes, one for the route somebody adds in the wrong place.
+#
+# Until now the app had exactly one URL. Every screen lived behind a JS view
+# switch, so a reader could not link to an article, a crawler saw one page, and
+# a shared link opened the home feed instead of the story it promised. The fix
+# is in two halves and both are needed:
+#
+#   * the SERVER answers /explore, /bytes, /bytes/<slug> and /profile with the
+#     same index.html, so those URLs exist on a cold load and on a refresh;
+#   * the CLIENT reads the path on boot and pushes real paths as you navigate
+#     (see routeFromPath / navTo in index.html).
+#
+# For /bytes/<slug> the server does one thing the client cannot: it writes the
+# og: and twitter: tags INTO the head before the HTML leaves the process.
+# Link unfurlers — WhatsApp, Slack, iMessage, X — do not run JavaScript. Tags
+# added by the SPA after load are invisible to every one of them, which is why a
+# shared story has always previewed as the generic app card.
+
+SITE_URL = (os.getenv("SITE_URL") or "https://sherr.app").rstrip("/")
+_INDEX_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "index.html")
+# Served straight off disk by the catch-all. An explicit allowlist, not a
+# directory walk: this process sits in the repo root, and a path-joining static
+# handler here would happily serve main.py or a .env to anyone who asked.
+_STATIC_FILES = {
+    "manifest.json": "application/manifest+json",
+    "sw.js": "application/javascript",
+    "firebase-messaging-sw.js": "application/javascript",
+    "logo.jpg": "image/jpeg",
+    "tiger-logo.png": "image/png",
+    "app-icon.png": "image/png",
+}
+# The paths the SPA owns. A request for one of these gets index.html and the
+# client router takes it from there.
+_SPA_ROUTES = ("", "explore", "bytes", "profile", "feed", "spie",
+               "bookmarks", "notifs", "search")
+
+_index_cache: dict = {"mtime": 0.0, "html": ""}
+
+
+def _index_html() -> str:
+    """index.html off disk, re-read only when it changes.
+
+    It is ~560KB, so re-reading it per request would be the most expensive thing
+    this process does. Keyed on mtime so a deploy picks up the new file without
+    a restart.
+    """
+    try:
+        mtime = os.path.getmtime(_INDEX_PATH)
+    except OSError:
+        return ""
+    if mtime != _index_cache["mtime"] or not _index_cache["html"]:
+        try:
+            with open(_INDEX_PATH, encoding="utf-8") as fh:
+                _index_cache["html"] = fh.read()
+            _index_cache["mtime"] = mtime
+        except OSError as e:
+            log.warning("[SPA] index.html unreadable: %s", e)
+            return ""
+    return _index_cache["html"]
+
+
+_SLUG_STRIP = re.compile(r"[^a-z0-9]+")
+
+
+def article_slug(article_id: int, headline: str) -> str:
+    """`some-headline-words-1234` — human-readable, and the id is the truth.
+
+    THE ID IS THE LAST SEGMENT AND IT IS WHAT RESOLVES THE ROW. The words in
+    front are for readers and search engines only, so an article whose headline
+    is rewritten by a later synthesis pass keeps working on every link already
+    shared — the slug changes, the id does not, and the old URL still lands on
+    the right story.
+    """
+    words = _SLUG_STRIP.sub("-", (headline or "").lower()).strip("-")
+    words = "-".join(words.split("-")[:9])
+    return f"{words}-{article_id}" if words else str(article_id)
+
+
+def article_id_from_slug(slug: str):
+    """The trailing id, or None. Never raises on a junk slug."""
+    m = re.search(r"(\d+)$", (slug or "").strip())
+    return int(m.group(1)) if m else None
+
+
+def _esc(text: str) -> str:
+    return (str(text or "")
+            .replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+            .replace('"', "&quot;"))
+
+
+def _og_block(*, title: str, description: str, url: str,
+              image: str = "", published: str = "") -> str:
+    """The tags an unfurler reads. Inserted right after <head>.
+
+    AFTER <head>, NOT BEFORE </head>. index.html already carries a generic
+    og:title for the app itself; a scraper takes the FIRST value it finds for a
+    property, so these have to come first to win. Appending at the end would
+    produce a page whose per-article tags are silently ignored.
+    """
+    tags = [
+        f'<title>{_esc(title)}</title>',
+        f'<meta name="description" content="{_esc(description)}">',
+        f'<link rel="canonical" href="{_esc(url)}">',
+        '<meta property="og:type" content="article">',
+        f'<meta property="og:title" content="{_esc(title)}">',
+        f'<meta property="og:description" content="{_esc(description)}">',
+        f'<meta property="og:url" content="{_esc(url)}">',
+        '<meta property="og:site_name" content="Sherr">',
+        '<meta name="twitter:card" content="summary_large_image">',
+        f'<meta name="twitter:title" content="{_esc(title)}">',
+        f'<meta name="twitter:description" content="{_esc(description)}">',
+    ]
+    if image:
+        tags.append(f'<meta property="og:image" content="{_esc(image)}">')
+        tags.append(f'<meta name="twitter:image" content="{_esc(image)}">')
+    if published:
+        tags.append(
+            f'<meta property="article:published_time" content="{_esc(published)}">')
+    return "\n".join(tags)
+
+
+def _fetch_article_meta(article_id: int):
+    """(headline, summary, image, published_at, slug) or None. Sync — executor it."""
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT id, headline, summary_60, full_body, image_url, published_at "
+            "FROM articles WHERE id=? AND status='published'", (article_id,)
+        ).fetchone()
+    except Exception as e:                                        # noqa: BLE001
+        log.warning("[SPA] og lookup failed for %s: %s", article_id, e)
+        return None
+    finally:
+        conn.close()
+    if not row:
+        return None
+    summary = (row["summary_60"] or row["full_body"] or "").strip()
+    return {
+        "id": row["id"],
+        "headline": (row["headline"] or "").strip(),
+        "summary": summary[:280],
+        "image": (row["image_url"] or "").strip(),
+        "published": str(row["published_at"] or ""),
+        "slug": article_slug(row["id"], row["headline"] or ""),
+    }
+
+
+async def _render_byte_page(slug: str) -> str:
+    """index.html with this article's og: tags in the head.
+
+    The RENDERED HEAD is what gets cached, not the whole 560KB page: the head is
+    a few hundred bytes, the body is identical for every article, and caching the
+    concatenation would put a copy of index.html in Redis per article.
+    """
+    html = _index_html()
+    if not html:
+        raise HTTPException(status_code=500, detail="index.html not deployed")
+
+    article_id = article_id_from_slug(slug)
+    head = None
+    if article_id:
+        ck = f"og:{article_id}"
+        head = await cache.get(ck)
+        if head is None:
+            meta = await asyncio.get_event_loop().run_in_executor(
+                None, _fetch_article_meta, article_id)
+            if meta:
+                head = _og_block(
+                    title=f"{meta['headline']} — Sherr",
+                    description=meta["summary"],
+                    url=f"{SITE_URL}/bytes/{meta['slug']}",
+                    image=meta["image"], published=meta["published"])
+                await cache.set(ck, head, OG_CACHE_SECONDS)
+    if head is None:
+        # An unknown or deleted id still returns the app rather than a 404 —
+        # the reader gets the feed instead of a dead end — but it must NOT
+        # inherit another article's preview, so it gets the generic one.
+        head = _og_block(title="Sherr — the news, synthesised",
+                         description="Original briefings written from multiple "
+                                     "sources, and the patterns underneath them.",
+                         url=f"{SITE_URL}/bytes")
+    return html.replace("<head>", "<head>\n" + head, 1)
+
+
+@app.get("/robots.txt", include_in_schema=False)
+async def robots_txt():
+    """Crawlable app, uncrawlable everything else.
+
+    /admin is disallowed as a courtesy signal only — it is enforced by
+    ADMIN_TOKEN, and a robots rule is never a security control.
+    """
+    body = ("User-agent: *\n"
+            "Allow: /\n"
+            "Disallow: /admin\n"
+            "Disallow: /api/\n"
+            "Disallow: /feed\n"
+            f"\nSitemap: {SITE_URL}/sitemap.xml\n")
+    return Response(content=body, media_type="text/plain")
+
+
+@app.get("/sitemap.xml", include_in_schema=False)
+async def sitemap_xml(limit: int = Query(2000, ge=1, le=5000)):
+    """The static screens plus the most recent published articles.
+
+    Capped and newest-first because a sitemap is a crawl budget, not an archive:
+    pointing a crawler at 25,000 URLs of which most are months old spends that
+    budget on the least valuable half of the corpus.
+    """
+    ck = f"sitemap:{limit}"
+    hit = await cache.get(ck)
+    if hit is not None:
+        return Response(content=hit, media_type="application/xml")
+
+    def _rows():
+        conn = get_db()
+        try:
+            return conn.execute(
+                "SELECT id, headline, published_at FROM articles "
+                "WHERE status='published' AND ai_processed=1 "
+                "ORDER BY published_at DESC, id DESC LIMIT ?", (limit,)
+            ).fetchall()
+        except Exception as e:                                    # noqa: BLE001
+            log.warning("[SPA] sitemap query failed: %s", e)
+            return []
+        finally:
+            conn.close()
+
+    rows = await asyncio.get_event_loop().run_in_executor(None, _rows)
+    parts = ['<?xml version="1.0" encoding="UTF-8"?>',
+             '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
+    for path in ("/", "/explore", "/bytes", "/profile"):
+        parts.append(f"<url><loc>{SITE_URL}{path}</loc>"
+                     f"<changefreq>hourly</changefreq></url>")
+    for r in rows:
+        slug = article_slug(r["id"], r["headline"] or "")
+        lastmod = str(r["published_at"] or "")[:10]
+        mod = f"<lastmod>{_esc(lastmod)}</lastmod>" if len(lastmod) == 10 else ""
+        parts.append(f"<url><loc>{SITE_URL}/bytes/{_esc(slug)}</loc>{mod}</url>")
+    parts.append("</urlset>")
+    xml = "\n".join(parts)
+    await cache.set(ck, xml, OG_CACHE_SECONDS)
+    return Response(content=xml, media_type="application/xml")
+
+
+@app.get("/bytes/{slug}", include_in_schema=False)
+async def byte_page(slug: str):
+    return HTMLResponse(await _render_byte_page(slug))
+
+
+@app.get("/", include_in_schema=False)
+async def spa_root():
+    html = _index_html()
+    if not html:
+        # The API is deployed without the frontend (the split Render/Firebase
+        # setup). Say so instead of returning a blank 200 that looks like a
+        # broken app.
+        return {"service": "sherr-api", "docs": "/docs", "health": "/health"}
+    return HTMLResponse(html)
+
+
+# ── THE CATCH-ALL. NOTHING MAY BE REGISTERED BELOW THIS. ─────────────────────
+@app.get("/{full_path:path}", include_in_schema=False)
+async def spa_catchall(full_path: str):
+    """Serve the SPA for app paths; 404 anything that is meant to be an API.
+
+    The explicit prefix refusal is the important half. Without it, a typo'd
+    /api/does-not-exist would return 200 and 560KB of HTML, and every client
+    error handler would report a JSON parse failure instead of a 404 — the kind
+    of misdirection that costs an afternoon.
+    """
+    first = (full_path or "").strip("/").split("/")[0]
+    if first in ("api", "admin", "docs", "openapi.json", "redoc"):
+        raise HTTPException(status_code=404, detail="Not Found")
+    if full_path in _STATIC_FILES:
+        path = os.path.join(os.path.dirname(_INDEX_PATH), full_path)
+        if os.path.isfile(path):
+            with open(path, "rb") as fh:
+                return Response(content=fh.read(),
+                                media_type=_STATIC_FILES[full_path])
+    if first in _SPA_ROUTES:
+        html = _index_html()
+        if html:
+            return HTMLResponse(html)
+    raise HTTPException(status_code=404, detail="Not Found")
 
 
 # ─── RUN ─────────────────────────────────────────────────────────────────────
