@@ -781,7 +781,15 @@ header {
   border-radius: 10px; padding: 8px 0; font: 700 .74rem/1 var(--f); cursor: pointer; }
 .dp-range button.on { background: var(--accent); color: #fff; }
 .dp-h { font: 700 .6rem/1 var(--f); letter-spacing: .15em; text-transform: uppercase;
-  color: var(--t3); margin: 22px 18px 8px; }
+  color: var(--t3); margin: 22px 18px 8px; display: flex; align-items: center;
+  justify-content: space-between; gap: 10px; }
+.dp-sort { background: var(--surface-2); color: var(--t2); border: 0;
+  border-radius: 999px; padding: 6px 11px; font: 700 .62rem/1 var(--f);
+  letter-spacing: .04em; text-transform: none; cursor: pointer; white-space: nowrap; }
+.dp-empty { margin: 10px 16px; padding: 18px; border-radius: 16px;
+  background: var(--surface-2); color: var(--t2); font: 600 .82rem/1.5 var(--f); }
+.dp-empty small { display: block; margin-top: 6px; color: var(--t3);
+  font-weight: 500; }
 .dp-row { display: flex; align-items: center; gap: 12px; padding: 12px 18px;
   border-top: 1px solid var(--line, rgba(255,255,255,.06)); cursor: pointer; }
 .dp-row .n { min-width: 0; flex: 1 }
@@ -3508,6 +3516,50 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   /* Home's own feed reads as one column at this width — it is a list of
      stories, and two columns of headlines is a portal, not a feed. */
   #home-feed, #home-headlines, #bm-feed, #notifs-feed { max-width: var(--col); }
+
+  /* ── Inner pages: the drill-downs, which the first pass missed ───────────
+     .xp-page and .xp-sheet are `position: fixed` with `inset: 0` / `left: 0`,
+     so they are OUTSIDE the .view they visually belong to and inherited none
+     of its layout: on a 1440px screen every Explore drill-down — Mandi prices,
+     each Matrix tile, real estate, sports — painted its 16px-gutter mobile
+     column across the whole width, under the sidebar.
+     Fixed positioning is right for them (they must escape the view's scroll),
+     so the layout is applied here rather than by restructuring the DOM: the
+     sidebar keeps its strip, and the page content sits in the same reading
+     column every other screen uses. */
+  .xp-page {
+    left: var(--sbw);
+    padding-left:  max(24px, calc((100vw - var(--sbw) - var(--col)) / 2));
+    padding-right: max(24px, calc((100vw - var(--sbw) - var(--col)) / 2));
+    padding-bottom: 48px;
+  }
+  /* The slide-in came from off the right edge of a phone. Across a desktop
+     viewport that is a long horizontal sweep, so it becomes a short rise. */
+  .xp-page { transform: translateY(14px); opacity: 0; }
+  .xp-page.on { transform: none; opacity: 1; }
+
+  /* A bottom sheet pinned to the full width of a 1440px screen is a banner.
+     Centred on the reading column it stays a sheet. */
+  .xp-sheet {
+    left: calc(var(--sbw) + max(24px, (100vw - var(--sbw) - var(--col)) / 2));
+    right: max(24px, calc((100vw - var(--sbw) - var(--col)) / 2));
+    border-radius: 26px 26px 0 0; max-height: 82vh;
+  }
+
+  /* body.dp-open hides the app header so a full-screen page's own back arrow
+     is reachable (see the rule it overrides). That is a phone constraint — the
+     header does not overlap anything here, and hiding it on desktop removed
+     the only thing anchoring the page to the app. */
+  body.dp-open > header, body.dp-open #hdr { display: flex !important; }
+  .xp-page, .xp-sheet { top: var(--hh); }
+  .xp-sheet { top: auto; }
+
+  /* The drill-down's own internals were written against a 360px column: a
+     3-across stat strip and a 132px chart read as cramped at 720px. */
+  .dp-chart svg { height: 200px; }
+  .dp-hero-v { font-size: 2.9rem; }
+  .dp-chart, .dp-stat, .dp-range, .dp-chips { margin-left: 0; margin-right: 0; }
+  .dp-hero, .dp-row { padding-left: 2px; padding-right: 2px; }
 }
 
 /* Wider still: a third Bytes column, and nothing else changes. */
@@ -9617,20 +9669,22 @@ const MOCK_EXPLORE = {
     oil:    { label:'Crude Oil',   sub:'WTI',       value:'$86.66',    pct:2.56,
               series:[81.2,82.4,81.9,83.6,84.8,84.1,85.9,86.66], tint:'m-oil' },
   },
-  mandi: { state:'Telangana', items:[
-    { commodity:'Onion', market:'Bowenpally', modal_price:2450, min_price:1800, max_price:2900, arrival_date:'21/08/2026' },
-    { commodity:'Tomato', market:'Gaddiannaram', modal_price:1620, min_price:1200, max_price:2100, arrival_date:'21/08/2026' },
-    { commodity:'Potato', market:'Malakpet', modal_price:1980, min_price:1600, max_price:2350, arrival_date:'21/08/2026' },
-  ]},
+  // MOCK_EXPLORE.mandi WAS HERE AND IT WAS A SECOND SOURCE FOR THE SAME NUMBER.
+  // It held three commodities at prices that disagreed with mandiDetail below —
+  // Onion 2450 vs 2400, Tomato at Gaddiannaram 1620 vs Gudimalkapur 1180,
+  // Potato 1980 vs 1850 — so the "Take a look" card and the Mandi prices page
+  // showed different figures for the same commodity on the same screen. It also
+  // carried a hardcoded arrival_date of 21/08/2026, which rendered as a
+  // precise-looking provenance line under a number nobody could source.
+  // mandiDetail is the superset (6 commodities, 3 states, weekly change and
+  // history) and is now the only table. Everything reads it through mandiRows().
   // No free circle-rate API exists in India. Same shape a real one would return,
   // so a fetcher can replace this object without the renderer changing.
-  realty: { items:[
-    { city:'Hyderabad', rate:6800, cls:'Residential', duty:6.0 },
-    { city:'Bengaluru', rate:9400, cls:'Residential', duty:5.6 },
-    { city:'Mumbai',    rate:19500, cls:'Residential', duty:6.0 },
-    { city:'Delhi',     rate:12600, cls:'Residential', duty:6.0 },
-    { city:'Pune',      rate:8100, cls:'Residential', duty:6.0 },
-  ]},
+  // MOCK_EXPLORE.realty / realtyDetail WERE HERE — fabricated circle rates,
+  // year-on-year changes, locality prices and history charts for a number no
+  // free API and no DB table provides. Fabricated rates are worse than an empty
+  // state because a reader cannot tell them from real ones. dpRealty is now
+  // corpus-backed; nothing here invents a rupee-per-sq-ft figure any more.
   bulletin: [
     { k:'Markets', t:'Nifty ends lower for a third session' },
     { k:'Policy',  t:'GST council meets on rate rationalisation' },
@@ -9659,28 +9713,11 @@ const MOCK_EXPLORE = {
   // endpoint later is a change of source and nothing else. Numbers are plausible
   // Indian market values, not round placeholders — a chart of 100,110,120 reads
   // as fake at a glance and teaches the reader to distrust the real ones.
-  stocksDetail: {
-    indices: {
-      NIFTY:  { name:'NIFTY 50',  value:24231.85, chg:-134.20, pct:-0.55 },
-      SENSEX: { name:'BSE SENSEX', value:77528.10, chg:-483.60, pct:-0.62 },
-      BANKNIFTY:{ name:'Bank Nifty', value:51204.35, chg:-211.05, pct:-0.41 },
-    },
-    // Close series per range. Real indices wander; these do too.
-    series: {
-      '1D': [24366,24352,24318,24290,24305,24274,24248,24231],
-      '1W': [24410,24388,24301,24355,24280,24262,24231],
-      '1M': [23980,24105,24220,24188,24402,24515,24468,24330,24276,24231],
-      '1Y': [21850,22190,22040,22610,23180,23020,23540,23990,24310,24180,24402,24231],
-    },
-    gainers: [
-      ['ADANIPORTS','Adani Ports','1,462.30',3.84],['TATAMOTORS','Tata Motors','1,024.55',2.91],
-      ['SBIN','State Bank of India','842.10',2.44],['HINDALCO','Hindalco','688.75',2.02],
-      ['ONGC','ONGC','284.60',1.78]],
-    losers: [
-      ['INFY','Infosys','1,846.90',-2.68],['TCS','TCS','4,102.35',-2.21],
-      ['HDFCBANK','HDFC Bank','1,678.40',-1.94],['WIPRO','Wipro','562.15',-1.60],
-      ['TECHM','Tech Mahindra','1,690.05',-1.35]],
-  },
+  // stocksDetail WAS HERE — a full set of index values, per-range series, and
+  // gainers/losers, all hardcoded. It was the last standalone copy of numbers
+  // the ticker already carries. The Stocks drill-down (dpMarket) now reads the
+  // live quote and the market_ticks history/table endpoints, so there is
+  // nothing here to disagree with them.
   mandiDetail: {
     states: { Telangana:['Hyderabad','Warangal','Karimnagar'],
               Maharashtra:['Pune','Nashik','Nagpur'],
@@ -9704,29 +9741,6 @@ const MOCK_EXPLORE = {
       { commodity:'Ragi',     market:'Bengaluru',    state:'Karnataka',   district:'Bengaluru',
         modal:3480, min:3100, max:3900, chg:0.6,
         history:[3410,3428,3445,3432,3461,3470,3480] },
-    ],
-  },
-  realtyDetail: {
-    cities: [
-      { city:'Mumbai',    rate:29400, chg:6.2, yield_:3.1, cls:'Metro',
-        history:[24800,25600,26400,27100,27900,28600,29400],
-        localities:[['Powai',26800,5.4],['Andheri West',31200,6.8],['Chembur',24500,4.9],
-                    ['Bandra West',48600,7.1],['Thane West',15900,8.2]] },
-      { city:'Bengaluru', rate:12800, chg:9.4, yield_:3.8, cls:'Metro',
-        history:[10200,10700,11150,11600,12050,12420,12800],
-        localities:[['Whitefield',9800,11.2],['Indiranagar',18400,7.6],['Sarjapur Road',10600,12.4],
-                    ['Hebbal',11200,8.9],['JP Nagar',13100,6.3]] },
-      { city:'Hyderabad', rate:8900,  chg:7.8, yield_:4.2, cls:'Metro',
-        history:[7300,7620,7940,8210,8480,8690,8900],
-        localities:[['Gachibowli',9600,10.8],['Kondapur',8800,9.1],['Kokapet',11400,13.6],
-                    ['Miyapur',6200,7.4],['Banjara Hills',17800,5.2]] },
-      { city:'Pune',      rate:9600,  chg:5.1, yield_:3.9, cls:'Tier 1',
-        history:[8400,8680,8910,9080,9290,9450,9600],
-        localities:[['Hinjewadi',8200,9.6],['Kharadi',10400,8.3],['Baner',11100,6.9],
-                    ['Wakad',8900,7.7],['Kothrud',12200,5.4]] },
-      { city:'Jaipur',    rate:4700,  chg:4.4, yield_:4.6, cls:'Tier 2',
-        history:[4050,4180,4290,4380,4490,4600,4700],
-        localities:[['Vaishali Nagar',5100,5.8],['Mansarovar',4400,4.9],['Jagatpura',4200,6.4]] },
     ],
   },
 
@@ -9893,56 +9907,48 @@ function renderXpTal() {
   const el = document.getElementById('xp-tal');
   if (!el) return;
   if (xpTal === 'Mandi') {
-    const md = ((xpSnap && xpSnap.mandi && xpSnap.mandi.data) || MOCK_EXPLORE.mandi);
-    const it = md.items || [];
+    // Same rows the Mandi prices page renders — see mandiRows(). This card
+    // used to read a second table and printed a different price for the same
+    // commodity two screens apart.
+    const it = mandiRows();
+    if (!it.length) {
+      el.innerHTML = `<div class="xp-band"><div class="exp-cat-load">No mandi
+        prices yet — Agmarknet has returned nothing for this state.</div></div>`;
+      return;
+    }
     const [a,b,c] = [it[0]||{}, it[1]||{}, it[2]||{}];
-    const sm = (x,i) => `<div class="sm" onclick="dpMandi(${JSON.stringify(x.commodity||'')})">
+    const sm = (x) => `<div class="sm" onclick="dpMandi(${JSON.stringify(x.commodity||'')})">
         <div class="k">${bEsc(x.commodity||'—')}</div>
-        <div class="v">₹${xpNum(x.modal_price||0)}</div>
+        <div class="v">₹${xpNum(x.modal||0)}</div>
         <div class="s">${bEsc(x.market||'')}</div></div>`;
     el.innerHTML = `<div class="xp-band"><div class="xp-tal">
       <div class="big" onclick="dpMandi()">
-        <div class="k">${bEsc(a.commodity||'Onion')} · ${bEsc(md.state||'')}</div>
-        <div class="v">₹${xpNum(a.modal_price||0)}</div>
-        <div class="s">₹${xpNum(a.min_price||0)}–₹${xpNum(a.max_price||0)} per quintal<br>
-          ${bEsc(a.market||'')} · ${bEsc(a.arrival_date||'')}</div>
-      </div>${sm(b,1)}${sm(c,2)}</div></div>`;
+        <div class="k">${bEsc(a.commodity||'')} · ${bEsc(a.state||mandiState())}</div>
+        <div class="v">₹${xpNum(a.modal||0)}</div>
+        <div class="s">₹${xpNum(a.min||0)}–₹${xpNum(a.max||0)} per quintal<br>
+          ${bEsc(mandiSourceLine(a))}</div>
+      </div>${sm(b)}${sm(c)}</div></div>`;
   } else if (xpTal === 'Real Estate') {
-    const rt = MOCK_EXPLORE.realty.items;
-    const sm = (x,i) => `<div class="sm" onclick="dpRealty(${JSON.stringify(x.city||'')})">
-        <div class="k">${bEsc(x.city)}</div>
-        <div class="v">₹${xpNum(x.rate)}</div>
-        <div class="s">per sq ft · ${x.duty}% duty</div></div>`;
+    // No circle-rate feed exists, so the card is an honest entry point to the
+    // corpus page, not three tiles of invented per-sq-ft rates.
     el.innerHTML = `<div class="xp-band"><div class="xp-tal">
-      <div class="big" onclick="dpRealty()">
-        <div class="k">${bEsc(rt[0].city)} · circle rate</div>
-        <div class="v">₹${xpNum(rt[0].rate)}</div>
-        <div class="s">guidance value per sq ft<br>${bEsc(rt[0].cls)} · stamp duty ${rt[0].duty}%</div>
-      </div>${sm(rt[1],1)}${sm(rt[2],2)}</div></div>`;
-  } else if (xpTal === 'Sports') {
-    const f = MOCK_EXPLORE.sports.fixtures;
-    const sm = (x) => `<div class="sm" onclick="xpSportsPage()">
-        <div class="k">${bEsc((x.t||'').split(' · ')[0])}</div>
-        <div class="v" style="font-size:1rem">${bEsc(x.r||'')}</div>
-        <div class="s">${bEsc(x.rs||'')}</div></div>`;
+      <div class="big" onclick="dpRealty()" style="flex:1">
+        <div class="k">Real estate</div>
+        <div class="v" style="font-size:1.2rem">Latest coverage</div>
+        <div class="s">Property and housing from the corpus — circle rates not connected</div>
+      </div></div></div>`;
+  } else if (xpTal === 'Sports' || xpTal === 'Movies') {
+    // No scores or listings feed exists, so the card is an honest entry point
+    // to the corpus page rather than three tiles of fabricated scores.
+    const isS = xpTal === 'Sports';
     el.innerHTML = `<div class="xp-band"><div class="xp-tal">
-      <div class="big" onclick="xpSportsPage()">
-        <div class="k">${bEsc(f[0].t)}</div>
-        <div class="v" style="font-size:1.5rem">${bEsc(f[0].r)}</div>
-        <div class="s">${bEsc(f[0].s)}<br>${bEsc(f[0].rs)}</div>
-      </div>${sm(f[1])}${sm(f[2])}</div></div>`;
-  } else {
-    const m = MOCK_EXPLORE.movies.releases;
-    const sm = (x) => `<div class="sm" onclick="xpMoviesPage()">
-        <div class="k">${bEsc((x.t||'').split(' —')[0])}</div>
-        <div class="v" style="font-size:1rem">${bEsc(x.r||'')}</div>
-        <div class="s">${bEsc((x.s||'').split(' · ')[0])}</div></div>`;
-    el.innerHTML = `<div class="xp-band"><div class="xp-tal">
-      <div class="big" onclick="xpMoviesPage()">
-        <div class="k">${bEsc(m[0].t)}</div>
-        <div class="v" style="font-size:1.4rem">${bEsc(m[0].r)}</div>
-        <div class="s">${bEsc(m[0].s)}<br>${bEsc(m[0].rs)}</div>
-      </div>${sm(m[1])}${sm(m[2])}</div></div>`;
+      <div class="big" onclick="${isS ? 'dpSports()' : 'dpMovies()'}" style="flex:1">
+        <div class="k">${isS ? 'Sports' : 'Movies &amp; shows'}</div>
+        <div class="v" style="font-size:1.2rem">Latest coverage</div>
+        <div class="s">${isS
+          ? 'Cricket, football and more from the corpus — live scores not connected'
+          : 'Films and series from the corpus — showtimes not connected'}</div>
+      </div></div></div>`;
   }
 }
 function xpSetTal(t){ xpTal = t; renderXpTal(); }
@@ -10080,49 +10086,113 @@ function xpSoon(what){ if (typeof toast === 'function') toast(what + ' — comin
 // ── Part C — expanded pages ─────────────────────────────────────────────────
 // One shell, one renderer. Each page is a segmented filter over a list of
 // instruments; the instruments themselves open the sheet below.
-const XP_PAGES = {
-  stocks: { title:'Stocks', segs:['Indices','Global','Movers'], entity:'STOCKS',
-    rows:{ Indices:[['NIFTY','NIFTY 50','24,231.85',-0.55],['SENSEX','BSE','77,528.10',-0.62],
-                    ['BANKNIFTY','Bank Nifty','51,204.35',-0.41],['INDIAVIX','India VIX','13.82',3.10]],
-           Global:[['NASDAQ','US','17,942.60',0.42],['SP500','US','5,431.20',0.28],
-                   ['NIKKEI','Japan','38,102.55',-0.18],['DAX','Germany','18,455.90',0.34],
-                   ['FTSE','UK','8,204.10',0.12],['HANGSENG','Hong Kong','17,880.44',-0.72]],
-           Movers:[['VIX','Volatility','14.62',5.20],['DOW','US','39,112.20',0.19]] } },
-  crypto: { title:'Crypto', segs:['Coins'], entity:'CRYPTO', gauge:true,
-    rows:{ Coins:[['BITCOIN','BTC','$71,908',11.79],['ETHEREUM','ETH','$3,844',6.21],
-                  ['SOLANA','SOL','$184.30',9.04],['RIPPLE','XRP','$0.62',-1.42],
-                  ['BINANCECOIN','BNB','$604.10',2.18]] } },
-  forex:  { title:'Forex', segs:['Pairs'], entity:'FOREX',
-    rows:{ Pairs:[['USD/INR','Dollar','95.69',0.31],['EUR/USD','Euro','1.0842',-0.12],
-                  ['GBP/INR','Pound','121.40',0.22],['EUR/INR','Euro','103.75',0.18],
-                  ['JPY/INR','Yen','0.618',-0.34],['AED/INR','Dirham','26.05',0.29],
-                  ['USD/CNY','Yuan','7.212',0.08],['DXY','Dollar index','104.62',0.15]] } },
-  bonds:  { title:'Bond Yields', segs:['Government','Corporate'], entity:'BONDS',
-    rows:{ Government:[['US10Y','US 10 year','4.65%',0.26],['US3M','US 3 month','5.22%',-0.04],
-                       ['IN10Y','India 10 year','7.02%',0.11]],
-           Corporate:[['AAA 5Y','Corporate AAA','7.62%',0.08],['AA 5Y','Corporate AA','8.15%',0.12]] } },
-  metals: { title:'Metals', segs:['Precious','Industrial'], entity:'METALS',
-    rows:{ Precious:[['GOLD','24k per 10g','₹1,43,789',5.80],['SILVER','per kg','₹2,134',4.90],
-                     ['PLATINUM','per oz','$982.40',1.22],['PALLADIUM','per oz','$1,024.60',-0.84]],
-           Industrial:[['COPPER','per lb','$4.28',2.14]] } },
-  oil:    { title:'Crude Oil', segs:['Brent','WTI','Natural Gas','Fuel rates'], entity:'OIL',
-    rows:{ Brent:[['BRENT','ICE Brent','$90.14',2.31]],
-           WTI:[['WTI','NYMEX WTI','$86.66',2.56]],
-           'Natural Gas':[['NATGAS','Henry Hub','$2.84',-1.10]],
-           'Fuel rates':[['PETROL','Mumbai','₹104.21',0],['DIESEL','Mumbai','₹92.15',0],
-                         ['PETROL DEL','Delhi','₹94.72',0],['DIESEL DEL','Delhi','₹87.62',0]] } },
+// ── THE INSTRUMENT CATALOGUE — ONE TABLE, NO PRICES ────────────────────────
+// XP_PAGES WAS HERE AND IT WAS THE THIRD COPY OF EVERY MARKET NUMBER.
+//
+// NIFTY appeared as '24,231.85' in XP_PAGES.stocks.rows.Indices, again in
+// MOCK_EXPLORE.matrix.stocks.value, and again in
+// MOCK_EXPLORE.stocksDetail.indices.NIFTY — three hardcoded answers to one
+// question, exactly the shape of the mandi bug. Gold, Bitcoin, USD/INR and WTI
+// each had two.
+//
+// So this table carries NO PRICES AT ALL. It says what exists and how to label
+// it; every number is fetched — /markets for the live quote, /markets/table and
+// /markets/history for the stored closes in market_ticks. A price that is not
+// available renders as an em dash and the section says why. There is nothing
+// left here that could disagree with the ticker.
+//
+// `group` is the asset class in markets.SYMBOLS, so the server and the client
+// agree on the symbol universe without either restating it.
+const MARKETS = {
+  stocks: { title:'Stocks',      tile:'Stocks',      sub:'NIFTY 50', tint:'m-stk',
+            entity:'STOCKS', group:'stocks', lead:'NIFTY', fmt:'inr0',
+            names:{ NIFTY:'NIFTY 50', SENSEX:'BSE Sensex', BANKNIFTY:'Bank Nifty',
+                    INDIAVIX:'India VIX', NASDAQ:'Nasdaq Composite',
+                    SP500:'S&P 500', DOW:'Dow Jones', FTSE:'FTSE 100',
+                    NIKKEI:'Nikkei 225', DAX:'DAX', CAC40:'CAC 40',
+                    HANGSENG:'Hang Seng', ASX200:'ASX 200', BOVESPA:'Bovespa',
+                    STI:'Straits Times', KOSPI:'KOSPI', SHANGHAI:'SSE Composite',
+                    VIX:'CBOE VIX' } },
+  crypto: { title:'Crypto',      tile:'Crypto',      sub:'Bitcoin',  tint:'m-cry',
+            entity:'CRYPTO', group:'crypto', lead:'BTC', fmt:'usd2', gauge:true,
+            names:{ BTC:'Bitcoin', ETH:'Ethereum', SOL:'Solana', XRP:'XRP',
+                    BNB:'BNB', ADA:'Cardano', DOGE:'Dogecoin', AVAX:'Avalanche',
+                    LINK:'Chainlink', POL:'Polygon', LTC:'Litecoin' } },
+  forex:  { title:'Forex',       tile:'Forex',       sub:'USD/INR',  tint:'m-fx',
+            entity:'FOREX', group:'forex', lead:'USDINR', fmt:'num4',
+            names:{ USDINR:'US Dollar / Rupee', EURINR:'Euro / Rupee',
+                    GBPINR:'Pound / Rupee', JPYINR:'Yen / Rupee',
+                    EURUSD:'Euro / Dollar', GBPUSD:'Pound / Dollar',
+                    DXY:'Dollar index' } },
+  bonds:  { title:'Bond Yields', tile:'Bond Yields', sub:'US 10Y',   tint:'m-bnd',
+            entity:'BONDS', group:'rates', lead:'US10Y', fmt:'pct2',
+            names:{ US10Y:'US 10 year', US5Y:'US 5 year', US30Y:'US 30 year',
+                    US13W:'US 13 week' } },
+  metals: { title:'Metals',      tile:'Metals',      sub:'Gold',     tint:'m-met',
+            entity:'METALS', group:'metals', lead:'GOLD', fmt:'usd2',
+            names:{ GOLD:'Gold', SILVER:'Silver', PLATINUM:'Platinum',
+                    PALLADIUM:'Palladium', COPPER:'Copper' } },
+  oil:    { title:'Crude Oil',   tile:'Crude Oil',   sub:'WTI',      tint:'m-oil',
+            entity:'OIL', group:'commodities', lead:'WTI_CRUDE', fmt:'usd2',
+            names:{ WTI_CRUDE:'WTI crude', BRENT:'Brent crude',
+                    NATGAS:'Natural gas (Henry Hub)', COPPER:'Copper',
+                    WHEAT:'Wheat', COCOA:'Cocoa' } },
 };
+
+// One formatter per unit, used by the tile, the hero and the list alike. Two
+// call sites formatting the same number their own way is how ₹1,43,789 and
+// $1,437.89 end up on one screen.
+function mktFmt(kind, n) {
+  if (n == null || !isFinite(n)) return '—';
+  if (kind === 'inr0')  return '₹' + xpNum(Math.round(n));
+  if (kind === 'usd2')  return '$' + Number(n).toLocaleString('en-US',
+                          { minimumFractionDigits:2, maximumFractionDigits:2 });
+  if (kind === 'pct2')  return Number(n).toFixed(2) + '%';
+  if (kind === 'num4')  return Number(n).toFixed(n < 10 ? 4 : 2);
+  return xpNum(n);
+}
+function mktName(key, sym) {
+  return (MARKETS[key] && MARKETS[key].names[sym]) || sym;
+}
+
+// The live quote for one label, out of the /explore/snapshot markets payload.
+// One lookup, so the tile and the drill-down hero cannot pick different rows.
+function mktLive(key, sym) {
+  const snap = (xpSnap && xpSnap.markets && xpSnap.markets.data) || {};
+  const cfg = MARKETS[key] || {};
+  // /markets nests by asset class; /markets/<class> returns the class flat.
+  // Accept both, because both shapes reach this code depending on which
+  // endpoint filled the snapshot.
+  const bucket = snap[cfg.group] || snap;
+  const hit = bucket && (bucket[sym] || bucket[String(sym).toLowerCase()]);
+  if (hit && hit.price != null) {
+    return { price: Number(hit.price),
+             pct: hit.change_pct != null ? Number(hit.change_pct) : null };
+  }
+  if (cfg.group === 'crypto') {
+    const coins = (xpSnap && xpSnap.crypto && xpSnap.crypto.data
+                   && xpSnap.crypto.data.coins) || {};
+    const c = coins[sym] || coins[String(sym).toLowerCase()];
+    if (c && c.price != null) {
+      return { price: Number(c.price),
+               pct: c.change_pct != null ? Number(c.change_pct) : null };
+    }
+  }
+  return null;
+}
+
 let xpPageKey = null, xpSeg = null;
 
+// xpOpenPage used to render XP_PAGES' hardcoded rows. Every one of its six keys
+// is a Matrix of Markets tile, and all six now open a real page instead, so
+// this is a thin forward for the callers that still name it (the module grid
+// and the sidebar shortcuts).
 function xpOpenPage(key) {
-  const cfg = XP_PAGES[key];
-  if (!cfg) return;
-  xpPageKey = key; xpSeg = cfg.segs[0];
-  xpRenderPage();
-  const pg = document.getElementById('xp-page');
-  pg.classList.add('on'); pg.scrollTop = 0;
-  document.body.classList.add('dp-open');
-  document.body.style.overflow = 'hidden';
+  if (MARKETS[key]) return dpMarket(key);
+  if (key === 'mandi')  return dpMandi();
+  if (key === 'realty') return dpRealty();
+  if (key === 'sports') return dpSports();
+  if (key === 'movies') return dpMovies();
 }
 function xpClosePage() {
   const pg = document.getElementById('xp-page');
@@ -10131,61 +10201,43 @@ function xpClosePage() {
   document.body.style.overflow = '';
   xpPageKey = null;
 }
-function xpSetSeg(s) { xpSeg = s; xpRenderPage(); }
-
-function xpRenderPage() {
-  const pg = document.getElementById('xp-page');
-  const cfg = XP_PAGES[xpPageKey];
-  if (!pg || !cfg) return;
-  const rows = cfg.rows[xpSeg] || [];
-  // A deterministic wiggle around the value: enough for the row to read as a
-  // trend, and honest about being decorative rather than a real history.
-  const series = (pct, seed) => Array.from({length:8},(_,i)=>
-    100 + pct*i*0.6 + Math.sin((i+seed)*1.7)*Math.abs(pct||1)*0.8);
-  let gauge = '';
-  if (cfg.gauge) {
-    const fg = (xpSnap && xpSnap.crypto && xpSnap.crypto.data && xpSnap.crypto.data.fear_greed) || {value:62,label:'Greed'};
-    const dom = (xpSnap && xpSnap.crypto && xpSnap.crypto.data && xpSnap.crypto.data.btc_dominance) || 54.2;
-    const col = fg.value>=60?'#0E9F6E':fg.value>=40?'#F5A524':'#E02D3C';
-    gauge = `<div class="xp-gauge">
-      <div class="g" style="color:${col}">${fg.value}</div>
-      <div class="l">Fear &amp; Greed · ${bEsc(fg.label||'')}</div>
-      <div class="bar"><i style="left:${Math.max(3,Math.min(97,fg.value))}%"></i></div>
-      <div class="l" style="margin-top:14px">BTC dominance ${dom}%</div></div>`;
-  }
-  pg.innerHTML = `
-    <div class="xp-pg-hd">
-      <button onclick="xpClosePage()" aria-label="Back"><span aria-hidden="true">&#8592;</span></button>
-      <h2>${bEsc(cfg.title)}</h2></div>
-    ${cfg.segs.length>1 ? `<div class="xp-seg">${cfg.segs.map(s=>
-      `<button class="xp-sg ${s===xpSeg?'on':''}" onclick="xpSetSeg(${JSON.stringify(s)})">${bEsc(s)}</button>`).join('')}</div>` : ''}
-    ${gauge}
-    <div class="xp-list">${rows.map(([sym,sub,val,pct],i)=>`
-      <div class="xp-li" onclick="openEntity('${sym}','${cfg.entity}')">
-        <div class="n"><b>${bEsc(sym)}</b><small>${bEsc(sub)}</small></div>
-        <div class="sp">${xpSpark(series(pct,i), pct>=0, 24, 62)}</div>
-        <div class="p"><b>${bEsc(val)}</b>
-          <small class="${pct>=0?'xp-up':'xp-dn'}">${pct?((pct>=0?'▲ ':'▼ ')+Math.abs(pct).toFixed(2)+'%'):'—'}</small></div>
-      </div>`).join('')}</div>`;
-}
+function xpSetSeg(s) { xpSeg = s; if (typeof xpListRedraw === 'function') xpListRedraw(); }
 
 // ── entity bottom sheet ─────────────────────────────────────────────────────
 // Built fully for Gold, NIFTY and Bitcoin; anything else still opens rather
 // than being an inert tap on a row that invites one.
+// XP_ENTITIES CARRIED PRICES TOO — the fourth copy of Gold, NIFTY and Bitcoin.
+// It now holds only the things a price cannot be derived from: the search query
+// that finds this instrument's coverage, and the neighbours worth a tap. The
+// value, the change and the series come from the same places the tile and the
+// drill-down use, so a sheet can never contradict the row that opened it.
 const XP_ENTITIES = {
-  GOLD:    { title:'Gold', q:'gold bullion', why:'METALS', value:'₹1,43,789', pct:5.80,
-             related:['Silver','Crude','USD/INR'],
-             series:[135900,137200,136800,139500,141100,140600,142900,143789] },
-  NIFTY:   { title:'NIFTY 50', q:'nifty sensex market', why:'STOCKS', value:'24,231.85', pct:-0.55,
-             related:['Sensex','Bank Nifty','India VIX'],
-             series:[24480,24402,24455,24310,24288,24350,24261,24231] },
-  BITCOIN: { title:'Bitcoin', q:'bitcoin crypto', why:'CRYPTO', value:'$71,908', pct:11.79,
-             related:['Ethereum','Solana','BTC dominance'],
-             series:[63100,64800,66200,65400,68100,69900,70400,71908] },
+  GOLD:    { title:'Gold',      q:'gold bullion',        why:'METALS',
+             key:'metals', sym:'GOLD',
+             related:['Silver','Crude','USD/INR'] },
+  NIFTY:   { title:'NIFTY 50',  q:'nifty sensex market', why:'STOCKS',
+             key:'stocks', sym:'NIFTY',
+             related:['Sensex','Bank Nifty','India VIX'] },
+  BITCOIN: { title:'Bitcoin',   q:'bitcoin crypto',      why:'CRYPTO',
+             key:'crypto', sym:'BTC',
+             related:['Ethereum','Solana','BTC dominance'] },
 };
 async function openEntity(sym, group) {
-  const spec = XP_ENTITIES[sym] || { title: sym, q: sym, why: group || null,
-                                     related: [], value:'—', pct:null, series:[] };
+  const spec = XP_ENTITIES[sym] || { title: mktName(String(group||'').toLowerCase(), sym) || sym,
+                                     q: sym, why: group || null, related: [] };
+  // Resolve the number once, here, from the live snapshot. An em dash is the
+  // right answer when nothing is loaded — a stale hardcoded price is not.
+  const live = spec.key ? mktLive(spec.key, spec.sym) : null;
+  spec.value = live ? mktFmt((MARKETS[spec.key]||{}).fmt, live.price) : '—';
+  spec.pct = live ? live.pct : null;
+  spec.series = [];
+  if (spec.key && spec.sym) {
+    try {
+      const h = await api('/markets/history?symbol=' + encodeURIComponent(spec.sym)
+                          + '&days=60', { timeout: 6000 });
+      if (h && h.source === 'ticks') spec.series = (h.points||[]).map(pt => pt.price);
+    } catch (e) { spec.series = []; }
+  }
   const body = document.getElementById('xp-sheet-body');
   if (!body) return;
   body.innerHTML = `
@@ -10548,36 +10600,26 @@ function xpKvSheet(title, sub, hero, pairs, series) {
 
 // ── destinations ────────────────────────────────────────────────────────────
 function xpMandiSheet(i) {
-  const md = ((xpSnap && xpSnap.mandi && xpSnap.mandi.data) || MOCK_EXPLORE.mandi);
-  const x = (md.items || [])[i] || {};
-  // A 7-day trend the API does not return; shaped around the modal price so the
-  // sparkline reads as a trend rather than implying a history we hold.
-  const base = x.modal_price || 0;
-  const series = [0.94,0.97,0.95,1.01,0.99,1.03,1.0].map(k => base*k);
-  xpKvSheet(x.commodity || 'Commodity', (md.state||'') + ' · ' + (x.market||''),
+  const x = mandiRows()[i] || {};
+  // The real weekly history off the one table, not a curve shaped around the
+  // current price. The old version multiplied the modal price by a fixed set of
+  // ratios, which drew a confident-looking sparkline out of a single number.
+  const base = x.modal || 0;
+  xpKvSheet(x.commodity || 'Commodity',
+    [x.state, x.market].filter(Boolean).join(' · ') + (x.live ? '' : ' · indicative'),
     '₹' + xpNum(base),
     [['Modal price','₹'+xpNum(base)],
-     ['Range','₹'+xpNum(x.min_price||0)+'–₹'+xpNum(x.max_price||0)],
+     ['Range','₹'+xpNum(x.min||0)+'–₹'+xpNum(x.max||0)],
      ['Mandi', x.market||'—'],
-     ['Arrival date', x.arrival_date||'—'],
-     ['Unit','per quintal']], series);
+     ['District', x.district||'—'],
+     ['Arrival date', x.arrival_date || (x.live ? '—' : 'not published')],
+     ['Unit','per quintal']], x.history || null);
 }
-function xpRealtySheet(i) {
-  const x = MOCK_EXPLORE.realty.items[i] || {};
-  xpKvSheet(x.city || 'City', 'Circle rate · guidance value', '₹' + xpNum(x.rate||0),
-    [['Guidance rate','₹'+xpNum(x.rate||0)+' / sq ft'],
-     ['Classification', x.cls||'—'],
-     ['Stamp duty', (x.duty||0)+'%'],
-     ['Registration','1% of value'],
-     ['Source','State registration dept (indicative)']], null);
-}
-// The Matrix of Markets stocks tile gets the full Stocks page (value, ranges,
-// gainers, losers, real related news); the other five keep the instrument list
-// they already had, which is the right shape for a basket of pairs or metals.
-function xpMatrixTap(key) {
-  if (key === 'stocks') return dpStocks();
-  return xpOpenPage(key);
-}
+// EVERY Matrix of Markets tile opens the SAME real page now — dpMarket — not
+// just stocks. The other five used to open a hardcoded instrument list; they
+// get the header, the stored-history chart, the full sortable list and the
+// corpus-filtered news that stocks got.
+function xpMatrixTap(key) { return dpMarket(key); }
 
 // ── Detail pages ────────────────────────────────────────────────────────────
 // One shell (dpPage) so all three share the back header, and the same chrome as
@@ -10631,39 +10673,136 @@ const dpRows = rows => rows.map(r => `
   </div>`).join('');
 
 // ── STOCKS ─────────────────────────────────────────────────────────────────
-function dpStocks(sym) {
-  const M = MOCK_EXPLORE.stocksDetail;
-  dpState.stock = sym || dpState.stock || 'NIFTY';
-  dpState.range = dpState.range || '1D';
-  const idx = M.indices[dpState.stock] || M.indices.NIFTY;
-  // Live value from /markets when the cache has it; the mock only fills the gap.
-  const live = (xpSnap && xpSnap.markets && xpSnap.markets.data
-                && xpSnap.markets.data[dpState.stock]) || null;
-  const value = live && live.price ? live.price : idx.value;
-  const pct = live && live.change_pct != null ? live.change_pct : idx.pct;
-  const series = M.series[dpState.range] || M.series['1D'];
+// ── MARKETS: ONE PAGE FOR ALL SIX MATRIX TILES ─────────────────────────────
+// Header (live value + change), a real history chart off market_ticks, the
+// FULL sortable instrument list off market_ticks, and related news from the
+// corpus. Every number is fetched — nothing on this page is hardcoded, so it
+// cannot disagree with the tile that opened it.
+const DP_RANGES = { '1M':30, '3M':90, '6M':180, '1Y':365 };
 
-  dpPage(idx.name, `
+function dpMarket(key) {
+  const cfg = MARKETS[key];
+  if (!cfg) return;
+  dpState.mkt = key;
+  dpState.mktSym = dpState.mktSym && MARKETS[dpState.mktKeyFor === key ? key : null]
+                   ? dpState.mktSym : cfg.lead;
+  if (dpState.mktKeyFor !== key) { dpState.mktSym = cfg.lead; dpState.mktKeyFor = key; }
+  dpState.mktRange = dpState.mktRange || '3M';
+  dpState.mktSort = dpState.mktSort || 'chg';
+
+  const sym = dpState.mktSym;
+  const live = mktLive(key, sym);
+  const value = live ? mktFmt(cfg.fmt, live.price) : '—';
+  const pct = live ? live.pct : null;
+
+  dpPage(cfg.title, `
     <div class="dp-hero">
-      <div class="dp-hero-k">${bEsc(dpState.stock)}${live ? '' : ' · indicative'}</div>
-      <div class="dp-hero-v">${xpNum(Math.round(value))}</div>
-      <div class="dp-hero-c ${pct >= 0 ? 'dp-up' : 'dp-dn'}">${
-        (pct >= 0 ? '▲ ' : '▼ ') + Math.abs(pct).toFixed(2)}% today</div>
+      <div class="dp-hero-k">${bEsc(mktName(key, sym))}${live ? '' : ' · awaiting quote'}</div>
+      <div class="dp-hero-v">${bEsc(value)}</div>
+      ${pct != null
+        ? `<div class="dp-hero-c ${pct >= 0 ? 'dp-up' : 'dp-dn'}">${
+            (pct >= 0 ? '▲ ' : '▼ ') + Math.abs(pct).toFixed(2)}% today</div>`
+        : `<div class="dp-hero-c" style="color:var(--t3)">change unavailable</div>`}
     </div>
-    ${dpChart(series, pct >= 0)}
-    <div class="dp-range">${['1D','1W','1M','1Y'].map(r =>
-      `<button class="${r === dpState.range ? 'on' : ''}"
-        onclick="dpState.range=${JSON.stringify(r)};dpStocks()">${r}</button>`).join('')}</div>
-    <div class="dp-chips">${Object.keys(M.indices).map(k =>
-      `<button class="${k === dpState.stock ? 'on' : ''}"
-        onclick="dpStocks(${JSON.stringify(k)})">${bEsc(M.indices[k].name)}</button>`).join('')}</div>
-    <div class="dp-h">Top gainers</div>
-    ${dpRows(M.gainers.map(([sy, nm, v, c]) => ({ a:nm, b:sy, c:'₹'+v, d:c })))}
-    <div class="dp-h">Top losers</div>
-    ${dpRows(M.losers.map(([sy, nm, v, c]) => ({ a:nm, b:sy, c:'₹'+v, d:c })))}
+    <div id="dp-chart">${skel(150)}</div>
+    <div class="dp-range">${Object.keys(DP_RANGES).map(r =>
+      `<button class="${r === dpState.mktRange ? 'on' : ''}"
+        onclick="dpState.mktRange=${JSON.stringify(r)};dpMarket(${JSON.stringify(key)})">${r}</button>`).join('')}</div>
+    <div class="dp-h">All ${bEsc(cfg.title.toLowerCase())}
+      <button class="dp-sort" onclick="dpMktSort(${JSON.stringify(key)})">
+        <i class="fa-solid fa-arrow-down-short-wide"></i> ${bEsc(DP_SORT_LABEL[dpState.mktSort])}</button></div>
+    <div id="dp-table">${skelRows(5)}</div>
     <div class="dp-h">Related news</div>
     <div id="dp-news">${skelRows(3)}</div>`);
-  dpNews(idx.name + ' ' + dpState.stock, 'dp-news');
+
+  dpMktChart(key, sym);
+  dpMktTable(key);
+  dpNews(cfg.title + ' ' + mktName(key, sym), 'dp-news');
+}
+
+const DP_SORT_LABEL = { chg:'By change', az:'A–Z', price:'By price' };
+function dpMktSort(key) {
+  const order = ['chg', 'price', 'az'];
+  dpState.mktSort = order[(order.indexOf(dpState.mktSort) + 1) % order.length];
+  dpMktTable(key);
+  // Repaint the sort button label without redrawing the whole page.
+  const b = document.querySelector('.dp-sort');
+  if (b) b.innerHTML = '<i class="fa-solid fa-arrow-down-short-wide"></i> ' + DP_SORT_LABEL[dpState.mktSort];
+}
+
+// The history chart for the selected instrument, from market_ticks. A real
+// series or an honest empty state — never a curve shaped around one price.
+async function dpMktChart(key, sym) {
+  const host = document.getElementById('dp-chart');
+  if (!host) return;
+  let pts = [], src = 'unavailable';
+  try {
+    const d = await api('/markets/history?symbol=' + encodeURIComponent(sym) + '&days='
+                        + DP_RANGES[dpState.mktRange], { timeout: 8000 });
+    src = d.source; pts = (d.points || []).map(p => p.price);
+  } catch (e) { src = 'unavailable'; }
+  if (pts.length >= 2) {
+    host.innerHTML = dpChart(pts, pts[pts.length - 1] >= pts[0]);
+  } else {
+    host.innerHTML = `<div class="dp-empty">No price history stored for ${bEsc(mktName(key, sym))} yet.
+      <small>${src === 'unavailable'
+        ? 'The daily price store (market_ticks) is not reachable.'
+        : 'The backfill has not reached this symbol.'}</small></div>`;
+  }
+}
+
+// The FULL instrument list for this class, from market_ticks, sortable. Symbols
+// the store has no price for are shown too — labelled, not dropped — so the
+// list is the whole asset class, not just the priced part.
+async function dpMktTable(key) {
+  const host = document.getElementById('dp-table');
+  if (!host) return;
+  const cfg = MARKETS[key];
+  let rows = [], syms = [], src = 'unavailable';
+  try {
+    const d = await api('/markets/table?group=' + encodeURIComponent(cfg.group), { timeout: 8000 });
+    src = d.source; rows = d.rows || []; syms = d.symbols || [];
+  } catch (e) { src = 'unavailable'; }
+
+  if (src !== 'ticks') {
+    // No stored prices. The catalogue is still the honest answer to "what is in
+    // this class"; it just has no numbers, and the page says why rather than
+    // inventing them.
+    const names = (syms.length ? syms : Object.keys(cfg.names));
+    host.innerHTML = dpRows(names.map(sv => ({ a: mktName(key, sv), b: sv, c: '—' })))
+      + `<div class="dp-empty" style="margin-top:8px">Prices unavailable
+        <small>market_ticks is not reachable — showing the instrument list without prices.</small></div>`;
+    return;
+  }
+
+  const byPrice = {};
+  rows.forEach(r => { byPrice[r.symbol] = r; });
+  // Every catalogued symbol, priced ones and not, so the list is the full class.
+  let all = (syms.length ? syms : rows.map(r => r.symbol)).map(sv => ({
+    sym: sv, name: mktName(key, sv),
+    price: byPrice[sv] ? byPrice[sv].price : null,
+    chg: byPrice[sv] ? byPrice[sv].change : null,
+  }));
+  const sort = dpState.mktSort;
+  all.sort((x, y) => {
+    if (sort === 'az') return x.name.localeCompare(y.name);
+    const vx = sort === 'price' ? x.price : x.chg;
+    const vy = sort === 'price' ? y.price : y.chg;
+    if (vx == null) return 1; if (vy == null) return -1;
+    return vy - vx;
+  });
+  host.innerHTML = dpRows(all.map(r => ({
+    a: r.name, b: r.sym,
+    c: r.price != null ? mktFmt(cfg.fmt, r.price) : '—',
+    d: r.chg,
+    tap: `dpMktPick(${JSON.stringify(key)},${JSON.stringify(r.sym)})` })));
+}
+
+// Tapping a row in the list makes that instrument the page's subject — the
+// header and chart follow it — instead of opening an inert sheet.
+function dpMktPick(key, sym) {
+  dpState.mktSym = sym; dpState.mktKeyFor = key;
+  dpMarket(key);
 }
 
 // Related news comes from the REAL corpus — /search over the article store —
@@ -10694,21 +10833,47 @@ async function dpNews(q, hostId) {
   });
 }
 
+// ── MANDI: ONE TABLE, ONE MERGE, EVERY CONSUMER ────────────────────────────
+// There were two mandi tables and four readers split across them, so the same
+// commodity carried two prices on one screen. There is now one table
+// (MOCK_EXPLORE.mandiDetail) and one merge, and every caller goes through here.
+//
+// The live rows from /explore/snapshot win their own commodity where the API
+// returned them; the rest stay indicative and are LABELLED indicative, because
+// a number a reader cannot source must not look like one they can.
+function mandiRows() {
+  const live = (xpSnap && xpSnap.mandi && xpSnap.mandi.data
+                && xpSnap.mandi.data.items) || [];
+  const liveState = (xpSnap && xpSnap.mandi && xpSnap.mandi.data
+                     && xpSnap.mandi.data.state) || '';
+  return (MOCK_EXPLORE.mandiDetail.items || []).map(m => {
+    const hit = live.find(l => (l.commodity || '') === m.commodity);
+    if (!hit) return { ...m, arrival_date: '', live: false };
+    return { ...m,
+      modal: hit.modal_price || m.modal,
+      min:   hit.min_price   || m.min,
+      max:   hit.max_price   || m.max,
+      market: hit.market     || m.market,
+      state:  liveState      || m.state,
+      arrival_date: hit.arrival_date || '',
+      live: true };
+  });
+}
+function mandiState() {
+  return (xpSnap && xpSnap.mandi && xpSnap.mandi.data
+          && xpSnap.mandi.data.state) || MOCK_EXPLORE.mandiDetail.items[0].state || '';
+}
+// The provenance line under a price. A live row can name its mandi and arrival
+// date; an indicative one says so instead of borrowing a date it does not have.
+function mandiSourceLine(x) {
+  return x.live ? [x.market, x.arrival_date].filter(Boolean).join(' · ')
+                : (x.market || '') + ' · indicative';
+}
+
 // ── MANDI ──────────────────────────────────────────────────────────────────
 function dpMandi(commodity) {
   const M = MOCK_EXPLORE.mandiDetail;
-  // Live rows from /explore/snapshot where the API returned them, merged over
-  // the mock so a live commodity always wins its own row.
-  const liveItems = (xpSnap && xpSnap.mandi && xpSnap.mandi.data
-                     && xpSnap.mandi.data.items) || [];
-  const liveState = (xpSnap && xpSnap.mandi && xpSnap.mandi.data
-                     && xpSnap.mandi.data.state) || '';
-  const merged = M.items.map(m => {
-    const hit = liveItems.find(l => (l.commodity || '') === m.commodity);
-    return hit ? { ...m, modal: hit.modal_price || m.modal, min: hit.min_price || m.min,
-                   max: hit.max_price || m.max, market: hit.market || m.market,
-                   state: liveState || m.state, live: true } : m;
-  });
+  const merged = mandiRows();
 
   if (commodity) {
     const x = merged.find(m => m.commodity === commodity) || merged[0];
@@ -10728,7 +10893,9 @@ function dpMandi(commodity) {
       <div class="dp-h">Other commodities</div>
       ${dpRows(merged.filter(m => m.commodity !== x.commodity).map(m => ({
         a:m.commodity, b:m.market + ' · ' + m.state, c:'₹'+xpNum(m.modal), d:m.chg,
-        tap:`dpMandi(${JSON.stringify(m.commodity)})` })))}`);
+        tap:`dpMandi(${JSON.stringify(m.commodity)})` })))}
+      <div class="dp-h">Related news</div>
+      <div id="dp-news">${skelRows(3)}</div>`), dpNews(x.commodity + ' mandi price ' + x.state, 'dp-news');
   }
 
   dpState.mandiState = dpState.mandiState || 'All';
@@ -10744,38 +10911,91 @@ function dpMandi(commodity) {
       // Many mandis are named for their district, so joining them blindly
       // printed "Nashik · Nashik" — which reads as a rendering bug.
       b:[m.market, m.district].filter((v, i, arr) => v && arr.indexOf(v) === i).join(' · '),
-      c:'₹'+xpNum(m.modal), d:m.chg, tap:`dpMandi(${JSON.stringify(m.commodity)})` })))}`);
+      c:'₹'+xpNum(m.modal), d:m.chg, tap:`dpMandi(${JSON.stringify(m.commodity)})` })))}
+    <div class="dp-h">Related news</div>
+    <div id="dp-news">${skelRows(3)}</div>`);
+  dpNews('mandi crop prices agriculture', 'dp-news');
 }
 
 // ── REAL ESTATE ────────────────────────────────────────────────────────────
-function dpRealty(city) {
-  const C = MOCK_EXPLORE.realtyDetail.cities;
-  dpState.city = city || dpState.city || C[0].city;
-  const x = C.find(c => c.city === dpState.city) || C[0];
-  dpPage('Real estate', `
-    <div class="dp-chips">${C.map(c =>
-      `<button class="${c.city === x.city ? 'on' : ''}"
-        onclick="dpRealty(${JSON.stringify(c.city)})">${bEsc(c.city)}</button>`).join('')}</div>
+// ── REAL ESTATE: corpus-backed, no fabricated circle rates ─────────────────
+// There is no free circle-rate / guidance-value API for India and no DB table
+// for it, so every rupee figure this page used to show — the per-sq-ft rate,
+// the year-on-year change, the locality prices, the history chart — was
+// invented. Fabricated circle rates are worse than an honest empty state: a
+// reader cannot tell them from real ones and might act on them. So the page now
+// leads with real property coverage from the corpus and says plainly that a
+// rate feed is not connected. dpRealty takes no city argument any more.
+function dpRealty() {
+  dpCorpusPage('Real estate',
+    'real estate property housing circle rate guidance value',
+    'Circle rates and guidance values are not connected — no property-rate feed is wired. This is the corpus\'s real-estate coverage.');
+}
+
+// ── SPORTS & MOVIES: corpus-backed, no fabricated scores ───────────────────
+// We hold no live scores, fixtures or listings — there is no feed and no DB
+// table for them. The mock fixtures ("IND 284/6") and release dates were
+// placeholders that read as real data, which is the one thing this rebuild
+// removes. What we DO hold is the article corpus, so these pages lead with real
+// coverage filtered to the topic, and say plainly that live scores/listings are
+// not connected rather than inventing them.
+function dpCorpusPage(title, query, note) {
+  dpPage(title, `
     <div class="dp-hero">
-      <div class="dp-hero-k">${bEsc(x.city)} · ${bEsc(x.cls)} · indicative</div>
-      <div class="dp-hero-v">₹${xpNum(x.rate)}</div>
-      <div class="dp-hero-c ${x.chg >= 0 ? 'dp-up' : 'dp-dn'}">${
-        (x.chg >= 0 ? '▲ ' : '▼ ') + Math.abs(x.chg).toFixed(1)}% year on year · per sq ft</div>
+      <div class="dp-hero-k">${bEsc(title)}</div>
+      <div class="dp-hero-v" style="font-size:1.5rem">Latest coverage</div>
+      <div class="dp-hero-c" style="color:var(--t3)">from the newsroom corpus</div>
     </div>
-    ${dpChart(x.history, x.chg >= 0)}
-    <div class="dp-stat">
-      <div><div class="k">Rental yield</div><div class="v">${x.yield_.toFixed(1)}%</div></div>
-      <div><div class="k">1 BHK · 600 sqft</div><div class="v">₹${
-        xpNum(Math.round(x.rate * 600 / 100000))}L</div></div>
-      <div><div class="k">YoY</div><div class="v ${x.chg >= 0 ? 'dp-up' : 'dp-dn'}">${
-        (x.chg >= 0 ? '+' : '') + x.chg.toFixed(1)}%</div></div>
-    </div>
-    <div class="dp-h">Top localities</div>
-    ${dpRows(x.localities.map(([n, r, g]) => ({
-      a:n, b:'per sq ft', c:'₹'+xpNum(r), d:g })))}
-    <div class="dp-h">Related news</div>
-    <div id="dp-news">${skelRows(3)}</div>`);
-  dpNews(x.city + ' real estate property', 'dp-news');
+    <div class="dp-empty">${bEsc(note)}</div>
+    <div class="dp-h">In the news
+      <button class="dp-sort" onclick="dpCorpusSort()">
+        <i class="fa-solid fa-arrow-down-short-wide"></i> ${bEsc(DP_CORPUS_SORT === 'new' ? 'Newest' : 'Oldest')}</button></div>
+    <div id="dp-corpus">${skelRows(6)}</div>`);
+  dpState.corpusQ = query;
+  dpCorpusList(query);
+}
+let DP_CORPUS_SORT = 'new';
+function dpCorpusSort() {
+  DP_CORPUS_SORT = DP_CORPUS_SORT === 'new' ? 'old' : 'new';
+  dpCorpusList(dpState.corpusQ);
+  const b = document.querySelector('.dp-sort');
+  if (b) b.innerHTML = '<i class="fa-solid fa-arrow-down-short-wide"></i> '
+                       + (DP_CORPUS_SORT === 'new' ? 'Newest' : 'Oldest');
+}
+async function dpCorpusList(query) {
+  const host = document.getElementById('dp-corpus');
+  if (!host) return;
+  let arts = [];
+  try {
+    const d = await api('/search?q=' + encodeURIComponent(query), { timeout: 8000 });
+    arts = (d.articles || []).map(normalizeArticle).filter(a => a.title);
+  } catch (e) { arts = []; }
+  arts.sort((a, b) => {
+    const ta = +new Date(a.published_at || 0), tb = +new Date(b.published_at || 0);
+    return DP_CORPUS_SORT === 'new' ? tb - ta : ta - tb;
+  });
+  if (!arts.length) {
+    host.innerHTML = `<div class="dp-empty">No stories match this topic yet.
+      <small>Coverage appears here as it is published.</small></div>`;
+    return;
+  }
+  host.innerHTML = arts.map((a, i) => `
+    <div class="dp-row" data-n="${i}">
+      <div class="n"><b>${bEsc(a.title)}</b><small>${
+        bEsc((a.orig_source || '') + ' · ' + (timeAgo(a.published_at) || ''))}</small></div>
+      <i class="fa-solid fa-chevron-right" style="color:var(--t3);font-size:.72rem"></i>
+    </div>`).join('');
+  host.querySelectorAll('.dp-row[data-n]').forEach(el => {
+    el.onclick = () => { xpClosePage(); openArticle(arts[+el.dataset.n]); };
+  });
+}
+function dpSports() {
+  dpCorpusPage('Sports', 'cricket football sports match',
+    'Live scores and fixtures are not connected — no scores feed is wired. This is the corpus\'s sports coverage.');
+}
+function dpMovies() {
+  dpCorpusPage('Movies & shows', 'film movie series streaming release',
+    'Showtimes and streaming listings are not connected — no listings feed is wired. This is the corpus\'s film and TV coverage.');
 }
 
 // ── Government: one page per tile, two segments ─────────────────────────────
@@ -10809,30 +11029,20 @@ function xpGovPage(key) {
 
 // ── Mandi: every commodity the API returned, with its price band ───────────
 function xpMandiPage() {
-  const md = ((xpSnap && xpSnap.mandi && xpSnap.mandi.data) || MOCK_EXPLORE.mandi);
-  const items = md.items || [];
+  const items = mandiRows();
   const rows = items.map((x, i) => ({
     title: x.commodity || 'Commodity',
-    sub: [x.market, x.arrival_date].filter(Boolean).join(' · '),
-    right: '₹' + xpNum(x.modal_price || 0), rightSub: 'per quintal',
+    sub: mandiSourceLine(x),
+    right: '₹' + xpNum(x.modal || 0), rightSub: 'per quintal',
     onTap: () => { xpClosePage(); xpMandiSheet(i); },
   }));
-  xpListPage('Mandi prices' + (md.state ? ' · ' + md.state : ''), null, () => rows);
+  const st = mandiState();
+  xpListPage('Mandi prices' + (st ? ' · ' + st : ''), null, () => rows);
 }
 
 // ── Real estate: guidance rates, split by how the city is classified ───────
-function xpRealtyPage() {
-  const items = MOCK_EXPLORE.realty.items || [];
-  const segs = ['All', ...[...new Set(items.map(x => x.cls).filter(Boolean))]];
-  xpListPage('Circle rates', segs, seg => items
-    .filter(x => seg === 'All' || x.cls === seg)
-    .map((x) => ({
-      title: x.city, sub: (x.cls || '') + ' · stamp duty ' + (x.duty || 0) + '%',
-      right: '₹' + xpNum(x.rate || 0), rightSub: 'per sq ft',
-      onTap: () => { xpClosePage();
-                     xpRealtySheet(items.findIndex(y => y.city === x.city)); },
-    })));
-}
+// Forwards to the corpus page — it used to list the fabricated circle rates.
+function xpRealtyPage() { return dpRealty(); }
 
 // ── Opportunities: the macro series behind the snapshot tile ───────────────
 function xpOppsPage() {
@@ -10851,20 +11061,11 @@ function xpOppsPage() {
 }
 
 // ── Sports ─────────────────────────────────────────────────────────────────
-function xpSportsPage() {
-  const S = MOCK_EXPLORE.sports;
-  xpListPage('Sports', ['Fixtures', 'Standings'], seg =>
-    (seg === 'Standings' ? S.standings : S.fixtures).map(x => ({
-      title:x.t, sub:x.s, right:x.r, rightSub:x.rs })));
-}
-
-// ── Movies ─────────────────────────────────────────────────────────────────
-function xpMoviesPage() {
-  const M = MOCK_EXPLORE.movies;
-  xpListPage('Movies & shows', ['In theatres', 'Streaming'], seg =>
-    (seg === 'Streaming' ? M.streaming : M.releases).map(x => ({
-      title:x.t, sub:x.s, right:x.r, rightSub:x.rs })));
-}
+// xpSportsPage / xpMoviesPage previously rendered MOCK fixtures and release
+// dates as if they were data. They now forward to the corpus-backed pages, so
+// any remaining caller reaches real coverage and an honest empty state instead.
+function xpSportsPage() { return dpSports(); }
+function xpMoviesPage() { return dpMovies(); }
 function xpSpacePage() {
   const L = (xpSnap && xpSnap.launches && xpSnap.launches.data && xpSnap.launches.data.launches) || null;
   // The page promises the next five. Upstream often returns fewer, so it is

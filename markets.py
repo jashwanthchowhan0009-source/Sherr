@@ -476,6 +476,179 @@ async def markets_all(spark: bool = False):
     }
 
 
+# ─── HISTORY AND TABLES, STRAIGHT OFF market_ticks ───────────────────────────
+# Every drill-down page needs two things the live quote endpoints above cannot
+# give it: a price HISTORY, and the FULL list of instruments in its asset class
+# rather than the handful a tile shows.
+#
+# Both already exist in the database. market_ticks holds ~400 days of daily
+# closes for the 46 symbols the backfill reached (see PROGRESS_SHERR_I.md), and
+# SYMBOLS above is the catalogue. So these two endpoints read that table and
+# nothing else — NO NEW PROVIDER, no upstream call, no key.
+#
+# The alternative was what the frontend used to do: draw a sparkline by
+# multiplying the current price by a fixed set of ratios. That produces a
+# confident-looking trend out of a single number, which is the one thing a
+# markets page must never do. A real series or an honest empty state.
+
+# The read cache, reached defensively: markets.py is imported by tooling that
+# has no app around it, and a missing cache module must not take an endpoint
+# down. A cache is never allowed to be the reason a request fails.
+async def _cache_get(key: str):
+    try:
+        import cache                                             # noqa: PLC0415
+        return await cache.get(key)
+    except Exception:                                            # noqa: BLE001
+        return None
+
+
+async def _cache_set(key: str, payload, ttl: int) -> None:
+    try:
+        import cache                                             # noqa: PLC0415
+        await cache.set(key, payload, ttl)
+    except Exception:                                            # noqa: BLE001
+        pass
+
+
+_TICKS_TABLE = "sherrbyte_app.market_ticks"
+
+_HISTORY_SQL = f"""
+    SELECT (ts AT TIME ZONE 'UTC')::date AS d, price, change_24h
+      FROM {_TICKS_TABLE}
+     WHERE symbol = $1
+       AND ts >= (now() - ($2::int * INTERVAL '1 day'))
+     ORDER BY ts ASC
+"""
+
+# The latest tick per symbol for one asset class. DISTINCT ON is the cheap way
+# to say "newest row per symbol" on Postgres, and the index on (symbol, day)
+# already supports it.
+_TABLE_SQL = f"""
+    SELECT DISTINCT ON (symbol) symbol, price, change_24h,
+           (ts AT TIME ZONE 'UTC')::date AS d
+      FROM {_TICKS_TABLE}
+     WHERE symbol = ANY($1::text[])
+     ORDER BY symbol, ts DESC
+"""
+
+
+def _ticks_symbols(group: str) -> list:
+    """The label set for one asset class, from the catalogue markets.py owns.
+
+    Labels, not Yahoo tickers: market_ticks stores the label (NIFTY, not
+    ^NSEI), because that is what every reader-facing surface speaks.
+    """
+    return sorted(set((SYMBOLS.get(group) or {}).values()))
+
+
+async def _ticks_query(sql: str, *args):
+    """Run one read against market_ticks, or return None if it is unreachable.
+
+    None means "unavailable" all the way to the client, never an empty series —
+    an empty chart and a missing database look identical to a reader, and only
+    one of them is worth waiting for.
+    """
+    try:
+        import market_ticks                                      # noqa: PLC0415
+    except Exception:                                            # noqa: BLE001
+        return None
+    if not market_ticks.configured():
+        return None
+    conn = None
+    try:
+        conn = await market_ticks.connect()
+        return await conn.fetch(sql, *args)
+    except Exception as e:                                       # noqa: BLE001
+        log.warning("market_ticks read failed: %s", e)
+        return None
+    finally:
+        if conn is not None:
+            try:
+                await conn.close()
+            except Exception:                                    # noqa: BLE001
+                pass
+
+
+@router.get("/markets/history")
+async def markets_history(symbol: str, days: int = 180):
+    """Daily closes for one instrument, oldest first.
+
+    `source` is the three-tier honesty the rest of the app uses: `ticks` means
+    these are real stored closes, `unavailable` means the store could not be
+    read. There is no seed tier and there will not be one — a fabricated price
+    history is a claim about the past that nobody can check.
+    """
+    sym = (symbol or "").strip().upper()[:32]
+    days = max(7, min(int(days or 180), 800))
+    if not sym:
+        return {"symbol": "", "points": [], "source": "unavailable",
+                "detail": "no symbol given"}
+    key = f"mkt:hist:{sym}:{days}"
+    hit = await _cache_get(key)
+    if hit is not None:
+        return hit
+
+    rows = await _ticks_query(_HISTORY_SQL, sym, days)
+    if rows is None:
+        return {"symbol": sym, "points": [], "source": "unavailable",
+                "detail": "market_ticks is not reachable (DATABASE_URL unset "
+                          "or the store is empty)"}
+    points = [{"d": str(r["d"]),
+               "price": float(r["price"]),
+               "change": (float(r["change_24h"])
+                          if r["change_24h"] is not None else None)}
+              for r in rows]
+    payload = {"symbol": sym, "days": days, "points": points,
+               "count": len(points), "source": "ticks"}
+    if not points:
+        # The store is reachable and has nothing for this symbol. That is a
+        # different answer from "unreachable" and the page says so differently.
+        payload["detail"] = f"no stored closes for {sym} in the last {days} days"
+    await _cache_set(key, payload, 900)
+    return payload
+
+
+@router.get("/markets/table")
+async def markets_table(group: str):
+    """Every instrument in one asset class, with its latest stored close.
+
+    THE FULL LIST, not the four a tile has room for. The drill-down pages used
+    to carry their own hardcoded rows — a second answer to the same question the
+    ticker was already answering — so the list now comes from the catalogue and
+    the store together.
+    """
+    g = (group or "").strip().lower()
+    if g not in SYMBOLS:
+        return {"group": g, "rows": [], "source": "unavailable",
+                "detail": f"unknown asset class; expected one of "
+                          f"{', '.join(sorted(SYMBOLS))}"}
+    syms = _ticks_symbols(g)
+    key = f"mkt:table:{g}"
+    hit = await _cache_get(key)
+    if hit is not None:
+        return hit
+
+    rows = await _ticks_query(_TABLE_SQL, syms)
+    if rows is None:
+        # The catalogue is still the honest answer to "what is in this class" —
+        # it just has no prices attached, and the page renders it that way
+        # rather than dropping the section.
+        return {"group": g, "symbols": syms, "rows": [],
+                "source": "unavailable",
+                "detail": "market_ticks is not reachable; showing no prices "
+                          "rather than invented ones"}
+    out = [{"symbol": r["symbol"], "price": float(r["price"]),
+            "change": (float(r["change_24h"])
+                       if r["change_24h"] is not None else None),
+            "as_of": str(r["d"])} for r in rows]
+    priced = {r["symbol"] for r in out}
+    payload = {"group": g, "rows": out, "symbols": syms,
+               "missing": [s for s in syms if s not in priced],
+               "source": "ticks"}
+    await _cache_set(key, payload, 300)
+    return payload
+
+
 @router.get("/markets/stocks")
 async def markets_stocks(spark: bool = False):
     return await fetch_stocks(spark)
