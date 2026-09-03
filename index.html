@@ -9617,11 +9617,15 @@ const MOCK_EXPLORE = {
     oil:    { label:'Crude Oil',   sub:'WTI',       value:'$86.66',    pct:2.56,
               series:[81.2,82.4,81.9,83.6,84.8,84.1,85.9,86.66], tint:'m-oil' },
   },
-  mandi: { state:'Telangana', items:[
-    { commodity:'Onion', market:'Bowenpally', modal_price:2450, min_price:1800, max_price:2900, arrival_date:'21/08/2026' },
-    { commodity:'Tomato', market:'Gaddiannaram', modal_price:1620, min_price:1200, max_price:2100, arrival_date:'21/08/2026' },
-    { commodity:'Potato', market:'Malakpet', modal_price:1980, min_price:1600, max_price:2350, arrival_date:'21/08/2026' },
-  ]},
+  // MOCK_EXPLORE.mandi WAS HERE AND IT WAS A SECOND SOURCE FOR THE SAME NUMBER.
+  // It held three commodities at prices that disagreed with mandiDetail below —
+  // Onion 2450 vs 2400, Tomato at Gaddiannaram 1620 vs Gudimalkapur 1180,
+  // Potato 1980 vs 1850 — so the "Take a look" card and the Mandi prices page
+  // showed different figures for the same commodity on the same screen. It also
+  // carried a hardcoded arrival_date of 21/08/2026, which rendered as a
+  // precise-looking provenance line under a number nobody could source.
+  // mandiDetail is the superset (6 commodities, 3 states, weekly change and
+  // history) and is now the only table. Everything reads it through mandiRows().
   // No free circle-rate API exists in India. Same shape a real one would return,
   // so a fetcher can replace this object without the renderer changing.
   realty: { items:[
@@ -9893,20 +9897,27 @@ function renderXpTal() {
   const el = document.getElementById('xp-tal');
   if (!el) return;
   if (xpTal === 'Mandi') {
-    const md = ((xpSnap && xpSnap.mandi && xpSnap.mandi.data) || MOCK_EXPLORE.mandi);
-    const it = md.items || [];
+    // Same rows the Mandi prices page renders — see mandiRows(). This card
+    // used to read a second table and printed a different price for the same
+    // commodity two screens apart.
+    const it = mandiRows();
+    if (!it.length) {
+      el.innerHTML = `<div class="xp-band"><div class="exp-cat-load">No mandi
+        prices yet — Agmarknet has returned nothing for this state.</div></div>`;
+      return;
+    }
     const [a,b,c] = [it[0]||{}, it[1]||{}, it[2]||{}];
-    const sm = (x,i) => `<div class="sm" onclick="dpMandi(${JSON.stringify(x.commodity||'')})">
+    const sm = (x) => `<div class="sm" onclick="dpMandi(${JSON.stringify(x.commodity||'')})">
         <div class="k">${bEsc(x.commodity||'—')}</div>
-        <div class="v">₹${xpNum(x.modal_price||0)}</div>
+        <div class="v">₹${xpNum(x.modal||0)}</div>
         <div class="s">${bEsc(x.market||'')}</div></div>`;
     el.innerHTML = `<div class="xp-band"><div class="xp-tal">
       <div class="big" onclick="dpMandi()">
-        <div class="k">${bEsc(a.commodity||'Onion')} · ${bEsc(md.state||'')}</div>
-        <div class="v">₹${xpNum(a.modal_price||0)}</div>
-        <div class="s">₹${xpNum(a.min_price||0)}–₹${xpNum(a.max_price||0)} per quintal<br>
-          ${bEsc(a.market||'')} · ${bEsc(a.arrival_date||'')}</div>
-      </div>${sm(b,1)}${sm(c,2)}</div></div>`;
+        <div class="k">${bEsc(a.commodity||'')} · ${bEsc(a.state||mandiState())}</div>
+        <div class="v">₹${xpNum(a.modal||0)}</div>
+        <div class="s">₹${xpNum(a.min||0)}–₹${xpNum(a.max||0)} per quintal<br>
+          ${bEsc(mandiSourceLine(a))}</div>
+      </div>${sm(b)}${sm(c)}</div></div>`;
   } else if (xpTal === 'Real Estate') {
     const rt = MOCK_EXPLORE.realty.items;
     const sm = (x,i) => `<div class="sm" onclick="dpRealty(${JSON.stringify(x.city||'')})">
@@ -10548,19 +10559,20 @@ function xpKvSheet(title, sub, hero, pairs, series) {
 
 // ── destinations ────────────────────────────────────────────────────────────
 function xpMandiSheet(i) {
-  const md = ((xpSnap && xpSnap.mandi && xpSnap.mandi.data) || MOCK_EXPLORE.mandi);
-  const x = (md.items || [])[i] || {};
-  // A 7-day trend the API does not return; shaped around the modal price so the
-  // sparkline reads as a trend rather than implying a history we hold.
-  const base = x.modal_price || 0;
-  const series = [0.94,0.97,0.95,1.01,0.99,1.03,1.0].map(k => base*k);
-  xpKvSheet(x.commodity || 'Commodity', (md.state||'') + ' · ' + (x.market||''),
+  const x = mandiRows()[i] || {};
+  // The real weekly history off the one table, not a curve shaped around the
+  // current price. The old version multiplied the modal price by a fixed set of
+  // ratios, which drew a confident-looking sparkline out of a single number.
+  const base = x.modal || 0;
+  xpKvSheet(x.commodity || 'Commodity',
+    [x.state, x.market].filter(Boolean).join(' · ') + (x.live ? '' : ' · indicative'),
     '₹' + xpNum(base),
     [['Modal price','₹'+xpNum(base)],
-     ['Range','₹'+xpNum(x.min_price||0)+'–₹'+xpNum(x.max_price||0)],
+     ['Range','₹'+xpNum(x.min||0)+'–₹'+xpNum(x.max||0)],
      ['Mandi', x.market||'—'],
-     ['Arrival date', x.arrival_date||'—'],
-     ['Unit','per quintal']], series);
+     ['District', x.district||'—'],
+     ['Arrival date', x.arrival_date || (x.live ? '—' : 'not published')],
+     ['Unit','per quintal']], x.history || null);
 }
 function xpRealtySheet(i) {
   const x = MOCK_EXPLORE.realty.items[i] || {};
@@ -10694,21 +10706,47 @@ async function dpNews(q, hostId) {
   });
 }
 
+// ── MANDI: ONE TABLE, ONE MERGE, EVERY CONSUMER ────────────────────────────
+// There were two mandi tables and four readers split across them, so the same
+// commodity carried two prices on one screen. There is now one table
+// (MOCK_EXPLORE.mandiDetail) and one merge, and every caller goes through here.
+//
+// The live rows from /explore/snapshot win their own commodity where the API
+// returned them; the rest stay indicative and are LABELLED indicative, because
+// a number a reader cannot source must not look like one they can.
+function mandiRows() {
+  const live = (xpSnap && xpSnap.mandi && xpSnap.mandi.data
+                && xpSnap.mandi.data.items) || [];
+  const liveState = (xpSnap && xpSnap.mandi && xpSnap.mandi.data
+                     && xpSnap.mandi.data.state) || '';
+  return (MOCK_EXPLORE.mandiDetail.items || []).map(m => {
+    const hit = live.find(l => (l.commodity || '') === m.commodity);
+    if (!hit) return { ...m, arrival_date: '', live: false };
+    return { ...m,
+      modal: hit.modal_price || m.modal,
+      min:   hit.min_price   || m.min,
+      max:   hit.max_price   || m.max,
+      market: hit.market     || m.market,
+      state:  liveState      || m.state,
+      arrival_date: hit.arrival_date || '',
+      live: true };
+  });
+}
+function mandiState() {
+  return (xpSnap && xpSnap.mandi && xpSnap.mandi.data
+          && xpSnap.mandi.data.state) || MOCK_EXPLORE.mandiDetail.items[0].state || '';
+}
+// The provenance line under a price. A live row can name its mandi and arrival
+// date; an indicative one says so instead of borrowing a date it does not have.
+function mandiSourceLine(x) {
+  return x.live ? [x.market, x.arrival_date].filter(Boolean).join(' · ')
+                : (x.market || '') + ' · indicative';
+}
+
 // ── MANDI ──────────────────────────────────────────────────────────────────
 function dpMandi(commodity) {
   const M = MOCK_EXPLORE.mandiDetail;
-  // Live rows from /explore/snapshot where the API returned them, merged over
-  // the mock so a live commodity always wins its own row.
-  const liveItems = (xpSnap && xpSnap.mandi && xpSnap.mandi.data
-                     && xpSnap.mandi.data.items) || [];
-  const liveState = (xpSnap && xpSnap.mandi && xpSnap.mandi.data
-                     && xpSnap.mandi.data.state) || '';
-  const merged = M.items.map(m => {
-    const hit = liveItems.find(l => (l.commodity || '') === m.commodity);
-    return hit ? { ...m, modal: hit.modal_price || m.modal, min: hit.min_price || m.min,
-                   max: hit.max_price || m.max, market: hit.market || m.market,
-                   state: liveState || m.state, live: true } : m;
-  });
+  const merged = mandiRows();
 
   if (commodity) {
     const x = merged.find(m => m.commodity === commodity) || merged[0];
@@ -10809,15 +10847,15 @@ function xpGovPage(key) {
 
 // ── Mandi: every commodity the API returned, with its price band ───────────
 function xpMandiPage() {
-  const md = ((xpSnap && xpSnap.mandi && xpSnap.mandi.data) || MOCK_EXPLORE.mandi);
-  const items = md.items || [];
+  const items = mandiRows();
   const rows = items.map((x, i) => ({
     title: x.commodity || 'Commodity',
-    sub: [x.market, x.arrival_date].filter(Boolean).join(' · '),
-    right: '₹' + xpNum(x.modal_price || 0), rightSub: 'per quintal',
+    sub: mandiSourceLine(x),
+    right: '₹' + xpNum(x.modal || 0), rightSub: 'per quintal',
     onTap: () => { xpClosePage(); xpMandiSheet(i); },
   }));
-  xpListPage('Mandi prices' + (md.state ? ' · ' + md.state : ''), null, () => rows);
+  const st = mandiState();
+  xpListPage('Mandi prices' + (st ? ' · ' + st : ''), null, () => rows);
 }
 
 // ── Real estate: guidance rates, split by how the city is classified ───────
