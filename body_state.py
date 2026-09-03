@@ -366,8 +366,13 @@ def _needing_rewrite_sql() -> str:
     body = _stub_like_clause("full_body")
     summ = _stub_like_clause("summary_60")
     return (
+        # published_at is here for the synthesis clustering: an event is a set
+        # of articles sharing terms INSIDE ONE WINDOW, and without the timestamp
+        # the window degrades to "ever", which merges a story with its own
+        # anniversary coverage.
         "SELECT id, headline, source_headline, full_body, summary_60, "
-        "source_summary, pillar_id, micro_tags, source_name, url FROM articles "
+        "source_summary, pillar_id, micro_tags, source_name, url, "
+        "published_at FROM articles "
         "WHERE status='published' AND ("
         "  COALESCE(reprocessed,0)=0"
         f" OR {body}"

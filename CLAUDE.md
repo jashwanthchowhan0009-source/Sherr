@@ -343,3 +343,130 @@ The math decides significance; the LLM only writes prose from a fixed evidence
 payload, never sees raw prices, and its output is schema-validated before it can
 reach a card. If the math is silent, nothing is rendered. Silence is a valid
 output.
+
+---
+
+## The rewrite's unit of work is an EVENT, not an article
+
+Adopted 2026-09-03. A single 200-character publisher blurb cannot be turned into
+an original 60-80 word body. There is no such transformation: everything added
+beyond the blurb is invented and everything kept is a paraphrase — which is
+exactly what the originality gate then rejected, run after run, while the rows
+sat on the placeholder. The single-article rewrite was not badly prompted, it
+was asked to do something impossible.
+
+Several blurbs about one event are solvable. `synthesis.py` clusters the drain's
+candidates and `main._synthesise_clusters` sends each cluster to
+`ai_processor.synthesize` with the specified prompt, verbatim.
+
+**`MIN_CLUSTER` is 2, not 3.** A feed ingesting a wide spread of publishers
+produces mostly 1- and 2-source events; a pass that only fired at 3+ would idle.
+Two publishers still corroborate. Singletons never reach synthesis — they fall
+back to the single-article rewrite, which is at least honest about being one
+source.
+
+**One cluster produces ONE article.** The synthesised body goes to a single
+primary row (the member with the most surviving publisher text, because that row
+is the originality reference) and every other member is set to `status='merged'`,
+which removes it from every served query. Writing the same body to five rows
+would put five identical cards in the feed. The merge is reversible in one
+statement — `UPDATE articles SET status='published' WHERE status='merged'` — and
+`SYNTHESIS_MERGE=0` turns it off.
+
+`synthesis_sources` on the primary is a JSON array of every member id and is
+**the only attribution trail there is**: a synthesised body is not traceable to
+any publisher by inspection. Merged rows point back via `story_id`.
+
+### Event clustering reads the summary; story threads read the headline
+
+Two publishers covering one event write different headlines deliberately.
+"Crude climbs as OPEC+ weighs deeper output cuts" and "Oil advances after OPEC+
+signals further restraint" share exactly ONE significant term, so the
+headline-only rule at 2 shared terms finds almost no real events — and dropping
+it to 1 merges everything that mentions the same company.
+
+`event_terms` therefore reads headline + the publisher's summary (never
+`full_body`: on a candidate row that is the placeholder, and every placeholder is
+identical). The larger vocabulary is paid for with a second threshold —
+`EVENT_MIN_RATIO = 0.28`, shared over the SMALLER term set, so a thin wire item
+can still match a long piece about the same event.
+
+`link_stories` keeps the old headline-only rule and now calls
+`synthesis.cluster_articles` rather than carrying a second copy of the union-find.
+A false link there costs a wrong "related" card; a false link in synthesis
+removes a row from the feed, which is why the two are tuned differently.
+
+**Synthesis spends FEWER requests, not more.** A cluster of five is one provider
+call where the single-article path was five, so the drain's per-tick rate ceiling
+is still honoured by construction. `/admin/body-audit` reports it under
+`synthesis`, and `articles_per_request` is the number that says whether
+clustering is earning its place — 1.0 means every "cluster" was a singleton.
+
+---
+
+## Real URLs, and the one route that must stay last
+
+The app had a single URL: every screen lived behind a JS view switch, so a
+reader could not link to a story, a refresh lost their place, and a shared link
+previewed as the generic app card because **unfurlers do not run JavaScript**.
+
+Both halves are required and they are in different files:
+
+- `main.py` serves index.html at `/`, `/explore`, `/bytes`, `/bytes/<slug>` and
+  `/profile`, and injects the og:/twitter: block **immediately after `<head>`** —
+  a scraper takes the FIRST value it finds for a property, and index.html already
+  carries a generic `og:title`, so appending would be silently ignored.
+- `index.html`'s `routeFromPath` / `pathForView` / `articleSlug` push the same
+  paths and resolve a deep link on boot.
+
+`tests/test_desktop_layout.py` compares the two sides, because nothing else does.
+
+**The catch-all `/{full_path:path}` is registered LAST and nothing may go below
+it.** FastAPI matches in registration order, so a catch-all above `/feed` returns
+560KB of HTML with a 200 and every client reports a JSON parse error instead of a
+404. It also refuses `/api`, `/admin`, `/docs` outright — one belt for today's
+routes, one for the route somebody adds in the wrong place.
+
+`/explore`, `/feed`, `/search` and `/bookmarks` are **both** an API endpoint and
+a linkable screen. The API came first and the shipped frontend calls those exact
+paths, so they answer by content negotiation: `text/html` listed explicitly in
+`Accept` (a browser navigating) gets the app, anything else (fetch's `*/*`) gets
+JSON. The check must never match a wildcard.
+
+`article_slug` puts the **id last and that is what resolves the row** — the words
+in front are for readers and crawlers, so a headline rewritten by a later
+synthesis pass never breaks a link already shared.
+
+## The read cache is two layers, and the local one is not optional
+
+`cache.py`. Supabase's pooler and Render's free tier cap connections in the low
+tens. A feed that queries once per reader does not degrade under load — it
+exhausts the pool and every request fails at once, including the admin endpoints
+you would use to find out why.
+
+- Redis (`UPSTASH_REDIS_URL` / `REDIS_URL`) is the shared layer.
+- A per-process TTL dict is the second, and it is the one that saves the database
+  **when Redis has just gone down** — which is exactly when a stampede arrives. A
+  cache whose only layer is remote fails open onto the thing it protects.
+
+`/feed` 30s, `/patterns` 60s, `/api/sherr-i/analogs` 120s, rendered og heads and
+the sitemap 600s. A producer failure is never cached: storing an error under a
+30-second TTL turns one bad query into thirty seconds of wrong answers. Neither
+is a `source: "unavailable"` payload — that is a transient reachability
+condition, and a cached one outlives the outage.
+
+Pools are capped: `PG_POOL_MAX` 8 (pgcompat), `SPIE_POOL_MAX` 4 (asyncpg).
+
+## Desktop is one @media block, and that is the whole guarantee
+
+`@media (min-width: 1024px)` in index.html, and **every** desktop rule is inside
+it. That is what makes "mobile renders identically to before" a structural
+property rather than a hope, and `tests/test_desktop_layout.py` asserts it: one
+breakpoint, the restyled selectors inside, the phone's base rules untouched
+outside. If you are adding a desktop rule somewhere else in that stylesheet:
+don't.
+
+1024px, not 768px — a tablet in portrait is a big phone and the bottom nav is
+right for it. The sidebar is the SAME `<nav>` element re-laid out, not a second
+nav; two navs would mean two active-tab states that disagree the first time
+either changes.

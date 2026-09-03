@@ -41,6 +41,12 @@ services:
           property: connectionString
       - key: ENV
         value: prod
+      # The origin the og:url, the canonical link and every sitemap entry are
+      # written against. Wrong here means every link preview and every indexed
+      # URL points at a host that is not this one, so it is declared rather
+      # than defaulted.
+      - key: SITE_URL
+        sync: false
       - key: RUN_SCHEDULER
         value: "true"          # single free service owns ingestion
       - key: LOG_LEVEL

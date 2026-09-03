@@ -16,3 +16,7 @@ asyncpg==0.29.0
 # pgcompat routes the existing sqlite-shaped queries here instead. Sync driver,
 # because the ~80 call sites in main.py are synchronous.
 psycopg[binary,pool]==3.2.1
+# The read cache in cache.py. REDIS_URL / UPSTASH_REDIS_URL is optional — without
+# it the cache degrades to its per-process layer and nothing else changes — but
+# with more than one worker only the shared layer actually caps database reads.
+redis==5.0.7

@@ -588,3 +588,124 @@ def available_providers() -> dict:
         # be checked against what was configured.
         "cascade":    configured or ["rule-based"],
     }
+
+
+# ─── MULTI-SOURCE SYNTHESIS ──────────────────────────────────────────────────
+# A separate call path from process_article, on purpose. That one takes ONE
+# article and asks for a rewrite; this takes a cluster of articles about one
+# event and asks for a new briefing written from the facts they agree on.
+#
+# It shares the key pools and the 401/403/429 rotation with everything else here
+# — one quota, one rotation policy — but nothing else. In particular it does NOT
+# fall back to _rule_based_fallback: the rule-based path writes a placeholder,
+# and a placeholder returned from a synthesis call would be written to every row
+# in the cluster at once. A failed synthesis returns None and the caller leaves
+# the rows alone for the next tick.
+
+async def _gemini_synth_once(key: str, prompt: str, client) -> tuple:
+    import synthesis                                             # noqa: PLC0415
+    url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
+           f"{model_for('gemini')}:generateContent?key={key}")
+    payload = {
+        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+        "generationConfig": {
+            # Lower than the rewrite's 0.35. Synthesis is a factual merge, and
+            # temperature is where invented detail comes from.
+            "temperature": 0.2,
+            "maxOutputTokens": 1024,
+            "responseMimeType": "application/json",
+            "responseSchema": synthesis.SYNTHESIS_SCHEMA,
+        },
+    }
+    try:
+        r = await client.post(url, json=payload, timeout=45)
+        if r.status_code != 200:
+            _record_error("gemini", r.status_code, r.text)
+            return None, r.status_code
+        candidates = (r.json() or {}).get("candidates", [])
+        if not candidates:
+            _record_error("gemini", 200, f"no candidates: {r.text[:300]}")
+            return None, 200
+        parts = candidates[0].get("content", {}).get("parts", [])
+        if not parts:
+            return None, 200
+        return parts[0].get("text", "").strip(), 200
+    except Exception as e:                                        # noqa: BLE001
+        _record_error("gemini", 0, f"{type(e).__name__}: {e}")
+        return None, 0
+
+
+async def _openai_synth_once(key: str, prompt: str, client, *,
+                             url: str, model: str, label: str) -> tuple:
+    try:
+        r = await client.post(
+            url,
+            headers={"Authorization": f"Bearer {key}",
+                     "Content-Type": "application/json"},
+            json={"model": model,
+                  "messages": [{"role": "user", "content": prompt}],
+                  "temperature": 0.2,
+                  "max_tokens": 900,
+                  "response_format": {"type": "json_object"}},
+            timeout=45,
+        )
+        if r.status_code != 200:
+            _record_error(label, r.status_code, r.text)
+            return None, r.status_code
+        return (r.json()["choices"][0]["message"]["content"] or "").strip(), 200
+    except Exception as e:                                        # noqa: BLE001
+        _record_error(label, 0, f"{type(e).__name__}: {e}")
+        return None, 0
+
+
+_SYNTH_CALLS = {
+    "gemini": _gemini_synth_once,
+    "groq":   lambda k, p, c: _openai_synth_once(
+        k, p, c, url="https://api.groq.com/openai/v1/chat/completions",
+        model=model_for("groq"), label="Groq"),
+    "openai": lambda k, p, c: _openai_synth_once(
+        k, p, c, url="https://api.openai.com/v1/chat/completions",
+        model=model_for("openai"), label="OpenAI"),
+    "grok":   lambda k, p, c: _openai_synth_once(
+        k, p, c, url="https://api.x.ai/v1/chat/completions",
+        model=model_for("grok"), label="Grok"),
+}
+
+
+async def synthesize(prompt: str, *, n_sources: int = 0) -> Optional[dict]:
+    """One synthesis call for one cluster. Returns the validated dict, or None.
+
+    ONE CLUSTER IS ONE REQUEST — that is the unit the drain's rate limit counts,
+    and it is why synthesis is cheaper per article than the single rewrite: five
+    articles that used to cost five requests now cost one.
+    """
+    import synthesis                                             # noqa: PLC0415
+    async with httpx.AsyncClient() as client:
+        for provider in KEYS.configured():
+            fn = _SYNTH_CALLS.get(provider)
+            if fn is None:
+                continue
+            pool = KEYS.get(provider)
+            if not pool.size:
+                continue
+            pool.reset()
+            for _ in range(pool.size):
+                key = pool.current()
+                if not key:
+                    break
+                text, status = await fn(key, prompt, client)
+                if text:
+                    try:
+                        return synthesis.parse_synthesis(text, n_sources=n_sources)
+                    except synthesis.SynthesisRejected as e:
+                        # A rejected answer is a provider failure, recorded like
+                        # one so /admin/body-audit can show why nothing was
+                        # written instead of reporting a silent zero.
+                        _record_error(provider, 200, f"synthesis rejected: {e}")
+                        return None
+                if status in key_pool.ROTATE_STATUSES:
+                    if not pool.rotate(f"HTTP {status}"):
+                        break
+                    continue
+                break
+    return None
