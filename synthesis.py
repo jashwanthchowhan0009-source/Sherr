@@ -55,8 +55,25 @@ STOPWORDS = set((
 
 # A term in more articles than this is describing the corpus, not an event, and
 # unioning on it merges everything into one cluster.
+#
+# IT HAS TO SCALE WITH THE SAMPLE. A flat 40 was written for a sample of a few
+# dozen; against a pool of 400 it is 10%, but against a pool of 50 a term in 40
+# of them passes as "specific" while being in 80% of the sample. Publisher
+# summaries are full of exactly that kind of vocabulary — "the company said",
+# "on Monday", "according to a statement" — and a generic term that survives the
+# filter chains unrelated rows together through union-find until the whole pool
+# is one cluster. Measured: with shared boilerplate and a flat cap, a 115-row
+# pool collapsed into a single 115-member "event".
 MAX_TERM_DOCS = 40
+MAX_TERM_DOC_FRACTION = 0.10
 MIN_SHARED_TERMS = 2
+
+# A cluster bigger than this is not an event, it is a clustering failure —
+# transitive merging that chained through a term it should have discarded. It is
+# REFUSED rather than truncated to the first five members: picking five of forty
+# would merge four arbitrary rows out of the feed and leave the rest, which is a
+# worse outcome than writing nothing and is impossible to explain afterwards.
+MAX_EVENT_SIZE = 8
 
 # ── Why event clustering reads the SUMMARY and story threads do not ──────────
 # Two publishers covering one event write different headlines on purpose. Their
@@ -167,11 +184,28 @@ def event_terms(row) -> set:
     return significant_terms(text, _tags_of(row))
 
 
+# Ratio buckets for the diagnostic. The threshold's own value is a boundary so
+# "just under" and "just over" are never averaged into the same bar — that is
+# the difference between "the threshold is slightly wrong" and "no pair in this
+# sample is remotely the same story".
+RATIO_BUCKETS = (0.05, 0.10, 0.20, EVENT_MIN_RATIO, 0.40, 0.60, 1.01)
+
+
+def _bucket(ratio: float) -> str:
+    lo = 0.0
+    for hi in RATIO_BUCKETS:
+        if ratio < hi:
+            return f"{lo:.2f}-{hi:.2f}"
+        lo = hi
+    return f">={RATIO_BUCKETS[-1]:.2f}"
+
+
 def cluster_articles(rows, *, window_hours: int = WINDOW_HOURS,
                      min_shared: int = MIN_SHARED_TERMS,
                      min_ratio: float = 0.0,
                      same_pillar: bool = True,
-                     terms_of=None) -> list:
+                     terms_of=None,
+                     stats: dict = None) -> list:
     """Group rows into events. Returns a list of lists, singletons included.
 
     Union-find over an inverted term index: two articles are joined when they
@@ -214,8 +248,14 @@ def cluster_articles(rows, *, window_hours: int = WINDOW_HOURS,
             parent[rb] = ra
 
     pair_shared: dict = {}
+    doc_cap = max(3, min(MAX_TERM_DOCS,
+                         int(MAX_TERM_DOC_FRACTION * len(by_id)) or MAX_TERM_DOCS))
+    if stats is not None:
+        stats["term_doc_cap"] = doc_cap
+        stats["terms_dropped_as_generic"] = sum(
+            1 for ids in inverted.values() if len(ids) > doc_cap)
     for term, ids in inverted.items():
-        if len(ids) < 2 or len(ids) > MAX_TERM_DOCS:
+        if len(ids) < 2 or len(ids) > doc_cap:
             continue
         for i in range(len(ids)):
             for j in range(i + 1, len(ids)):
@@ -223,38 +263,94 @@ def cluster_articles(rows, *, window_hours: int = WINDOW_HOURS,
                 key = (a, b) if a < b else (b, a)
                 pair_shared[key] = pair_shared.get(key, 0) + 1
 
+    # WHICH GATE STOPS A PAIR IS THE WHOLE DIAGNOSTIC.
+    #
+    # "No clusters" has four completely different causes and four different
+    # fixes: the threshold is too strict, the corpus genuinely has no
+    # same-event pairs, the pillar split is separating them, or — the one that
+    # cost this pass its first production run — the sample handed in was too
+    # small and too narrow in time to CONTAIN a pair at all. Counting the stop
+    # reason tells them apart; counting only the clusters cannot.
+    if stats is not None:
+        stats.setdefault("pairs_examined", 0)
+        stats.setdefault("stopped", {})
+        stats.setdefault("ratio_histogram", {})
+        stats.setdefault("shared_histogram", {})
+        stats.setdefault("best_pairs", [])
+
+    def _stop(reason):
+        if stats is not None:
+            stats["stopped"][reason] = stats["stopped"].get(reason, 0) + 1
+
     for (a, b), shared in sorted(pair_shared.items()):
+        smaller = min(len(terms[a]), len(terms[b])) or 1
+        ratio = shared / smaller
+        ra, rb = by_id[a], by_id[b]
+        if stats is not None:
+            stats["pairs_examined"] += 1
+            key = _bucket(ratio)
+            stats["ratio_histogram"][key] = stats["ratio_histogram"].get(key, 0) + 1
+            sk = str(min(shared, 12))
+            stats["shared_histogram"][sk] = stats["shared_histogram"].get(sk, 0) + 1
+            # Keep the closest near-misses, headlines included, so a human can
+            # answer the only question a histogram cannot: are these actually
+            # the same story?
+            stats["best_pairs"].append({
+                "ids": [a, b], "shared": shared, "ratio": round(ratio, 3),
+                "same_pillar": _get(ra, "pillar_id") == _get(rb, "pillar_id"),
+                "in_window": _within(_get(ra, "published_at"),
+                                     _get(rb, "published_at"), window_hours),
+                "headlines": [str(_get(ra, "headline", ""))[:90],
+                              str(_get(rb, "headline", ""))[:90]],
+            })
         if shared < min_shared:
+            _stop("shared_below_min")
             continue
-        if min_ratio:
+        if min_ratio and ratio < min_ratio:
             # Normalised against the SMALLER vocabulary. Against the union, a
             # thin two-line wire item could never reach the threshold against a
             # long piece about the same event, and the thin ones are exactly the
             # rows this pass exists to rescue.
-            smaller = min(len(terms[a]), len(terms[b])) or 1
-            if shared / smaller < min_ratio:
-                continue
-        ra, rb = by_id[a], by_id[b]
+            _stop("ratio_below_min")
+            continue
         if same_pillar and _get(ra, "pillar_id") != _get(rb, "pillar_id"):
+            _stop("different_pillar")
             continue
         if not _within(_get(ra, "published_at"), _get(rb, "published_at"), window_hours):
+            _stop("outside_window")
             continue
+        _stop("joined")
         union(a, b)
+
+    if stats is not None:
+        stats["best_pairs"] = sorted(
+            stats["best_pairs"], key=lambda p: -p["ratio"])[:8]
 
     groups: dict = {}
     for rid in by_id:
         groups.setdefault(find(rid), []).append(rid)
 
     out = []
+    oversized = 0
     for members in groups.values():
         members.sort()
+        if len(members) > MAX_EVENT_SIZE:
+            # Broken back into singletons, not truncated. Each row is then
+            # handled honestly by the single-article path instead of four of
+            # them silently leaving the feed as "merged".
+            oversized += 1
+            out.extend([[by_id[m]] for m in members])
+            continue
         out.append([by_id[m] for m in members])
+    if stats is not None:
+        stats["oversized_clusters_refused"] = oversized
     # Biggest events first: a cluster is worth more provider calls than a single.
     out.sort(key=lambda g: (-len(g), _get(g[0], "id", 0)))
     return out
 
 
-def cluster_events(rows, *, window_hours: int = WINDOW_HOURS) -> list:
+def cluster_events(rows, *, window_hours: int = WINDOW_HOURS,
+                   stats: dict = None) -> list:
     """cluster_articles with the settings that identify one news EVENT.
 
     One entry point so the synthesis pass, the report script and the tests all
@@ -264,7 +360,54 @@ def cluster_events(rows, *, window_hours: int = WINDOW_HOURS) -> list:
     return cluster_articles(rows, window_hours=window_hours,
                             min_shared=EVENT_MIN_SHARED,
                             min_ratio=EVENT_MIN_RATIO,
-                            terms_of=event_terms)
+                            terms_of=event_terms, stats=stats)
+
+
+def pool_report(rows, *, window_hours: int = WINDOW_HOURS) -> dict:
+    """Is this sample even CAPABLE of containing a same-event pair?
+
+    THE QUESTION THAT WAS NEVER ASKED. The clustering window is 24 hours, but
+    the drain used to hand the clusterer whatever the tick's rate limit allowed
+    — ten rows, ordered by published_at DESC, so ten CONSECUTIVE articles.
+    A feed ingesting a hundred articles an hour puts ten consecutive rows inside
+    about six minutes. Two publishers covering one event are commonly an hour
+    apart. The clusterer was being asked to find pairs from a 24-hour window
+    inside a six-minute sample, and it found none — which was the correct answer
+    to the question it was actually being asked.
+
+    `span_hours` against `window_hours` is the number that says so: a span far
+    below the window means the sample, not the threshold, is the constraint.
+    """
+    stamps = [t for t in (parse_ts(_get(r, "published_at")) for r in rows) if t]
+    pillars: dict = {}
+    for r in rows:
+        p = _get(r, "pillar_id")
+        pillars[str(p)] = pillars.get(str(p), 0) + 1
+    span = ((max(stamps) - min(stamps)).total_seconds() / 3600.0
+            if len(stamps) >= 2 else 0.0)
+    # Pairs available at all: same pillar, inside the window. If this is 0 the
+    # threshold is irrelevant, because nothing ever reaches it.
+    eligible = 0
+    rl = list(rows)
+    for i in range(len(rl)):
+        for j in range(i + 1, len(rl)):
+            if _get(rl[i], "pillar_id") != _get(rl[j], "pillar_id"):
+                continue
+            if _within(_get(rl[i], "published_at"),
+                       _get(rl[j], "published_at"), window_hours):
+                eligible += 1
+    return {
+        "rows": len(rl),
+        "with_timestamp": len(stamps),
+        "span_hours": round(span, 2),
+        "window_hours": window_hours,
+        "sample_covers_window": bool(span >= window_hours * 0.5),
+        "oldest": min(stamps).isoformat() if stamps else None,
+        "newest": max(stamps).isoformat() if stamps else None,
+        "pillars": dict(sorted(pillars.items())),
+        "eligible_pairs": eligible,
+        "max_possible_pairs": len(rl) * (len(rl) - 1) // 2,
+    }
 
 
 def size_histogram(clusters) -> dict:

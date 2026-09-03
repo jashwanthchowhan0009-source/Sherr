@@ -31,6 +31,26 @@ sys.path.insert(0, _ROOT)
 import synthesis  # noqa: E402
 
 
+@pytest.fixture(autouse=True)
+def _reset_synth_counters():
+    """RESET to a known baseline, do not save-and-restore.
+
+    _synth_run is module state that only _reprocess_bodies_sync clears. These
+    tests call _synthesise_clusters directly, so without this the per-run
+    counters accumulate down the file and a test asserting "one request was
+    spent" silently measures eight — passing alone and failing in the file.
+    """
+    import main
+    baseline = {"clusters": 0, "written": 0, "merged": 0, "failed": 0,
+                "sources_used": 0, "reasons": {}, "pool": {}, "pairs": {},
+                "near_misses": []}
+    main._synth_run.clear()
+    main._synth_run.update(baseline)
+    yield
+    main._synth_run.clear()
+    main._synth_run.update(baseline)
+
+
 A = ("Oil prices rose on Monday after OPEC+ delegates said the group was "
      "weighing deeper output cuts at its next meeting in Vienna.")
 B = ("Crude prices rose on Monday as OPEC+ delegates said the group was "
@@ -297,7 +317,10 @@ def test_a_failed_synthesis_changes_nothing_and_hands_the_rows_back(tmp_path,
 
     monkeypatch.setattr(main.ai_processor, "synthesize", refuse)
     work = conn.execute(main.body_state.SELECT_NEEDING_REWRITE, (10,)).fetchall()
-    leftover = main._synthesise_clusters(conn, work)
+    # An explicit budget: the default is len(work), and the failed cluster spends
+    # one request of it, so the default would trim a row for a reason that has
+    # nothing to do with what this test is asserting.
+    leftover = main._synthesise_clusters(conn, work, budget=10)
     assert sorted(r["id"] for r in leftover) == [1, 2]
     after = conn.execute("SELECT id, status, reprocessed, synthesis_sources,"
                          " full_body FROM articles").fetchall()
@@ -319,7 +342,8 @@ def test_a_synthesis_that_reproduces_its_source_is_never_written(tmp_path,
 
     monkeypatch.setattr(main.ai_processor, "synthesize", copies)
     leftover = main._synthesise_clusters(
-        conn, conn.execute(main.body_state.SELECT_NEEDING_REWRITE, (10,)).fetchall())
+        conn, conn.execute(main.body_state.SELECT_NEEDING_REWRITE, (10,)).fetchall(),
+        budget=10)
     assert sorted(r["id"] for r in leftover) == [1, 2]
     assert not any(r["synthesis_sources"] for r in
                    conn.execute("SELECT synthesis_sources FROM articles"))
@@ -366,3 +390,220 @@ def test_the_audit_reports_the_pass(tmp_path):
     src = open(main.__file__).read()
     assert 'out["synthesis"] = synth' in src
     assert '"articles_per_request"' in src
+
+
+# ─── why the first production run found nothing ─────────────────────────────
+#
+# clusters_seen 10, size_histogram {"1": 10}, min_cluster 2 — every cluster a
+# singleton. The threshold was not the cause and lowering it would have started
+# merging unrelated stories. The cause was the SAMPLE: the drain clustered
+# exactly the rows its per-minute rate limit allowed, so the clusterer was asked
+# to find pairs from a 24-hour window inside a sample spanning a few minutes.
+
+def _timed_rows(n, minutes_apart, event_every=None):
+    """n rows, `minutes_apart` apart, optionally with a duplicate every k."""
+    out = []
+    for i in range(n):
+        when = f"2026-09-01T{10 + (i * minutes_apart) // 60:02d}:" \
+               f"{(i * minutes_apart) % 60:02d}:00+00:00"
+        if event_every and i and i % event_every == 0:
+            src, head = A, "Crude climbs as OPEC+ weighs deeper output cuts"
+        else:
+            src = (f"Company {i} reported unrelated quarterly figures {i} on "
+                   f"a separate matter numbered {i} with distinct detail {i}.")
+            head = f"Company {i} reports unrelated quarterly figures {i}"
+        out.append(_row(i + 1, head, when=when, summary=src))
+    return out
+
+
+def test_a_sample_spanning_minutes_cannot_contain_a_days_worth_of_pairs():
+    """THE DIAGNOSIS, as an assertion. Twelve consecutive articles from a feed
+    that publishes steadily span minutes, not a day — so the 24h window never
+    gets to apply and no threshold change could rescue it."""
+    twelve = _timed_rows(12, 1)
+    report = synthesis.pool_report(twelve, window_hours=24)
+    assert report["span_hours"] < 1
+    assert report["sample_covers_window"] is False
+
+
+def test_the_same_corpus_clusters_once_the_pool_is_large_enough():
+    """Same articles, same thresholds, bigger sample — the pairs appear. That
+    is what makes this a sample-size problem rather than a threshold problem."""
+    corpus = _timed_rows(120, 12, event_every=40)   # a repeat every 8 hours
+    small, large = corpus[:12], corpus
+    assert not [g for g in synthesis.cluster_events(small) if len(g) >= 2]
+    assert [g for g in synthesis.cluster_events(large) if len(g) >= 2]
+
+
+def test_the_stop_reason_for_every_pair_is_counted():
+    """"No clusters" has four causes and four different fixes. Counting only
+    the clusters cannot tell them apart; counting the stop reason can."""
+    stats = {}
+    synthesis.cluster_events(_timed_rows(30, 20, event_every=10), stats=stats)
+    assert stats["pairs_examined"] > 0
+    assert set(stats["stopped"]) <= {"joined", "shared_below_min",
+                                     "ratio_below_min", "different_pillar",
+                                     "outside_window"}
+    assert sum(stats["stopped"].values()) == stats["pairs_examined"]
+    assert stats["ratio_histogram"] and stats["shared_histogram"]
+
+
+def test_the_near_misses_carry_headlines():
+    """The one question a histogram cannot answer: are these the same story?"""
+    stats = {}
+    synthesis.cluster_events(_timed_rows(20, 20, event_every=7), stats=stats)
+    assert stats["best_pairs"]
+    for pair in stats["best_pairs"]:
+        assert len(pair["headlines"]) == 2 and pair["headlines"][0]
+        assert 0.0 <= pair["ratio"] <= 1.0
+
+
+# ─── the two hazards a bigger pool introduces ───────────────────────────────
+
+def test_boilerplate_cannot_chain_the_whole_pool_into_one_cluster():
+    """MEASURED, not feared: with a flat generic-term cap, a 115-row pool of
+    articles sharing publisher boilerplate ("the company said", "on Monday")
+    collapsed into ONE 115-member cluster. The cap now scales with the sample,
+    because a term in 40 of 50 rows is corpus vocabulary however you count it."""
+    rows = [_row(i + 1,
+                 f"Firm {i} posted results as the company said on Monday",
+                 when=f"2026-09-01T{10 + i // 6:02d}:{(i * 10) % 60:02d}:00+00:00",
+                 summary=("The company said the figures were released on Monday "
+                          "according to a statement issued after the meeting."))
+            for i in range(60)]
+    stats = {}
+    clusters = synthesis.cluster_events(rows, stats=stats)
+    assert max(len(g) for g in clusters) <= synthesis.MAX_EVENT_SIZE
+    assert stats["term_doc_cap"] <= max(3, int(0.10 * len(rows)))
+
+
+def test_an_oversized_cluster_is_refused_not_truncated():
+    """Truncating a 40-member "event" to five would merge four arbitrary rows
+    out of the feed and leave the rest — worse than writing nothing, and
+    impossible to explain afterwards. It is broken back into singletons.
+
+    The shape that produces one is a CHAIN, not a blob: union-find is
+    transitive, so a~b, b~c, c~d joins all four even though a and d share
+    nothing. That is the failure mode a large pool makes reachable, and the one
+    the generic-term cap cannot catch — each link here is a term appearing in
+    exactly two rows.
+    """
+    chain = synthesis.MAX_EVENT_SIZE + 4
+    rows, filler = [], 90
+    for i in range(chain):
+        # Row i shares its "left" terms with row i-1 and its "right" with i+1.
+        left = " ".join(f"linkterm{i:02d}x{k}" for k in range(9))
+        right = " ".join(f"linkterm{i + 1:02d}x{k}" for k in range(9))
+        rows.append(_row(i + 1, f"Chained item {i}",
+                         when="2026-09-01T10:00:00+00:00",
+                         summary=f"{left} {right}"))
+    for j in range(filler):
+        rows.append(_row(1000 + j, f"Filler {j}",
+                         when="2026-09-01T10:00:00+00:00",
+                         summary=" ".join(f"fill{j:03d}y{k}" for k in range(18))))
+    stats = {}
+    clusters = synthesis.cluster_events(rows, stats=stats)
+    assert stats["oversized_clusters_refused"] >= 1
+    assert max(len(g) for g in clusters) <= synthesis.MAX_EVENT_SIZE
+    # Nothing is lost — every row still comes back, just unclustered.
+    assert sum(len(g) for g in clusters) == len(rows)
+    assert {r["id"] for g in clusters for r in g} == {r["id"] for r in rows}
+
+
+# ─── the pool, and the request budget it must not spend ─────────────────────
+
+def test_the_clustering_pool_is_bigger_than_the_request_budget(tmp_path,
+                                                               monkeypatch):
+    """The pool costs one SELECT; only a written cluster costs a request. Tying
+    them together is what made the pass blind."""
+    import main
+    rows = ([_row(1, "Crude climbs as OPEC+ weighs deeper output cuts", summary=A),
+             _row(2, "Oil advances after OPEC+ signals further restraint", summary=B)]
+            + [_row(i, f"Unrelated story {i} on a separate matter entirely {i}",
+                    summary=f"Separate dispatch {i} about distinct subject {i}.")
+               for i in range(3, 12)])
+    conn = _db(tmp_path, rows)
+    seen = {}
+
+    async def fake(prompt, n_sources=0):
+        seen["n"] = n_sources
+        return synthesis.parse_synthesis(_answer(content=SYNTH), n_sources=n_sources)
+
+    monkeypatch.setattr(main.ai_processor, "synthesize", fake)
+    # The tick owns ONE row — id 1. Its partner is only reachable through the
+    # pool, which is exactly the case the old code could never see.
+    work = [r for r in conn.execute(main.body_state.SELECT_NEEDING_REWRITE,
+                                    (20,)).fetchall() if r["id"] == 1]
+    main._synthesise_clusters(conn, work, budget=4)
+    assert seen.get("n") == 2, "the partner outside the tick's rows was not found"
+    assert main._synth_run["pool"]["rows"] > len(work)
+
+
+def test_clusters_and_singles_share_one_request_allowance(tmp_path, monkeypatch):
+    """A cluster costs exactly one request — the same unit a single rewrite
+    costs — so the leftovers handed to the single-article batch are trimmed by
+    what the clusters already spent. Otherwise the tick quietly exceeds the
+    free tier's per-minute rate."""
+    import main
+    rows = [_row(1, "Crude climbs as OPEC+ weighs deeper output cuts", summary=A),
+            _row(2, "Oil advances after OPEC+ signals further restraint", summary=B)]
+    rows += [_row(i, f"Unrelated story {i} on a separate matter entirely {i}",
+                  summary=f"Separate dispatch {i} about distinct subject {i}.")
+             for i in range(3, 9)]
+    conn = _db(tmp_path, rows)
+
+    async def fake(prompt, n_sources=0):
+        return synthesis.parse_synthesis(_answer(content=SYNTH), n_sources=n_sources)
+
+    monkeypatch.setattr(main.ai_processor, "synthesize", fake)
+    work = conn.execute(main.body_state.SELECT_NEEDING_REWRITE, (20,)).fetchall()
+    budget = 4
+    leftover = main._synthesise_clusters(conn, work, budget=budget)
+    spent = main._synth_run["clusters"]
+    assert spent >= 1
+    assert spent + len(leftover) <= budget, \
+        f"{spent} cluster call(s) + {len(leftover)} single(s) exceeds {budget}"
+
+
+def test_a_deferred_row_is_not_marked_done(tmp_path, monkeypatch):
+    """A row trimmed by the allowance must stay a candidate. Flagging it is how
+    work disappears silently, which is the failure this whole pass exists to
+    end."""
+    import main
+    rows = [_row(1, "Crude climbs as OPEC+ weighs deeper output cuts", summary=A),
+            _row(2, "Oil advances after OPEC+ signals further restraint", summary=B)]
+    rows += [_row(i, f"Unrelated story {i} on a separate matter entirely {i}",
+                  summary=f"Separate dispatch {i} about distinct subject {i}.")
+             for i in range(3, 9)]
+    conn = _db(tmp_path, rows)
+
+    async def fake(prompt, n_sources=0):
+        return synthesis.parse_synthesis(_answer(content=SYNTH), n_sources=n_sources)
+
+    monkeypatch.setattr(main.ai_processor, "synthesize", fake)
+    work = conn.execute(main.body_state.SELECT_NEEDING_REWRITE, (20,)).fetchall()
+    leftover = main._synthesise_clusters(conn, work, budget=3)
+    handled = {r["id"] for r in conn.execute(
+        "SELECT id FROM articles WHERE reprocessed=1 OR status='merged'")}
+    left = {r["id"] for r in leftover}
+    for r in rows:
+        if r["id"] not in handled and r["id"] not in left:
+            row = conn.execute("SELECT reprocessed, status FROM articles WHERE id=?",
+                               (r["id"],)).fetchone()
+            assert row["reprocessed"] == 0 and row["status"] == "published", \
+                f"deferred row {r['id']} was flagged done without being rewritten"
+
+
+def test_the_audit_says_which_cause_it_is(tmp_path, monkeypatch):
+    """A one-line verdict, so nobody re-derives the argument from a JSON blob —
+    and so a threshold is never loosened to fix a sample-size problem."""
+    import main
+    main._synth_stats["last_pool"] = {
+        "rows": 12, "span_hours": 0.2, "window_hours": 24,
+        "sample_covers_window": False, "eligible_pairs": 66}
+    main._synth_stats["last_pairs"] = {"pairs_examined": 66,
+                                       "stopped": {"shared_below_min": 66}}
+    verdict = main._synthesis_diagnosis(dict(main._synth_stats,
+                                             articles_written=0))
+    assert "SYNTHESIS_POOL" in verdict
+    assert "0.2" in verdict and "24" in verdict

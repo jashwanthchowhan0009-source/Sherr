@@ -396,6 +396,58 @@ can still match a long piece about the same event.
 A false link there costs a wrong "related" card; a false link in synthesis
 removes a row from the feed, which is why the two are tuned differently.
 
+### The clustering pool is NOT the request budget
+
+First production run: `clusters_seen 10`, `size_histogram {"1": 10}`, nothing
+written. The threshold was not the cause.
+
+The drain's tick is bounded by the free tier's REQUEST rate — 12 articles a
+minute — and the first version clustered exactly those 12 rows. `SELECT_NEEDING_REWRITE`
+orders by `published_at DESC`, so those were twelve CONSECUTIVE articles: about
+seven minutes of a feed ingesting ~100/hour, against a 24-hour clustering
+window. Two publishers covering one event are routinely an hour apart. The
+clusterer was asked to find day-window pairs inside a seven-minute sample and
+correctly answered that there were none.
+
+**Lowering `EVENT_MIN_RATIO` would have "fixed" it by merging unrelated
+stories** — strictly worse than producing nothing, because a merge takes rows
+out of the feed.
+
+`SYNTHESIS_POOL` (400) is fetched separately and clustered; the request budget
+still governs how many clusters are written, and the leftovers handed to the
+single-article path are trimmed by what the clusters spent, so a tick can never
+exceed its rate. Clustering 400 rows costs one extra SELECT a minute and no
+provider calls. Measured on a simulated 24h corpus of 60 events (40
+multi-source): pool 12 found 3, pool 200 found all 40, none impure.
+
+### Two hazards a large pool introduces, both guarded
+
+- **`MAX_TERM_DOC_FRACTION = 0.10`.** The generic-term cap has to scale with the
+  sample. A flat 40 was written for a few dozen rows; against a pool of 50, a
+  term in 40 of them passed as "specific". Publisher boilerplate — "the company
+  said", "on Monday" — then chains unrelated rows through union-find. Measured:
+  with a flat cap, a 115-row boilerplate-heavy pool collapsed into a **single
+  115-member cluster**.
+- **`MAX_EVENT_SIZE = 8`.** Union-find is transitive, so a~b, b~c, c~d joins all
+  four even where a and d share nothing. A cluster past this size is a
+  clustering failure, and it is **refused — broken back into singletons — never
+  truncated to the first five**: truncating would merge four arbitrary rows out
+  of the feed and leave the rest.
+
+### The diagnosis is instrumentation, not archaeology
+
+"No clusters" has four causes with four different fixes. `cluster_articles`
+records which gate stopped every pair (`shared_below_min`, `ratio_below_min`,
+`different_pillar`, `outside_window`, `joined`), the ratio and shared-term
+histograms, and the closest near-misses **with their headlines** — the one
+question a histogram cannot answer is "are these actually the same story".
+`pool_report` adds the sample's span against the window, which is what
+distinguishes a threshold problem from a sample problem.
+
+All of it is under `synthesis` in `/admin/body-audit`, with a one-line
+`DIAGNOSIS`. `scripts/cluster_report.py --pool N` reproduces it against the
+database (`--pool 12` shows what a pre-fix tick saw).
+
 **Synthesis spends FEWER requests, not more.** A cluster of five is one provider
 call where the single-article path was five, so the drain's per-tick rate ceiling
 is still honoured by construction. `/admin/body-audit` reports it under
