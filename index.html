@@ -9680,13 +9680,11 @@ const MOCK_EXPLORE = {
   // history) and is now the only table. Everything reads it through mandiRows().
   // No free circle-rate API exists in India. Same shape a real one would return,
   // so a fetcher can replace this object without the renderer changing.
-  realty: { items:[
-    { city:'Hyderabad', rate:6800, cls:'Residential', duty:6.0 },
-    { city:'Bengaluru', rate:9400, cls:'Residential', duty:5.6 },
-    { city:'Mumbai',    rate:19500, cls:'Residential', duty:6.0 },
-    { city:'Delhi',     rate:12600, cls:'Residential', duty:6.0 },
-    { city:'Pune',      rate:8100, cls:'Residential', duty:6.0 },
-  ]},
+  // MOCK_EXPLORE.realty / realtyDetail WERE HERE — fabricated circle rates,
+  // year-on-year changes, locality prices and history charts for a number no
+  // free API and no DB table provides. Fabricated rates are worse than an empty
+  // state because a reader cannot tell them from real ones. dpRealty is now
+  // corpus-backed; nothing here invents a rupee-per-sq-ft figure any more.
   bulletin: [
     { k:'Markets', t:'Nifty ends lower for a third session' },
     { k:'Policy',  t:'GST council meets on rate rationalisation' },
@@ -9743,29 +9741,6 @@ const MOCK_EXPLORE = {
       { commodity:'Ragi',     market:'Bengaluru',    state:'Karnataka',   district:'Bengaluru',
         modal:3480, min:3100, max:3900, chg:0.6,
         history:[3410,3428,3445,3432,3461,3470,3480] },
-    ],
-  },
-  realtyDetail: {
-    cities: [
-      { city:'Mumbai',    rate:29400, chg:6.2, yield_:3.1, cls:'Metro',
-        history:[24800,25600,26400,27100,27900,28600,29400],
-        localities:[['Powai',26800,5.4],['Andheri West',31200,6.8],['Chembur',24500,4.9],
-                    ['Bandra West',48600,7.1],['Thane West',15900,8.2]] },
-      { city:'Bengaluru', rate:12800, chg:9.4, yield_:3.8, cls:'Metro',
-        history:[10200,10700,11150,11600,12050,12420,12800],
-        localities:[['Whitefield',9800,11.2],['Indiranagar',18400,7.6],['Sarjapur Road',10600,12.4],
-                    ['Hebbal',11200,8.9],['JP Nagar',13100,6.3]] },
-      { city:'Hyderabad', rate:8900,  chg:7.8, yield_:4.2, cls:'Metro',
-        history:[7300,7620,7940,8210,8480,8690,8900],
-        localities:[['Gachibowli',9600,10.8],['Kondapur',8800,9.1],['Kokapet',11400,13.6],
-                    ['Miyapur',6200,7.4],['Banjara Hills',17800,5.2]] },
-      { city:'Pune',      rate:9600,  chg:5.1, yield_:3.9, cls:'Tier 1',
-        history:[8400,8680,8910,9080,9290,9450,9600],
-        localities:[['Hinjewadi',8200,9.6],['Kharadi',10400,8.3],['Baner',11100,6.9],
-                    ['Wakad',8900,7.7],['Kothrud',12200,5.4]] },
-      { city:'Jaipur',    rate:4700,  chg:4.4, yield_:4.6, cls:'Tier 2',
-        history:[4050,4180,4290,4380,4490,4600,4700],
-        localities:[['Vaishali Nagar',5100,5.8],['Mansarovar',4400,4.9],['Jagatpura',4200,6.4]] },
     ],
   },
 
@@ -9954,17 +9929,14 @@ function renderXpTal() {
           ${bEsc(mandiSourceLine(a))}</div>
       </div>${sm(b)}${sm(c)}</div></div>`;
   } else if (xpTal === 'Real Estate') {
-    const rt = MOCK_EXPLORE.realty.items;
-    const sm = (x,i) => `<div class="sm" onclick="dpRealty(${JSON.stringify(x.city||'')})">
-        <div class="k">${bEsc(x.city)}</div>
-        <div class="v">₹${xpNum(x.rate)}</div>
-        <div class="s">per sq ft · ${x.duty}% duty</div></div>`;
+    // No circle-rate feed exists, so the card is an honest entry point to the
+    // corpus page, not three tiles of invented per-sq-ft rates.
     el.innerHTML = `<div class="xp-band"><div class="xp-tal">
-      <div class="big" onclick="dpRealty()">
-        <div class="k">${bEsc(rt[0].city)} · circle rate</div>
-        <div class="v">₹${xpNum(rt[0].rate)}</div>
-        <div class="s">guidance value per sq ft<br>${bEsc(rt[0].cls)} · stamp duty ${rt[0].duty}%</div>
-      </div>${sm(rt[1],1)}${sm(rt[2],2)}</div></div>`;
+      <div class="big" onclick="dpRealty()" style="flex:1">
+        <div class="k">Real estate</div>
+        <div class="v" style="font-size:1.2rem">Latest coverage</div>
+        <div class="s">Property and housing from the corpus — circle rates not connected</div>
+      </div></div></div>`;
   } else if (xpTal === 'Sports' || xpTal === 'Movies') {
     // No scores or listings feed exists, so the card is an honest entry point
     // to the corpus page rather than three tiles of fabricated scores.
@@ -10643,15 +10615,6 @@ function xpMandiSheet(i) {
      ['Arrival date', x.arrival_date || (x.live ? '—' : 'not published')],
      ['Unit','per quintal']], x.history || null);
 }
-function xpRealtySheet(i) {
-  const x = MOCK_EXPLORE.realty.items[i] || {};
-  xpKvSheet(x.city || 'City', 'Circle rate · guidance value', '₹' + xpNum(x.rate||0),
-    [['Guidance rate','₹'+xpNum(x.rate||0)+' / sq ft'],
-     ['Classification', x.cls||'—'],
-     ['Stamp duty', (x.duty||0)+'%'],
-     ['Registration','1% of value'],
-     ['Source','State registration dept (indicative)']], null);
-}
 // EVERY Matrix of Markets tile opens the SAME real page now — dpMarket — not
 // just stocks. The other five used to open a hardcoded instrument list; they
 // get the header, the stored-history chart, the full sortable list and the
@@ -10955,34 +10918,18 @@ function dpMandi(commodity) {
 }
 
 // ── REAL ESTATE ────────────────────────────────────────────────────────────
-function dpRealty(city) {
-  const C = MOCK_EXPLORE.realtyDetail.cities;
-  dpState.city = city || dpState.city || C[0].city;
-  const x = C.find(c => c.city === dpState.city) || C[0];
-  dpPage('Real estate', `
-    <div class="dp-chips">${C.map(c =>
-      `<button class="${c.city === x.city ? 'on' : ''}"
-        onclick="dpRealty(${JSON.stringify(c.city)})">${bEsc(c.city)}</button>`).join('')}</div>
-    <div class="dp-hero">
-      <div class="dp-hero-k">${bEsc(x.city)} · ${bEsc(x.cls)} · indicative</div>
-      <div class="dp-hero-v">₹${xpNum(x.rate)}</div>
-      <div class="dp-hero-c ${x.chg >= 0 ? 'dp-up' : 'dp-dn'}">${
-        (x.chg >= 0 ? '▲ ' : '▼ ') + Math.abs(x.chg).toFixed(1)}% year on year · per sq ft</div>
-    </div>
-    ${dpChart(x.history, x.chg >= 0)}
-    <div class="dp-stat">
-      <div><div class="k">Rental yield</div><div class="v">${x.yield_.toFixed(1)}%</div></div>
-      <div><div class="k">1 BHK · 600 sqft</div><div class="v">₹${
-        xpNum(Math.round(x.rate * 600 / 100000))}L</div></div>
-      <div><div class="k">YoY</div><div class="v ${x.chg >= 0 ? 'dp-up' : 'dp-dn'}">${
-        (x.chg >= 0 ? '+' : '') + x.chg.toFixed(1)}%</div></div>
-    </div>
-    <div class="dp-h">Top localities</div>
-    ${dpRows(x.localities.map(([n, r, g]) => ({
-      a:n, b:'per sq ft', c:'₹'+xpNum(r), d:g })))}
-    <div class="dp-h">Related news</div>
-    <div id="dp-news">${skelRows(3)}</div>`);
-  dpNews(x.city + ' real estate property', 'dp-news');
+// ── REAL ESTATE: corpus-backed, no fabricated circle rates ─────────────────
+// There is no free circle-rate / guidance-value API for India and no DB table
+// for it, so every rupee figure this page used to show — the per-sq-ft rate,
+// the year-on-year change, the locality prices, the history chart — was
+// invented. Fabricated circle rates are worse than an honest empty state: a
+// reader cannot tell them from real ones and might act on them. So the page now
+// leads with real property coverage from the corpus and says plainly that a
+// rate feed is not connected. dpRealty takes no city argument any more.
+function dpRealty() {
+  dpCorpusPage('Real estate',
+    'real estate property housing circle rate guidance value',
+    'Circle rates and guidance values are not connected — no property-rate feed is wired. This is the corpus\'s real-estate coverage.');
 }
 
 // ── SPORTS & MOVIES: corpus-backed, no fabricated scores ───────────────────
@@ -11094,18 +11041,8 @@ function xpMandiPage() {
 }
 
 // ── Real estate: guidance rates, split by how the city is classified ───────
-function xpRealtyPage() {
-  const items = MOCK_EXPLORE.realty.items || [];
-  const segs = ['All', ...[...new Set(items.map(x => x.cls).filter(Boolean))]];
-  xpListPage('Circle rates', segs, seg => items
-    .filter(x => seg === 'All' || x.cls === seg)
-    .map((x) => ({
-      title: x.city, sub: (x.cls || '') + ' · stamp duty ' + (x.duty || 0) + '%',
-      right: '₹' + xpNum(x.rate || 0), rightSub: 'per sq ft',
-      onTap: () => { xpClosePage();
-                     xpRealtySheet(items.findIndex(y => y.city === x.city)); },
-    })));
-}
+// Forwards to the corpus page — it used to list the fabricated circle rates.
+function xpRealtyPage() { return dpRealty(); }
 
 // ── Opportunities: the macro series behind the snapshot tile ───────────────
 function xpOppsPage() {

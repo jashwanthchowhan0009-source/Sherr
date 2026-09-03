@@ -72,6 +72,22 @@ def test_no_market_number_is_hardcoded_in_the_drilldowns(html):
     assert not re.search(r"\d,\d{3}\.\d", body)
 
 
+def test_real_estate_does_not_fabricate_circle_rates(html):
+    """No free circle-rate API and no DB table exists for it, so every rupee
+    figure the page showed was invented. Fabricated rates are worse than an
+    empty state — a reader cannot tell them from real ones and might act on
+    them. The page is corpus-backed and the rate tables are gone."""
+    assert "function dpRealty()" in html
+    realty = html[html.index("function dpRealty()"):][:600]
+    assert "not connected" in realty and "dpCorpusPage(" in realty
+    assert "realtyDetail: {" not in html, "the fabricated realty detail table remains"
+    assert "realty: { items:[" not in html, "the fabricated realty rate table remains"
+    # The "Take a look" card no longer renders invented per-sq-ft rates.
+    band = html[html.index("xpTal === 'Real Estate'"):][:700]
+    assert "MOCK_EXPLORE.realty" not in band
+    assert "circle rates not connected" in band
+
+
 def test_sports_and_movies_do_not_fabricate_scores(html):
     """We hold no scores or listings feed. The pages lead with real corpus
     coverage and say plainly what is not connected — no invented fixtures."""
