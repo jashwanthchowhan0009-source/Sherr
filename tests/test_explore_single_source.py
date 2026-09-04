@@ -105,3 +105,29 @@ def test_an_unreachable_store_shows_an_honest_empty_chart(html):
     body = html[html.index("async function dpMktChart("):][:1200]
     assert "dp-empty" in body
     assert "No price history stored" in body
+
+
+def test_the_matrix_reads_the_one_live_market_store(html):
+    """#5/#6: the Matrix of Markets showed hardcoded mock values (NIFTY
+    24,231.85) while At-a-Glance and Live Data showed the live /markets numbers,
+    so one instrument had two values on one screen. The mock matrix table is
+    deleted and the Matrix now reads window._lastMkt through the same
+    _mktBucket / _mktVal / _mktFmt accessor as every other market surface."""
+    assert "matrix: {" not in html, "the hardcoded MOCK_EXPLORE.matrix table is still present"
+    # The DATA form, not the word — the tombstone comment names the old value.
+    assert "value:'24,231.85'" not in html and "value:'$71,908'" not in html, \
+        "a hardcoded matrix value survives"
+    assert "function xpMatrixData(" not in html, "the mock-fallback matrix builder is still here"
+    rx = html[html.index("function renderXpMatrix()"):]
+    rx = rx[:rx.index("\n}")]
+    assert "_mktBucket(" in rx and "_mktVal(" in rx and "_mktFmt(" in rx, \
+        "renderXpMatrix does not read the shared live accessor"
+    assert "MOCK_EXPLORE.matrix" not in rx
+
+
+def test_a_missing_matrix_value_is_an_em_dash_not_a_mock(html):
+    """No stale fallback: a value not yet loaded renders '—', exactly like the
+    other surfaces, never a hardcoded number."""
+    rx = html[html.index("function renderXpMatrix()"):]
+    rx = rx[:rx.index("\n}")]
+    assert "'—'" in rx or '"—"' in rx
