@@ -154,3 +154,18 @@ def test_a_deep_link_opens_the_story_on_boot(html):
 def test_navigation_pushes_the_path_not_just_the_state(html):
     assert "history.pushState({ view: name }, '', pathForView(name))" in html
     assert "'/bytes/' + articleSlug(a)" in html
+
+
+def test_the_desktop_nav_is_a_full_height_rail_not_a_floating_card(html):
+    """#2/#3: the desktop sidebar showed as a floating frosted pill with a
+    stray circular button, overlapping content. The rail itself must carry the
+    surface and the pill/orb chrome must be flattened."""
+    block = _block(html, "@media (min-width: 1024px)")
+    # nav is a fixed full-height rail with its own background.
+    assert "position: fixed; top: 0; bottom: 0; left: 0" in block
+    assert "background: var(--glass)" in block
+    # the tab group is flattened (no pill background / radius / shadow).
+    assert "background: transparent; box-shadow: none; border: 0;" in block
+    assert "border-radius: 0;" in block
+    # the scan orb becomes a flush full-width row, not a floating circle.
+    assert "width: 100%; height: auto; margin: auto 0 0 0; border-radius: 12px;" in block

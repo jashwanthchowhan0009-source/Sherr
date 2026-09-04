@@ -3452,35 +3452,52 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
      The same <nav> element, re-laid out. Not a second nav: two navs would mean
      two active-tab states, and they would disagree the first time either was
      changed. */
+  /* nav is a FULL-HEIGHT OPAQUE RAIL, not a floating card. The base nav is a
+     transparent shell holding a frosted pill (.nb-tabs) and a circular orb
+     (.nb-scan) — right for a phone's floating bottom bar, wrong for a desktop
+     sidebar, where they read as a card and a stray button hovering over the
+     content. Here the rail itself carries the surface and the pill/orb chrome
+     is flattened into flush rows. position:fixed so it never scrolls away. */
   nav {
-    top: 0; bottom: 0; left: 0;
+    position: fixed; top: 0; bottom: 0; left: 0; right: auto;
     width: var(--sbw); max-width: var(--sbw);
     transform: none;
     flex-direction: column; align-items: stretch; justify-content: flex-start;
-    gap: 10px; padding: calc(var(--hh) + 18px) 12px 18px;
-    border-right: 1px solid var(--glassB);
+    gap: 6px; padding: calc(var(--hh) + 16px) 12px 16px;
+    background: var(--glass); border-right: 1px solid var(--glassB);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
   }
+  [data-theme="light"] nav { background: #fff; }
   /* The scroll-away and the minimised pill are phone behaviours. A sidebar that
      slid off-screen on scroll would take the app's only navigation with it. */
   nav.hidden, nav.compact { transform: none; opacity: 1; pointer-events: auto; }
-  nav.compact .nb-tabs { flex: 1 1 auto; gap: 2px; }
+  nav.compact .nb-tabs { flex: 1 1 auto; gap: 6px; }
   nav.compact .nb:not(.on), nav.compact .nb.on {
     flex: 0 0 auto; padding: 11px 14px; opacity: 1; width: auto;
   }
 
+  /* Flat column, no pill: no frost, no radius, no shadow — the rail is the
+     surface now, so the tab group must not paint a second one over it. */
   .nb-tabs {
-    flex-direction: column; align-items: stretch; flex: 0 0 auto;
-    gap: 4px; padding: 8px; border-radius: 18px;
+    flex-direction: column; align-items: stretch; flex: 1 1 auto;
+    gap: 4px; padding: 0; border-radius: 0;
+    background: transparent; box-shadow: none; border: 0;
+    backdrop-filter: none; -webkit-backdrop-filter: none;
   }
-  /* Icon beside the label, the way every desktop sidebar reads. */
+  [data-theme="light"] .nb-tabs { background: transparent; box-shadow: none; border: 0; }
+  /* Icon beside the label, the way every desktop sidebar reads. Full-width rows. */
   .nb {
     flex-direction: row; justify-content: flex-start; align-items: center;
-    gap: 12px; flex: 0 0 auto; padding: 11px 14px; border-radius: 12px;
+    gap: 12px; flex: 0 0 auto; width: 100%; padding: 11px 14px; border-radius: 12px;
   }
   .nb-icon { font-size: 1rem; }
-  .nb-lbl { font-size: 0.86rem; font-weight: 700; opacity: 1; }
+  .nb-lbl { font-size: 0.9rem; font-weight: 700; opacity: 1; }
+  /* The "scan" orb becomes a flush full-width row pinned to the bottom of the
+     rail — reachable, labelled by its icon, but never a floating circle. */
   .nb-scan {
-    width: auto; margin-top: auto; border-radius: 14px; padding: 13px 0;
+    width: 100%; height: auto; margin: auto 0 0 0; border-radius: 12px;
+    padding: 13px 14px; justify-content: flex-start; gap: 12px; box-shadow: none;
   }
 
   /* ── Header sits to the right of the sidebar ─────────────────────────────── */
@@ -7077,7 +7094,18 @@ async function renderExpCatSection(cat, feed, count) {
          <div class="exp-rcard-t">${bEsc(a.title)}</div>`;
       row.appendChild(d);
     });
-  } catch (e) { row.innerHTML = '<div class="exp-cat-load">Couldn’t load</div>'; }
+  } catch (e) {
+    // SURFACE THE REAL ERROR, do not swallow it into a generic message. For a
+    // non-2xx api() throws Error(detail || "HTTP <status>"); a timeout throws
+    // "Request timed out"; a cross-origin/network failure throws "Failed to
+    // fetch". Printing e.message turns "Couldn't load" into the actual cause,
+    // which is the whole diagnosis — the category endpoint returns valid JSON
+    // locally, so the failure only shows against the live backend and has to be
+    // read off the live backend. Also logged for the console.
+    console.error('[explore] category "' + cat + '" failed:', e);
+    const why = (e && e.message) ? String(e.message).slice(0, 140) : 'request failed';
+    row.innerHTML = '<div class="exp-cat-load">Couldn’t load — ' + bEsc(why) + '</div>';
+  }
 }
 function gotoCategory(cat) {
   navTo('home');
@@ -9779,20 +9807,11 @@ const MOCK_EXPLORE = {
     { tag:'Society', title:'Cabinet approves the national semiconductor mission',
       meta:'SherrByte News · 8h ago', cat:'society' },
   ],
-  matrix: {
-    stocks: { label:'Stocks',      sub:'NIFTY 50',  value:'24,231.85', pct:-0.55,
-              series:[24480,24402,24455,24310,24288,24350,24261,24231], tint:'m-stk' },
-    crypto: { label:'Crypto',      sub:'Bitcoin',   value:'$71,908',   pct:11.79,
-              series:[63100,64800,66200,65400,68100,69900,70400,71908], tint:'m-cry' },
-    forex:  { label:'Forex',       sub:'USD/INR',   value:'₹95.69',    pct:0.31,
-              series:[95.1,95.22,95.18,95.34,95.41,95.5,95.61,95.69], tint:'m-fx' },
-    bonds:  { label:'Bond Yields', sub:'US 10Y',    value:'4.65%',     pct:0.26,
-              series:[4.41,4.48,4.44,4.52,4.58,4.55,4.62,4.65], tint:'m-bnd' },
-    metals: { label:'Metals',      sub:'Gold',      value:'₹1,43,789', pct:5.80,
-              series:[135900,137200,136800,139500,141100,140600,142900,143789], tint:'m-met' },
-    oil:    { label:'Crude Oil',   sub:'WTI',       value:'$86.66',    pct:2.56,
-              series:[81.2,82.4,81.9,83.6,84.8,84.1,85.9,86.66], tint:'m-oil' },
-  },
+  // MOCK_EXPLORE.matrix WAS HERE — hardcoded NIFTY 24,231.85 / BTC $71,908 /
+  // GOLD ₹1,43,789 etc., a SECOND market source that disagreed with the live
+  // /markets data every other surface shows. Deleted: the Matrix now reads
+  // window._lastMkt through the same accessor (see renderXpMatrix), so there is
+  // one market source on the page and it cannot contradict itself.
   // MOCK_EXPLORE.mandi WAS HERE AND IT WAS A SECOND SOURCE FOR THE SAME NUMBER.
   // It held three commodities at prices that disagreed with mandiDetail below —
   // Onion 2450 vs 2400, Tomato at Gaddiannaram 1620 vs Gudimalkapur 1180,
@@ -9988,39 +10007,47 @@ function xpHeroTap(i) {
 }
 
 // ── 4. matrix of markets ────────────────────────────────────────────────────
-function xpMatrixData() {
-  const m = JSON.parse(JSON.stringify(MOCK_EXPLORE.matrix));
-  const mk = (xpSnap && xpSnap.markets && xpSnap.markets.data) || {};
-  const cy = (xpSnap && xpSnap.crypto && xpSnap.crypto.data) || {};
-  const fx = (xpSnap && xpSnap.forex && xpSnap.forex.data) || {};
-  const pick = (o,...k) => k.map(x=>o[x]).find(v=>v!=null);
-  const n = pick(mk,'NIFTY','Nifty');
-  if (n && n.price!=null){ m.stocks.value='₹'+xpNum(n.price); if(n.change_pct!=null) m.stocks.pct=+n.change_pct; }
-  const btc = (cy.coins && (cy.coins.BITCOIN || cy.coins.bitcoin)) || pick(mk,'BTC','Bitcoin');
-  if (btc && btc.price!=null){ m.crypto.value='$'+Number(btc.price).toLocaleString('en-US');
-    if(btc.change_pct!=null) m.crypto.pct=+btc.change_pct; }
-  const usd = pick(fx,'USD','USDINR');
-  if (usd!=null) m.forex.value='₹'+Number(usd.price!=null?usd.price:usd).toFixed(2);
-  const gold = pick(mk,'GOLD','Gold');
-  if (gold && gold.price!=null) m.metals.value='₹'+xpNum(gold.price);
-  const oil = pick(mk,'WTI_CRUDE','CRUDE','WTI');
-  if (oil && oil.price!=null){ m.oil.value='$'+Number(oil.price).toFixed(2);
-    if(oil.change_pct!=null) m.oil.pct=+oil.change_pct; }
-  return m;
+// THE MATRIX READS THE ONE MARKET STORE, NOT A SECOND ONE.
+// It used to read xpSnap.markets.data (from /explore/snapshot, a 2s-timeout
+// fetch that usually came back empty) and then fall back to MOCK_EXPLORE.matrix
+// — hardcoded numbers like NIFTY 24,231.85. Meanwhile At a Glance, Live Data
+// and every market detail read window._lastMkt (from /markets). So the same
+// instrument showed two values on one screen: the Matrix's stale mock and Live
+// Data's real quote. Now every market surface reads _lastMkt through the same
+// _mktBucket / _mktVal / _mktFmt accessor. No mock, no second answer; a value
+// we do not have yet renders as an em dash, exactly like the other surfaces.
+const MATRIX_TILES = [
+  { key:'stocks',      bucket:'stocks',      sym:'NIFTY',     label:'Stocks',      sub:'NIFTY 50', tint:'m-stk' },
+  { key:'crypto',      bucket:'crypto',      sym:'BTC',       label:'Crypto',      sub:'Bitcoin',  tint:'m-cry' },
+  { key:'forex',       bucket:'forex',       sym:'USDINR',    label:'Forex',       sub:'USD/INR',  tint:'m-fx'  },
+  { key:'bonds',       bucket:'rates',       sym:'US10Y',     label:'Bond Yields', sub:'US 10Y',   tint:'m-bnd' },
+  { key:'metals',      bucket:'metals',      sym:'GOLD',      label:'Metals',      sub:'Gold',     tint:'m-met' },
+  { key:'oil',         bucket:'commodities', sym:'WTI_CRUDE', label:'Crude Oil',   sub:'WTI',      tint:'m-oil' },
+];
+function _sparkNums(spark) {
+  if (!Array.isArray(spark)) return [];
+  return spark.map(x => typeof x === 'number' ? x : (x && (x.p != null ? x.p : x.price)) || 0);
 }
 function renderXpMatrix() {
   const el = document.getElementById('xp-matrix');
   if (!el) return;
-  const d = xpMatrixData();
-  el.innerHTML = Object.entries(d).map(([k,v])=>`
-    <div class="xp-mt ${v.tint} ${v.pct>=0?'up':'dn'}" onclick="xpMatrixTap('${k}')">
-      <div class="nm">${bEsc(v.label)}</div>
-      <div class="val">${bEsc(v.value)}</div>
-      <div class="chg">${xpPct(v.pct)}</div>
-      <div class="sub">${bEsc(v.sub)}</div>
-      ${xpSpark(v.series, v.pct>=0, 26)}
-    </div>`).join('');
+  el.innerHTML = MATRIX_TILES.map(t => {
+    const d = _mktBucket(t.bucket)[t.sym] || {};
+    const val = _mktVal(t.bucket, d);
+    const has = val > 0;
+    const pct = d.change_pct;
+    const up = (pct || 0) >= 0;
+    const nums = _sparkNums(d.spark);
+    return `<div class="xp-mt ${t.tint} ${up ? 'up' : 'dn'}" onclick="xpMatrixTap('${t.key}')">
+      <div class="nm">${bEsc(t.label)}</div>
+      <div class="val">${has ? bEsc(_mktFmt(t.bucket, val)) : '—'}</div>
+      <div class="chg">${pct == null ? '' : xpPct(+pct)}</div>
+      <div class="sub">${bEsc(t.sub)}</div>
+      ${nums.length ? xpSpark(nums, up, 26) : ''}
+    </div>`;
+  }).join('');
 }
+
 
 
 // ── 5. take a look ──────────────────────────────────────────────────────────
