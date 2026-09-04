@@ -1929,13 +1929,21 @@ nav.compact .nb.on { flex: 0 0 auto; padding-left: 16px; padding-right: 16px; }
   -webkit-overflow-scrolling:touch;transform:translateX(100%);
   transition:transform .34s cubic-bezier(.22,1,.32,1);
   padding-bottom:var(--nav-clear)}
-/* The app header sat ON TOP of a full-screen detail page, covering that page's
-   own back arrow — so there was no visible way out of it.
-   z-index did not help: #xp-page lives inside #v-explore, whose own stacking
-   context traps its 880 below the header's 500 in the root context. Rather than
-   restructure the DOM, the app header is hidden while a page is open. It is
-   redundant there anyway: the page has its own header, with the back arrow. */
+/* #xp-page is a body-level overlay (below </nav>) at z-index 880, so it already
+   sits above the app header (z 500) in the root stacking context. The header is
+   still hidden while a page is open on PHONES because the page is full-bleed
+   there and the page carries its own back arrow; on desktop the header is
+   restored (see the min-width:1024px block) since the page is offset beside the
+   sidebar and does not cover it. */
 body.dp-open > header, body.dp-open #hdr { display:none !important }
+/* HOME CONTENT MUST NOT SHOW UNDER A FULL DRILL-DOWN PAGE. dp-open is set only
+   for full pages (xpOpenPage/dpPage), never for the entity bottom sheet, so
+   hiding .phone here blanks every view behind the page without touching the
+   body-level overlays (which sit outside .phone) or the sidebar/header (also
+   outside .phone). This makes "no home sections below the inner page" a
+   structural fact rather than a bet on the overlay being perfectly opaque and
+   full-height. */
+body.dp-open .phone { visibility: hidden !important; }
 .xp-page.on{transform:translateX(0)}
 .xp-pg-hd{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:12px;
   padding:14px 16px;background:var(--bg);border-bottom:1px solid var(--xp-line)}
@@ -2065,7 +2073,10 @@ body.dp-open > header, body.dp-open #hdr { display:none !important }
    keeps retiring anything added there later. Hidden, not deleted: the renderers
    still run and still populate these nodes. */
 #v-explore #exp-hero-wrap{display:none!important;}
-#v-explore > #xp-page ~ *{display:none!important;}
+/* The old `#v-explore > #xp-page ~ *` hide rule is gone: #xp-page is a body-
+   level overlay now (below </nav>), not a sibling of the explore modules, so it
+   simply covers them when open. That also fixes the bleed the ~ combinator
+   could never reach — the modules that came BEFORE #xp-page in source order. */
 
 /* The Live Data sections sit below the redesigned modules and were the last of
    the identical white boxes. Same visual language applied rather than removing
@@ -4139,12 +4150,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   </div>
 </div>
 
-<!-- ENTITY BOTTOM SHEET (Explore v7) -->
-<div class="xp-scrim" id="xp-scrim" onclick="closeEntity()"></div>
-<div class="xp-sheet" id="xp-sheet" role="dialog" aria-modal="true" aria-label="Entity detail">
-  <div class="xp-grab" id="xp-grab"><i></i></div>
-  <div id="xp-sheet-body"></div>
-</div>
+<!-- ENTITY BOTTOM SHEET + drill-down page live at BODY LEVEL now, below </nav> -->
 
 <!-- MARKET DETAIL OVERLAY -->
 <div id="market-overlay">
@@ -4235,8 +4241,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
     <div class="xp-close">Exploring<br>the World</div>
   </div>
 
-  <!-- Part C — expanded pages, rendered into the same shell -->
-  <div id="xp-page" class="xp-page"></div>
+  <!-- Part C — the expanded drill-down page moved to BODY LEVEL (see below </nav>) -->
 
   <!-- At a Glance: Live Markets (weather card removed; its data feeds the bento weather tile) -->
   <div class="exp-sec-hdr">
@@ -4960,6 +4965,17 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
     <i class="fa-solid fa-satellite-dish"></i>
   </div>
 </nav>
+
+<!-- ── BODY-LEVEL OVERLAYS ─────────────────────────────────────────────────
+     These are position:fixed and MUST NOT sit under .phone (which is
+     transformed at 500–1023px, which would contain them). As direct children
+     of <body> their inset:0 is the viewport at every width. -->
+<div class="xp-scrim" id="xp-scrim" onclick="closeEntity()"></div>
+<div class="xp-sheet" id="xp-sheet" role="dialog" aria-modal="true" aria-label="Entity detail">
+  <div class="xp-grab" id="xp-grab"><i></i></div>
+  <div id="xp-sheet-body"></div>
+</div>
+<div id="xp-page" class="xp-page"></div>
 
 <script>
 
