@@ -191,11 +191,19 @@ SELECT id, headline, summary_60, full_body, source_summary,
        published_at::timestamptz AS occurred_at
   FROM sherrbyte_app.articles
  WHERE status = 'published'
-   -- The FEED GATE, same as news_match._SQL. An analog is financial evidence,
-   -- so the event library is built only from Indian financial sources; a general
-   -- feed can never become a past analog. Bound from feeds_financial (one
-   -- registry), not hand-listed here.
+   -- The FEED GATE — TWO belts over the ONE registry (feeds_financial.py), and a
+   -- row must clear both. An analog is "what news accompanied this price move", so
+   -- it may only be built from financial reporting; a general feed matching on the
+   -- word "silver" is exactly what linked a silver move to a video-game guide.
+   --   1. source_name = ANY($3): the whitelist, bound from feeds_financial (never
+   --      hand-listed), which also carries the corpus's historical financial names.
+   --   2. feed_class = 'financial': the persisted column, stamped at ingest and
+   --      backfilled from the SAME registry, so it is a stored fact a query joins
+   --      on rather than a filter a caller must remember.
+   -- Both derive from feeds_financial and are backfilled to agree, so this is
+   -- redundant enforcement of one truth, not two truths that can diverge.
    AND source_name = ANY($3::text[])
+   AND feed_class = 'financial'
    -- published_at::text, NOT published_at. The column is TEXT under the
    -- sqlite-shaped schema and timestamptz once migration 018 has run, and
    -- this query must work against both. Applying ~ to a timestamptz raises

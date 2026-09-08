@@ -82,3 +82,15 @@ def financial_sources() -> list[str]:
     """The whitelist as a sorted list — the parameter every financial-path
     query binds to. One place builds it; no query hand-rolls its own."""
     return sorted(FINANCIAL_SOURCES)
+
+
+def feed_class(source_name: str) -> str:
+    """'financial' for a source in FINANCIAL_SOURCES, else 'general'.
+
+    This is the second belt beside the query whitelist: ingest stamps every row's
+    `feed_class` column from THIS function, so the persisted column and the
+    `source_name = ANY(financial_sources())` filter derive from one set and can
+    never disagree. Exact-match on the stored source_name — no fuzzy rule, so
+    "Mint Markets" is financial and any general feed is not.
+    """
+    return "financial" if (source_name or "").strip() in FINANCIAL_SOURCES else "general"

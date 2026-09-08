@@ -8034,7 +8034,10 @@ function spieSignificance(f) {
   // 6. EVIDENCE + CONFIDENCE — the M5 breakdown, so the number is auditable.
   const ev = e.evidence || {};
   const bd = e.confidence_breakdown || [];
-  const confPct = Math.round((e.confidence || 0) * 100);
+  // The engine's score is signal_strength — a 0-100 RANKING integer, NOT a
+  // probability. Compliance rule: it is never rendered as a percentage. The
+  // stored value is 0..1, so scale to 0-100 and print a bare integer.
+  const signal = Math.round((e.confidence || 0) * 100);
   const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
   const evBody = `
     <div class="spie-note">${bEsc([plural(ev.articles || 0, 'article', 'articles'),
@@ -8046,7 +8049,7 @@ function spieSignificance(f) {
         <span class="spie-bd-bar"><i style="width:${Math.round(Math.max(0, Math.min(1, b.strength || 0)) * 100)}%"></i></span>
         <span class="spie-bd-d">${bEsc(b.detail || '')}</span>
       </div>`).join('')}</div>` : ''}
-    <div class="spie-note is-muted">Confidence ${confPct}% — how well-evidenced this reasoning is, not a forecast.</div>`;
+    <div class="spie-note is-muted">Signal strength ${signal} of 100 — how well-evidenced this reasoning is. A ranking score, not a forecast and not a percentage.</div>`;
 
   // Demo disclosure — stated on the card itself, not buried in the raw JSON. A
   // widened-window card is real data the live engine would not yet surface; a
@@ -8097,7 +8100,10 @@ function renderPattern(p) {
     `<span class="spie-ent">${bEsc(x)}</span>` +
     (isTemporal && i < ents.length - 1 ? '<span class="spie-arrow"><i class="fa-solid fa-arrow-right-long"></i></span>' : '')
   ).join('');
-  const conf = (e.confidence != null) ? Math.round(e.confidence * 100) + '%'
+  // The score pill. signal_strength is a 0-100 ranking integer and is never a
+  // percentage (compliance rule); the stored value is 0..1, so scale but drop
+  // the '%'. A pattern with no confidence falls back to its raw score.
+  const conf = (e.confidence != null) ? String(Math.round(e.confidence * 100))
              : (typeof p.score === 'number' ? p.score : '');
   const why = e.why ? `<div class="spie-why">${bEsc(e.why)}</div>` : '';
   const meta = [];
@@ -10599,7 +10605,8 @@ function xpConnOpen(i) {
   if (e.source_count) chips.push(`${e.source_count} source${e.source_count===1?'':'s'}`);
   if (e.observations) chips.push(`${e.observations} observations`);
   if (e.lag_days != null) chips.push(`${e.lag_days} day lag`);
-  if (e.confidence != null) chips.push(`confidence ${Math.round(e.confidence * 100)}%`);
+  // signal_strength is a 0-100 ranking, never a percentage (compliance rule).
+  if (e.confidence != null) chips.push(`signal strength ${Math.round(e.confidence * 100)}`);
   if ((e.top_sources || []).length) chips.push((e.top_sources || []).slice(0, 4).join(' · '));
 
   body.innerHTML = `
