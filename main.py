@@ -42,6 +42,12 @@ from originality import (
 import body_state
 import cache
 import synthesis
+# The single source of truth for which sources the market engines may read. Feeds
+# listed here are ingested like any other, but every row they produce is stamped
+# feed_class='financial' so the analog engine and market_reaction can filter to
+# them in SQL rather than by a filter each caller has to remember. See
+# financial_feeds.py.
+import financial_feeds
 # One canonical shape for articles.published_at. Four formats used to reach that
 # column; see timestamps.py for the two bugs that produced.
 import timestamps
@@ -652,6 +658,13 @@ RSS_FEEDS = [
     ("https://www.newscientist.com/feed/home/", "New Scientist"),
 ]
 
+# The financial-signal feed set — Indian markets desks, exchange/regulator
+# filings and commodity sources — appended from the shared registry. They ingest
+# alongside the general feeds above (so the consumer tabs are unaffected), but
+# every row they produce is stamped feed_class='financial' at insert time and is
+# the ONLY corpus the analog engine and market_reaction ever read.
+RSS_FEEDS += financial_feeds.FINANCIAL_FEEDS
+
 # ─── DATABASE ────────────────────────────────────────────────────────────────
 CREATE_TABLES = """
 PRAGMA journal_mode=WAL;
@@ -708,7 +721,13 @@ CREATE TABLE IF NOT EXISTS articles (
     ai_processed INTEGER DEFAULT 0,
     reprocessed INTEGER DEFAULT 0,
     story_id INTEGER DEFAULT 0,
-    engagement INTEGER DEFAULT 0
+    engagement INTEGER DEFAULT 0,
+    -- Which feed set this row came from: 'financial' | 'general'. Stamped at
+    -- ingest from financial_feeds.feed_class(source_name). The analog engine and
+    -- market_reaction read WHERE feed_class='financial'; the consumer tabs read
+    -- everything. Stored, not inferred, so the separation is a column a query
+    -- can join on rather than a filter a caller can forget.
+    feed_class TEXT DEFAULT 'general'
 );
 
 CREATE TABLE IF NOT EXISTS user_preferences (
@@ -820,6 +839,13 @@ _MIGRATIONS = [
     # was built out of is this column; without it the pass would be unauditable.
     # '' means the row was never synthesised (a single-source rewrite, or older).
     "ALTER TABLE articles ADD COLUMN synthesis_sources TEXT DEFAULT ''",
+    # ── corpus separation ─────────────────────────────────────────────────────
+    # 'financial' | 'general'. Stamped at ingest from the source's feed_class.
+    # The analog engine and market_reaction read only 'financial' rows. Existing
+    # rows default 'general' — correct, because they came from the general feeds;
+    # the market engines simply start fresh on the financial feeds' output rather
+    # than inheriting a mixed history.
+    "ALTER TABLE articles ADD COLUMN feed_class TEXT DEFAULT 'general'",
 ]
 
 # Publisher image URLs are never persisted again (P0.1). Existing rows are scrubbed
@@ -1261,6 +1287,7 @@ async def fetch_feed_async(feed_url: str, source_name: str, client: httpx.AsyncC
                 "image_url": "",
                 "source_image_url": img or "",
                 "source_name": source_name,
+                "feed_class": financial_feeds.feed_class(source_name),
                 "pillar_id": pid,
                 "micro_tags": json.dumps(tags),
                 "scope": scope,
@@ -1337,6 +1364,11 @@ async def collect_newsapi() -> list[dict]:
                         "source_image_url": a.get("urlToImage") or "",
 
                         "source_name": (a.get("source") or {}).get("name", "NewsAPI"),
+                        # NewsAPI is general-interest headlines; none of its source
+                        # names are in the financial registry, so this resolves to
+                        # 'general' and NewsAPI never feeds the market engines.
+                        "feed_class": financial_feeds.feed_class(
+                            (a.get("source") or {}).get("name", "NewsAPI")),
                         "pillar_id": pid,
                         "micro_tags": json.dumps(tags),
                         "scope": scope,
@@ -1363,16 +1395,22 @@ def _insert_with_dedup(conn, article: dict) -> bool:
     article.setdefault("source_headline", article.get("headline", ""))
     article.setdefault("source_image_url", "")
     article.setdefault("status", "pending_rewrite")
+    # Any caller predating the corpus-separation column defaults to 'general', so
+    # a row can never reach the market engines by omission — it must be stamped
+    # financial explicitly, which only the financial feeds are.
+    article.setdefault("feed_class",
+                       financial_feeds.feed_class(article.get("source_name", "")))
     try:
         cur = conn.execute("""
             INSERT OR IGNORE INTO articles
             (url, title_hash, headline, source_headline, status, summary_60, full_body,
              source_summary, when_info, where_info, what_info, how_info, image_url,
-             source_image_url, source_name, pillar_id, micro_tags, scope, published_at)
+             source_image_url, source_name, pillar_id, micro_tags, scope, published_at,
+             feed_class)
             VALUES(:url, :title_hash, :headline, :source_headline, :status, :summary_60,
                    :full_body, :source_summary, :when_info, :where_info, :what_info,
                    :how_info, :image_url, :source_image_url, :source_name, :pillar_id,
-                   :micro_tags, :scope, :published_at)
+                   :micro_tags, :scope, :published_at, :feed_class)
         """, article)
         # cur.rowcount, NOT conn.total_changes. total_changes is CUMULATIVE for
         # the connection, so once a single row had ever landed it stayed > 0 and

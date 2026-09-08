@@ -191,6 +191,13 @@ SELECT id, headline, summary_60, full_body, source_summary,
        published_at::timestamptz AS occurred_at
   FROM sherrbyte_app.articles
  WHERE status = 'published'
+   -- Corpus separation, enforced in SQL. An analog is "what news accompanied
+   -- this price move", so it may only be built from financial reporting. Rows
+   -- from the general feeds (feed_class='general') are the ones that let a
+   -- silver move link to a video-game guide; the column is stamped at ingest
+   -- (financial_feeds.py) precisely so this stays a WHERE clause, not a filter
+   -- someone forgets. Existing rows are 'general' and correctly excluded.
+   AND feed_class = 'financial'
    -- published_at::text, NOT published_at. The column is TEXT under the
    -- sqlite-shaped schema and timestamptz once migration 018 has run, and
    -- this query must work against both. Applying ~ to a timestamptz raises

@@ -81,7 +81,8 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE TABLE IF NOT EXISTS sherrbyte_app.articles (
     id BIGSERIAL PRIMARY KEY, headline TEXT, summary_60 TEXT, full_body TEXT,
     source_summary TEXT, source_name TEXT, url TEXT, status TEXT,
-    published_at TIMESTAMPTZ);
+    feed_class TEXT, published_at TIMESTAMPTZ);
+ALTER TABLE sherrbyte_app.articles ADD COLUMN IF NOT EXISTS feed_class TEXT;
 CREATE TABLE IF NOT EXISTS sherrbyte_app.market_ticks (
     symbol TEXT, market_type TEXT, price DOUBLE PRECISION,
     change_24h DOUBLE PRECISION, ts TIMESTAMPTZ);

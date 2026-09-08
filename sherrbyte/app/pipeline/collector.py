@@ -14,7 +14,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import re
+import sys
 from datetime import datetime
 
 import httpx
@@ -29,6 +31,16 @@ from app.text_utils import (
 )
 
 log = logging.getLogger("sherbyte.collector")
+
+# financial_feeds lives at the repo root beside main.py, not in this package. It
+# is pure stdlib data, and it is the SAME registry the root app ingests from, so
+# a source is financial in exactly one place across both pipelines. Loaded by
+# path for the same reason body_state is in event_library.
+_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
+    os.path.abspath(__file__)))))
+if _ROOT not in sys.path:
+    sys.path.insert(0, _ROOT)
+import financial_feeds  # noqa: E402
 
 # ─── Source registry: 50+ RSS feeds ───────────────────────────────────────────
 RSS_FEEDS: list[tuple[str, str]] = [
@@ -84,6 +96,11 @@ RSS_FEEDS: list[tuple[str, str]] = [
     ("https://www.gamespot.com/feeds/mashup/", "GameSpot"),
     ("https://e360.yale.edu/feed", "Yale E360"),
 ]
+
+# The financial-signal feed set, appended from the shared registry. These ingest
+# into info_objects like any other feed, but constructor.persist_info_object
+# stamps their rows feed_class='financial' so market_reaction can read only them.
+RSS_FEEDS += financial_feeds.FINANCIAL_FEEDS
 
 
 def _extract_image(entry) -> str:

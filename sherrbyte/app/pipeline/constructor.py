@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import sys
 
 from app.config import PILLARS
 from app.models.article import ArticleIn
@@ -23,6 +25,14 @@ from app.pipeline.understander import Understanding
 from app.text_utils import word_count
 
 log = logging.getLogger("sherbyte.constructor")
+
+# The corpus-separation registry lives at the repo root beside main.py; loaded by
+# path so the market engines classify a source identically to the root app.
+_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
+    os.path.abspath(__file__)))))
+if _ROOT not in sys.path:
+    sys.path.insert(0, _ROOT)
+import financial_feeds  # noqa: E402
 
 # Light canonical map — extend as needed; keeps "PM Modi" and "Modi" together.
 _CANONICAL = {
@@ -95,8 +105,9 @@ async def persist_info_object(conn, obj: InfoObjectIn) -> str:
         INSERT INTO info_objects
             (article_id, headline, summary, body, who, what, where_info, when_info,
              why_info, entities, topic, pillar_id, micro_tags, scope, importance,
-             sentiment, is_trending, source_name, image_url, published_at, video_url)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
+             sentiment, is_trending, source_name, image_url, published_at, video_url,
+             feed_class)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
         RETURNING id
         """,
         obj.article_id, obj.headline, obj.summary, obj.body,
@@ -105,6 +116,8 @@ async def persist_info_object(conn, obj: InfoObjectIn) -> str:
         obj.topic, obj.pillar_id, json.dumps(obj.micro_tags), obj.scope,
         obj.importance, obj.sentiment, obj.is_trending,
         obj.source_name, obj.image_url, obj.published_at, getattr(obj, "video_url", "") or "",
+        # Stamped from the source, so market_reaction reads only financial rows.
+        financial_feeds.feed_class(obj.source_name),
     )
     # Mark the source article processed.
     if obj.article_id:

@@ -101,8 +101,16 @@ async def _news_window(conn, entity_ids: list, start_sql: str, end_sql: str, arg
         SELECT DISTINCT {_STORY_KEY} AS cluster_id, ds.ref_id, ds.source_id,
                io.headline
         FROM domain_signals ds
-        LEFT JOIN info_objects io ON io.id::text = ds.ref_id
+        JOIN info_objects io ON io.id::text = ds.ref_id
         WHERE ds.domain = 'news'
+          -- Corpus separation: a market reaction may only cite financial
+          -- reporting. Without this a silver move links to a video-game guide
+          -- that merely says "silver". feed_class is stamped at ingest
+          -- (constructor.persist_info_object) so this is a WHERE clause, not a
+          -- filter each news reader has to remember. The LEFT JOIN becomes an
+          -- inner one on purpose — a news signal with no info_object has no
+          -- feed_class to vouch for it and is not evidence.
+          AND io.feed_class = 'financial'
           AND ds.entity_ids && $1::uuid[]
           AND ds.ts >= {start_sql} AND ds.ts < {end_sql}
         LIMIT 50
