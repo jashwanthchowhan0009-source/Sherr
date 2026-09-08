@@ -3535,6 +3535,11 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
      Full-screen vertical snap is a phone gesture. On a desktop it wastes a
      1440px-wide screen on one card and makes the wheel fight the snap, so the
      snap comes off and the cards become a two-column scroll. */
+  /* #v-bytes carries its own `inset:0` (an ID rule, so it beats `.view`'s
+     `left:var(--sbw)`), which parked the grid at x:0 and slid the left column
+     under the sidebar. Re-apply the sidebar offset here so Bytes sits in the
+     content area like every other view. */
+  #v-bytes { left: var(--sbw); }
   .bytes-feed {
     scroll-snap-type: none;
     display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -9707,6 +9712,11 @@ function renderBytes(arts, feed){
 async function hydrateByteCounts(ids) {
   ids = (ids || []).filter(Boolean);
   if (!ids.length) return;
+  // The like and comment pills were removed from the byte card (same as the
+  // feed card), so there is nothing left to fill — and /signal/counts is a
+  // node that does not exist. Without this guard every Bytes load fired a
+  // request whose only result was a 404 in the console.
+  if (!document.querySelector('.byte .b-like, .byte .b-comment')) return;
   try {
     const res = await api('/signal/counts?ids=' + encodeURIComponent(ids.join(',')));
     const counts = (res && res.counts) || {};
