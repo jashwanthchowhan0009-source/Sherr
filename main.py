@@ -652,6 +652,16 @@ RSS_FEEDS = [
     ("https://www.newscientist.com/feed/home/", "New Scientist"),
 ]
 
+# Indian financial desks, exchange/regulator releases and crude/metals sources.
+# They live in feeds_financial.py, not inline here, because the SAME set is the
+# whitelist the financial SIGNAL path reads (news_match, event_library, the RIL
+# proof). Appending them here is what lands their rows in the corpus; the
+# registry there is what lets ONLY these reach a signal. The general feeds above
+# are untouched — they still fill the consumer news tabs, they just never become
+# financial evidence. One list, two roles, no filter to forget.
+from feeds_financial import FINANCIAL_FEEDS as _FINANCIAL_FEEDS  # noqa: E402
+RSS_FEEDS = RSS_FEEDS + list(_FINANCIAL_FEEDS)
+
 # ─── DATABASE ────────────────────────────────────────────────────────────────
 CREATE_TABLES = """
 PRAGMA journal_mode=WAL;
@@ -4725,6 +4735,73 @@ async def admin_sherr_i_status(x_admin_token: str = Header(""),
         "thresholds": {"z": tick_anomaly.Z_THRESHOLD,
                        "window": tick_anomaly.WINDOW,
                        "min_observations": tick_anomaly.MIN_OBSERVATIONS},
+    }
+
+
+@app.get("/admin/proof-log")
+async def admin_proof_log(x_admin_token: str = Header(""), token: str = Query(""),
+                          limit: int = Query(0)):
+    """The RIL proof run's permanent firing log, plus a count per edge.
+
+    The log is the product evidence — every firing the four hand-authored edges
+    produced, whether or not it rendered a card, with its date, which signals
+    moved, the evidence article ids, the signal_strength and the noise_floor
+    beside it (never a percentage). It is written by the engine (cron) into
+    sherrbyte_app.ril_proof_log and read here, schema-qualified, over the same
+    asyncpg pool /patterns uses. `limit` caps the rows returned (0 = all); the
+    per-edge counts always cover the whole log.
+    """
+    _check_admin(x_admin_token or token)
+    pool = await get_spie_pool()
+    if pool is None:
+        return {"ok": False, "detail": "engine Postgres not reachable"}
+
+    log_sql = (
+        "SELECT id, edge_key, event_date, run_kind, moved_signals, "
+        "       evidence_article_ids, signal_strength, noise_floor, rendered, "
+        "       fwd_z, fwd_exceeded, logged_at "
+        "  FROM sherrbyte_app.ril_proof_log "
+        " ORDER BY event_date DESC, edge_key"
+        + (" LIMIT $1" if limit and limit > 0 else "")
+    )
+    try:
+        async with pool.acquire() as conn:
+            rows = await (conn.fetch(log_sql, limit) if limit and limit > 0
+                          else conn.fetch(log_sql))
+            counts = await conn.fetch(
+                "SELECT edge_key, COUNT(*) AS firings, "
+                "       SUM((rendered)::int) AS rendered "
+                "  FROM sherrbyte_app.ril_proof_log "
+                " GROUP BY edge_key ORDER BY edge_key")
+            edges = await conn.fetch(
+                "SELECT edge_key, head, tail, mechanism, signal_keys "
+                "  FROM sherrbyte_app.ril_edges ORDER BY edge_key")
+            total = int(await conn.fetchval(
+                "SELECT COUNT(*) FROM sherrbyte_app.ril_proof_log") or 0)
+    except Exception as e:
+        # The engine may not have applied migration 024 yet on a fresh DB.
+        return {"ok": False, "detail": f"proof log not available yet: {e}"}
+
+    def _row(r):
+        d = dict(r)
+        for k in ("event_date", "logged_at"):
+            if d.get(k) is not None:
+                d[k] = str(d[k])
+        for k in ("fwd_z", "fwd_exceeded"):
+            v = d.get(k)
+            if isinstance(v, str):
+                try:
+                    d[k] = json.loads(v)
+                except Exception:
+                    pass
+        return d
+
+    return {
+        "ok": True,
+        "total_firings": total,
+        "firings_per_edge": [dict(c) for c in counts],
+        "edges": [dict(e) for e in edges],
+        "log": [_row(r) for r in rows],
     }
 
 
