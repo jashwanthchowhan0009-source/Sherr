@@ -191,6 +191,11 @@ SELECT id, headline, summary_60, full_body, source_summary,
        published_at::timestamptz AS occurred_at
   FROM sherrbyte_app.articles
  WHERE status = 'published'
+   -- The FEED GATE, same as news_match._SQL. An analog is financial evidence,
+   -- so the event library is built only from Indian financial sources; a general
+   -- feed can never become a past analog. Bound from feeds_financial (one
+   -- registry), not hand-listed here.
+   AND source_name = ANY($3::text[])
    -- published_at::text, NOT published_at. The column is TEXT under the
    -- sqlite-shaped schema and timestamptz once migration 018 has run, and
    -- this query must work against both. Applying ~ to a timestamptz raises
@@ -202,6 +207,15 @@ SELECT id, headline, summary_60, full_body, source_summary,
  ORDER BY id
  LIMIT $2
 """
+
+
+def _financial_sources() -> list:
+    """The financial-source whitelist from the single registry at the repo root
+    (feeds_financial.py). Imported, never copied."""
+    if _ROOT not in sys.path:
+        sys.path.insert(0, _ROOT)
+    import feeds_financial
+    return feeds_financial.financial_sources()
 
 _UPSERT = """
 INSERT INTO hist_events (article_id, occurred_at, entity_ids, event_class,
@@ -271,7 +285,7 @@ async def build(conn, *, limit: int = None, batch: int = None) -> dict:
         take = batch if limit is None else min(batch, limit - wrote)
         if take <= 0:
             break
-        rows = await conn.fetch(_SCAN_SQL, last_id, take)
+        rows = await conn.fetch(_SCAN_SQL, last_id, take, _financial_sources())
         if not rows:
             break
         last_id = rows[-1]["id"]

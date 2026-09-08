@@ -32,6 +32,11 @@ on:
         default: both
         type: choice
         options: [both, market-signals, detectors]
+      run_proof_backfill:
+        description: "Also run the RIL proof BACKWARDS over all history (one-off)"
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: cron-detectors
@@ -99,3 +104,25 @@ jobs:
         # a run that writes 0 insights says WHY in the job log rather than
         # needing a second investigation.
         run: python -m app.workers.detectors --diagnostics
+      - name: RIL proof — log this morning's firings
+        # The daily job. Evaluates the four hand-authored RIL edges for the most
+        # recent session and APPENDS every firing to the permanent proof log.
+        # Runs after the detector pass so market_signals for the day are in.
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          REDIS_URL: ${{ secrets.REDIS_URL }}
+          RUN_SCHEDULER: "false"
+        run: python -m app.workers.proof --daily
+      - name: RIL proof — backwards run over all history (manual only)
+        # One-off: walk ~600 sessions, log every firing with its date, and print
+        # the honest forward hit rate. Gated on the dispatch flag so the nightly
+        # schedule never re-runs it (it is idempotent anyway — ON CONFLICT DO
+        # NOTHING — but there is no reason to pay for it every night).
+        if: >-
+          github.event_name == 'workflow_dispatch' &&
+          inputs.run_proof_backfill
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          REDIS_URL: ${{ secrets.REDIS_URL }}
+          RUN_SCHEDULER: "false"
+        run: python -m app.workers.proof --backfill
