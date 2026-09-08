@@ -2668,6 +2668,32 @@ async def get_article(article_id: int, authorization: str = Header("")):
     return article_row_to_dict(row)
 
 
+@app.get("/article/{article_id}/full")
+async def get_article_full(article_id: int, authorization: str = Header("")):
+    """The fuller reading body plus the who/what/where/when/why the reader panel
+    shows on demand. The frontend fetches this on article open (aoLoadFullContext)
+    and for the Summarize key-points; without the route both silently 404'd, so
+    the body never upgraded past the card summary and Key Points stayed empty.
+
+    Reads only columns the AI pass already fills — no new storage."""
+    get_current_user(authorization)
+    conn = get_db()
+    row = conn.execute("SELECT * FROM articles WHERE id=?", (article_id,)).fetchone()
+    conn.close()
+    if not row:
+        raise HTTPException(404, "Article not found")
+    d = article_row_to_dict(row)
+    wwww = {
+        "what":  (d.get("what_info")  or "").strip(),
+        "where": (d.get("where_info") or "").strip(),
+        "when":  (d.get("when_info")  or "").strip(),
+        "why":   (d.get("how_info")   or "").strip(),
+    }
+    return {"id": d["id"],
+            "body": d.get("full_body") or d.get("summary_60") or "",
+            "wwww": {k: v for k, v in wwww.items() if v}}
+
+
 @app.post("/interact")
 async def interact(req: InteractReq, authorization: str = Header("")):
     uid = get_current_user(authorization)
@@ -2722,6 +2748,30 @@ async def search(request: Request, q: str = Query(""),
     ).fetchall()
     conn.close()
     return {"articles": [article_row_to_dict(r) for r in rows]}
+
+
+@app.get("/stats/categories")
+async def stats_categories(scope: str = Query(""), authorization: str = Header("")):
+    """Per-pillar published-article counts for the Explore category badges.
+
+    The frontend shows this total beside each Explore category heading; without
+    the route the fetch 404'd (swallowed) and the badge was silently omitted.
+    It is the count of published articles in the pillar, matching the same
+    filter /explore uses (scope honoured)."""
+    get_current_user(authorization)
+    conn = get_db()
+    try:
+        sc_sql, sc_params = _scope_clause(scope)
+        cats = []
+        for pid, meta in PILLARS.items():
+            n = conn.execute(
+                "SELECT COUNT(*) AS c FROM articles WHERE ai_processed=1 "
+                "AND status='published' AND pillar_id=?" + sc_sql,
+                [pid] + sc_params).fetchone()["c"]
+            cats.append({"slug": meta["slug"], "name": meta["name"], "count": n})
+        return {"categories": cats}
+    finally:
+        conn.close()
 
 
 @app.get("/me")
