@@ -32,15 +32,15 @@ from app.text_utils import (
 
 log = logging.getLogger("sherbyte.collector")
 
-# financial_feeds lives at the repo root beside main.py, not in this package. It
-# is pure stdlib data, and it is the SAME registry the root app ingests from, so
-# a source is financial in exactly one place across both pipelines. Loaded by
-# path for the same reason body_state is in event_library.
+# feeds_financial lives at the repo root beside main.py, not in this package. It
+# is pure stdlib data, and it is the SAME registry the root app ingests from and
+# the signal-path whitelist is bound from, so a source is financial in exactly one
+# place across both pipelines. Loaded by path, like body_state in event_library.
 _ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__)))))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
-import financial_feeds  # noqa: E402
+import feeds_financial  # noqa: E402
 
 # ─── Source registry: 50+ RSS feeds ───────────────────────────────────────────
 RSS_FEEDS: list[tuple[str, str]] = [
@@ -100,7 +100,7 @@ RSS_FEEDS: list[tuple[str, str]] = [
 # The financial-signal feed set, appended from the shared registry. These ingest
 # into info_objects like any other feed, but constructor.persist_info_object
 # stamps their rows feed_class='financial' so market_reaction can read only them.
-RSS_FEEDS += financial_feeds.FINANCIAL_FEEDS
+RSS_FEEDS += feeds_financial.FINANCIAL_FEEDS
 
 
 def _extract_image(entry) -> str:

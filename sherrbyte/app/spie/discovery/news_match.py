@@ -61,6 +61,12 @@ SELECT id, headline, summary_60, full_body, source_summary, source_name, url,
        published_at
   FROM sherrbyte_app.articles
  WHERE status = 'published'
+   -- The FEED GATE. The financial signal path may only read Indian financial
+   -- sources; source_name = ANY($3) is that gate, bound from the ONE registry
+   -- (feeds_financial.FINANCIAL_SOURCES). It is why a silver move can no longer
+   -- be corroborated by a video-game guide that happens to say "silver" — a game
+   -- feed's name is not in the set, so its rows never reach this query.
+   AND source_name = ANY($3::text[])
    -- published_at::text, NOT published_at. The column is TEXT under the
    -- sqlite-shaped schema and timestamptz once migration 018 has run, and
    -- this query must work against both. Applying ~ to a timestamptz raises
@@ -73,6 +79,15 @@ SELECT id, headline, summary_60, full_body, source_summary, source_name, url,
  ORDER BY published_at DESC
  LIMIT 400
 """
+
+
+def _financial_sources() -> list:
+    """The financial-source whitelist, from the single registry at the repo root.
+    Imported, never copied — see feeds_financial.py."""
+    if _ROOT not in sys.path:
+        sys.path.insert(0, _ROOT)
+    import feeds_financial
+    return feeds_financial.financial_sources()
 
 
 def _terms(names: list) -> list:
@@ -127,7 +142,7 @@ async def match(conn, symbol_names: list, ts, *, hours: int = None,
 
     from datetime import timedelta
     lo, hi = ts - timedelta(hours=hours), ts + timedelta(hours=hours)
-    rows = [dict(r) for r in await conn.fetch(_SQL, lo, hi)]
+    rows = [dict(r) for r in await conn.fetch(_SQL, lo, hi, _financial_sources())]
 
     scored = []
     skipped_stub = 0

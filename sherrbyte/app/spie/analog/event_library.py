@@ -191,12 +191,18 @@ SELECT id, headline, summary_60, full_body, source_summary,
        published_at::timestamptz AS occurred_at
   FROM sherrbyte_app.articles
  WHERE status = 'published'
-   -- Corpus separation, enforced in SQL. An analog is "what news accompanied
-   -- this price move", so it may only be built from financial reporting. Rows
-   -- from the general feeds (feed_class='general') are the ones that let a
-   -- silver move link to a video-game guide; the column is stamped at ingest
-   -- (financial_feeds.py) precisely so this stays a WHERE clause, not a filter
-   -- someone forgets. Existing rows are 'general' and correctly excluded.
+   -- The FEED GATE — TWO belts over the ONE registry (feeds_financial.py), and a
+   -- row must clear both. An analog is "what news accompanied this price move", so
+   -- it may only be built from financial reporting; a general feed matching on the
+   -- word "silver" is exactly what linked a silver move to a video-game guide.
+   --   1. source_name = ANY($3): the whitelist, bound from feeds_financial (never
+   --      hand-listed), which also carries the corpus's historical financial names.
+   --   2. feed_class = 'financial': the persisted column, stamped at ingest and
+   --      backfilled from the SAME registry, so it is a stored fact a query joins
+   --      on rather than a filter a caller must remember.
+   -- Both derive from feeds_financial and are backfilled to agree, so this is
+   -- redundant enforcement of one truth, not two truths that can diverge.
+   AND source_name = ANY($3::text[])
    AND feed_class = 'financial'
    -- published_at::text, NOT published_at. The column is TEXT under the
    -- sqlite-shaped schema and timestamptz once migration 018 has run, and
@@ -209,6 +215,15 @@ SELECT id, headline, summary_60, full_body, source_summary,
  ORDER BY id
  LIMIT $2
 """
+
+
+def _financial_sources() -> list:
+    """The financial-source whitelist from the single registry at the repo root
+    (feeds_financial.py). Imported, never copied."""
+    if _ROOT not in sys.path:
+        sys.path.insert(0, _ROOT)
+    import feeds_financial
+    return feeds_financial.financial_sources()
 
 _UPSERT = """
 INSERT INTO hist_events (article_id, occurred_at, entity_ids, event_class,
@@ -278,7 +293,7 @@ async def build(conn, *, limit: int = None, batch: int = None) -> dict:
         take = batch if limit is None else min(batch, limit - wrote)
         if take <= 0:
             break
-        rows = await conn.fetch(_SCAN_SQL, last_id, take)
+        rows = await conn.fetch(_SCAN_SQL, last_id, take, _financial_sources())
         if not rows:
             break
         last_id = rows[-1]["id"]

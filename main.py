@@ -42,12 +42,13 @@ from originality import (
 import body_state
 import cache
 import synthesis
-# The single source of truth for which sources the market engines may read. Feeds
-# listed here are ingested like any other, but every row they produce is stamped
-# feed_class='financial' so the analog engine and market_reaction can filter to
-# them in SQL rather than by a filter each caller has to remember. See
-# financial_feeds.py.
-import financial_feeds
+# The single source of truth for which sources the market engines may read
+# (feeds_financial.py). Its feeds are ingested like any other, but every row they
+# produce is stamped feed_class='financial' from feeds_financial.feed_class(), the
+# same set the signal-path query whitelist binds — two belts, one registry, so the
+# analog engine and market_reaction filter on a stored column AND a whitelist that
+# can never disagree, rather than a filter each caller has to remember.
+import feeds_financial
 # One canonical shape for articles.published_at. Four formats used to reach that
 # column; see timestamps.py for the two bugs that produced.
 import timestamps
@@ -658,12 +659,16 @@ RSS_FEEDS = [
     ("https://www.newscientist.com/feed/home/", "New Scientist"),
 ]
 
-# The financial-signal feed set — Indian markets desks, exchange/regulator
-# filings and commodity sources — appended from the shared registry. They ingest
-# alongside the general feeds above (so the consumer tabs are unaffected), but
-# every row they produce is stamped feed_class='financial' at insert time and is
-# the ONLY corpus the analog engine and market_reaction ever read.
-RSS_FEEDS += financial_feeds.FINANCIAL_FEEDS
+# Indian financial desks, exchange/regulator releases and crude/metals sources.
+# They live in feeds_financial.py, not inline here, because the SAME set is the
+# whitelist the financial SIGNAL path reads (news_match, event_library, the RIL
+# proof) AND the source of feed_class at ingest. Appending them here is what lands
+# their rows in the corpus; the registry there is what lets ONLY these reach a
+# signal. The general feeds above are untouched — they still fill the consumer
+# news tabs, they just never become financial evidence. One list, two roles, no
+# filter to forget.
+from feeds_financial import FINANCIAL_FEEDS as _FINANCIAL_FEEDS  # noqa: E402
+RSS_FEEDS = RSS_FEEDS + list(_FINANCIAL_FEEDS)
 
 # ─── DATABASE ────────────────────────────────────────────────────────────────
 CREATE_TABLES = """
@@ -723,7 +728,7 @@ CREATE TABLE IF NOT EXISTS articles (
     story_id INTEGER DEFAULT 0,
     engagement INTEGER DEFAULT 0,
     -- Which feed set this row came from: 'financial' | 'general'. Stamped at
-    -- ingest from financial_feeds.feed_class(source_name). The analog engine and
+    -- ingest from feeds_financial.feed_class(source_name). The analog engine and
     -- market_reaction read WHERE feed_class='financial'; the consumer tabs read
     -- everything. Stored, not inferred, so the separation is a column a query
     -- can join on rather than a filter a caller can forget.
@@ -1071,6 +1076,27 @@ def init_db():
             # first. Postgres raises its own error type, not sqlite3's, so this
             # cannot stay narrowed to OperationalError.
             pass
+    # feed_class backfill. The column defaults 'general', but the analog engine
+    # gates on feed_class='financial' AND the source-name whitelist together, so a
+    # historical financial row left at 'general' would be filtered out by the
+    # column even though the whitelist admits it — the two belts must agree on
+    # every row. Stamp the column from the SAME registry the whitelist is bound
+    # from (feeds_financial), for rows already in the corpus under a financial
+    # source name. Idempotent: a second boot matches nothing left to change.
+    try:
+        _fin = feeds_financial.financial_sources()
+        if _fin:
+            _ph = ",".join("?" * len(_fin))
+            n = conn.execute(
+                f"UPDATE articles SET feed_class='financial' "
+                f"WHERE source_name IN ({_ph}) "
+                f"AND (feed_class IS NULL OR feed_class <> 'financial')",
+                _fin).rowcount
+            if n:
+                log.info("[FEED_CLASS] backfilled %d historical financial row(s)", n)
+    except Exception as e:
+        log.warning("[FEED_CLASS] backfill skipped: %s", e)
+
     # A card with no headline is the worst thing the feed can show. Repair
     # before anything is served.
     try:
@@ -1287,7 +1313,7 @@ async def fetch_feed_async(feed_url: str, source_name: str, client: httpx.AsyncC
                 "image_url": "",
                 "source_image_url": img or "",
                 "source_name": source_name,
-                "feed_class": financial_feeds.feed_class(source_name),
+                "feed_class": feeds_financial.feed_class(source_name),
                 "pillar_id": pid,
                 "micro_tags": json.dumps(tags),
                 "scope": scope,
@@ -1367,7 +1393,7 @@ async def collect_newsapi() -> list[dict]:
                         # NewsAPI is general-interest headlines; none of its source
                         # names are in the financial registry, so this resolves to
                         # 'general' and NewsAPI never feeds the market engines.
-                        "feed_class": financial_feeds.feed_class(
+                        "feed_class": feeds_financial.feed_class(
                             (a.get("source") or {}).get("name", "NewsAPI")),
                         "pillar_id": pid,
                         "micro_tags": json.dumps(tags),
@@ -1399,7 +1425,7 @@ def _insert_with_dedup(conn, article: dict) -> bool:
     # a row can never reach the market engines by omission — it must be stamped
     # financial explicitly, which only the financial feeds are.
     article.setdefault("feed_class",
-                       financial_feeds.feed_class(article.get("source_name", "")))
+                       feeds_financial.feed_class(article.get("source_name", "")))
     try:
         cur = conn.execute("""
             INSERT OR IGNORE INTO articles
@@ -4763,6 +4789,73 @@ async def admin_sherr_i_status(x_admin_token: str = Header(""),
         "thresholds": {"z": tick_anomaly.Z_THRESHOLD,
                        "window": tick_anomaly.WINDOW,
                        "min_observations": tick_anomaly.MIN_OBSERVATIONS},
+    }
+
+
+@app.get("/admin/proof-log")
+async def admin_proof_log(x_admin_token: str = Header(""), token: str = Query(""),
+                          limit: int = Query(0)):
+    """The RIL proof run's permanent firing log, plus a count per edge.
+
+    The log is the product evidence — every firing the four hand-authored edges
+    produced, whether or not it rendered a card, with its date, which signals
+    moved, the evidence article ids, the signal_strength and the noise_floor
+    beside it (never a percentage). It is written by the engine (cron) into
+    sherrbyte_app.ril_proof_log and read here, schema-qualified, over the same
+    asyncpg pool /patterns uses. `limit` caps the rows returned (0 = all); the
+    per-edge counts always cover the whole log.
+    """
+    _check_admin(x_admin_token or token)
+    pool = await get_spie_pool()
+    if pool is None:
+        return {"ok": False, "detail": "engine Postgres not reachable"}
+
+    log_sql = (
+        "SELECT id, edge_key, event_date, run_kind, moved_signals, "
+        "       evidence_article_ids, signal_strength, noise_floor, rendered, "
+        "       fwd_z, fwd_exceeded, logged_at "
+        "  FROM sherrbyte_app.ril_proof_log "
+        " ORDER BY event_date DESC, edge_key"
+        + (" LIMIT $1" if limit and limit > 0 else "")
+    )
+    try:
+        async with pool.acquire() as conn:
+            rows = await (conn.fetch(log_sql, limit) if limit and limit > 0
+                          else conn.fetch(log_sql))
+            counts = await conn.fetch(
+                "SELECT edge_key, COUNT(*) AS firings, "
+                "       SUM((rendered)::int) AS rendered "
+                "  FROM sherrbyte_app.ril_proof_log "
+                " GROUP BY edge_key ORDER BY edge_key")
+            edges = await conn.fetch(
+                "SELECT edge_key, head, tail, mechanism, signal_keys "
+                "  FROM sherrbyte_app.ril_edges ORDER BY edge_key")
+            total = int(await conn.fetchval(
+                "SELECT COUNT(*) FROM sherrbyte_app.ril_proof_log") or 0)
+    except Exception as e:
+        # The engine may not have applied migration 024 yet on a fresh DB.
+        return {"ok": False, "detail": f"proof log not available yet: {e}"}
+
+    def _row(r):
+        d = dict(r)
+        for k in ("event_date", "logged_at"):
+            if d.get(k) is not None:
+                d[k] = str(d[k])
+        for k in ("fwd_z", "fwd_exceeded"):
+            v = d.get(k)
+            if isinstance(v, str):
+                try:
+                    d[k] = json.loads(v)
+                except Exception:
+                    pass
+        return d
+
+    return {
+        "ok": True,
+        "total_firings": total,
+        "firings_per_edge": [dict(c) for c in counts],
+        "edges": [dict(e) for e in edges],
+        "log": [_row(r) for r in rows],
     }
 
 

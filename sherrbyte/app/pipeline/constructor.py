@@ -27,12 +27,14 @@ from app.text_utils import word_count
 log = logging.getLogger("sherbyte.constructor")
 
 # The corpus-separation registry lives at the repo root beside main.py; loaded by
-# path so the market engines classify a source identically to the root app.
+# path so the market engines classify a source identically to the root app. This
+# is the same feeds_financial the signal-path query whitelist is bound from, so
+# the persisted feed_class column and that whitelist can never disagree.
 _ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__)))))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
-import financial_feeds  # noqa: E402
+import feeds_financial  # noqa: E402
 
 # Light canonical map — extend as needed; keeps "PM Modi" and "Modi" together.
 _CANONICAL = {
@@ -117,7 +119,7 @@ async def persist_info_object(conn, obj: InfoObjectIn) -> str:
         obj.importance, obj.sentiment, obj.is_trending,
         obj.source_name, obj.image_url, obj.published_at, getattr(obj, "video_url", "") or "",
         # Stamped from the source, so market_reaction reads only financial rows.
-        financial_feeds.feed_class(obj.source_name),
+        feeds_financial.feed_class(obj.source_name),
     )
     # Mark the source article processed.
     if obj.article_id:
