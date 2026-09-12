@@ -113,6 +113,20 @@ jobs:
           REDIS_URL: ${{ secrets.REDIS_URL }}
           RUN_SCHEDULER: "false"
         run: python -m app.workers.proof --daily
+      - name: Filings — ingest BSE/NSE/RBI/SEBI corporate announcements
+        # First-class filing ingestion: structured exchange announcements and
+        # regulator press releases, resolved to our entity/instrument map and
+        # classified to event_class by RULES at ingest. ZERO provider calls —
+        # a filing is evidence, never something to rewrite — so it is safe beside
+        # the rate-limited AI paths. Idempotent (ON CONFLICT DO NOTHING), so a
+        # re-run only writes genuinely new filings. Non-fatal: a blocked source
+        # costs only itself, and /admin/filing-doctor shows the raw record.
+        continue-on-error: true
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          REDIS_URL: ${{ secrets.REDIS_URL }}
+          RUN_SCHEDULER: "false"
+        run: python -m app.workers.filings
       - name: RIL proof — backwards run over all history (manual only)
         # One-off: walk ~600 sessions, log every firing with its date, and print
         # the honest forward hit rate. Gated on the dispatch flag so the nightly

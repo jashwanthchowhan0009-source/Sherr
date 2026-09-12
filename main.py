@@ -5037,6 +5037,79 @@ async def admin_feed_doctor(x_admin_token: str = Header(""), token: str = Query(
         conn.close()
 
 
+@app.get("/admin/filing-doctor")
+async def admin_filing_doctor(
+    x_admin_token: str = Header(""),
+    token: str = Query(""),
+    only: str = Query(""),
+    ingest: int = Query(0),
+):
+    """Are BSE/NSE/RBI/SEBI filings ingesting, and if not, WHY?
+
+    The four filing sources are built blind (blocked by the build sandbox), so
+    their parsers are written against documented shapes and verified HERE, in
+    production. Per source this fetches live and reports: fetch success, the HTTP
+    status, a SAMPLE RAW record, and how many records parsed vs failed — and when
+    a shape is wrong it shows the raw record, not a stack trace.
+
+        GET /admin/filing-doctor?token=...            -> fetch + report all four
+        GET /admin/filing-doctor?token=...&only=NSE   -> one source
+        GET /admin/filing-doctor?token=...&ingest=1   -> also run a real ingest
+
+    Read-only unless &ingest=1, which fetches, resolves and UPSERTs through the
+    engine pool (the same work the cron does), then reports what it wrote.
+    """
+    _check_admin(x_admin_token or token)
+    engine_root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sherrbyte")
+    if engine_root not in sys.path:
+        sys.path.insert(0, engine_root)
+    from app.spie.filings import doctor as filing_doctor
+
+    report = await filing_doctor.run(only=(only or None))
+
+    # Stored counts, from the engine pool the cron writes to (schema-qualified,
+    # like /admin/proof-log). Absent on a DB where migration 028 has not run.
+    stored = None
+    ingested = None
+    pool = await get_spie_pool()
+    if pool is not None:
+        try:
+            async with pool.acquire() as conn:
+                if ingest:
+                    from app.spie.filings import ingest as filing_ingest
+                    ingested = await filing_ingest.run(conn, only=(only or None))
+                total = int(await conn.fetchval(
+                    "SELECT COUNT(*) FROM sherrbyte_app.filings") or 0)
+                by_source = await conn.fetch(
+                    "SELECT source, COUNT(*) AS c, MAX(filing_date) AS latest "
+                    "  FROM sherrbyte_app.filings GROUP BY source ORDER BY source")
+                by_class = await conn.fetch(
+                    "SELECT event_class, COUNT(*) AS c FROM sherrbyte_app.filings "
+                    "GROUP BY event_class ORDER BY c DESC")
+                with_symbol = int(await conn.fetchval(
+                    "SELECT COUNT(*) FROM sherrbyte_app.filings "
+                    "WHERE symbol IS NOT NULL") or 0)
+                with_entity = int(await conn.fetchval(
+                    "SELECT COUNT(*) FROM sherrbyte_app.filings "
+                    "WHERE entity_id IS NOT NULL") or 0)
+            stored = {
+                "total": total,
+                "with_symbol": with_symbol,
+                "with_entity": with_entity,
+                "by_source": [dict(r) for r in by_source],
+                "by_event_class": {r["event_class"]: r["c"] for r in by_class},
+            }
+        except Exception as e:
+            stored = {"error": f"filings table not available yet: {e}"}
+    else:
+        stored = {"error": "engine Postgres not reachable"}
+
+    result = {**report, "stored": stored}
+    if ingested is not None:
+        result["ingested"] = ingested
+    return json.loads(json.dumps(result, default=str))
+
+
 @app.post("/admin/publish-pending")
 async def admin_publish_pending(
     dry_run: bool = Query(True),

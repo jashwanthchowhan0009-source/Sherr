@@ -136,3 +136,30 @@ async def load_edges(conn) -> list:
     """The four edges, exactly as seeded by hand. The engine only ever READS
     this table — it has no write path to it, so it cannot invent an edge."""
     return [dict(r) for r in await conn.fetch(_EDGES_SQL)]
+
+
+# ─── the generalised, watchlist-gated hand-authored edges (migration 029) ────
+# The daily job evaluates the hand-authored edges for ONLY the entities named in
+# edge_watchlist — so the engine's attention is exactly what a person put on the
+# list, one INSERT per entity, and nothing wider. This supersedes load_edges
+# once 029 is applied; RIL is seeded onto the watchlist there, so the behaviour
+# is identical until someone hand-authors an edge for a second entity. Still
+# READ-ONLY: like ril_edges, there is no write path from code to hand_edges.
+_WATCHLIST_EDGES_SQL = """
+SELECT h.edge_key, h.watch_entity, h.head, h.tail, h.mechanism, h.signal_keys
+  FROM sherrbyte_app.hand_edges h
+  JOIN sherrbyte_app.edge_watchlist w ON w.watch_entity = h.watch_entity
+ ORDER BY h.watch_entity, h.edge_key
+"""
+
+
+async def load_watchlist_edges(conn) -> list:
+    """Hand-authored edges for the entities ON the watchlist, and only those.
+
+    Returns [] (not an error) on a database where migration 029 has not run, so
+    the caller can fall back to load_edges and a pre-029 deployment still fires
+    the RIL proof unchanged."""
+    try:
+        return [dict(r) for r in await conn.fetch(_WATCHLIST_EDGES_SQL)]
+    except Exception:                              # tables not present yet
+        return []
