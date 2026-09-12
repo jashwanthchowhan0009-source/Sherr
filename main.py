@@ -708,6 +708,16 @@ CREATE TABLE IF NOT EXISTS articles (
     where_info TEXT DEFAULT '',
     what_info TEXT DEFAULT '',
     how_info TEXT DEFAULT '',
+    -- The News node's remaining facets (dossier Phase 1). why_info completes the
+    -- what/when/where/how/why set; who_subject/who_affected name the actor and
+    -- the acted-upon; hook is one factual line stating the tension a headline
+    -- alone would miss. All written only by the synthesis pass, and all allowed
+    -- to be empty — the sources frequently do not state a cause and inventing one
+    -- is the failure mode. who_affected is a JSON array.
+    why_info TEXT DEFAULT '',
+    who_subject TEXT DEFAULT '',
+    who_affected TEXT DEFAULT '[]',
+    hook TEXT DEFAULT '',
     image_url TEXT DEFAULT '',
     source_name TEXT DEFAULT '',
     pillar_id INTEGER DEFAULT 1,
@@ -851,6 +861,17 @@ _MIGRATIONS = [
     # the market engines simply start fresh on the financial feeds' output rather
     # than inheriting a mixed history.
     "ALTER TABLE articles ADD COLUMN feed_class TEXT DEFAULT 'general'",
+    # ── the News node (dossier Phase 1) ───────────────────────────────────────
+    # why/who/hook, completing the what/when/where/how already on the row. Added
+    # here through pgcompat exactly as feed_class was — a plain articles column
+    # owned by the deployed app, NOT an engine migration: the engine's runner
+    # applies its *.sql over asyncpg against public, while articles lives in
+    # sherrbyte_app, and CLAUDE.md keeps that boundary uncrossed (no cross-schema
+    # coupling). All written only by the synthesis pass and all emptyable.
+    "ALTER TABLE articles ADD COLUMN why_info TEXT DEFAULT ''",
+    "ALTER TABLE articles ADD COLUMN who_subject TEXT DEFAULT ''",
+    "ALTER TABLE articles ADD COLUMN who_affected TEXT DEFAULT '[]'",
+    "ALTER TABLE articles ADD COLUMN hook TEXT DEFAULT ''",
 ]
 
 # Publisher image URLs are never persisted again (P0.1). Existing rows are scrubbed
@@ -3771,17 +3792,26 @@ def _synthesise_clusters(conn, work: list, budget: int = None) -> list:
             # else, so leaving it on the placeholder while the body was rewritten
             # is what made a "fixed" row still look broken.
             summary = text_utils.truncate_to_words(result["content"], 45)
+            # The News node's why/who/hook, written alongside the body. They are
+            # emptyable — a synthesis that stated no cause writes '' here, which is
+            # the honest value, not a defect. source_summary is deliberately NOT
+            # in this statement (CLAUDE.md: it is the only copy of the publisher's
+            # text and nothing may overwrite it).
             conn.execute("""
                 UPDATE articles SET headline=?, summary_60=?, full_body=?,
                     micro_tags=?, synthesis_sources=?, ai_processed=1,
                     reprocessed=1, status='published', originality_json=?,
                     originality_overlap=?, originality_run=?,
-                    originality_checked_at=?
+                    originality_checked_at=?, why_info=?, who_subject=?,
+                    who_affected=?, hook=?
                 WHERE id=?""", (
                 headline, summary, result["content"], json.dumps(tags),
                 json.dumps(member_ids), json.dumps(audit),
                 body_m["overlap"], body_m["longest_run"],
-                datetime.now(timezone.utc).isoformat(), primary["id"]))
+                datetime.now(timezone.utc).isoformat(),
+                result.get("why_info", ""), result.get("who_subject", ""),
+                json.dumps(result.get("who_affected", [])),
+                result.get("hook", ""), primary["id"]))
             _synth_run["written"] += 1
             _synth_run["sources_used"] += len(group)
             _body_last["written"] += 1
@@ -4400,6 +4430,27 @@ async def admin_body_audit(x_admin_token: str = Header(""), token: str = Query("
     conn = get_db()
     try:
         out = body_state.audit(conn)
+        # NODE COMPLETENESS. Of the published rows, how many carry the News
+        # node's why / who / hook — the number that says whether the Phase 1
+        # prompt change actually landed. A prompt extension that silently fails
+        # leaves the body counts unchanged and would otherwise be invisible;
+        # this makes "the model is emitting the new fields" a countable fact.
+        try:
+            nc = conn.execute(
+                "SELECT COUNT(*) AS published, "
+                "SUM(CASE WHEN why_info <> '' THEN 1 ELSE 0 END) AS with_why, "
+                "SUM(CASE WHEN who_subject <> '' THEN 1 ELSE 0 END) AS with_who_subject, "
+                "SUM(CASE WHEN hook <> '' THEN 1 ELSE 0 END) AS with_hook "
+                "FROM articles WHERE status='published'").fetchone()
+            published = nc["published"] or 0
+            out["node_completeness"] = {
+                "published": published,
+                "with_why": nc["with_why"] or 0,
+                "with_who_subject": nc["with_who_subject"] or 0,
+                "with_hook": nc["with_hook"] or 0,
+            }
+        except Exception as e:                                    # noqa: BLE001
+            out["node_completeness"] = {"error": f"{type(e).__name__}: {e}"}
     finally:
         conn.close()
 

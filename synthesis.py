@@ -443,7 +443,7 @@ OPERATIONAL RULES:
    * Do NOT hallucinate names, dates, or numbers. If the sources conflict, mention the discrepancy explicitly.
 
 OUTPUT FORMAT:
-Output ONLY valid JSON with this exact structure: { "headline": "Punchy, factual headline under 12 words", "content": "The generated original summary text.", "extracted_entities": ["Key Person", "Organization", "Location"], "primary_source_attribution": "Name of the primary publication reporting this" }"""
+Output ONLY valid JSON with this exact structure: { "headline": "Punchy, factual headline under 12 words", "content": "The generated original summary text.", "extracted_entities": ["Key Person", "Organization", "Location"], "primary_source_attribution": "Name of the primary publication reporting this", "why_info": "The stated cause or trigger, in the sources' facts only. Empty string if the sources do not state one.", "who_subject": "The actor that took the action", "who_affected": ["Entities the action was done to"], "hook": "One line, under 18 words, that states the tension a reader would miss from the headline alone. Facts only. No speculation about motive." }"""
 
 # The JSON contract above, restated for Gemini's responseSchema so the provider
 # enforces the shape rather than us discovering a missing key at parse time.
@@ -454,9 +454,17 @@ SYNTHESIS_SCHEMA = {
         "content": {"type": "STRING"},
         "extracted_entities": {"type": "ARRAY", "items": {"type": "STRING"}},
         "primary_source_attribution": {"type": "STRING"},
+        # The News node's why/who/hook. Emitted every time so the provider
+        # enforces the shape; the VALUES may be empty — the sources often do not
+        # state a cause, and inventing one is the failure mode, not a missing key.
+        "why_info": {"type": "STRING"},
+        "who_subject": {"type": "STRING"},
+        "who_affected": {"type": "ARRAY", "items": {"type": "STRING"}},
+        "hook": {"type": "STRING"},
     },
     "required": ["headline", "content", "extracted_entities",
-                 "primary_source_attribution"],
+                 "primary_source_attribution", "why_info", "who_subject",
+                 "who_affected", "hook"],
 }
 
 # Per-source text budget. Five sources at 700 characters is well inside a free
@@ -500,13 +508,25 @@ class SynthesisRejected(Exception):
     """The model's answer cannot be written to a row, and why."""
 
 
-def parse_synthesis(raw, *, n_sources: int = 0) -> dict:
+def parse_synthesis(raw, *, n_sources: int = 0, hook_check=None) -> dict:
     """Validate the model's JSON, or raise SynthesisRejected.
 
     NOTHING HALF-VALID IS ACCEPTED. A synthesis that came back short, empty, or
     shaped wrong is a failed call, not a partial result — writing it would put a
     fragment on a published row, and the row is better left as a placeholder
     that the next tick retries.
+
+    THE NEWS-NODE FIELDS ARE NOT THAT STRICT. `why_info`, `who_subject` and
+    `hook` may come back empty and that is a valid answer, not a rejection: the
+    sources frequently do not state a cause, and demanding one is what would
+    make the model invent it. Only the body and headline gate the whole call.
+
+    `hook_check(text, entity_names)` is the compliance blocklist, injected rather
+    than imported so this module stays pure and depends on no second copy of the
+    rules (see CLAUDE.md — one blocklist). When the hook trips it, the hook is
+    DROPPED, never raised: a bad one-line hook must not throw away a valid body.
+    When it is None the hook is kept verbatim — the caller that has the engine's
+    `narrative.violates_language_rules` on its path passes it in.
     """
     if isinstance(raw, (str, bytes)):
         text = raw.decode() if isinstance(raw, bytes) else raw
@@ -536,12 +556,35 @@ def parse_synthesis(raw, *, n_sources: int = 0) -> dict:
         ents = [ents]
     entities = [str(e).strip() for e in ents if str(e).strip()][:10]
 
+    # ── the News node: why / who / hook ────────────────────────────────────────
+    why_info = str(raw.get("why_info") or "").strip()
+    who_subject = str(raw.get("who_subject") or "").strip()
+
+    affected = raw.get("who_affected") or []
+    if isinstance(affected, str):
+        affected = [affected]
+    # Capped at 8 — an actor whose action reaches dozens of entities is a list
+    # the card cannot render and the model padding the answer, not a fact.
+    who_affected = [str(a).strip() for a in affected if str(a).strip()][:8]
+
+    hook = str(raw.get("hook") or "").strip()
+    if hook and hook_check is not None:
+        # Names are quoted facts, not claims the template makes — masked out so a
+        # company called "Target" or an actor named "Will" cannot trip the guard.
+        names = [n for n in (entities + [who_subject] + who_affected) if n]
+        if hook_check(hook, names):
+            hook = ""
+
     return {
         "headline": headline,
         "content": content,
         "extracted_entities": entities,
         "primary_source_attribution": str(
             raw.get("primary_source_attribution") or "").strip(),
+        "why_info": why_info,
+        "who_subject": who_subject,
+        "who_affected": who_affected,
+        "hook": hook,
         "n_sources": n_sources,
         "words": words,
     }
