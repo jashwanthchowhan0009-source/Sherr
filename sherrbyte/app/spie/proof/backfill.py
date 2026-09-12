@@ -78,9 +78,16 @@ async def evaluate_history(conn) -> dict:
     session, so the caller can both write the log and measure forward reactions
     without re-reading anything.
     """
-    edges = await D.load_edges(conn)
+    # Prefer the generalised, watchlist-gated edges (migration 029): the daily
+    # job evaluates ONLY the hand-authored edges for entities on edge_watchlist.
+    # Fall back to ril_edges on a pre-029 database, so the proof runs unchanged
+    # before the generalisation is applied.
+    edges = await D.load_watchlist_edges(conn)
     if not edges:
-        return {"ok": False, "detail": "ril_edges is empty — apply migration 024"}
+        edges = await D.load_edges(conn)
+    if not edges:
+        return {"ok": False,
+                "detail": "no hand-authored edges — apply migrations 024 & 029"}
 
     series_by_symbol = {sym: await D.load_series(conn, sym)
                         for sym in _edge_symbols(edges)}
