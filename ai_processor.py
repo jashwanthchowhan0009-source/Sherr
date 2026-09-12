@@ -672,6 +672,39 @@ _SYNTH_CALLS = {
 }
 
 
+_HOOK_CHECK = None
+_HOOK_CHECK_LOADED = False
+
+
+def _hook_check():
+    """The compliance blocklist the News-node hook is screened against.
+
+    ONE BLOCKLIST, not a second copy (CLAUDE.md): this reuses the engine's
+    `narrative.violates_language_rules` rather than re-listing the banned words
+    here. The engine lives under sherrbyte/ so its package root is added to the
+    path the same way the market backfills reach it. Resolved once and cached; if
+    the engine cannot be imported the hook is left unscreened rather than the
+    whole synthesis failing — but the import is in-repo, so that is a last resort.
+    """
+    global _HOOK_CHECK, _HOOK_CHECK_LOADED
+    if _HOOK_CHECK_LOADED:
+        return _HOOK_CHECK
+    _HOOK_CHECK_LOADED = True
+    try:
+        import sys                                               # noqa: PLC0415
+        engine = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                              "sherrbyte")
+        if engine not in sys.path:
+            sys.path.insert(0, engine)
+        from app.spie.reasoning.narrative import (               # noqa: PLC0415
+            violates_language_rules)
+        _HOOK_CHECK = violates_language_rules
+    except Exception as e:                                       # noqa: BLE001
+        log.warning("hook language check unavailable, hooks left unscreened: %s", e)
+        _HOOK_CHECK = None
+    return _HOOK_CHECK
+
+
 async def synthesize(prompt: str, *, n_sources: int = 0) -> Optional[dict]:
     """One synthesis call for one cluster. Returns the validated dict, or None.
 
@@ -680,6 +713,7 @@ async def synthesize(prompt: str, *, n_sources: int = 0) -> Optional[dict]:
     articles that used to cost five requests now cost one.
     """
     import synthesis                                             # noqa: PLC0415
+    hook_check = _hook_check()
     async with httpx.AsyncClient() as client:
         for provider in KEYS.configured():
             fn = _SYNTH_CALLS.get(provider)
@@ -696,7 +730,8 @@ async def synthesize(prompt: str, *, n_sources: int = 0) -> Optional[dict]:
                 text, status = await fn(key, prompt, client)
                 if text:
                     try:
-                        return synthesis.parse_synthesis(text, n_sources=n_sources)
+                        return synthesis.parse_synthesis(
+                            text, n_sources=n_sources, hook_check=hook_check)
                     except synthesis.SynthesisRejected as e:
                         # A rejected answer is a provider failure, recorded like
                         # one so /admin/body-audit can show why nothing was

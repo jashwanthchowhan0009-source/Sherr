@@ -202,6 +202,84 @@ def test_a_bad_answer_is_rejected_rather_than_written(bad):
         synthesis.parse_synthesis(bad)
 
 
+# ─── the News node: why / who / hook (dossier Phase 1) ──────────────────────
+
+def test_the_news_node_fields_default_empty_when_absent():
+    """A synthesis that omits why/who/hook is NOT rejected. The sources often do
+    not state a cause and the older prompt never emitted these keys; the row is
+    still valid and the missing facets are simply empty."""
+    got = synthesis.parse_synthesis(_answer())
+    assert got["why_info"] == ""
+    assert got["who_subject"] == ""
+    assert got["who_affected"] == []
+    assert got["hook"] == ""
+
+
+def test_the_news_node_fields_parse_when_present():
+    got = synthesis.parse_synthesis(_answer(
+        why_info="A cut to the benchmark rate.",
+        who_subject="The Reserve Bank",
+        who_affected=["Lenders", "Borrowers"],
+        hook="The move landed a day before the policy meeting."))
+    assert got["why_info"] == "A cut to the benchmark rate."
+    assert got["who_subject"] == "The Reserve Bank"
+    assert got["who_affected"] == ["Lenders", "Borrowers"]
+    assert got["hook"] == "The move landed a day before the policy meeting."
+
+
+def test_who_affected_is_capped_at_eight():
+    """A list longer than eight is the model padding the answer, not a fact the
+    card can render."""
+    got = synthesis.parse_synthesis(_answer(
+        who_affected=[f"Entity {i}" for i in range(20)]))
+    assert len(got["who_affected"]) == 8
+
+
+def _narrative():
+    """The engine's ONE blocklist, reached the way the app reaches it — never a
+    second copy re-listed in the test (CLAUDE.md)."""
+    sys.path.insert(0, os.path.join(_ROOT, "sherrbyte"))
+    from app.spie.reasoning import narrative  # noqa: E402,PLC0415
+    return narrative
+
+
+def test_a_hook_that_trips_the_compliance_blocklist_is_dropped_not_raised():
+    """A forbidden word in a one-line hook must cost the hook, never the whole
+    synthesis: the body is the value, the hook is garnish. And the check is the
+    engine's own blocklist, injected — not a second copy living in synthesis.py."""
+    narrative = _narrative()
+    bad = _answer(hook="Analysts say the stock looks bullish after the results.")
+    got = synthesis.parse_synthesis(
+        bad, hook_check=narrative.violates_language_rules)
+    assert got["hook"] == "", "a hook tripping the blocklist must be dropped"
+    assert got["content"], "the body must survive a dropped hook"
+    assert got["words"] >= synthesis.MIN_CONTENT_WORDS
+    # …and with no checker wired in, the hook is kept verbatim — proving the drop
+    # was the guard's doing and not something baked into parse_synthesis.
+    kept = synthesis.parse_synthesis(bad)
+    assert "bullish" in kept["hook"]
+
+
+def test_a_clean_hook_survives_the_compliance_check():
+    narrative = _narrative()
+    clean = _answer(hook="The cut arrived a day before the scheduled review.")
+    got = synthesis.parse_synthesis(
+        clean, hook_check=narrative.violates_language_rules)
+    assert got["hook"] == "The cut arrived a day before the scheduled review."
+
+
+def test_a_name_in_the_hook_does_not_trip_the_blocklist():
+    """Real names collide with the blocklist — an actor named Will, a retailer
+    called Target. They are quoted facts, so they are masked before the scan."""
+    narrative = _narrative()
+    got = synthesis.parse_synthesis(
+        _answer(who_subject="Will Smith",
+                extracted_entities=["Will Smith", "Target"],
+                hook="Will Smith addressed the Target shareholders on Monday."),
+        hook_check=narrative.violates_language_rules)
+    assert got["hook"], "a hook whose only 'violation' is a masked name is kept"
+
+
 # ─── the write path ─────────────────────────────────────────────────────────
 
 def _db(tmp_path, rows):
@@ -284,6 +362,38 @@ def test_the_publishers_text_survives_the_synthesis_write(tmp_path, monkeypatch)
     got = {r["id"]: r["source_summary"] for r in
            conn.execute("SELECT id, source_summary FROM articles").fetchall()}
     assert got[1] == A and got[2] == B
+
+
+def test_the_synthesis_write_stores_the_news_node_on_the_primary(tmp_path,
+                                                                 monkeypatch):
+    """why/who/hook land on the primary row alongside the body, in ONE request —
+    the drain's rate ceiling is the one thing Phase 1 may not touch."""
+    import main
+    conn = _db(tmp_path, _cluster_rows())
+    calls = []
+
+    async def fake(prompt, n_sources=0):
+        calls.append(1)
+        return synthesis.parse_synthesis(_answer(
+            content=SYNTH,
+            why_info="OPEC+ signalled tighter supply.",
+            who_subject="OPEC+",
+            who_affected=["Refiners", "Importers"],
+            hook="The signal came days before the ministerial meeting."),
+            n_sources=n_sources)
+
+    monkeypatch.setattr(main.ai_processor, "synthesize", fake)
+    work = conn.execute(main.body_state.SELECT_NEEDING_REWRITE, (10,)).fetchall()
+    main._synthesise_clusters(conn, work)
+
+    assert len(calls) == 1, "the News node must not cost an extra provider call"
+    got = conn.execute(
+        "SELECT why_info, who_subject, who_affected, hook FROM articles "
+        "WHERE synthesis_sources <> ''").fetchone()
+    assert got["why_info"] == "OPEC+ signalled tighter supply."
+    assert got["who_subject"] == "OPEC+"
+    assert json.loads(got["who_affected"]) == ["Refiners", "Importers"]
+    assert got["hook"] == "The signal came days before the ministerial meeting."
 
 
 def test_no_synthesis_update_names_source_summary():
@@ -390,6 +500,16 @@ def test_the_audit_reports_the_pass(tmp_path):
     src = open(main.__file__).read()
     assert 'out["synthesis"] = synth' in src
     assert '"articles_per_request"' in src
+
+
+def test_the_audit_reports_node_completeness():
+    """A prompt extension that silently fails leaves the body counts unchanged.
+    node_completeness makes "the model is emitting why/who/hook" a countable
+    fact, so the landing of Phase 1 is visible without log access."""
+    import main
+    src = open(main.__file__).read()
+    assert 'out["node_completeness"]' in src
+    assert '"with_hook"' in src and '"with_why"' in src
 
 
 # ─── why the first production run found nothing ─────────────────────────────
