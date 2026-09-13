@@ -46,28 +46,53 @@ async def ensure_schema(conn) -> None:
     except Exception as ex:                     # noqa: BLE001
         log.warning("ensure_schema (028_filings) failed: %s", ex)
 
+# ON CONFLICT DO UPDATE, not DO NOTHING. The dedup key is still (source,
+# external_id) — a filing is never duplicated — but a re-ingest now BACKFILLS the
+# fields that are derived rather than intrinsic: filing_date (parsed), entity_id
+# and symbol (resolved), event_class (classified), and the verbatim text. Without
+# this, the 60 rows first ingested before the date-parse and resolver fixes would
+# keep their null filing_date / entity_id / symbol forever — DO NOTHING never
+# revisits a row — so `latest` stayed null and with_entity/with_symbol stayed low.
+# `(xmax = 0)` is true only on a genuine INSERT, so `written` still counts new
+# rows and a backfill of an existing row is not miscounted as one.
 _INSERT = """
 INSERT INTO sherrbyte_app.filings
   (source, external_id, company_code, company_name, filing_type, event_class,
    subject, filing_date, url, entity_id, symbol, feed_class, raw)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8::date, $9, $10::uuid, $11, 'financial',
         $12::jsonb)
-ON CONFLICT (source, external_id) DO NOTHING
-RETURNING id
+ON CONFLICT (source, external_id) DO UPDATE SET
+    company_code = EXCLUDED.company_code,
+    company_name = EXCLUDED.company_name,
+    filing_type  = EXCLUDED.filing_type,
+    event_class  = EXCLUDED.event_class,
+    subject      = EXCLUDED.subject,
+    filing_date  = EXCLUDED.filing_date,
+    url          = EXCLUDED.url,
+    entity_id    = EXCLUDED.entity_id,
+    symbol       = EXCLUDED.symbol,
+    raw          = EXCLUDED.raw
+RETURNING id, (xmax = 0) AS inserted
 """
 
 
 async def _resolve(conn, f: P.Filing, index: dict) -> tuple:
-    """(entity_id, symbol) for a filing, both best-effort and both create=False.
+    """(entity_id, symbol) for a filing, both best-effort.
 
-    entity_id: resolve the company name against our entity graph WITHOUT creating
-    it — a filing about a company we have never seen contributes no fabricated
-    node, exactly like instrument_map's honesty rule.
+    entity_id: resolve the company name against our entity graph, CREATING it if
+    new. A filing's company_name/company_code is a VERIFIED identity issued by the
+    exchange — not a loose news mention — so minting a node from it is honest, and
+    it is the only way an exchange-style name the news corpus has never carried
+    ("Lloyds Metals And Energy Limited", "The Federal Bank Limited") gets an
+    entity at all. With create=False these resolved to nothing on every filing,
+    leaving with_entity at 0 and the whole table unusable by the event library.
+    Regulator releases carry no company (both None) and mint nothing.
 
-    symbol: the instrument ticker the filing's own text reaches, via the SAME
-    seeded keyword edges the analog engine uses (event_library.linked_symbols).
-    Most mid-cap filings reach no priced instrument and get NULL — that is the
-    known ~13-symbol limit stated in CLAUDE.md, not a bug.
+    symbol: for NSE the record already carries a clean exchange ticker in
+    company_code — use it DIRECTLY rather than fuzzy keyword matching, which only
+    ever reaches the ~13 priced instruments and missed every ordinary listed
+    company. BSE's company_code is a numeric scrip code, not a ticker, and
+    regulators have none, so those fall back to the seeded keyword edges.
     """
     from app.spie.knowledge import entity_resolver
     from app.spie.analog import event_library
@@ -76,27 +101,34 @@ async def _resolve(conn, f: P.Filing, index: dict) -> tuple:
     name = (f.company_name or "").strip() or (f.company_code or "").strip()
     if name:
         try:
-            entity_id = await entity_resolver.resolve(conn, name, "ORG", create=False)
+            entity_id = await entity_resolver.resolve(conn, name, "ORG", create=True)
         except Exception as ex:                    # resolution is best-effort
             log.debug("entity resolve failed for %r: %s", name, ex)
 
     symbol = None
-    syms = event_library.linked_symbols(f.subject or "", f.company_name or "", index)
-    if syms:
-        symbol = syms[0]
+    code = (f.company_code or "").strip()
+    if f.source == "NSE" and code:
+        # NSE's symbol IS the ticker (e.g. "RELIANCE", "LLOYDSME"); take it as-is.
+        symbol = code.upper()
+    else:
+        syms = event_library.linked_symbols(f.subject or "", f.company_name or "", index)
+        if syms:
+            symbol = syms[0]
     return entity_id, symbol
 
 
 async def _upsert(conn, f: P.Filing, entity_id, symbol) -> bool:
+    """Insert or backfill one filing. Returns True only for a genuinely NEW row,
+    so `written` still counts inserts; an existing row is updated in place."""
     row = f.to_row()
-    new_id = await conn.fetchval(
+    rec = await conn.fetchrow(
         _INSERT,
         row["source"], row["external_id"], row["company_code"],
         row["company_name"], row["filing_type"], row["event_class"],
         row["subject"], row["filing_date"], row["url"],
         entity_id, symbol, json.dumps(row["raw"]),
     )
-    return new_id is not None
+    return bool(rec and rec["inserted"])
 
 
 async def ingest_source(conn, client, src: S.Source, index: dict) -> dict:

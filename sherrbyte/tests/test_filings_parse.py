@@ -13,6 +13,7 @@ shapes. Two things every parser must guarantee:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import sys
@@ -217,6 +218,74 @@ def test_dispatch_by_kind():
     assert P.parse("nse_json", "NSE", NSE_BODY).parsed == 1
     assert P.parse("rss", "RBI", RBI_RSS).parsed == 1
     assert P.parse("mystery", "X", "x").failed == 1
+
+
+# ─── ingest resolution: entities are minted, NSE ticker mapped directly ───────
+from app.spie.filings import ingest as I             # noqa: E402
+from app.spie.knowledge import entity_resolver as _ER  # noqa: E402
+from app.spie.analog import event_library as _EL     # noqa: E402
+
+
+def test_exchange_company_is_resolved_with_create_true(monkeypatch):
+    """An exchange filing carries a verified company identity, so its entity is
+    MINTED if new (create=True) — with create=False, names the news corpus never
+    carried resolved to nothing and with_entity stayed 0."""
+    seen = {}
+
+    async def fake_resolve(conn, name, type="MISC", *, create=True):
+        seen["name"], seen["create"] = name, create
+        return "ent-123"
+
+    monkeypatch.setattr(_ER, "resolve", fake_resolve)
+    monkeypatch.setattr(_EL, "linked_symbols", lambda *a, **k: [])
+    f = P.Filing(source="NSE", external_id="x", filing_type="Result",
+                 company_code="FEDERALBNK", company_name="The Federal Bank Limited")
+    entity_id, _sym = asyncio.run(I._resolve(object(), f, {}))
+    assert entity_id == "ent-123"
+    assert seen["create"] is True
+    assert seen["name"] == "The Federal Bank Limited"
+
+
+def test_nse_ticker_is_used_directly_not_name_matched(monkeypatch):
+    """NSE's company_code IS the ticker — used verbatim, never through the
+    keyword matcher (which only reaches the ~13 priced instruments)."""
+    called = []
+    monkeypatch.setattr(_EL, "linked_symbols",
+                        lambda *a, **k: called.append(1) or ["WRONG"])
+
+    async def fake_resolve(conn, name, type="MISC", *, create=True):
+        return None
+    monkeypatch.setattr(_ER, "resolve", fake_resolve)
+
+    f = P.Filing(source="NSE", external_id="x", filing_type="Result",
+                 company_code="lloydsme", company_name="Lloyds Metals And Energy Limited")
+    _eid, symbol = asyncio.run(I._resolve(object(), f, {}))
+    assert symbol == "LLOYDSME"
+    assert not called, "NSE must not fall through to keyword name matching"
+
+
+def test_bse_numeric_code_is_not_used_as_symbol(monkeypatch):
+    """BSE's company_code is a numeric scrip code, not a ticker — it must fall
+    back to the seeded keyword edges, not be stored as a symbol."""
+    async def fake_resolve(conn, name, type="MISC", *, create=True):
+        return None
+    monkeypatch.setattr(_ER, "resolve", fake_resolve)
+    monkeypatch.setattr(_EL, "linked_symbols", lambda *a, **k: ["WTI"])
+    f = P.Filing(source="BSE", external_id="x", filing_type="Result",
+                 company_code="500325", company_name="Reliance Industries Ltd")
+    _eid, symbol = asyncio.run(I._resolve(object(), f, {}))
+    assert symbol == "WTI"
+
+
+def test_upsert_backfills_on_conflict_not_do_nothing():
+    """The dedup key still prevents duplicates, but a re-ingest UPDATES the
+    derived fields — the SQL must carry DO UPDATE (so a pre-fix row's null
+    filing_date/entity_id/symbol is backfilled) and count only real inserts."""
+    assert "DO UPDATE" in I._INSERT
+    assert "DO NOTHING" not in I._INSERT
+    assert "xmax = 0" in I._INSERT
+    for col in ("filing_date", "entity_id", "symbol", "event_class"):
+        assert f"{col}" in I._INSERT
 
 
 def test_to_row_shape_matches_insert_binding():
