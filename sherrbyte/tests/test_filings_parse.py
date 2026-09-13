@@ -70,6 +70,15 @@ def test_parse_bse_html_error_page_kept_as_raw():
     assert "Access Denied" in r.failures[0]["raw"]
 
 
+def test_parse_bse_no_record_found_is_empty_not_a_failure():
+    """BSE answers a quiet window (e.g. a weekend) with HTTP 200 and the literal
+    'No Record Found!'. That is zero filings, not a shape mismatch — it must not
+    register as a parse failure and light the doctor red."""
+    for body in ("No Record Found!", '"No Record Found!"', "  No Record Found!  "):
+        r = P.parse_bse(body)
+        assert r.parsed == 0 and r.failed == 0, body
+
+
 # ─── NSE: corporate-announcements JSON ────────────────────────────────────────
 NSE_BODY = json.dumps([
     {"symbol": "RELIANCE", "sm_name": "Reliance Industries Limited",
@@ -96,6 +105,16 @@ def test_parse_nse_wellformed():
 def test_parse_nse_wrapped_in_data_key():
     r = P.parse_nse(json.dumps({"data": json.loads(NSE_BODY)}))
     assert r.parsed == 1
+
+
+def test_parse_nse_dd_mon_yyyy_date():
+    """NSE's an_dt is 'dd-Mon-yyyy HH:MM:SS' — the production shape that was
+    coming back as a null filing_date, which the analog engine cannot use."""
+    body = json.dumps([{"symbol": "TCS", "sm_name": "TCS Ltd", "desc": "Result",
+                        "an_dt": "13-Sep-2026 01:11:09",
+                        "sort_date": "2026-09-13 01:11:09"}])
+    f = P.parse_nse(body).filings[0]
+    assert f.filing_date == "2026-09-13"
 
 
 def test_parse_nse_non_array_is_a_failure():
@@ -142,6 +161,43 @@ def test_parse_sebi_rss():
     r = P.parse_rss("SEBI", SEBI_RSS)
     assert r.parsed == 1
     assert r.filings[0].event_class == "regulatory_action"
+
+
+def test_iso_date_parses_every_source_shape():
+    """The three production date shapes that were all coming back null:
+    NSE dd-Mon-yyyy, RBI RFC822 without a tz, SEBI 'dd Mon, yyyy +0530'."""
+    assert P._iso_date("13-Sep-2026 01:11:09") == "2026-09-13"      # NSE
+    assert P._iso_date("Fri, 11 Sep 2026 21:40:00") == "2026-09-11"  # RBI, no tz
+    assert P._iso_date("11 Sep, 2026 +0530") == "2026-09-11"         # SEBI
+
+
+def test_rbi_pubdate_without_tz_yields_a_date():
+    """RBI's live pubDate carries no timezone; the filing_date must still parse
+    (without a date the analog engine cannot use the filing at all)."""
+    rss = ("""<?xml version="1.0"?><rss version="2.0"><channel><item>"""
+           "<title>RBI issues KYC Direction amendment</title>"
+           "<link>https://www.rbi.org.in/pr/2</link><guid>rbi-2</guid>"
+           "<pubDate>Fri, 11 Sep 2026 21:40:00</pubDate>"
+           "<description>Direction amended.</description>"
+           "</item></channel></rss>")
+    f = P.parse_rss("RBI", rss).filings[0]
+    assert f.filing_date == "2026-09-11"
+
+
+def test_rbi_html_description_is_stripped():
+    """RBI's <description> is raw HTML table markup — the stored subject must be
+    readable text, not tags, and the classifier must not see the markup."""
+    rss = ("""<?xml version="1.0"?><rss version="2.0"><channel><item>"""
+           "<title>RBI Press Release</title>"
+           "<link>https://www.rbi.org.in/pr/3</link><guid>rbi-3</guid>"
+           "<pubDate>Fri, 11 Sep 2026 21:40:00 +0530</pubDate>"
+           "<description>&lt;table&gt;&lt;tr&gt;&lt;td&gt;Repo rate held"
+           "&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;</description>"
+           "</item></channel></rss>")
+    f = P.parse_rss("RBI", rss).filings[0]
+    assert "<" not in f.subject and ">" not in f.subject
+    assert "table" not in f.raw["summary"].lower()
+    assert "Repo rate held" in f.subject
 
 
 def test_parse_rss_empty_body_is_a_failure():

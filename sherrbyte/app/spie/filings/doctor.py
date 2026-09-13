@@ -26,10 +26,12 @@ from datetime import datetime, timedelta, timezone
 from app.spie.filings import sources as S
 from app.spie.filings import parse as P
 
-# How far back BSE's date window reaches. The API needs strPrevDate/strToDate;
-# a two-day window catches the current session plus the previous one across the
-# 18:30 IST dissemination boundary.
-BSE_WINDOW_DAYS = 2
+# How far back BSE's date window reaches. The API needs strPrevDate/strToDate.
+# FOUR days, not two: a two-day window run on a Monday (or after a holiday)
+# spans only the weekend and BSE answers "No Record Found!" — an empty result
+# that looks like silence. Four days always reaches back across a weekend to the
+# previous trading session, so a Monday run still catches Friday's filings.
+BSE_WINDOW_DAYS = 4
 FETCH_TIMEOUT_S = 20.0
 _MAX_FAILURES_SHOWN = 3
 

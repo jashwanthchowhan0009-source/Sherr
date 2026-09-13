@@ -15,6 +15,7 @@ not an exception that takes the pass down.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
@@ -86,12 +87,22 @@ def _iso_date(value) -> str | None:
     s = str(value).strip()
     if not s:
         return None
-    # RSS pubDate first (RFC 822), then the ISO / space-separated forms the JSON
-    # APIs use. Each attempt is cheap and the first that parses wins.
+    # EACH SOURCE EMITS A DIFFERENT SHAPE, and every one below is a real value
+    # seen in production, not a guess:
+    #   NSE  "13-Sep-2026 01:11:09"     -> %d-%b-%Y %H:%M:%S   (an_dt)
+    #   RBI  "Fri, 11 Sep 2026 21:40:00" -> %a, %d %b %Y %H:%M:%S  (RFC822, NO tz)
+    #   SEBI "11 Sep, 2026 +0530"       -> %d %b, %Y %z
+    # The tz-bearing RFC822 form and the JSON APIs' ISO/space forms are kept too.
+    # Each attempt is cheap and the first that parses wins.
     fmts = (
         "%a, %d %b %Y %H:%M:%S %z", "%a, %d %b %Y %H:%M:%S %Z",
+        "%a, %d %b %Y %H:%M:%S",                       # RBI pubDate without a tz
         "%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M:%S.%f",
-        "%Y-%m-%d %H:%M:%S", "%d-%m-%Y %H:%M:%S", "%d %b %Y",
+        "%Y-%m-%d %H:%M:%S",
+        "%d-%m-%Y %H:%M:%S",
+        "%d-%b-%Y %H:%M:%S", "%d-%b-%Y %H:%M", "%d-%b-%Y",   # NSE an_dt
+        "%d %b, %Y %z", "%d %b, %Y",                          # SEBI
+        "%d %b %Y %H:%M:%S", "%d %b %Y",
         "%Y-%m-%d", "%d-%m-%Y",
     )
     for f in fmts:
@@ -113,8 +124,49 @@ def _str(v) -> str:
     return "" if v is None else str(v).strip()
 
 
+_TAG_RE = re.compile(r"<[^>]+>")
+_WS_RE = re.compile(r"\s+")
+
+
+def _strip_html(v) -> str:
+    """Plain text out of an HTML fragment. RBI's RSS <description> is a whole
+    HTML table of markup — stored raw it makes `subject` unreadable and feeds the
+    classifier tag noise. Drop tags, unescape entities, collapse whitespace."""
+    import html as _html
+
+    s = _str(v)
+    if not s:
+        return ""
+    s = _TAG_RE.sub(" ", s)
+    s = _html.unescape(s)
+    return _WS_RE.sub(" ", s).strip()
+
+
+def _rss_date(entry) -> str | None:
+    """The most reliable date for an RSS item: feedparser's parsed struct_time
+    when it managed to read one, else the raw published/updated string through
+    _iso_date (which now knows RBI's no-tz and SEBI's 'dd Mon, yyyy +0530')."""
+    for key in ("published_parsed", "updated_parsed"):
+        st = entry.get(key) if hasattr(entry, "get") else None
+        if st:
+            try:
+                return datetime(*st[:6], tzinfo=timezone.utc).date().isoformat()
+            except (TypeError, ValueError):
+                pass
+    return _iso_date(_str(entry.get("published")) or _str(entry.get("updated"))
+                     or _str(entry.get("pubDate")))
+
+
 # ─── BSE: AnnGetData JSON ─────────────────────────────────────────────────────
 _BSE_ATTACH_BASE = "https://www.bseindia.com/xml-data/corpfiling/AttachLive/"
+
+
+def _is_bse_empty(body) -> bool:
+    """BSE's HTTP-200 empty-window sentinel: the literal 'No Record Found!',
+    with or without surrounding quotes/whitespace."""
+    if not isinstance(body, str):
+        return False
+    return "no record found" in body.strip().strip('"').lower()
 
 
 def parse_bse(body) -> ParseResult:
@@ -123,8 +175,19 @@ def parse_bse(body) -> ParseResult:
                     NEWS_DT, ATTACHMENTNAME, HEADLINE}, ...], "Table1": [...]}
     """
     res = ParseResult()
+    # BSE answers a quiet window with HTTP 200 and the literal string
+    # "No Record Found!" (sometimes JSON-quoted). That is an EMPTY result — zero
+    # filings, common on a weekend — not a shape mismatch. Counting it as a parse
+    # failure would light up the doctor red for a market that was simply closed.
+    if _is_bse_empty(body):
+        return res
     data = body if isinstance(body, (dict, list)) else _loads(body, res)
     if data is None:
+        return res
+    if isinstance(data, str):                 # JSON-decoded to a bare string
+        if _is_bse_empty(data):
+            return res
+        res.failures.append(_fail(data, "BSE response is a string, not a table"))
         return res
     rows = data.get("Table") if isinstance(data, dict) else data
     if not isinstance(rows, list):
@@ -221,7 +284,10 @@ def parse_rss(source: str, body) -> ParseResult:
         if not ext:
             res.failures.append(_fail(dict(e), f"{source} item has no id/link/title"))
             continue
-        desc = _str(e.get("summary")) or _str(e.get("description"))
+        # STRIPPED before use: RBI's <description> is raw HTML table markup, so
+        # the classifier must not see the tags and the stored subject must be
+        # readable text, not markup.
+        desc = _strip_html(e.get("summary")) or _strip_html(e.get("description"))
         res.filings.append(Filing(
             source=source,
             external_id=ext,
@@ -229,8 +295,7 @@ def parse_rss(source: str, body) -> ParseResult:
             company_name=None,
             filing_type=title,               # the category signal is in the title
             subject=(title + (" — " + desc if desc else "")).strip(" —"),
-            filing_date=_iso_date(e.get("published") or e.get("updated")
-                                  or e.get("pubDate")),
+            filing_date=_rss_date(e),
             url=link or None,
             raw={"title": title, "link": link, "id": ext,
                  "published": _str(e.get("published")), "summary": desc},

@@ -5074,9 +5074,14 @@ async def admin_filing_doctor(
     pool = await get_spie_pool()
     if pool is not None:
         try:
+            from app.spie.filings import ingest as filing_ingest
             async with pool.acquire() as conn:
+                # Create the table if migration 028 has not run on this DB yet, so
+                # a read-only doctor call reports total:0 instead of "relation does
+                # not exist" (the endpoint uses the raw engine pool, which does not
+                # bootstrap migrations). ingest.run() ensures it too.
+                await filing_ingest.ensure_schema(conn)
                 if ingest:
-                    from app.spie.filings import ingest as filing_ingest
                     ingested = await filing_ingest.run(conn, only=(only or None))
                 total = int(await conn.fetchval(
                     "SELECT COUNT(*) FROM sherrbyte_app.filings") or 0)

@@ -59,3 +59,33 @@ def test_most_specific_rule_wins():
     assert classify_filing(
         "RBI", "Press Release", "Monetary Policy Committee keeps repo rate steady"
     ) == "central_bank_policy"
+
+
+def test_regulator_release_never_reaches_the_company_rules():
+    """An RBI KYC amendment DIRECTION is a regulatory_action — never m_and_a,
+    even when bulk RSS text drags in a stray 'acquisition'/'merger'. Regulators
+    are classified against central_bank_policy / regulatory_action / sanctions
+    only, so a company class cannot be emitted for them."""
+    got = classify_filing(
+        "RBI",
+        "Amendment to Master Direction - Know Your Customer (KYC) Directions",
+        "Bulk feed also mentions an acquisition and a merger elsewhere")
+    assert got == "regulatory_action"
+
+
+def test_regulator_only_ever_emits_regulator_classes():
+    allowed = {"central_bank_policy", "regulatory_action", "sanctions", "other"}
+    samples = ["Acquisition of majority stake", "Financial Results Q1",
+               "Change in Directors", "Credit Rating downgrade",
+               "Plant Shutdown", "Capacity Expansion", "random noise"]
+    for src in ("RBI", "SEBI"):
+        for s in samples:
+            assert classify_filing(src, s) in allowed, (src, s)
+
+
+def test_sebi_felicitation_press_release_stays_other():
+    """A SEBI felicitation carries no category signal; 'press release' is not one,
+    so it must default to 'other' rather than being guessed into a class."""
+    assert classify_filing(
+        "SEBI", "SEBI felicitates awardees at its annual function",
+        "Press release") == "other"
