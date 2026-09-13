@@ -14,12 +14,37 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 
 from app.spie.filings import sources as S
 from app.spie.filings import parse as P
 from app.spie.filings.doctor import _fetch
 
 log = logging.getLogger("sherbyte.filings.ingest")
+
+# Migration 028 creates sherrbyte_app.filings. run_migrations() applies it on a
+# worker bootstrap, but the write and read paths that matter in practice do NOT
+# bootstrap: /admin/filing-doctor (and a manual ingest) write through the raw
+# engine pool, so until the first successful nightly cron the table is missing
+# and every insert/select raises "relation sherrbyte_app.filings does not exist"
+# — the reported blocker. Applying the migration here, idempotently, makes the
+# ingest path self-sufficient regardless of who created the connection.
+_MIGRATION_028 = os.path.normpath(os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    "..", "..", "db", "migrations", "028_filings.sql"))
+
+
+async def ensure_schema(conn) -> None:
+    """Apply migration 028 (IF NOT EXISTS throughout, so a no-op once created).
+
+    Belt for the paths that reach the filings table without a worker bootstrap.
+    Best-effort: a failure here is logged and left to surface at the insert, so
+    this never turns a permissions problem into a silent swallow."""
+    try:
+        with open(_MIGRATION_028, encoding="utf-8") as fh:
+            await conn.execute(fh.read())
+    except Exception as ex:                     # noqa: BLE001
+        log.warning("ensure_schema (028_filings) failed: %s", ex)
 
 _INSERT = """
 INSERT INTO sherrbyte_app.filings
@@ -112,6 +137,10 @@ async def run(conn, *, only: str | None = None) -> dict:
     """Ingest every source (or just `only`). Returns a per-source summary."""
     import httpx
     from app.spie.analog import event_library
+
+    # The table must exist before the first upsert — the caller may be the
+    # endpoint's raw pool, which never ran migrations.
+    await ensure_schema(conn)
 
     # Build the keyword -> ticker index ONCE, not per filing.
     index = event_library.symbol_index()

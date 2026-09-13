@@ -75,19 +75,51 @@ _RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
         "foreign exchange", "forex", "rupee", "exchange rate", "fema")),
 )
 
+# ── Regulator rule set — RBI / SEBI ONLY ─────────────────────────────────────
+# A regulator release is NOT a company filing and must never reach the
+# company-filing rules: an RBI KYC amendment DIRECTION is a regulatory_action,
+# not an "m_and_a" caught because the word "acquisition" happened to appear
+# somewhere in a bulk RSS description. So regulators are classified against a
+# closed set of just the three classes a regulator can actually emit —
+# central_bank_policy, sanctions, regulatory_action — and everything else is
+# 'other' by default, never a guess. Ordered most-specific first so a monetary
+# policy release is central_bank_policy, not the regulatory_action its
+# "directions"/"framework" wording would otherwise catch. "press release" is
+# deliberately NOT a phrase here: it is not a category signal, and matching on it
+# would drag a SEBI felicitation release out of the honest 'other'.
+_REGULATOR_RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("central_bank_policy", (
+        "monetary policy", "repo rate", "policy rate", "mpc", "bank rate",
+        "liquidity adjustment", "cash reserve ratio", "crr", "slr",
+        "open market operation", "omo")),
+    ("sanctions", (
+        "debarment", "debar", "export ban", "import ban", "trade restriction",
+        "prohibited")),
+    ("regulatory_action", (
+        "order", "adjudication", "penalty", "show cause", "show-cause",
+        "settlement order", "enforcement", "circular", "notification",
+        "master direction", "direction", "directions", "guidelines",
+        "framework", "consultation paper", "regulation", "probe",
+        "investigation", "warning", "amendment")),
+)
+
+_REGULATORS = {"RBI", "SEBI"}
+
 
 def classify_filing(source: str, filing_type: str, subject: str = "") -> str:
     """The filing's event_class, or 'other'.
 
     Deterministic and rule-based on purpose: the class feeds a ranking weight, so
-    an LLM must never decide it. `source` is accepted for symmetry and future
-    per-source rules; today the mapping is driven purely by the filing_type and
-    subject text, which is what carries the category signal.
+    an LLM must never decide it. `source` SELECTS THE RULE SET: RBI/SEBI releases
+    go through the regulator-only rules (central_bank_policy / sanctions /
+    regulatory_action, else 'other'), never the company-filing rules — that is
+    what stops a regulator release from being mislabelled m_and_a or earnings.
     """
     hay = f"{filing_type or ''} {subject or ''}".lower()
     if not hay.strip():
         return "other"
-    for klass, phrases in _RULES:
+    rules = _REGULATOR_RULES if (source or "").upper() in _REGULATORS else _RULES
+    for klass, phrases in rules:
         if any(p in hay for p in phrases):
             # Defensive: never emit a class the schema CHECK / matcher rejects.
             return klass if klass in EVENT_CLASSES else "other"
