@@ -9300,16 +9300,51 @@ function renderTicker(data) {
   if (rt.US10Y?.price) push('US 10Y', '#8E24AA', fmtNum(rt.US10Y.price) + '%', rt.US10Y.change_pct);
   if (f.USDINR?.price) push('USD/INR', '#FB8C00', '₹' + fmtNum(f.USDINR.price), f.USDINR.change_pct);
   if (!items.length) {
-    // This used to just return, leaving "Live market data loading…" on screen
-    // forever — a permanent lie once the upstream has actually answered and had
-    // nothing. Say what happened instead.
-    const why = (data.upstream_errors && Object.keys(data.upstream_errors).length)
-      ? 'Market data unavailable — upstream declined'
-      : 'Markets closed or no data right now';
-    el.innerHTML = `<span class="tick-item" style="opacity:.55">● ${bEsc(why)}</span>`;
+    // /markets (Yahoo/CoinGecko) had nothing. Rather than the old dead "no data"
+    // line, fall back to Twelve Data via /quote (hard-cached server-side, so this
+    // is quota-safe); it paints a live tape or the honest message on empty.
+    tickerTwelveDataFallback(el, data);
     return;
   }
   el.innerHTML = items.concat(items).join('');
+}
+
+// A curated set Twelve Data's free tier covers well (forex, metals, crypto) —
+// the Indian indices stay on Yahoo, so this is a resilience fallback, not a
+// replacement.
+const TD_TAPE = [
+  { sym: 'USD/INR', label: 'USD/INR', color: '#FB8C00', pfx: '₹' },
+  { sym: 'XAU/USD', label: 'GOLD',    color: '#FBC02D', pfx: '$' },
+  { sym: 'BTC/USD', label: 'BTC',     color: '#F7931A', pfx: '$' },
+  { sym: 'ETH/USD', label: 'ETH',     color: '#627EEA', pfx: '$' },
+  { sym: 'EUR/USD', label: 'EUR/USD', color: '#4CAF50', pfx: '' },
+];
+let _tdTapeInFlight = false;
+async function tickerTwelveDataFallback(el, data){
+  const dead = () => {
+    const why = (data && data.upstream_errors && Object.keys(data.upstream_errors).length)
+      ? 'Market data unavailable — upstream declined'
+      : 'Markets closed or no data right now';
+    el.innerHTML = `<span class="tick-item" style="opacity:.55">● ${bEsc(why)}</span>`;
+  };
+  if (_tdTapeInFlight) { dead(); return; }
+  _tdTapeInFlight = true;
+  try {
+    const res = await api('/quote?symbols=' + encodeURIComponent(TD_TAPE.map(t => t.sym).join(',')),
+                          { timeout: 20000 });
+    const q = (res && res.quotes) || {};
+    const items = [];
+    TD_TAPE.forEach(t => {
+      const d = q[t.sym]; if (!d || d.price == null) return;
+      const up = (d.change_pct || 0) >= 0;
+      items.push(`<span class="tick-item"><span style="color:${t.color}">${t.label}</span> `
+        + `${t.pfx}${fmtNum(d.price)} <span class="${up ? 'tick-up' : 'tick-dn'}">`
+        + `${up ? '▲' : '▼'} ${up ? '+' : '−'}${Math.abs(d.change_pct || 0).toFixed(2)}%</span></span>`);
+    });
+    if (items.length) el.innerHTML = items.concat(items).join('');
+    else dead();
+  } catch (e) { dead(); }
+  finally { _tdTapeInFlight = false; }
 }
 
 function renderStocks(stocks) {
@@ -10032,21 +10067,30 @@ function dossierQuote(sym){
   }
   return null;
 }
+function _paintTick(m, q){
+  if (!q || q.change_pct == null) return false;
+  const up = q.change_pct >= 0;
+  m.textContent = (up ? '▲ +' : '▼ ') + Math.abs(q.change_pct).toFixed(2) + '%';
+  m.classList.add(up ? 'up' : 'down');
+  return true;
+}
 function hydrateMyfeedTickers(el){
   const marks = el.querySelectorAll('.mfd-tick[data-tickfor]');
   if (!marks.length) return;
-  let missing = false;
-  marks.forEach(m => {
-    const q = dossierQuote(m.dataset.tickfor);
-    if (q && q.change_pct != null){
-      const up = q.change_pct >= 0;
-      m.textContent = (up ? '▲ +' : '▼ ') + Math.abs(q.change_pct).toFixed(2) + '%';
-      m.classList.add(up ? 'up' : 'down');
-    } else { missing = true; }
-  });
-  if (missing && !window._lastMkt && typeof loadMarkets === 'function'){
-    loadMarkets(); setTimeout(() => hydrateMyfeedTickers(el), 4000);
-  }
+  // 1) The Explore market store first — free, already cached in the page.
+  const unresolved = [];
+  marks.forEach(m => { if (!_paintTick(m, dossierQuote(m.dataset.tickfor))) unresolved.push(m); });
+  if (!unresolved.length) return;
+  // 2) Anything the store does not carry (an arbitrary instrument a dossier
+  //    named) → Twelve Data via /quote, which is hard-cached server-side so this
+  //    stays well inside the free-tier quota.
+  const syms = [...new Set(unresolved.map(m => m.dataset.tickfor).filter(Boolean))];
+  api('/quote?symbols=' + encodeURIComponent(syms.join(',')), { timeout: 20000 })
+    .then(res => {
+      const quotes = (res && res.quotes) || {};
+      unresolved.forEach(m => _paintTick(m, quotes[m.dataset.tickfor]));
+    })
+    .catch(() => {});
 }
 
 // Deep link (/myfeed/<slug>): render that story as the FIRST card in the deck —

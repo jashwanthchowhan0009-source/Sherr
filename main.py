@@ -243,6 +243,10 @@ EXPLORE_CACHE_SECONDS = int(os.getenv("EXPLORE_CACHE_SECONDS", "600"))
 # the others, and it serves stale on a DB error so /myfeed never hangs on
 # "Loading dossier…" when Postgres is down.
 DOSSIER_CACHE_SECONDS = int(os.getenv("DOSSIER_CACHE_SECONDS", "600"))
+# Twelve Data live quotes (myFeed Dots tickers). Free tier is 800 req/day, so this
+# is long on purpose — 30 min means at most ~48 upstream calls a day per distinct
+# symbol set, well inside the quota, and the value moves little at that cadence.
+TWELVE_DATA_CACHE_SECONDS = int(os.getenv("TWELVE_DATA_CACHE_SECONDS", "1800"))
 # Rendered <head> blocks for /myfeed/<slug>. A crawler fetch is a database read
 # for a row that changes once, when it is written.
 OG_CACHE_SECONDS = int(os.getenv("OG_CACHE_SECONDS", "600"))
@@ -3000,6 +3004,41 @@ async def get_dossier(article_id: int, authorization: str = Header("")):
     payload = await cache.get_or_set_stale(ck, DOSSIER_CACHE_SECONDS, _produce)
     if payload is _missing or (isinstance(payload, dict) and payload.get("__404__")):
         raise HTTPException(404, "Article not found")
+    return payload
+
+
+@app.get("/quote")
+async def quote(symbols: str = Query(""), authorization: str = Header("")):
+    """Live quotes for named instruments, via Twelve Data — the myFeed Dots tab
+    calls this for the tickers a dossier names.
+
+    Cached HARD (TWELVE_DATA_CACHE_SECONDS, 30 min) because the free tier is
+    800 req/day: one entry per distinct symbol set means a handful of upstream
+    calls a day. A successful answer also keeps a stale copy; an empty answer is
+    negative-cached briefly so a transient limit does not blank the tile for the
+    full 30 min nor hammer the quota. Skips cleanly (empty) when no key is set.
+    """
+    get_current_user(authorization)
+    syms = [s.strip().upper() for s in symbols.split(",") if s.strip()][:20]
+    if not syms:
+        return {"quotes": {}, "source": "empty"}
+    import twelve_data                                            # noqa: PLC0415
+    if not twelve_data.enabled():
+        return {"quotes": {}, "source": "unconfigured"}
+    ck = "quote:" + ",".join(sorted(syms))
+    hit = await cache.get(ck)
+    if hit is not None:
+        return hit
+    q = await twelve_data.get_quotes(syms)
+    payload = {"quotes": q, "source": "twelvedata" if q else "unavailable"}
+    if q:
+        await cache.set(ck, payload, TWELVE_DATA_CACHE_SECONDS)
+        await cache.set("stale:" + ck, payload, cache.STALE_TTL)
+        return payload
+    stale = await cache.get("stale:" + ck)
+    if stale is not None:
+        return stale
+    await cache.set(ck, payload, 120)   # brief negative cache — protects the quota
     return payload
 
 

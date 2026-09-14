@@ -157,7 +157,8 @@ async def markets(client: httpx.AsyncClient) -> dict:
     try:
         r = await client.get("https://api.coingecko.com/api/v3/simple/price",
                              params={"ids": "bitcoin", "vs_currencies": "usd",
-                                     "include_24hr_change": "true"}, timeout=10)
+                                     "include_24hr_change": "true"},
+                             headers=CG_HEADERS, timeout=10)
         if r.status_code == 200:
             b = (r.json() or {}).get("bitcoin") or {}
             if b.get("usd"):
@@ -282,6 +283,11 @@ FRED_API_KEY = _env_any("FRED_API_KEY", "FRED_BOND_YEI1DS_KEY",
 # now skipped cleanly when no real key is set, exactly like FRED and data.gov.in.
 NASA_API_KEY = _env_any("NASA_API_KEY", "NASA_OPEN_API_KEY")
 DATA_GOV_IN_KEY = _env_any("DATA_GOV_IN_KEY", "GOVT_DATA_GAZETTE_API_KEY")
+# CoinGecko demo key (x-cg-demo-api-key). The keyless tier is rate-limited and
+# was returning nothing ("coingecko returned no prices"); a free demo key lifts
+# the ceiling. Sent as a header on every CoinGecko call below when set.
+COINGECKO_KEY = _env_any("COINGECKO_CRYPTO_API_KEY", "COINGECKO_KEY")
+CG_HEADERS = {"x-cg-demo-api-key": COINGECKO_KEY} if COINGECKO_KEY else {}
 
 
 async def world_bank(client: httpx.AsyncClient) -> dict:
@@ -416,14 +422,16 @@ async def crypto(client: httpx.AsyncClient) -> dict:
     async def prices():
         r = await client.get("https://api.coingecko.com/api/v3/simple/price",
                              params={"ids": CRYPTO_IDS, "vs_currencies": "usd",
-                                     "include_24hr_change": "true"}, timeout=10)
+                                     "include_24hr_change": "true"},
+                             headers=CG_HEADERS, timeout=10)
         r.raise_for_status()
         return {k.upper(): {"price": v.get("usd"),
                             "change_pct": round(v.get("usd_24h_change") or 0, 2)}
                 for k, v in (r.json() or {}).items()}
 
     async def dominance():
-        r = await client.get("https://api.coingecko.com/api/v3/global", timeout=10)
+        r = await client.get("https://api.coingecko.com/api/v3/global",
+                             headers=CG_HEADERS, timeout=10)
         r.raise_for_status()
         d = ((r.json() or {}).get("data") or {}).get("market_cap_percentage") or {}
         return round(float(d.get("btc") or 0), 1)
