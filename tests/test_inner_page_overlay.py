@@ -38,7 +38,7 @@ def html():
 # appears inside a CSS comment far earlier, so it is not a reliable anchor.)
 def _last_view_offset(html):
     return max(html.index(f'<div id="v-{v}"')
-               for v in ("home", "explore", "profile", "bytes", "spie", "notifs"))
+               for v in ("home", "explore", "profile", "myfeed", "spie", "notifs"))
 
 
 def test_the_overlays_are_body_level_not_inside_phone(html):

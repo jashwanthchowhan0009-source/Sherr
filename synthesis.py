@@ -442,8 +442,35 @@ OPERATIONAL RULES:
    * Do NOT include editorial commentary, personal opinions, or adjectives not supported directly by the facts.
    * Do NOT hallucinate names, dates, or numbers. If the sources conflict, mention the discrepancy explicitly.
 
+4. THE DOSSIER FIELDS (strings, dots):
+   * These describe what HAS ALREADY HAPPENED. Write in the past tense or the conditional only. State observed facts and stated positions — never a prediction, a forecast, or advice.
+   * NEVER use the words: will, buy, sell, predict, bullish, bearish, forecast, target price, recommend.
+   * Every field is emptyable. If the sources do not support a stage or a sector, return an empty string / empty array for it rather than inventing one. A short honest dossier is correct; a padded one is not.
+
 OUTPUT FORMAT:
-Output ONLY valid JSON with this exact structure: { "headline": "Punchy, factual headline under 12 words", "content": "The generated original summary text.", "extracted_entities": ["Key Person", "Organization", "Location"], "primary_source_attribution": "Name of the primary publication reporting this", "why_info": "The stated cause or trigger, in the sources' facts only. Empty string if the sources do not state one.", "who_subject": "The actor that took the action", "who_affected": ["Entities the action was done to"], "hook": "One line, under 18 words, that states the tension a reader would miss from the headline alone. Facts only. No speculation about motive." }"""
+Output ONLY valid JSON with this exact structure: { "headline": "Punchy, factual headline under 12 words", "content": "The generated original summary text.", "extracted_entities": ["Key Person", "Organization", "Location"], "primary_source_attribution": "Name of the primary publication reporting this", "why_info": "The stated cause or trigger, in the sources' facts only. Empty string if the sources do not state one.", "who_subject": "The actor that took the action", "who_affected": ["Entities the action was done to"], "hook": "One line, under 18 words, that states the tension a reader would miss from the headline alone. Facts only. No speculation about motive.", "strings": [ { "stage": "Origin | Escalation | The Spark", "title": "A few words naming this step", "detail": "One past-tense sentence of what happened at this step." } ], "dots": { "market_debt": { "summary": "One sentence on the effect on public markets and debt, past tense.", "impact": "up | down | mixed | neutral", "instruments": [ { "name": "Instrument name", "ticker": "SYMBOL" } ] }, "policy_governance": { "summary": "One sentence on the policy / governance angle.", "impact": "up | down | mixed | neutral", "instruments": [] }, "tech_culture": { "summary": "One sentence on the tech or culture vector.", "impact": "up | down | mixed | neutral", "instruments": [] }, "asymmetric_catch": { "summary": "One sentence on what mainstream coverage is missing." } } }"""
+
+# One contagion sector of The Dots: a one-line effect, a red/green/neutral
+# impact marker, and any named instruments a live ticker can be hung off.
+_DOT_SCHEMA = {
+    "type": "OBJECT",
+    "properties": {
+        "summary": {"type": "STRING"},
+        "impact": {"type": "STRING"},
+        "instruments": {
+            "type": "ARRAY",
+            "items": {
+                "type": "OBJECT",
+                "properties": {
+                    "name": {"type": "STRING"},
+                    "ticker": {"type": "STRING"},
+                },
+                "required": ["name", "ticker"],
+            },
+        },
+    },
+    "required": ["summary", "impact", "instruments"],
+}
 
 # The JSON contract above, restated for Gemini's responseSchema so the provider
 # enforces the shape rather than us discovering a missing key at parse time.
@@ -461,10 +488,40 @@ SYNTHESIS_SCHEMA = {
         "who_subject": {"type": "STRING"},
         "who_affected": {"type": "ARRAY", "items": {"type": "STRING"}},
         "hook": {"type": "STRING"},
+        # The dossier deck. The provider enforces the SHAPE; the VALUES are
+        # emptyable — a story the sources do not carry a timeline or a sector for
+        # returns [] / '' there, and inventing one is the failure mode.
+        "strings": {
+            "type": "ARRAY",
+            "items": {
+                "type": "OBJECT",
+                "properties": {
+                    "stage": {"type": "STRING"},
+                    "title": {"type": "STRING"},
+                    "detail": {"type": "STRING"},
+                },
+                "required": ["stage", "title", "detail"],
+            },
+        },
+        "dots": {
+            "type": "OBJECT",
+            "properties": {
+                "market_debt": _DOT_SCHEMA,
+                "policy_governance": _DOT_SCHEMA,
+                "tech_culture": _DOT_SCHEMA,
+                "asymmetric_catch": {
+                    "type": "OBJECT",
+                    "properties": {"summary": {"type": "STRING"}},
+                    "required": ["summary"],
+                },
+            },
+            "required": ["market_debt", "policy_governance",
+                         "tech_culture", "asymmetric_catch"],
+        },
     },
     "required": ["headline", "content", "extracted_entities",
                  "primary_source_attribution", "why_info", "who_subject",
-                 "who_affected", "hook"],
+                 "who_affected", "hook", "strings", "dots"],
 }
 
 # Per-source text budget. Five sources at 700 characters is well inside a free
@@ -568,12 +625,21 @@ def parse_synthesis(raw, *, n_sources: int = 0, hook_check=None) -> dict:
     who_affected = [str(a).strip() for a in affected if str(a).strip()][:8]
 
     hook = str(raw.get("hook") or "").strip()
+    # Names are quoted facts, not claims the template makes — masked out so a
+    # company called "Target" or an actor named "Will" cannot trip the guard.
+    names = [n for n in (entities + [who_subject] + who_affected) if n]
     if hook and hook_check is not None:
-        # Names are quoted facts, not claims the template makes — masked out so a
-        # company called "Target" or an actor named "Will" cannot trip the guard.
-        names = [n for n in (entities + [who_subject] + who_affected) if n]
         if hook_check(hook, names):
             hook = ""
+
+    # ── the dossier deck: strings / dots ────────────────────────────────────────
+    # NEITHER IS ALLOWED TO FAIL THE CALL. A malformed or missing timeline or
+    # sector map leaves the body — which the reader most needs — perfectly usable,
+    # and the myFeed surface already renders "pending" for an empty one. So both
+    # are parsed defensively and every piece that trips the compliance blocklist
+    # is dropped, never raised. The same names-mask as the hook applies.
+    strings = _parse_strings(raw.get("strings"), hook_check, names)
+    dots = _parse_dots(raw.get("dots"), hook_check, names)
 
     return {
         "headline": headline,
@@ -585,6 +651,83 @@ def parse_synthesis(raw, *, n_sources: int = 0, hook_check=None) -> dict:
         "who_subject": who_subject,
         "who_affected": who_affected,
         "hook": hook,
+        "strings": strings,
+        "dots": dots,
         "n_sources": n_sources,
         "words": words,
     }
+
+
+# The stages the timeline is drawn from, and their order. A model answer that
+# names something else keeps its label but is still bounded by MAX_STRINGS.
+MAX_STRINGS = 6
+_DOT_SECTIONS = ("market_debt", "policy_governance",
+                 "tech_culture", "asymmetric_catch")
+_IMPACTS = ("up", "down", "mixed", "neutral")
+
+
+def _tripped(text, hook_check, names) -> bool:
+    """True when the compliance blocklist rejects `text`. None check → never."""
+    return bool(text) and hook_check is not None and hook_check(text, names)
+
+
+def _parse_strings(raw_strings, hook_check, names) -> list:
+    """The causal timeline: a bounded list of {stage, title, detail}.
+
+    Anything that is not a list, or a step missing a detail, or a step whose
+    detail trips the blocklist, is dropped. An empty result is valid — it renders
+    as 'pending', not as an error.
+    """
+    if not isinstance(raw_strings, list):
+        return []
+    out = []
+    for step in raw_strings:
+        if not isinstance(step, dict):
+            continue
+        stage = str(step.get("stage") or "").strip()[:40]
+        title = str(step.get("title") or "").strip()[:80]
+        detail = str(step.get("detail") or "").strip()[:300]
+        if not detail:
+            continue
+        if _tripped(detail, hook_check, names) or _tripped(title, hook_check, names):
+            continue
+        out.append({"stage": stage, "title": title, "detail": detail})
+        if len(out) >= MAX_STRINGS:
+            break
+    return out
+
+
+def _parse_dot(raw_dot, hook_check, names, *, allow_instruments=True) -> dict:
+    if not isinstance(raw_dot, dict):
+        return {}
+    summary = str(raw_dot.get("summary") or "").strip()[:300]
+    if not summary or _tripped(summary, hook_check, names):
+        return {}
+    out = {"summary": summary}
+    if allow_instruments:
+        impact = str(raw_dot.get("impact") or "").strip().lower()
+        out["impact"] = impact if impact in _IMPACTS else "neutral"
+        instruments = []
+        for ins in (raw_dot.get("instruments") or [])[:6]:
+            if not isinstance(ins, dict):
+                continue
+            name = str(ins.get("name") or "").strip()[:60]
+            ticker = str(ins.get("ticker") or "").strip()[:16].upper()
+            if name or ticker:
+                instruments.append({"name": name, "ticker": ticker})
+        out["instruments"] = instruments
+    return out
+
+
+def _parse_dots(raw_dots, hook_check, names) -> dict:
+    """Cross-asset contagion, keyed by sector. Empty sectors are omitted, so an
+    all-empty answer is `{}` — which the surface reads as 'pending'."""
+    if not isinstance(raw_dots, dict):
+        return {}
+    out = {}
+    for key in _DOT_SECTIONS:
+        parsed = _parse_dot(raw_dots.get(key), hook_check, names,
+                            allow_instruments=(key != "asymmetric_catch"))
+        if parsed:
+            out[key] = parsed
+    return out

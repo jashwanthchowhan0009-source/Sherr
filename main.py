@@ -231,7 +231,11 @@ PATTERN_MAX_AGE_HOURS = int(os.getenv("PATTERN_MAX_AGE_HOURS", "72"))
 FEED_CACHE_SECONDS = int(os.getenv("FEED_CACHE_SECONDS", "30"))
 PATTERNS_CACHE_SECONDS = int(os.getenv("PATTERNS_CACHE_SECONDS", "60"))
 ANALOG_CACHE_SECONDS = int(os.getenv("ANALOG_CACHE_SECONDS", "120"))
-# Rendered <head> blocks for /bytes/<slug>. A crawler fetch is a database read
+# The myFeed dossier (node + strings + dots) for one story. It changes only when
+# the synthesis pass rewrites the row, so a couple of minutes is generous — and
+# a tapped card is a burst of reads for the same id, exactly what the cache is for.
+DOSSIER_CACHE_SECONDS = int(os.getenv("DOSSIER_CACHE_SECONDS", "120"))
+# Rendered <head> blocks for /myfeed/<slug>. A crawler fetch is a database read
 # for a row that changes once, when it is written.
 OG_CACHE_SECONDS = int(os.getenv("OG_CACHE_SECONDS", "600"))
 
@@ -872,6 +876,18 @@ _MIGRATIONS = [
     "ALTER TABLE articles ADD COLUMN who_subject TEXT DEFAULT ''",
     "ALTER TABLE articles ADD COLUMN who_affected TEXT DEFAULT '[]'",
     "ALTER TABLE articles ADD COLUMN hook TEXT DEFAULT ''",
+    # ── the dossier deck (myFeed) — The Strings + The Dots ────────────────────
+    # Structured JSON on the article row, written only by the synthesis pass, and
+    # both emptyable: '[]' / '{}' is the honest value for a row the pass has not
+    # yet reached (the common case at first). Stored as TEXT holding JSON exactly
+    # like who_affected / synthesis_sources above — this schema keeps its
+    # structured fields as JSON-in-TEXT so the same column works over pgcompat
+    # (Postgres) and the local sqlite backend without a driver-specific type.
+    #   strings: [] of {stage, title, detail}   — the causal timeline
+    #   dots:    {} of {market_debt, policy_governance, tech_culture,
+    #                   asymmetric_catch} — cross-asset contagion
+    "ALTER TABLE articles ADD COLUMN strings TEXT DEFAULT '[]'",
+    "ALTER TABLE articles ADD COLUMN dots TEXT DEFAULT '{}'",
 ]
 
 # Publisher image URLs are never persisted again (P0.1). Existing rows are scrubbed
@@ -1843,7 +1859,7 @@ def compute_feed_for_user(user_id: int):
 
 # ─── FASTAPI APP ─────────────────────────────────────────────────────────────
 from fastapi import FastAPI, HTTPException, Header, Query, Request, Response
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -2777,6 +2793,118 @@ async def get_article_full(article_id: int, authorization: str = Header("")):
     return {"id": d["id"],
             "body": d.get("full_body") or d.get("summary_60") or "",
             "wwww": {k: v for k, v in wwww.items() if v}}
+
+
+def _dossier_payload(row) -> dict:
+    """node + strings + dots for one story, in one shape the myFeed surface reads.
+
+    THE NODE IS ALWAYS PRESENT. It is assembled from columns the row already
+    carries (what/who/when/where/how/why + headline + hook), so a story renders
+    even when it was never synthesised. THE STRINGS AND THE DOTS ARE OPTIONAL —
+    most rows carry the '[]' / '{}' defaults because the synthesis pass has not
+    reached them yet, and the surface treats that as 'pending', not an error.
+    That degraded path is the normal case at first, not an edge case.
+    """
+    d = article_row_to_dict(row)
+
+    def _clean(v):
+        return (str(v or "")).strip()
+
+    node = {
+        "what":          _clean(d.get("what_info")),
+        "who_subject":   _clean(d.get("who_subject")),
+        "who_affected":  [str(a).strip() for a in _load_json_list(
+                              d.get("who_affected")) if str(a).strip()],
+        "when":          _clean(d.get("when_info")),
+        "where":         _clean(d.get("where_info")),
+        "mechanism":     _clean(d.get("how_info")),
+        "why":           _clean(d.get("why_info")),
+    }
+
+    strings = _load_json_list(d.get("strings"))
+    dots = _load_json_obj(d.get("dots"))
+
+    # Corroboration count drives the verification badge. synthesis_sources is a
+    # JSON array of every source id merged into this story; a single-source row
+    # (or an un-synthesised one) has none.
+    n_sources = len(_load_json_list(d.get("synthesis_sources")))
+    if n_sources >= 2:
+        verification = {"state": "corroborated", "sources": n_sources,
+                        "label": f"Corroborated · {n_sources} sources"}
+    else:
+        verification = {"state": "single", "sources": max(n_sources, 1),
+                        "label": "Single source"}
+
+    return {
+        "id": d["id"],
+        "signal_id": f"SB-{d['id']}",
+        "headline": _clean(d.get("headline")),
+        "hook": _clean(d.get("hook")),
+        "verticals": d.get("micro_tags") or [],
+        "verification": verification,
+        "published_at": d.get("published_at") or "",
+        "image_url": d.get("image_url") or "",
+        "category": d.get("category") or "",
+        "node": node,
+        "strings": strings,
+        "dots": dots if isinstance(dots, dict) else {},
+        # The surface reads these to decide pending vs ready without re-checking
+        # the shapes itself. Emptiness — not a flag — is the source of truth.
+        "strings_status": "ready" if strings else "pending",
+        "dots_status": "ready" if (isinstance(dots, dict) and dots) else "pending",
+    }
+
+
+def _load_json_list(v):
+    if isinstance(v, list):
+        return v
+    try:
+        out = json.loads(v or "[]")
+        return out if isinstance(out, list) else []
+    except Exception:                                             # noqa: BLE001
+        return []
+
+
+def _load_json_obj(v):
+    if isinstance(v, dict):
+        return v
+    try:
+        out = json.loads(v or "{}")
+        return out if isinstance(out, dict) else {}
+    except Exception:                                             # noqa: BLE001
+        return {}
+
+
+@app.get("/article/{article_id}/dossier")
+async def get_dossier(article_id: int, authorization: str = Header("")):
+    """The myFeed dossier — The Node, The Strings and The Dots in one payload.
+
+    Cached through cache.py the same way /feed is (see DOSSIER_CACHE_SECONDS): a
+    tapped card is a burst of reads for one id, and the row only changes when the
+    synthesis pass rewrites it. A MISS is one query; everything else is served
+    from the local or Redis layer.
+    """
+    get_current_user(authorization)
+    ck = f"dossier:{article_id}"
+    hit = await cache.get(ck)
+    if hit is not None:
+        return hit
+
+    def _row():
+        conn = get_db()
+        try:
+            return conn.execute(
+                "SELECT * FROM articles WHERE id=? AND status IN "
+                "('published','merged')", (article_id,)).fetchone()
+        finally:
+            conn.close()
+
+    row = await asyncio.get_event_loop().run_in_executor(None, _row)
+    if not row:
+        raise HTTPException(404, "Article not found")
+    payload = _dossier_payload(row)
+    await cache.set(ck, payload, DOSSIER_CACHE_SECONDS)
+    return payload
 
 
 @app.post("/interact")
@@ -3803,7 +3931,7 @@ def _synthesise_clusters(conn, work: list, budget: int = None) -> list:
                     reprocessed=1, status='published', originality_json=?,
                     originality_overlap=?, originality_run=?,
                     originality_checked_at=?, why_info=?, who_subject=?,
-                    who_affected=?, hook=?
+                    who_affected=?, hook=?, strings=?, dots=?
                 WHERE id=?""", (
                 headline, summary, result["content"], json.dumps(tags),
                 json.dumps(member_ids), json.dumps(audit),
@@ -3811,7 +3939,13 @@ def _synthesise_clusters(conn, work: list, budget: int = None) -> list:
                 datetime.now(timezone.utc).isoformat(),
                 result.get("why_info", ""), result.get("who_subject", ""),
                 json.dumps(result.get("who_affected", [])),
-                result.get("hook", ""), primary["id"]))
+                result.get("hook", ""),
+                # The dossier deck, written alongside the News node. Both default
+                # to '[]' / '{}' — the honest value for a story whose sources
+                # carried no timeline or no sector angle.
+                json.dumps(result.get("strings", [])),
+                json.dumps(result.get("dots", {})),
+                primary["id"]))
             _synth_run["written"] += 1
             _synth_run["sources_used"] += len(group)
             _body_last["written"] += 1
@@ -5394,7 +5528,7 @@ _STATIC_FILES = {
 }
 # The paths the SPA owns. A request for one of these gets index.html and the
 # client router takes it from there.
-_SPA_ROUTES = ("", "explore", "bytes", "profile", "feed", "spie",
+_SPA_ROUTES = ("", "explore", "myfeed", "profile", "feed", "spie",
                "bookmarks", "notifs", "search")
 
 _index_cache: dict = {"mtime": 0.0, "html": ""}
@@ -5531,7 +5665,7 @@ async def _render_byte_page(slug: str) -> str:
                 head = _og_block(
                     title=f"{meta['headline']} — Sherr",
                     description=meta["summary"],
-                    url=f"{SITE_URL}/bytes/{meta['slug']}",
+                    url=f"{SITE_URL}/myfeed/{meta['slug']}",
                     image=meta["image"], published=meta["published"])
                 await cache.set(ck, head, OG_CACHE_SECONDS)
     if head is None:
@@ -5541,7 +5675,7 @@ async def _render_byte_page(slug: str) -> str:
         head = _og_block(title="Sherr — the news, synthesised",
                          description="Original briefings written from multiple "
                                      "sources, and the patterns underneath them.",
-                         url=f"{SITE_URL}/bytes")
+                         url=f"{SITE_URL}/myfeed")
     return html.replace("<head>", "<head>\n" + head, 1)
 
 
@@ -5591,23 +5725,36 @@ async def sitemap_xml(limit: int = Query(2000, ge=1, le=5000)):
     rows = await asyncio.get_event_loop().run_in_executor(None, _rows)
     parts = ['<?xml version="1.0" encoding="UTF-8"?>',
              '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
-    for path in ("/", "/explore", "/bytes", "/profile"):
+    for path in ("/", "/explore", "/myfeed", "/profile"):
         parts.append(f"<url><loc>{SITE_URL}{path}</loc>"
                      f"<changefreq>hourly</changefreq></url>")
     for r in rows:
         slug = article_slug(r["id"], r["headline"] or "")
         lastmod = str(r["published_at"] or "")[:10]
         mod = f"<lastmod>{_esc(lastmod)}</lastmod>" if len(lastmod) == 10 else ""
-        parts.append(f"<url><loc>{SITE_URL}/bytes/{_esc(slug)}</loc>{mod}</url>")
+        parts.append(f"<url><loc>{SITE_URL}/myfeed/{_esc(slug)}</loc>{mod}</url>")
     parts.append("</urlset>")
     xml = "\n".join(parts)
     await cache.set(ck, xml, OG_CACHE_SECONDS)
     return Response(content=xml, media_type="application/xml")
 
 
-@app.get("/bytes/{slug}", include_in_schema=False)
-async def byte_page(slug: str):
+@app.get("/myfeed/{slug}", include_in_schema=False)
+async def myfeed_page(slug: str):
     return HTMLResponse(await _render_byte_page(slug))
+
+
+# Legacy story links (shared before the Bytes→myFeed rename) 301 to the new path
+# so an unfurler re-resolves and the address bar shows the real route. A permanent
+# redirect is correct: the story never lives at /bytes/<slug> again.
+@app.get("/bytes/{slug}", include_in_schema=False)
+async def legacy_byte_page(slug: str):
+    return RedirectResponse(url=f"/myfeed/{slug}", status_code=301)
+
+
+@app.get("/bytes", include_in_schema=False)
+async def legacy_byte_root():
+    return RedirectResponse(url="/myfeed", status_code=301)
 
 
 @app.get("/", include_in_schema=False)

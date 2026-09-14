@@ -76,7 +76,7 @@ def test_the_real_api_routes_still_answer(client):
 
 # ─── the SPA paths ──────────────────────────────────────────────────────────
 
-@pytest.mark.parametrize("path", ["/", "/explore", "/bytes", "/profile",
+@pytest.mark.parametrize("path", ["/", "/explore", "/myfeed", "/profile",
                                   "/feed", "/search", "/bookmarks"])
 def test_each_app_path_serves_the_app(client, path):
     """Real URLs need the SERVER to answer them; the History API alone only
@@ -157,7 +157,7 @@ def test_a_shared_story_carries_its_own_og_tags(tmp_path, monkeypatch, client):
     one of them — which is why a shared story has always previewed as the
     generic app card. These have to be in the bytes on the wire."""
     _seed_article(tmp_path, monkeypatch)
-    body = client.get("/bytes/crude-climbs-as-opec-weighs-deeper-cuts-11").text
+    body = client.get("/myfeed/crude-climbs-as-opec-weighs-deeper-cuts-11").text
     assert 'property="og:title" content="Crude climbs as OPEC+ weighs deeper cuts' in body
     assert 'Benchmark crude settled higher on Monday.' in body
     assert 'property="og:image" content="https://img.example/a.jpg"' in body
@@ -169,7 +169,7 @@ def test_the_article_tags_come_before_the_apps_own(tmp_path, monkeypatch, client
     already carries a generic og:title, so appending would produce a page whose
     per-article tags are silently ignored."""
     _seed_article(tmp_path, monkeypatch)
-    body = client.get("/bytes/x-11").text
+    body = client.get("/myfeed/x-11").text
     ours = body.index('content="Crude climbs as OPEC+ weighs deeper cuts')
     head = body.index("<head>")
     assert head < ours < body.index("</head>")
@@ -178,9 +178,21 @@ def test_the_article_tags_come_before_the_apps_own(tmp_path, monkeypatch, client
 def test_an_unknown_story_gets_the_generic_preview_not_another_articles(
         tmp_path, monkeypatch, client):
     _seed_article(tmp_path, monkeypatch)
-    body = client.get("/bytes/deleted-story-999999").text
+    body = client.get("/myfeed/deleted-story-999999").text
     assert "Crude climbs" not in body
     assert 'property="og:title"' in body
+
+
+def test_a_legacy_bytes_link_permanently_redirects_to_myfeed(client):
+    """Links shared before the Bytes→myFeed rename must not die. The server 301s
+    /bytes/<slug> to /myfeed/<slug> so an unfurler re-resolves and the address
+    bar shows the real route."""
+    r = client.get("/bytes/crude-climbs-11", follow_redirects=False)
+    assert r.status_code == 301
+    assert r.headers["location"] == "/myfeed/crude-climbs-11"
+    r2 = client.get("/bytes", follow_redirects=False)
+    assert r2.status_code == 301
+    assert r2.headers["location"] == "/myfeed"
 
 
 # ─── crawling ───────────────────────────────────────────────────────────────
@@ -198,7 +210,7 @@ def test_the_sitemap_lists_the_screens_and_the_articles(tmp_path, monkeypatch,
     assert r.status_code == 200
     assert "xml" in r.headers["content-type"]
     assert f"{main.SITE_URL}/explore" in r.text
-    assert "/bytes/crude-climbs-as-opec-weighs-deeper-cuts-11" in r.text
+    assert "/myfeed/crude-climbs-as-opec-weighs-deeper-cuts-11" in r.text
 
 
 # ─── the read cache ─────────────────────────────────────────────────────────
