@@ -5084,6 +5084,21 @@ const ActivityTracker = (() => {
     isVisible = !document.hidden;
   });
 
+  // Background refresh on tab focus: when the reader returns after a while and is
+  // on the default feed, pull the latest so a long-open tab is never stale.
+  // Throttled to once per 90s and gated to the feed view so it never interrupts
+  // an article or another screen. Additive — the handler above only tracks read
+  // time; this one refreshes content.
+  let _lastFocusRefresh = Date.now();
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) return;
+    if (Date.now() - _lastFocusRefresh < 90000) return;
+    if (typeof _isDefaultFeedView === 'function' && !_isDefaultFeedView()) return;
+    if (typeof loadFeed !== 'function') return;
+    _lastFocusRefresh = Date.now();
+    try { loadFeed(true); } catch (e) {}
+  });
+
   window.addEventListener('beforeunload', () => {
     if (currentArticleId && ST && ST.token) {
       const elapsed = Math.min(60, Math.floor((Date.now() - articleStartTime) / 1000));
