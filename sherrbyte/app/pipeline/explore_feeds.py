@@ -264,12 +264,24 @@ async def news_top(client: httpx.AsyncClient) -> dict:
 
 
 # ─── second tranche: zero-key public datasets ─────────────────────────────────
-FRED_API_KEY = os.getenv("FRED_API_KEY") or ""
+# Each key is read under BOTH its canonical name and the name actually set on the
+# Render service (they were named differently, so these providers silently
+# skipped even though the keys existed). First non-empty wins; the fallbacks
+# include the misspelled Render var verbatim so nothing has to be renamed there.
+def _env_any(*names: str) -> str:
+    for n in names:
+        v = (os.getenv(n) or "").strip()
+        if v:
+            return v
+    return ""
+
+FRED_API_KEY = _env_any("FRED_API_KEY", "FRED_BOND_YEI1DS_KEY",
+                        "FRED_BOND_YEILDS_KEY", "FRED_BOND_YIELDS_KEY")
 # A REAL key from the env, or nothing. DEMO_KEY was shared, throttled to ~30
 # req/hr across every caller, and its 429s read as an outage; the APOD section is
 # now skipped cleanly when no real key is set, exactly like FRED and data.gov.in.
-NASA_API_KEY = os.getenv("NASA_API_KEY") or ""
-DATA_GOV_IN_KEY = os.getenv("DATA_GOV_IN_KEY") or ""
+NASA_API_KEY = _env_any("NASA_API_KEY", "NASA_OPEN_API_KEY")
+DATA_GOV_IN_KEY = _env_any("DATA_GOV_IN_KEY", "GOVT_DATA_GAZETTE_API_KEY")
 
 
 async def world_bank(client: httpx.AsyncClient) -> dict:
