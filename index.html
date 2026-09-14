@@ -4999,123 +4999,91 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 </div>
 <div id="xp-page" class="xp-page"></div>
 
-<!-- ════════ myFeed DOSSIER — The Node · The Strings · The Dots ════════
-     A body-level, full-bleed overlay opened from a myFeed card (openDossier).
-     Every rule below is a BASE rule — there is no min-width media query here, so
-     the single-desktop-breakpoint guarantee (tests/test_desktop_layout.py) holds;
-     the shell simply centres itself with max-width, which reads fine at every
-     width. -->
+<!-- ════════ myFeed inline dossier — News · Strings · Dots ════════
+     The dossier is rendered INLINE on each myFeed card (no tap-to-open overlay):
+     segmented tabs at the top of the card, then the active pane. Every rule here
+     is a BASE rule (no min-width media query), so the single-desktop-breakpoint
+     guarantee in tests/test_desktop_layout.py holds. -->
 <style>
-body.no-scroll{overflow:hidden;}
-.dossier-overlay{position:fixed;inset:0;z-index:2200;background:var(--bg);
-  transform:translateY(100%);transition:transform .32s var(--ease);
-  overflow-y:auto;-webkit-overflow-scrolling:touch;visibility:hidden;}
-.dossier-overlay.open{transform:translateY(0);visibility:visible;}
-.dossier-shell{max-width:720px;margin:0 auto;padding:0 16px 96px;min-height:100%;}
-.dsr-head{position:relative;padding:20px 0 14px;border-bottom:1px solid var(--line);}
-.dsr-close{position:absolute;top:16px;right:0;width:38px;height:38px;border:0;
-  border-radius:50%;background:var(--glass);color:var(--t1);font-size:1rem;
-  cursor:pointer;display:flex;align-items:center;justify-content:center;}
-.dsr-signal{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
-  padding-right:46px;margin-bottom:10px;}
-.dsr-sigid{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.72rem;
-  letter-spacing:.08em;color:var(--accent);background:rgba(10,132,255,0.12);
-  padding:3px 9px;border-radius:6px;font-weight:700;}
-.dsr-verify{font-size:.72rem;font-weight:600;display:inline-flex;align-items:center;
-  gap:5px;color:var(--t2);}
-.dsr-verify .dot{width:7px;height:7px;border-radius:50%;background:var(--t3);}
-.dsr-verify.ok .dot{background:#30D158;}
-.dsr-verticals{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;}
-.dsr-vtag{font-size:.68rem;font-weight:600;color:var(--t2);border:1px solid var(--line);
-  padding:2px 9px;border-radius:999px;text-transform:capitalize;}
-.dsr-title{font-size:1.32rem;line-height:1.28;font-weight:800;color:var(--t1);
-  margin:2px 0 8px;letter-spacing:-0.01em;}
-.dsr-hook{font-size:.95rem;line-height:1.45;color:var(--t2);font-style:italic;
-  margin:0;padding-left:12px;border-left:3px solid var(--accent);}
-/* segmented pills */
-.dsr-pills{position:sticky;top:0;z-index:2;display:grid;grid-template-columns:1fr 1fr 1fr;
-  gap:4px;padding:12px 0;background:var(--bg);}
-.dsr-pill{border:1px solid var(--line);background:transparent;color:var(--t2);
-  font-size:.82rem;font-weight:700;padding:10px 6px;border-radius:12px;cursor:pointer;
-  transition:all .18s var(--ease);display:flex;flex-direction:column;align-items:center;gap:2px;}
-.dsr-pill .dsr-pill-sub{font-size:.6rem;font-weight:600;opacity:.7;text-transform:uppercase;letter-spacing:.05em;}
-.dsr-pill.on{background:var(--accent);color:#fff;border-color:var(--accent);}
-.dsr-pill.pending{opacity:.85;}
-.dsr-pane{display:none;padding-top:6px;animation:mfIn .3s var(--ease);}
-.dsr-pane.on{display:block;}
-/* The Node — key/value table */
-.dsr-kv{width:100%;border-collapse:collapse;}
-.dsr-kv tr{border-bottom:1px solid var(--line);}
-.dsr-kv th{text-align:left;vertical-align:top;width:34%;padding:12px 12px 12px 0;
-  font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);}
-.dsr-kv td{padding:12px 0;font-size:.92rem;line-height:1.45;color:var(--t1);}
-.dsr-chips{display:flex;flex-wrap:wrap;gap:6px;}
-.dsr-chips span{font-size:.78rem;background:var(--glass);border:1px solid var(--line);
+/* colourful ticket-shaped sector badges (per-sector colour set inline via --bd) */
+.mf-badges{display:flex;flex-wrap:wrap;gap:7px;}
+.mf-badge{position:relative;display:inline-flex;align-items:center;
+  padding:4px 11px 4px 18px;border-radius:6px;font-size:.62rem;font-weight:800;
+  letter-spacing:.04em;text-transform:uppercase;color:#fff;white-space:nowrap;
+  background:var(--bd,#5661f0);box-shadow:0 1px 3px rgba(0,0,0,.28);}
+.mf-badge.dark{color:#1c1c1e;}
+.mf-badge::before{content:'';position:absolute;left:9px;top:4px;bottom:4px;
+  border-left:2px dotted rgba(255,255,255,.55);}
+.mf-badge.dark::before{border-color:rgba(0,0,0,.35);}
+/* segmented tabs, at the TOP of the card content */
+.mfd-tabs{display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;
+  position:sticky;top:0;z-index:2;padding:2px 0 8px;
+  background:inherit;}
+.mfd-tab{border:1px solid var(--line);background:transparent;color:var(--t2);
+  font-size:.82rem;font-weight:800;padding:9px 4px;border-radius:11px;cursor:pointer;
+  transition:all .16s var(--ease);}
+.mfd-tab.on{background:var(--accent);color:#fff;border-color:var(--accent);}
+.mfd-tab.pending{opacity:.7;}
+.mfd-pane{display:none;animation:mfIn .28s var(--ease);}
+.mfd-pane.on{display:block;}
+/* News pane */
+.mfd-tldr{background:var(--glass);border:1px solid var(--line);
+  border-left:3px solid var(--accent);border-radius:11px;padding:11px 13px;
+  font-size:.93rem;line-height:1.5;color:var(--t1);}
+.mfd-tldr b{display:block;font-size:.6rem;text-transform:uppercase;
+  letter-spacing:.09em;color:var(--accent);margin-bottom:4px;}
+.mfd-sec{margin-top:13px;}
+.mfd-sec h4{font-size:.64rem;text-transform:uppercase;letter-spacing:.07em;
+  color:var(--t3);margin:0 0 5px;font-weight:800;}
+.mfd-sec p{margin:0;font-size:.9rem;line-height:1.5;color:var(--t1);}
+.mfd-chips{display:flex;flex-wrap:wrap;gap:6px;}
+.mfd-chips span{font-size:.78rem;background:var(--glass);border:1px solid var(--line);
   padding:3px 9px;border-radius:8px;color:var(--t1);}
-/* The Strings — vertical timeline */
-.dsr-timeline{position:relative;margin:6px 0 0;padding-left:26px;}
-.dsr-timeline::before{content:'';position:absolute;left:6px;top:6px;bottom:10px;
-  width:2px;background:var(--line);}
-.dsr-step{position:relative;padding:0 0 22px;}
-.dsr-step::before{content:'';position:absolute;left:-26px;top:3px;width:14px;height:14px;
-  border-radius:50%;background:var(--bg);border:2px solid var(--accent);}
-.dsr-step:last-child::before{background:var(--accent);}
-.dsr-step-stage{font-size:.68rem;font-weight:800;text-transform:uppercase;
-  letter-spacing:.07em;color:var(--accent);}
-.dsr-step-title{font-size:.98rem;font-weight:700;color:var(--t1);margin:1px 0 4px;}
-.dsr-step-detail{font-size:.9rem;line-height:1.45;color:var(--t2);}
-/* The Dots — contagion cards */
-.dsr-dot{background:var(--glass);border:1px solid var(--line);border-radius:14px;
-  padding:14px;margin-bottom:12px;}
-.dsr-dot.catch{border-color:rgba(255,159,10,0.5);background:rgba(255,159,10,0.08);}
-.dsr-dot-head{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
-.dsr-dot-ico{width:26px;height:26px;border-radius:8px;display:flex;align-items:center;
-  justify-content:center;font-size:.8rem;background:rgba(10,132,255,0.14);color:var(--accent);}
-.dsr-dot.catch .dsr-dot-ico{background:rgba(255,159,10,0.16);color:#FF9F0A;}
-.dsr-dot-name{font-size:.82rem;font-weight:800;color:var(--t1);flex:1;}
-.dsr-impact{font-size:.68rem;font-weight:800;text-transform:uppercase;letter-spacing:.05em;
-  padding:2px 8px;border-radius:999px;display:inline-flex;align-items:center;gap:4px;}
-.dsr-impact.up{color:#30D158;background:rgba(48,209,88,0.14);}
-.dsr-impact.down{color:#FF453A;background:rgba(255,69,58,0.14);}
-.dsr-impact.mixed{color:#FF9F0A;background:rgba(255,159,10,0.14);}
-.dsr-impact.neutral{color:var(--t2);background:var(--glass);}
-.dsr-dot-summary{font-size:.9rem;line-height:1.45;color:var(--t2);}
-.dsr-instruments{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;}
-.dsr-ins{display:inline-flex;align-items:center;gap:6px;font-size:.78rem;
-  border:1px solid var(--line);border-radius:8px;padding:5px 9px;color:var(--t1);}
-.dsr-ins b{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.74rem;color:var(--accent);}
-.dsr-ins .dsr-tick{font-weight:700;}
-.dsr-ins .dsr-tick.up{color:#30D158;} .dsr-ins .dsr-tick.down{color:#FF453A;}
-/* pending / empty state */
-.dsr-pending{text-align:center;padding:44px 20px;color:var(--t2);}
-.dsr-pending i{font-size:1.6rem;color:var(--t3);margin-bottom:12px;display:block;}
-.dsr-pending b{display:block;color:var(--t1);font-size:1rem;margin-bottom:5px;}
-.dsr-pending span{font-size:.85rem;line-height:1.5;display:block;max-width:320px;margin:0 auto;}
+/* Strings pane — HORIZONTAL timeline (dots connected left→right) */
+.mfd-timeline-h{display:flex;overflow-x:auto;padding:20px 2px 6px;-webkit-overflow-scrolling:touch;}
+.mfd-tstep{flex:0 0 auto;min-width:132px;max-width:170px;position:relative;
+  padding:0 12px;text-align:center;}
+.mfd-tstep::before{content:'';position:absolute;top:-13px;left:0;right:0;height:2px;
+  background:var(--line);}
+.mfd-tstep:first-child::before{left:50%;}
+.mfd-tstep:last-child::before{right:50%;}
+.mfd-tdot{position:absolute;top:-19px;left:50%;transform:translateX(-50%);
+  width:13px;height:13px;border-radius:50%;background:var(--accent);
+  border:2px solid var(--bg);z-index:1;}
+.mfd-tstage{font-size:.58rem;font-weight:800;text-transform:uppercase;
+  letter-spacing:.06em;color:var(--accent);}
+.mfd-ttitle{font-size:.84rem;font-weight:700;color:var(--t1);margin:2px 0 3px;line-height:1.25;}
+.mfd-tmeta{font-size:.72rem;color:var(--t2);line-height:1.4;}
+/* Dots pane — labelled contagion rows */
+.mfd-dotrow{display:flex;flex-direction:column;gap:5px;padding:12px 0;
+  border-bottom:1px solid var(--line);}
+.mfd-dotrow:last-child{border-bottom:0;}
+.mfd-dothead{display:flex;align-items:center;gap:9px;}
+.mfd-dotlabel{font-weight:800;font-size:.84rem;color:var(--t1);flex:1;}
+.mfd-dotrow.catch .mfd-dotlabel{color:#FF9F0A;}
+.mfd-dotbody{font-size:.86rem;line-height:1.45;color:var(--t2);}
+.mfd-impact{font-size:.64rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em;
+  padding:2px 8px;border-radius:999px;}
+.mfd-impact.up{color:#30D158;background:rgba(48,209,88,.14);}
+.mfd-impact.down{color:#FF453A;background:rgba(255,69,58,.14);}
+.mfd-impact.mixed{color:#FF9F0A;background:rgba(255,159,10,.14);}
+.mfd-impact.neutral{color:var(--t2);background:var(--glass);}
+.mfd-ins{display:inline-flex;align-items:center;gap:6px;font-size:.76rem;
+  border:1px solid var(--line);border-radius:8px;padding:4px 8px;color:var(--t1);margin:6px 6px 0 0;}
+.mfd-ins b{font-family:ui-monospace,Menlo,monospace;font-size:.72rem;color:var(--accent);}
+.mfd-ins .mfd-tick.up{color:#30D158;font-weight:700;} .mfd-ins .mfd-tick.down{color:#FF453A;font-weight:700;}
+/* pending / loading */
+.mfd-pending{text-align:center;padding:26px 16px;color:var(--t2);}
+.mfd-pending i{font-size:1.4rem;color:var(--t3);display:block;margin-bottom:9px;}
+.mfd-pending b{display:block;color:var(--t1);font-size:.95rem;margin-bottom:4px;}
+.mfd-pending span{font-size:.82rem;line-height:1.45;display:block;max-width:300px;margin:0 auto;}
+.mfd-sig{display:flex;align-items:center;gap:9px;flex-wrap:wrap;font-size:.68rem;}
+.mfd-sigid{font-family:ui-monospace,Menlo,monospace;color:var(--accent);
+  background:rgba(10,132,255,.12);padding:2px 8px;border-radius:6px;font-weight:800;letter-spacing:.06em;}
+.mfd-verify{display:inline-flex;align-items:center;gap:5px;color:var(--t2);font-weight:600;}
+.mfd-verify .d{width:7px;height:7px;border-radius:50%;background:var(--t3);}
+.mfd-verify.ok .d{background:#30D158;}
 </style>
-<div id="dossier-overlay" class="dossier-overlay" role="dialog" aria-modal="true" aria-label="Story dossier">
-  <div class="dossier-shell">
-    <header class="dsr-head">
-      <button class="dsr-close" onclick="closeDossier()" aria-label="Close dossier"><i class="fa-solid fa-xmark"></i></button>
-      <div class="dsr-signal">
-        <span class="dsr-sigid" id="dsr-sigid">SB-—</span>
-        <span class="dsr-verify" id="dsr-verify"><span class="dot"></span><span class="dsr-verify-lbl"></span></span>
-      </div>
-      <div class="dsr-verticals" id="dsr-verticals"></div>
-      <h2 class="dsr-title" id="dsr-title"></h2>
-      <p class="dsr-hook" id="dsr-hook" hidden></p>
-    </header>
-    <nav class="dsr-pills" id="dsr-pills">
-      <button class="dsr-pill on" data-pane="node" onclick="dossierPane('node')">The Node<span class="dsr-pill-sub">Facts</span></button>
-      <button class="dsr-pill" data-pane="strings" onclick="dossierPane('strings')">The Strings<span class="dsr-pill-sub">Thread</span></button>
-      <button class="dsr-pill" data-pane="dots" onclick="dossierPane('dots')">The Dots<span class="dsr-pill-sub">Contagion</span></button>
-    </nav>
-    <div class="dsr-panes">
-      <section class="dsr-pane on" id="dsr-pane-node"></section>
-      <section class="dsr-pane" id="dsr-pane-strings"></section>
-      <section class="dsr-pane" id="dsr-pane-dots"></section>
-    </div>
-  </div>
-</div>
 
 <script>
 
@@ -8429,14 +8397,12 @@ window.addEventListener('popstate', (e) => {
   try {
     const mv  = document.getElementById('media-viewer');
     const ao  = document.getElementById('article-overlay');
-    const dsr = document.getElementById('dossier-overlay');
     const so  = document.getElementById('search-overlay');
     const mo  = document.getElementById('market-overlay');
     const sb  = document.getElementById('sidebar');
     const sub = document.querySelector('.sub.on');
     // Close the topmost open layer first; otherwise navigate to the routed view.
     if (mv && mv.classList.contains('on'))   closeMediaViewer();
-    else if (dsr && dsr.classList.contains('open')) closeDossier();
     else if (ao && ao.classList.contains('open')) closeArticle();
     else if (so && so.classList.contains('open')) closeSearch();
     else if (mo && mo.classList.contains('open')) closeMarketDetail();
@@ -9793,42 +9759,157 @@ async function loadMyfeed(reset){
   } finally { myfeedLoading = false; }
 }
 function renderMyfeed(arts, feed){
-  arts.forEach(a => {
-    const cc = CATS[a.category] || CATS.tech;
-    const liked = ST.likes.includes(a.id), saved = ST.saves.includes(a.id);
-    const el = document.createElement('div'); el.className = 'mf-item'; el.dataset.aid = a.id;
-    const src = a.source || 'SherrByte';
-    el.innerHTML = `
-      <div class="mf-card">
-        <div class="mf-media b-open" style="${ownImage(a) ? `background-image:url('${a.image_url}')` : `background:${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}`}">
-          ${a.image_url ? '' : '<i class="fa-regular fa-image mf-media-ico"></i>'}
-        </div>
-        <div class="mf-body">
-          <div class="mf-srcrow">
-            <div class="mf-src">
-              <span class="mf-src-logo">${bEsc(src.charAt(0).toUpperCase())}</span>
-              <span class="mf-src-name">${bEsc(src)}</span>
-            </div>
-            <div class="mf-srcacts">
-              <span class="b-save ${saved?'on':''}"><i class="fa-${saved?'solid':'regular'} fa-bookmark"></i></span>
-              <span class="b-share"><i class="fa-solid fa-arrow-up-from-bracket"></i></span>
-            </div>
-          </div>
-          <div class="mf-headline b-open">${bEsc(a.title)}</div>
-          <div class="mf-what">${bEsc(a.preview||'')}</div>
-          <div class="mf-meta">${timeAgo(a.published_at)||'Just now'} · ${bEsc(src)}</div>
-        </div>
-        <div class="mf-foot b-open">
-          <div class="mf-foot-title">Open dossier</div>
-          <div class="mf-foot-sub">The Node · The Strings · The Dots</div>
-        </div>
-      </div>`;
-    el.querySelectorAll('.b-open').forEach(o => o.addEventListener('click', e => { e.stopPropagation(); markSeen(a.id); openDossier(a.id, { article: a }); }));
-    el.querySelector('.b-save').addEventListener('click', e => { e.stopPropagation(); myfeedToggle('saves', a, e.currentTarget, 'fa-bookmark', '🔖 Saved', 'save'); });
-    el.querySelector('.b-share').addEventListener('click', e => { e.stopPropagation(); shareArticleCard(a); });
-    feed.appendChild(el);
-  });
+  arts.forEach(a => feed.appendChild(buildMyfeedCard(a)));
   hydrateMyfeedCounts(arts.map(a => a.id));   // real like/comment counts
+}
+
+// ── colourful ticket-shaped sector badges ────────────────────────────────────
+// Per-sector colour keyed on the tag/category text; dark flag = dark text on a
+// light badge so gold/pink stay readable.
+const SECTOR_BADGES = [
+  { re: /sport|cricket|football|ipl|olympic/i,        c: '#FF3B30' },
+  { re: /nature|climate|environment|weather|science/i, c: '#34C759' },
+  { re: /market|econom|finance|stock|business|trade|money/i, c: '#FFCC00', dark: true },
+  { re: /tech|\bai\b|software|gadget|startup|cyber/i,  c: '#AF52DE' },
+  { re: /art|culture|film|music|entertain|pop/i,       c: '#FF2D92' },
+  { re: /politic|govern|policy|election|world/i,       c: '#0A84FF' },
+  { re: /health|medic/i,                               c: '#5AC8FA' },
+];
+function sectorBadge(label){
+  const s = String(label || '').trim();
+  if (!s) return '';
+  const m = SECTOR_BADGES.find(b => b.re.test(s)) || { c: '#5661f0' };
+  return `<span class="mf-badge${m.dark ? ' dark' : ''}" style="--bd:${m.c}">${bEsc(s)}</span>`;
+}
+function myfeedBadges(a){
+  // Prefer the article's own tags; always lead with its category so every card
+  // carries at least one badge.
+  const tags = [];
+  const cat = (a.category || a.pillar_slug || '').trim();
+  if (cat) tags.push(cat);
+  (a.micro_tags || []).forEach(t => { if (t && tags.length < 4) tags.push(t); });
+  return tags.map(sectorBadge).join('');
+}
+
+function buildMyfeedCard(a){
+  const saved = ST.saves.includes(a.id);
+  const el = document.createElement('div'); el.className = 'mf-item'; el.dataset.aid = a.id;
+  const src = a.source || 'SherrByte';
+  const tldr = bEsc(a.preview || a.summary || a.cached_summary || '');
+  el.innerHTML = `
+    <div class="mf-card">
+      <div class="mf-media b-open" style="${ownImage(a) ? `background-image:url('${a.image_url}')` : `background:${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}`}">
+        ${a.image_url ? '' : '<i class="fa-regular fa-image mf-media-ico"></i>'}
+      </div>
+      <div class="mf-body">
+        <div class="mf-srcrow">
+          <div class="mf-src">
+            <span class="mf-src-logo">${bEsc(src.charAt(0).toUpperCase())}</span>
+            <span class="mf-src-name">${bEsc(src)}</span>
+          </div>
+          <div class="mf-srcacts">
+            <span class="b-save ${saved?'on':''}"><i class="fa-${saved?'solid':'regular'} fa-bookmark"></i></span>
+            <span class="b-share"><i class="fa-solid fa-arrow-up-from-bracket"></i></span>
+          </div>
+        </div>
+        <div class="mf-badges">${myfeedBadges(a)}</div>
+        <div class="mf-headline b-open">${bEsc(a.title)}</div>
+        <div class="mfd-sig">
+          <span class="mfd-sigid">SB-${a.id}</span>
+          <span class="mfd-verify"><span class="d"></span><span class="mfd-verify-lbl">${timeAgo(a.published_at)||'Just now'} · ${bEsc(src)}</span></span>
+        </div>
+        <div class="mfd-tabs" role="tablist">
+          <button class="mfd-tab on" data-tab="news">News</button>
+          <button class="mfd-tab" data-tab="strings">Strings</button>
+          <button class="mfd-tab" data-tab="dots">Dots</button>
+        </div>
+        <div class="mfd-panes">
+          <div class="mfd-pane news on" data-pane="news">
+            <div class="mfd-tldr"><b>TL;DR</b>${tldr || 'Loading…'}</div>
+            <div class="mfd-sec mfd-what"><h4>What happened</h4><p>${tldr || '—'}</p></div>
+            <div class="mfd-sec mfd-whowhere" hidden><h4>Who &amp; Where</h4><p></p></div>
+          </div>
+          <div class="mfd-pane strings" data-pane="strings">${mfdPending('The Strings','Loading the causal thread…', true)}</div>
+          <div class="mfd-pane dots" data-pane="dots">${mfdPending('The Dots','Loading the contagion map…', true)}</div>
+        </div>
+      </div>
+    </div>`;
+  // Tab switching (scoped to this card).
+  el.querySelectorAll('.mfd-tab').forEach(t => t.addEventListener('click', e => {
+    e.stopPropagation();
+    const name = t.dataset.tab;
+    el.querySelectorAll('.mfd-tab').forEach(x => x.classList.toggle('on', x === t));
+    el.querySelectorAll('.mfd-pane').forEach(p => p.classList.toggle('on', p.dataset.pane === name));
+  }));
+  el.querySelector('.b-save').addEventListener('click', e => { e.stopPropagation(); myfeedToggle('saves', a, e.currentTarget, 'fa-bookmark', '🔖 Saved', 'save'); });
+  el.querySelector('.b-share').addEventListener('click', e => { e.stopPropagation(); shareArticleCard(a); });
+  el.querySelectorAll('.b-open').forEach(o => o.addEventListener('click', e => { e.stopPropagation(); markSeen(a.id); }));
+  // Lazily fill the dossier (node / strings / dots) once the card is on screen.
+  myfeedObserver.observe(el);
+  return el;
+}
+
+// One IntersectionObserver hydrates each card's dossier the first time it nears
+// the viewport — so the deck stays cheap (one dossier fetch per card actually
+// seen, not per card rendered), and the fetch is cached + serves stale on the
+// server side.
+const _mfdHydrated = new Set();
+const myfeedObserver = new IntersectionObserver((entries) => {
+  entries.forEach(ent => {
+    if (!ent.isIntersecting) return;
+    const el = ent.target, id = parseInt(el.dataset.aid, 10);
+    if (!id || _mfdHydrated.has(id)) { myfeedObserver.unobserve(el); return; }
+    _mfdHydrated.add(id);
+    myfeedObserver.unobserve(el);
+    hydrateDossier(el, id);
+  });
+}, { rootMargin: '300px 0px' });
+
+async function hydrateDossier(el, id){
+  let d;
+  try { d = await api('/article/' + id + '/dossier', { timeout: 20000 }); }
+  catch (e) { _mfdHydrated.delete(id); return; }   // allow a retry on next view
+  if (!el.isConnected) return;
+  markSeen(id);
+  // News — enrich TL;DR / What happened / Who & Where from The Node.
+  const node = d.node || {};
+  const what = (node.what || '').trim();
+  if (what) {
+    const w = el.querySelector('.mfd-what p'); if (w) w.textContent = what;
+    const tl = el.querySelector('.mfd-tldr'); if (tl && (d.hook || '').trim()) {
+      tl.innerHTML = '<b>TL;DR</b>' + bEsc(d.hook);
+    }
+  }
+  const whoBits = [];
+  if (node.who_subject) whoBits.push(node.who_subject);
+  (node.who_affected || []).forEach(x => whoBits.push(x));
+  const where = (node.where || '').trim(), when = (node.when || '').trim();
+  const wwSec = el.querySelector('.mfd-whowhere');
+  if (wwSec && (whoBits.length || where || when)) {
+    const parts = [];
+    if (whoBits.length) parts.push(`<div class="mfd-chips">${whoBits.map(x=>`<span>${bEsc(x)}</span>`).join('')}</div>`);
+    const line = [when, where].filter(Boolean).join(' · ');
+    if (line) parts.push(`<p>${bEsc(line)}</p>`);
+    wwSec.querySelector('p').outerHTML = parts.join('');
+    wwSec.hidden = false;
+  }
+  // Verification badge.
+  const v = d.verification || {};
+  const vfy = el.querySelector('.mfd-verify');
+  if (vfy && v.label) {
+    vfy.classList.toggle('ok', v.state === 'corroborated');
+    vfy.querySelector('.mfd-verify-lbl').textContent = v.label;
+  }
+  // Strings + Dots panes.
+  el.querySelector('.mfd-pane.strings').innerHTML = renderStringsPane(d.strings || [], d.strings_status);
+  el.querySelector('.mfd-pane.dots').innerHTML = renderDotsPane(d.dots || {}, d.dots_status);
+  _mfdMarkPending(el, 'strings', d.strings_status !== 'ready');
+  _mfdMarkPending(el, 'dots', d.dots_status !== 'ready');
+  hydrateMyfeedTickers(el);
+}
+function _mfdMarkPending(el, name, pending){
+  const t = el.querySelector(`.mfd-tab[data-tab="${name}"]`);
+  if (t) t.classList.toggle('pending', !!pending);
 }
 async function hydrateMyfeedCounts(ids) {
   ids = (ids || []).filter(Boolean);
@@ -9868,242 +9949,123 @@ function myfeedToggle(key, a, el, icon, msg, action){
 }
 
 // ══════════════════════════════════════════════════════════════════════
-// myFeed DOSSIER — The Node · The Strings · The Dots
-// One tapped card → one payload from /article/<id>/dossier. THE NODE ALWAYS
-// RENDERS (it is built from columns the row already carries); The Strings and
-// The Dots are marked "pending" when the synthesis pass has not written them
-// yet — which is the common case at first, not an error.
+// myFeed inline dossier — News · Strings · Dots rendered ON the card.
+// The News pane always renders (it is built from data the row already carries);
+// The Strings and The Dots are marked "pending" until the synthesis pass writes
+// them — the common case at first, not an error. Each card hydrates lazily from
+// /article/<id>/dossier as it nears the viewport (see myfeedObserver).
 // ══════════════════════════════════════════════════════════════════════
-let _dossierId = null, _dossierLoading = false;
-
 const DOTS_META = {
-  market_debt:       { label: 'Public Markets & Debt', icon: 'fa-chart-line' },
-  policy_governance: { label: 'Policy & Governance',    icon: 'fa-landmark' },
-  tech_culture:      { label: 'Tech / Culture Vector',  icon: 'fa-microchip' },
-  asymmetric_catch:  { label: 'The Asymmetric Catch',   icon: 'fa-bullseye' },
+  market_debt:       { label: 'Dot: Markets' },
+  policy_governance: { label: 'Dot: Governance' },
+  tech_culture:      { label: 'Dot: Tech/Social' },
+  asymmetric_catch:  { label: 'The Catch' },
 };
 
-async function openDossier(id, opts) {
-  opts = opts || {};
-  if (!id) return;
-  _dossierId = id;
-  const ov = document.getElementById('dossier-overlay');
-  // Instant paint from the card we already hold, so the surface is never blank
-  // while the payload is in flight (a cold backend can take a moment).
-  if (opts.article) _dossierHeader({
-    signal_id: 'SB-' + id,
-    headline: opts.article.title || opts.article.headline || '',
-    verticals: opts.article.micro_tags || [],
-    verification: { state: 'single', label: 'Loading…' },
-  });
-  _dossierPaneLoading();
-  ov.classList.add('open');
-  document.body.classList.add('no-scroll');
-  dossierPane('node');
-
-  // Real path + history entry, so back/refresh/share all land on this story.
-  if (!_navReplay) {
-    const slug = articleSlug({ id: id, title: (opts.article && (opts.article.title || opts.article.headline)) || '' });
-    try {
-      if (opts.replace) history.replaceState({ view: 'dossier', articleId: id }, '', '/myfeed/' + slug);
-      else history.pushState({ view: 'dossier', articleId: id }, '', '/myfeed/' + slug);
-    } catch (e) {}
-  }
-
-  if (_dossierLoading) return;
-  _dossierLoading = true;
-  try {
-    const d = await api('/article/' + id + '/dossier', { timeout: 45000 });
-    if (_dossierId !== id) return;   // a newer card was tapped mid-flight
-    renderDossier(d);
-    logInteract(id, d.category || '', 'read');
-  } catch (e) {
-    _dossierError();
-  } finally { _dossierLoading = false; }
+function mfdPending(title, msg, loading){
+  return `<div class="mfd-pending"><i class="fa-solid ${loading?'fa-circle-notch fa-spin':'fa-hourglass-half'}"></i>`
+    + `<b>${bEsc(title)}${loading?'':' — pending'}</b><span>${bEsc(msg)}</span></div>`;
 }
 
-function closeDossier() {
-  const ov = document.getElementById('dossier-overlay');
-  ov.classList.remove('open');
-  document.body.classList.remove('no-scroll');
-  _dossierId = null;
-  // The X closes without history.back(), so a /myfeed/<slug> path left in the
-  // bar would reopen the dossier on refresh over the deck. Restore the deck path.
-  if (!_navReplay && location.pathname.indexOf('/myfeed/') === 0) {
-    try { history.replaceState({ view: 'myfeed' }, '', '/myfeed'); } catch (e) {}
-  }
-}
-
-function dossierPane(name) {
-  document.querySelectorAll('.dsr-pill').forEach(p =>
-    p.classList.toggle('on', p.dataset.pane === name));
-  document.querySelectorAll('.dsr-pane').forEach(s =>
-    s.classList.toggle('on', s.id === 'dsr-pane-' + name));
-}
-
-function _dossierHeader(d) {
-  document.getElementById('dsr-sigid').textContent = d.signal_id || ('SB-' + (d.id || ''));
-  document.getElementById('dsr-title').textContent = d.headline || '';
-  const hookEl = document.getElementById('dsr-hook');
-  if (d.hook) { hookEl.textContent = d.hook; hookEl.hidden = false; }
-  else { hookEl.hidden = true; }
-  const vfy = document.getElementById('dsr-verify');
-  const v = d.verification || {};
-  vfy.classList.toggle('ok', v.state === 'corroborated');
-  vfy.querySelector('.dsr-verify-lbl').textContent = v.label || '';
-  const vt = document.getElementById('dsr-verticals');
-  const tags = (d.verticals || []).slice(0, 6);
-  vt.innerHTML = tags.map(t => `<span class="dsr-vtag">${bEsc(t)}</span>`).join('');
-}
-
-function renderDossier(d) {
-  _dossierHeader(d);
-  _renderNode(d.node || {}, d.headline || '');
-  _renderStrings(d.strings || [], d.strings_status);
-  _renderDots(d.dots || {}, d.dots_status);
-  // Mark pending pills so the reader knows before tapping.
-  _markPill('strings', d.strings_status !== 'ready');
-  _markPill('dots', d.dots_status !== 'ready');
-}
-
-function _markPill(name, pending) {
-  const p = document.querySelector(`.dsr-pill[data-pane="${name}"]`);
-  if (p) p.classList.toggle('pending', !!pending);
-}
-
-function _renderNode(node, headline) {
-  // Who — subject + affected rendered as chips.
-  const who = [];
-  if (node.who_subject) who.push(`<span>${bEsc(node.who_subject)}</span>`);
-  (node.who_affected || []).forEach(a => who.push(`<span>${bEsc(a)}</span>`));
-  const whoHtml = who.length ? `<div class="dsr-chips">${who.join('')}</div>` : '';
-  let html = '<table class="dsr-kv"><tbody>';
-  html += `<tr><th>What</th><td>${bEsc(node.what || headline || '—')}</td></tr>`;
-  if (whoHtml) html += `<tr><th>Who</th><td>${whoHtml}</td></tr>`;
-  if (node.when)      html += `<tr><th>When</th><td>${bEsc(node.when)}</td></tr>`;
-  if (node.where)     html += `<tr><th>Where</th><td>${bEsc(node.where)}</td></tr>`;
-  if (node.mechanism) html += `<tr><th>Mechanism</th><td>${bEsc(node.mechanism)}</td></tr>`;
-  if (node.why)       html += `<tr><th>Why</th><td>${bEsc(node.why)}</td></tr>`;
-  html += '</tbody></table>';
-  document.getElementById('dsr-pane-node').innerHTML = html;
-}
-
-function _renderStrings(strings, status) {
-  const pane = document.getElementById('dsr-pane-strings');
-  if (!strings || !strings.length) {
-    pane.innerHTML = _pending('The Strings',
-      status === 'pending'
-        ? 'The causal thread for this story has not been mapped yet. It appears here once the synthesis pass links its sources.'
-        : 'No causal thread was found in the sources for this story.');
-    return;
+// The Strings — a HORIZONTAL timeline: dots connected left→right by a line, each
+// labelled beneath. (The wireframe's key ask — the old vertical layout was wrong.)
+function renderStringsPane(strings, status){
+  if (!strings || !strings.length){
+    return mfdPending('The Strings', status === 'pending'
+      ? 'The causal thread has not been mapped for this story yet. It appears here once synthesis links its sources.'
+      : 'No causal thread was found in the sources.', false);
   }
   const steps = strings.map(s => `
-    <div class="dsr-step">
-      ${s.stage ? `<div class="dsr-step-stage">${bEsc(s.stage)}</div>` : ''}
-      ${s.title ? `<div class="dsr-step-title">${bEsc(s.title)}</div>` : ''}
-      <div class="dsr-step-detail">${bEsc(s.detail || '')}</div>
+    <div class="mfd-tstep">
+      <span class="mfd-tdot"></span>
+      ${s.stage ? `<div class="mfd-tstage">${bEsc(s.stage)}</div>` : ''}
+      ${s.title ? `<div class="mfd-ttitle">${bEsc(s.title)}</div>` : ''}
+      <div class="mfd-tmeta">${bEsc(s.detail || '')}</div>
     </div>`).join('');
-  pane.innerHTML = `<div class="dsr-timeline">${steps}</div>`;
+  return `<div class="mfd-timeline-h">${steps}</div>`;
 }
 
-function _renderDots(dots, status) {
-  const pane = document.getElementById('dsr-pane-dots');
+// The Dots — labelled contagion rows ("Dot: Markets" …) each with its impact line.
+function renderDotsPane(dots, status){
   const keys = Object.keys(dots || {});
-  if (!keys.length) {
-    pane.innerHTML = _pending('The Dots',
-      status === 'pending'
-        ? 'The cross-asset contagion map has not been drawn for this story yet. It appears here once the synthesis pass reaches it.'
-        : 'No cross-asset ripples were identified in the sources for this story.');
-    return;
+  if (!keys.length){
+    return mfdPending('The Dots', status === 'pending'
+      ? 'The cross-asset contagion map has not been drawn for this story yet.'
+      : 'No cross-asset ripples were identified in the sources.', false);
   }
-  // Fixed order; the Asymmetric Catch always closes the deck.
   const order = ['market_debt', 'policy_governance', 'tech_culture', 'asymmetric_catch'];
-  const html = order.filter(k => dots[k]).map(k => _dotCard(k, dots[k])).join('');
-  pane.innerHTML = html;
-  _hydrateDossierTickers();
+  return order.filter(k => dots[k]).map(k => mfdDotRow(k, dots[k])).join('');
 }
 
-function _dotCard(key, dot) {
-  const meta = DOTS_META[key] || { label: key, icon: 'fa-circle-dot' };
+function mfdDotRow(key, dot){
+  const meta = DOTS_META[key] || { label: key };
   const isCatch = key === 'asymmetric_catch';
   let impact = '';
-  if (!isCatch && dot.impact) {
+  if (!isCatch && dot.impact){
     const cls = ['up', 'down', 'mixed', 'neutral'].includes(dot.impact) ? dot.impact : 'neutral';
-    const arrow = cls === 'up' ? '▲' : cls === 'down' ? '▼' : cls === 'mixed' ? '◆' : '●';
-    impact = `<span class="dsr-impact ${cls}">${arrow} ${bEsc(dot.impact)}</span>`;
+    impact = `<span class="mfd-impact ${cls}">${bEsc(dot.impact)}</span>`;
   }
   let ins = '';
-  if (!isCatch && dot.instruments && dot.instruments.length) {
-    ins = `<div class="dsr-instruments">` + dot.instruments.map(i => {
+  if (!isCatch && dot.instruments && dot.instruments.length){
+    ins = dot.instruments.map(i => {
       const tk = (i.ticker || '').toUpperCase();
-      return `<span class="dsr-ins" ${tk ? `data-ticker="${bEsc(tk)}"` : ''}>${bEsc(i.name || tk)}`
+      return `<span class="mfd-ins" ${tk ? `data-ticker="${bEsc(tk)}"` : ''}>${bEsc(i.name || tk)}`
         + (tk ? ` <b>${bEsc(tk)}</b>` : '')
-        + (tk ? ` <span class="dsr-tick" data-tickfor="${bEsc(tk)}"></span>` : '')
-        + `</span>`;
-    }).join('') + `</div>`;
+        + (tk ? ` <span class="mfd-tick" data-tickfor="${bEsc(tk)}"></span>` : '') + `</span>`;
+    }).join('');
   }
-  return `
-    <div class="dsr-dot ${isCatch ? 'catch' : ''}">
-      <div class="dsr-dot-head">
-        <span class="dsr-dot-ico"><i class="fa-solid ${meta.icon}"></i></span>
-        <span class="dsr-dot-name">${bEsc(meta.label)}</span>
-        ${impact}
-      </div>
-      <div class="dsr-dot-summary">${bEsc(dot.summary || '')}</div>
-      ${ins}
-    </div>`;
+  return `<div class="mfd-dotrow ${isCatch ? 'catch' : ''}">
+    <div class="mfd-dothead"><span class="mfd-dotlabel">${bEsc(meta.label)}</span>${impact}</div>
+    <div class="mfd-dotbody">${bEsc(dot.summary || '')}</div>${ins}
+  </div>`;
 }
 
-// Live tickers where an instrument is named — read from the one market store the
-// Explore tab already fills (window._lastMkt). Best-effort: if markets have not
-// loaded, kick one fetch and re-hydrate; if a symbol is not covered, the chip
-// just shows its ticker with no move, never an error.
-function dossierQuote(sym) {
+// Live tickers from the one market store Explore fills (best-effort; a symbol not
+// covered just shows its ticker with no move, never an error).
+function dossierQuote(sym){
   const data = window._lastMkt;
   if (!data || !sym) return null;
   const S = String(sym).toUpperCase();
-  for (const k in data) {
-    const grp = data[k];
-    if (grp && typeof grp === 'object' && grp[S] && grp[S].change_pct != null) return grp[S];
+  for (const k in data){
+    const g = data[k];
+    if (g && typeof g === 'object' && g[S] && g[S].change_pct != null) return g[S];
   }
   return null;
 }
-function _hydrateDossierTickers() {
-  const marks = document.querySelectorAll('.dsr-tick[data-tickfor]');
+function hydrateMyfeedTickers(el){
+  const marks = el.querySelectorAll('.mfd-tick[data-tickfor]');
   if (!marks.length) return;
-  let anyMissing = false;
+  let missing = false;
   marks.forEach(m => {
     const q = dossierQuote(m.dataset.tickfor);
-    if (q && q.change_pct != null) {
+    if (q && q.change_pct != null){
       const up = q.change_pct >= 0;
       m.textContent = (up ? '▲ +' : '▼ ') + Math.abs(q.change_pct).toFixed(2) + '%';
       m.classList.add(up ? 'up' : 'down');
-    } else { anyMissing = true; }
+    } else { missing = true; }
   });
-  // Markets never fetched this session → fill the store once, then re-hydrate.
-  if (anyMissing && !window._lastMkt && typeof loadMarkets === 'function') {
-    loadMarkets();
-    setTimeout(_hydrateDossierTickers, 4000);
+  if (missing && !window._lastMkt && typeof loadMarkets === 'function'){
+    loadMarkets(); setTimeout(() => hydrateMyfeedTickers(el), 4000);
   }
 }
 
-function _pending(title, msg) {
-  return `<div class="dsr-pending">
-    <i class="fa-regular fa-hourglass-half"></i>
-    <b>${bEsc(title)} — pending</b>
-    <span>${bEsc(msg)}</span>
-  </div>`;
+// Deep link (/myfeed/<slug>): render that story as the FIRST card in the deck —
+// the dossier is inline now, so there is no overlay to open. Kept under the name
+// openDossier because the boot router and the layout test reference it.
+async function openDossier(id, opts){
+  opts = opts || {};
+  const feed = document.getElementById('myfeed-feed');
+  if (!feed || !id) return;
+  let a = opts.article;
+  if (!a){ try { a = await api('/article/' + id); } catch (e) { return; } }
+  if (!a || !a.id) return;
+  const card = buildMyfeedCard(normalizeArticle(a));
+  feed.insertBefore(card, feed.firstChild);
+  feed.scrollTop = 0;
+  myfeedInit = true;   // the deck now has a card; the normal load fills the rest
 }
-function _dossierPaneLoading() {
-  ['node', 'strings', 'dots'].forEach(n => {
-    const el = document.getElementById('dsr-pane-' + n);
-    if (el) el.innerHTML = `<div class="dsr-pending"><i class="fa-solid fa-circle-notch fa-spin"></i><b>Loading dossier…</b></div>`;
-  });
-}
-function _dossierError() {
-  const el = document.getElementById('dsr-pane-node');
-  if (el) el.innerHTML = _pending('Dossier', 'Couldn\'t load this dossier — close and tap the card again.');
-}
+// No overlay to close in the inline model; kept as a no-op for the history plumbing.
+function closeDossier(){}
 
 // ── Live: weather (Open-Meteo), word-of-day + dictionary (dictionaryapi.dev) ──
 // Ask the browser for location once; cache coords so we don't re-prompt.

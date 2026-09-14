@@ -25,18 +25,25 @@ from app.db.supabase import db
 log = logging.getLogger("sherbyte.connector")
 
 
-async def _nearest_thread(conn, embedding: list[float]) -> tuple[str | None, float]:
-    """Return (thread_id, cosine_similarity) for the closest recent thread."""
+async def _nearest_thread(conn, info_object_id: str) -> tuple[str | None, float]:
+    """Return (thread_id, cosine_similarity) for the closest recent thread.
+
+    THE EMBEDDING NEVER LEAVES THE DATABASE. The subject vector is referenced by
+    id through a scalar subquery rather than SELECTed into Python and shipped
+    back as a bind parameter — a 1536-float vector is ~6 KB, and round-tripping
+    it per ingested object was pure egress against Supabase's cap. The `<=>`
+    comparison already runs in the database; now the operand does too.
+    """
     row = await conn.fetchrow(
         """
-        SELECT id, 1 - (centroid <=> $1) AS similarity
+        SELECT id, 1 - (centroid <=> (SELECT embedding FROM info_objects WHERE id=$1)) AS similarity
         FROM story_threads
         WHERE centroid IS NOT NULL
           AND updated_at > now() - ($2 || ' hours')::interval
-        ORDER BY centroid <=> $1
+        ORDER BY centroid <=> (SELECT embedding FROM info_objects WHERE id=$1)
         LIMIT 1
         """,
-        embedding, str(settings.story_link_window_hours),
+        info_object_id, str(settings.story_link_window_hours),
     )
     if not row:
         return None, 0.0
@@ -80,15 +87,17 @@ async def _attach_node(conn, thread_id: str, info_object_id: str, similarity: fl
     return str(node["id"]) if node else ""
 
 
-async def _open_thread(conn, info_object_id: str, embedding: list[float],
+async def _open_thread(conn, info_object_id: str,
                        title: str, topic: str, pillar_id: int) -> str:
+    # centroid is seeded from the object's own embedding, pulled in-DB by id so
+    # the vector is never shipped to Python and back (see _nearest_thread).
     thread = await conn.fetchrow(
         """
         INSERT INTO story_threads (title, topic, pillar_id, centroid, node_count)
-        VALUES ($1,$2,$3,$4,1)
+        VALUES ($1,$2,$3,(SELECT embedding FROM info_objects WHERE id=$4),1)
         RETURNING id
         """,
-        title, topic, pillar_id, embedding,
+        title, topic, pillar_id, info_object_id,
     )
     thread_id = str(thread["id"])
     await conn.execute(
@@ -106,23 +115,26 @@ async def _open_thread(conn, info_object_id: str, embedding: list[float],
 
 async def connect(info_object_id: str) -> str:
     """Thread one (already-embedded) info object. Returns its thread_id."""
+    # Only the scalar metadata is fetched — NOT the embedding. `has_embedding` is
+    # a boolean computed in the database, so the presence check costs a bit, not
+    # 6 KB of vector. Everything downstream references the vector by id in-DB.
     obj = await db.fetchrow(
-        "SELECT headline, topic, pillar_id, embedding FROM info_objects WHERE id=$1",
+        "SELECT headline, topic, pillar_id, (embedding IS NOT NULL) AS has_embedding "
+        "FROM info_objects WHERE id=$1",
         info_object_id,
     )
-    if not obj or obj["embedding"] is None:
+    if not obj or not obj["has_embedding"]:
         log.debug("connect skipped (no embedding) for %s", info_object_id)
         return ""
 
-    embedding = obj["embedding"]
     async with db.acquire() as conn:
-        thread_id, sim = await _nearest_thread(conn, embedding)
+        thread_id, sim = await _nearest_thread(conn, info_object_id)
         if thread_id and sim >= settings.story_link_threshold:
             await _attach_node(conn, thread_id, info_object_id, sim)
             log.debug("linked %s → thread %s (sim=%.3f)", info_object_id, thread_id, sim)
             return thread_id
         new_id = await _open_thread(
-            conn, info_object_id, embedding,
+            conn, info_object_id,
             title=obj["headline"], topic=obj["topic"], pillar_id=obj["pillar_id"],
         )
         log.debug("opened thread %s for %s", new_id, info_object_id)
