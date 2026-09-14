@@ -61,8 +61,14 @@ services:
         value: thumbnail
       - key: ADMIN_TOKEN
         generateValue: true    # /admin/* is refused entirely without it in prod
+      # PINNED, not generateValue. Render regenerates a generateValue secret when
+      # the Blueprint is re-applied / the service is recreated, and every rotation
+      # of JWT_SECRET invalidates every issued token at once — every logged-in user
+      # is silently signed out. The signing key must be STABLE across deploys, so
+      # it is set once as a fixed value in the dashboard (sync:false keeps it out
+      # of git). Set it to a long random string and never change it.
       - key: JWT_SECRET
-        generateValue: true
+        sync: false
       - key: WATERMARK_SECRET
         generateValue: true
       # Optional: supabase-py client (auth/storage helpers). The app's own JWT

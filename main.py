@@ -1947,6 +1947,46 @@ async def lifespan(app: FastAPI):
             _c.close()
     except Exception as e:
         log.warning("[BODY] census failed: %s", e)
+
+    # ── SCHEMA VISIBILITY CHECK ────────────────────────────────────────────────
+    # The two-schemas bug (the app on sherrbyte_app, the engine on public) was
+    # silent: the site read empty tables and nothing errored. This makes it loud.
+    # Log the search_path this process actually resolved, plus the row counts of
+    # the two tables the whole product hangs on — articles (the feed, read through
+    # pgcompat from sherrbyte_app) and insights (the /patterns engine output, read
+    # through the asyncpg pool from public). A zero on either is an ERROR, because
+    # a zero here means a live screen is about to render empty.
+    try:
+        _c = get_db()
+        try:
+            _sp = _c.execute("SHOW search_path").fetchone()
+            _sp = (_sp[0] if _sp is not None else "?")
+            _arts = _c.execute(
+                "SELECT COUNT(*) AS c FROM articles "
+                "WHERE status='published'").fetchone()["c"]
+        finally:
+            _c.close()
+        _ins = None
+        try:
+            _pool = await get_spie_pool()
+            if _pool is not None:
+                async with _pool.acquire() as _pc:
+                    _ins = await _pc.fetchval("SELECT COUNT(*) FROM insights")
+        except Exception as e:                                    # noqa: BLE001
+            log.warning("[SCHEMA] insight count unavailable: %s", e)
+        log.info("[SCHEMA] search_path=%s | articles(published)=%s | insights=%s",
+                 _sp, _arts, _ins)
+        if not _arts:
+            log.error("[SCHEMA] articles is EMPTY on the schema the web service "
+                      "reads (search_path=%s). The feed will render blank — the "
+                      "app is pointed at the wrong schema or ingest is not writing "
+                      "where it reads.", _sp)
+        if _ins == 0:
+            log.error("[SCHEMA] insights is EMPTY on public — /patterns will be "
+                      "empty. The detector cron is not writing, or DATABASE_URL "
+                      "points at a different database than the workers use.")
+    except Exception as e:
+        log.error("[SCHEMA] visibility check failed: %s", e)
     yield
     scheduler.shutdown()
 

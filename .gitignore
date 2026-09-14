@@ -13,3 +13,9 @@ node_modules/
 
 # Local backup bundles (pending-work archives) — not source
 *.bundle
+
+# Editor/OS cruft and build caches
+desktop.ini
+*.cache
+# Firebase Hosting build cache (Hosting retired; FCM sw kept)
+hosting.*.cache
