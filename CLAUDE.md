@@ -181,9 +181,12 @@ for a matcher that can never look further back than the news. `--days` is
 sufficient and already exists.
 
 Crypto is the one class that stays short: CoinGecko's keyless public tier caps
-history at 365 days, and adding a key or a paid tier is refused (it is on the
-non-commercial licensing audit list). Treat thin crypto analogs as a known
-limitation, not a bug to solve.
+history at 365 days. A free **demo** key (`COINGECKO_CRYPTO_API_KEY`, sent as the
+`x-cg-demo-api-key` header) is now used to lift the rate limit — the earlier note
+that "adding a key is refused" predated having one, and referred to a *paid* tier
+(on the non-commercial licensing audit list). A demo key is free and only raises
+the call ceiling; it does NOT extend history, so the 365-day cap and thin crypto
+analogs remain a known limitation, not a bug to solve.
 
 ### CoinGecko's public tier: two failure modes, both now handled
 

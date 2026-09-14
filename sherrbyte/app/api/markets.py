@@ -31,7 +31,8 @@ router = APIRouter(prefix="/markets", tags=["markets"])
 # Provider keys — read from env/secrets ONLY, never hardcoded.
 FINNHUB_KEY    = os.getenv("FINNHUB_KEY", "")
 METALS_API_KEY = os.getenv("METALS_API_KEY", "")      # legacy metals-api.com
-COINGECKO_KEY  = os.getenv("COINGECKO_KEY", "")       # CoinGecko demo key (x-cg-demo-api-key)
+COINGECKO_KEY  = (os.getenv("COINGECKO_CRYPTO_API_KEY")
+                  or os.getenv("COINGECKO_KEY") or "")  # CoinGecko demo key (x-cg-demo-api-key)
 METALS_DEV_KEY = os.getenv("METALS_DEV_KEY", "")      # metals.dev
 
 # ─── TTL cache ────────────────────────────────────────────────────────────────

@@ -36,6 +36,12 @@ METALS_API_KEY   = os.getenv("METALS_API_KEY", "")
 # is fine in os.getenv since Render injects the var directly.
 EXCHANGE_RATE_KEY= (os.getenv("EXCHANGE_RATE_KEY")
                     or os.getenv("FOREX_ExchangeRate-API_KEY") or "")
+# CoinGecko demo key (x-cg-demo-api-key). The keyless tier is rate-limited to
+# ~5-15 calls/min and started returning nothing under load ("coingecko returned
+# no prices"); a free demo key lifts that. Read under the Render name first.
+COINGECKO_KEY    = (os.getenv("COINGECKO_CRYPTO_API_KEY")
+                    or os.getenv("COINGECKO_KEY") or "")
+_CG_HEADERS      = {"x-cg-demo-api-key": COINGECKO_KEY} if COINGECKO_KEY else {}
 
 # ─── Symbol catalogue ────────────────────────────────────────────────────
 # Every symbol this module quotes, in one place, keyed by market_type.
@@ -241,6 +247,7 @@ async def _coingecko(client: httpx.AsyncClient, ids: list[str]) -> dict:
                 "include_24hr_change":"true",
                 "include_market_cap": "true",
             },
+            headers=_CG_HEADERS,
             timeout=8,
         )
         if r.status_code != 200:
