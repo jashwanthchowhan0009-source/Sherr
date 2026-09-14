@@ -2000,6 +2000,15 @@ app.add_middleware(
     allow_methods=["*"], allow_headers=["*"],
 )
 
+# GZip every response above ~1KB. index.html is ~618KB of highly compressible
+# text (it gzips to well under a tenth of that), and the JSON feeds compress
+# similarly — on a free tier where bandwidth and TTFB are the felt constraint for
+# 1000-5000 readers, this is the single cheapest win. Built-in, no dependency.
+# Brotli would compress a little further but needs a third-party ASGI package;
+# GZip is universally supported and adds nothing to the build.
+from starlette.middleware.gzip import GZipMiddleware          # noqa: E402
+app.add_middleware(GZipMiddleware, minimum_size=1024)
+
 app.include_router(activity_router)
 app.include_router(markets_router)
 
@@ -2342,7 +2351,111 @@ def _spa_or_none(request):
     if not _wants_html(request):
         return None
     html = _index_html()
-    return HTMLResponse(html) if html else None
+    return _spa_html(html) if html else None
+
+
+EXPLORE_CACHE_SECONDS = int(os.getenv("EXPLORE_CACHE_SECONDS", "60"))
+# How much a page's within-page order leans on engagement vs recency. The
+# recency backbone (id DESC) is the STABLE pagination key; this only reorders the
+# 20 items already on a page, so higher-engagement items float up without ever
+# moving an item across a page boundary (no dupes, no gaps). As engagement
+# accrues between visits, the order shifts — that is the "reshuffle" the feed
+# wants, driven by real signal rather than a random seed.
+EXPLORE_ENGAGEMENT_BLEND = float(os.getenv("EXPLORE_ENGAGEMENT_BLEND", "0.35"))
+
+
+def _encode_cursor(last_id: int) -> str:
+    return base64.urlsafe_b64encode(str(int(last_id)).encode()).decode()
+
+
+def _decode_cursor(cursor: str):
+    """The id after which to continue, or None on absent/garbage — a bad cursor
+    restarts from the top rather than 500ing."""
+    if not cursor:
+        return None
+    try:
+        return int(base64.urlsafe_b64decode(cursor.encode()).decode())
+    except Exception:
+        return None
+
+
+def _blend_engagement(arts: list) -> list:
+    """Reorder ONE page: float higher-engagement items up within their recency
+    neighbourhood. Pure and page-local, so pagination stays exact."""
+    n = len(arts)
+    if n < 2:
+        return arts
+    max_eng = max((a.get("engagement") or 0) for a in arts) or 1
+    scored = []
+    for i, a in enumerate(arts):
+        recency = 1.0 - (i / (n - 1))                 # 1=newest … 0=oldest here
+        eng = (a.get("engagement") or 0) / max_eng
+        score = (1 - EXPLORE_ENGAGEMENT_BLEND) * recency + EXPLORE_ENGAGEMENT_BLEND * eng
+        scored.append((score, i, a))
+    scored.sort(key=lambda t: (-t[0], t[1]))
+    return [a for _, _, a in scored]
+
+
+def _explore_page(category: str, pillar: int, scope: str, cursor: str,
+                  page: int, limit: int) -> dict:
+    """Sync worker for /explore — runs off the event loop via to_thread.
+
+    Cursor-paginated on id DESC (integer keyset: portable across the sqlite and
+    Postgres shapes with no cast, and stable while new rows arrive). Falls back
+    to page/offset for older clients that still send ?page=. NEVER returns an
+    empty first page under a pillar filter: it drops the pillar and serves the
+    nearest recent items rather than rendering a blank section.
+    """
+    conn = get_db()
+    try:
+        if category and not pillar:
+            resolved = FRONTEND_SLUG_MAP.get(category.lower())
+            if resolved:
+                pillar = resolved
+        # Scope soft-fallback: ingest tags almost everything 'global', so a Local
+        # reader would otherwise get a blank page while the stories sat one filter
+        # away. An empty scope broadens rather than starves.
+        eff_scope = scope
+        if eff_scope and eff_scope.lower() != "global":
+            sc_sql, sc_params = _scope_clause(eff_scope)
+            if conn.execute(
+                "SELECT COUNT(*) AS c FROM articles WHERE ai_processed=1 "
+                "AND status='published'" + sc_sql, sc_params).fetchone()["c"] == 0:
+                eff_scope = ""
+
+        last_id = _decode_cursor(cursor)
+
+        def fetch(use_pillar: bool):
+            q = "SELECT * FROM articles WHERE ai_processed=1 AND status='published'"
+            p: list = []
+            if use_pillar and pillar:
+                q += " AND pillar_id=?"; p.append(pillar)
+            sc_sql, sc_params = _scope_clause(eff_scope)
+            q += sc_sql; p += sc_params
+            if last_id is not None:
+                q += " AND id < ?"; p.append(last_id)
+                q += " ORDER BY id DESC LIMIT ?"; p.append(limit + 1)
+            else:
+                q += " ORDER BY id DESC LIMIT ? OFFSET ?"
+                p += [limit + 1, max(0, (page - 1) * limit)]
+            return conn.execute(q, p).fetchall()
+
+        rows = fetch(True)
+        fallback = False
+        # Never-empty: a first page that a pillar/category filter emptied falls
+        # back to the nearest recent items (same scope, any pillar).
+        if not rows and last_id is None and pillar:
+            rows = fetch(False)
+            fallback = bool(rows)
+
+        has_more = len(rows) > limit
+        rows = rows[:limit]
+        next_cursor = _encode_cursor(rows[-1]["id"]) if (rows and has_more) else None
+        arts = _blend_engagement([article_row_to_dict(r) for r in rows])
+        return {"articles": arts, "has_more": has_more,
+                "next_cursor": next_cursor, "fallback": fallback}
+    finally:
+        conn.close()
 
 
 @app.get("/explore")
@@ -2351,43 +2464,21 @@ async def explore_feed(
     category: str = Query(""),
     pillar: int = Query(0),
     scope: str = Query(""),
+    cursor: str = Query(""),
     page: int = Query(1, ge=1),
-    limit: int = Query(30, le=100),
+    limit: int = Query(20, le=50),
     authorization: str = Header(""),
 ):
     page_html = _spa_or_none(request)
     if page_html is not None:
         return page_html
     get_current_user(authorization)
-    offset = (page - 1) * limit
-    conn = get_db()
-    # Scope soft-fallback, matching /feed. Ingest classifies almost everything
-    # 'global', so a reader on Local was served an empty Explore page — every
-    # category row reading "No stories yet" while the same articles sat one
-    # filter away. An empty scope broadens rather than starving.
-    if scope and scope.lower() != "global":
-        sc_sql, sc_params = _scope_clause(scope)
-        have = conn.execute(
-            "SELECT COUNT(*) AS c FROM articles WHERE ai_processed=1 "
-            "AND status='published'" + sc_sql, sc_params).fetchone()["c"]
-        if have == 0:
-            scope = ""
-    q = "SELECT * FROM articles WHERE ai_processed=1 AND status='published'"
-    p = []
-    if category and not pillar:
-        resolved = FRONTEND_SLUG_MAP.get(category.lower())
-        if resolved:
-            pillar = resolved
-    if pillar:
-        q += " AND pillar_id=?"; p.append(pillar)
-    sc_sql, sc_params = _scope_clause(scope)
-    q += sc_sql; p += sc_params
-    q += " ORDER BY published_at DESC, id DESC LIMIT ? OFFSET ?"
-    p += [limit + 1, offset]
-    rows = conn.execute(q, p).fetchall()
-    conn.close()
-    has_more = len(rows) > limit
-    return {"articles": [article_row_to_dict(r) for r in rows[:limit]], "has_more": has_more}
+    limit = max(1, min(limit, 50))
+    ck = f"explore:{category}:{pillar}:{scope}:{cursor}:{page}:{limit}"
+    return await cache.swr(
+        ck, EXPLORE_CACHE_SECONDS,
+        lambda: asyncio.to_thread(_explore_page, category, pillar, scope,
+                                  cursor, page, limit))
 
 
 # ─── Explore page snapshot ────────────────────────────────────────────────────
@@ -2537,9 +2628,14 @@ async def live_dictionary(word: str):
 
 @app.get("/explore/snapshot")
 async def explore_snapshot():
-    """All Explore sections from cache in one call — no upstream API on this path."""
+    """All Explore sections from cache in one call — no upstream API on this path.
+
+    Wrapped in the read cache with a stale-while-revalidate fallback so a crowd
+    costs one producer call per 60s and a transient failure serves the last good
+    snapshot rather than an error."""
     import explore_feeds
-    return await explore_feeds.snapshot()
+    return await cache.swr("explore:snapshot", EXPLORE_CACHE_SECONDS,
+                           lambda: explore_feeds.snapshot())
 
 
 @app.post("/admin/explore/refresh")
@@ -2553,21 +2649,9 @@ async def explore_refresh(name: str = Query("")):
     return await explore_feeds.refresh_all()
 
 
-@app.get("/explore/pillars")
-async def explore_by_pillar(
-    per: int = Query(6, ge=1, le=20),
-    scope: str = Query(""),
-    authorization: str = Header(""),
-):
-    """Every pillar, with the SAME number of articles each.
-
-    The old page built its rows by slicing one flat recency-ordered feed, so a pillar
-    with a busy news day crowded out the quiet ones and the rows came out ragged. Here
-    each pillar gets its own top-N, and `per` is clamped to what the THINNEST pillar
-    can actually supply — otherwise "equal" would mean padding some rows with older
-    material while others stay fresh, which is a different kind of uneven.
-    """
-    get_current_user(authorization)
+def _explore_pillars(per: int, scope: str) -> dict:
+    """Sync worker for /explore/pillars — every pillar with the SAME number of
+    articles each, clamped to what the thinnest stocked pillar can supply."""
     conn = get_db()
     try:
         sc_sql, sc_params = _scope_clause(scope)
@@ -2576,10 +2660,7 @@ async def explore_by_pillar(
         avail = {pid: conn.execute(base, [pid] + sc_params).fetchone()["c"]
                  for pid in PILLARS}
         stocked = [c for c in avail.values() if c > 0]
-        # Clamp to the thinnest STOCKED pillar; an empty pillar is reported as empty
-        # rather than dragging every other row to zero.
         n = min(per, min(stocked)) if stocked else 0
-
         out = []
         for pid, meta in PILLARS.items():
             rows = conn.execute(
@@ -2594,11 +2675,29 @@ async def explore_by_pillar(
                 "articles": [article_row_to_dict(r) for r in rows],
             })
         return {"per_pillar": n, "requested": per, "pillars": out,
-                # Surfaced so a short row is explainable rather than looking broken.
                 "limited_by": (min(avail, key=lambda k: avail[k] if avail[k] else 10**9)
                                if stocked and n < per else None)}
     finally:
         conn.close()
+
+
+@app.get("/explore/pillars")
+async def explore_by_pillar(
+    per: int = Query(6, ge=1, le=20),
+    scope: str = Query(""),
+    authorization: str = Header(""),
+):
+    """Every pillar, with the SAME number of articles each.
+
+    Each pillar gets its own top-N, and `per` is clamped to what the THINNEST
+    pillar can supply — otherwise "equal" would pad some rows with older material
+    while others stay fresh. Cached (60s) with a stale-while-revalidate fallback,
+    keyed by the query string.
+    """
+    get_current_user(authorization)
+    return await cache.swr(
+        f"explore:pillars:{per}:{scope}", EXPLORE_CACHE_SECONDS,
+        lambda: asyncio.to_thread(_explore_pillars, per, scope))
 
 
 @app.get("/trending")
@@ -2694,6 +2793,13 @@ async def patterns(
                                        max_age_hours=max_age_hours)
     if payload.get("source") != "unavailable":
         await cache.set(ck, payload, PATTERNS_CACHE_SECONDS)
+        # Keep a long-lived good copy so a later DB blip serves this instead of
+        # an "unavailable" wall (stale-while-revalidate).
+        await cache.set(f"{ck}|swr", payload, 86400)
+    else:
+        stale = await cache.get(f"{ck}|swr")
+        if stale is not None:
+            return stale
     return payload
 
 
@@ -5439,6 +5545,41 @@ _SPA_ROUTES = ("", "explore", "bytes", "profile", "feed", "spie",
 
 _index_cache: dict = {"mtime": 0.0, "html": ""}
 
+# index.html must NEVER be cached by the browser, or a deploy ships new bytes that
+# nobody sees until they hard-refresh. no-cache means "revalidate every time";
+# paired with the SPA being tiny to revalidate, a new deploy is always picked up.
+_HTML_HEADERS = {"Cache-Control": "no-cache, must-revalidate"}
+# The static assets, by contrast, are content-addressed via a strong ETag: the
+# browser may cache them but must revalidate, and an unchanged file answers 304
+# (no bytes). A changed file has a new ETag and is refetched — the same freshness
+# guarantee a content-hash query string gives, without editing index.html's asset
+# references (which the 618KB file forbids touching).
+_static_etags: dict = {}
+
+
+def _static_etag(path: str) -> str:
+    """A strong ETag = short content hash, recomputed only when mtime changes."""
+    try:
+        mtime = os.path.getmtime(path)
+    except OSError:
+        return ""
+    cached = _static_etags.get(path)
+    if cached and cached[0] == mtime:
+        return cached[1]
+    try:
+        with open(path, "rb") as fh:
+            digest = hashlib.sha256(fh.read()).hexdigest()[:16]
+    except OSError:
+        return ""
+    etag = f'"{digest}"'
+    _static_etags[path] = (mtime, etag)
+    return etag
+
+
+def _spa_html(html: str) -> HTMLResponse:
+    """index.html with the no-cache header, so deploys are always picked up."""
+    return HTMLResponse(html, headers=_HTML_HEADERS)
+
 
 def _index_html() -> str:
     """index.html off disk, re-read only when it changes.
@@ -5647,7 +5788,7 @@ async def sitemap_xml(limit: int = Query(2000, ge=1, le=5000)):
 
 @app.get("/bytes/{slug}", include_in_schema=False)
 async def byte_page(slug: str):
-    return HTMLResponse(await _render_byte_page(slug))
+    return HTMLResponse(await _render_byte_page(slug), headers=_HTML_HEADERS)
 
 
 @app.get("/", include_in_schema=False)
@@ -5658,12 +5799,12 @@ async def spa_root():
         # setup). Say so instead of returning a blank 200 that looks like a
         # broken app.
         return {"service": "sherr-api", "docs": "/docs", "health": "/health"}
-    return HTMLResponse(html)
+    return _spa_html(html)
 
 
 # ── THE CATCH-ALL. NOTHING MAY BE REGISTERED BELOW THIS. ─────────────────────
 @app.get("/{full_path:path}", include_in_schema=False)
-async def spa_catchall(full_path: str):
+async def spa_catchall(full_path: str, request: Request):
     """Serve the SPA for app paths; 404 anything that is meant to be an API.
 
     The explicit prefix refusal is the important half. Without it, a typo'd
@@ -5677,13 +5818,24 @@ async def spa_catchall(full_path: str):
     if full_path in _STATIC_FILES:
         path = os.path.join(os.path.dirname(_INDEX_PATH), full_path)
         if os.path.isfile(path):
+            # Content-addressed: a strong ETag lets the browser revalidate cheaply
+            # and get a 304 when the asset is unchanged, and refetch automatically
+            # when a deploy changes the bytes — the freshness guarantee a
+            # content-hash query string gives, without editing index.html's refs.
+            etag = _static_etag(path)
+            if etag and request.headers.get("if-none-match") == etag:
+                return Response(status_code=304, headers={"ETag": etag})
             with open(path, "rb") as fh:
+                headers = {"Cache-Control": "public, max-age=300, must-revalidate"}
+                if etag:
+                    headers["ETag"] = etag
                 return Response(content=fh.read(),
-                                media_type=_STATIC_FILES[full_path])
+                                media_type=_STATIC_FILES[full_path],
+                                headers=headers)
     if first in _SPA_ROUTES:
         html = _index_html()
         if html:
-            return HTMLResponse(html)
+            return _spa_html(html)
     raise HTTPException(status_code=404, detail="Not Found")
 
 

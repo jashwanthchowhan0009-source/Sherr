@@ -182,6 +182,41 @@ async def get_or_set(key: str, ttl: int, producer):
     return payload
 
 
+async def swr(key: str, ttl: int, producer, *, stale_ttl: int = 86400):
+    """Stale-while-revalidate: fresh cache → producer → last-known-good on failure.
+
+    1. A fresh value (within `ttl`) is returned straight from cache.
+    2. On a miss, `producer()` runs; its answer is stored under both the fresh key
+       (ttl) and a long-lived stale key (`stale_ttl`), then returned.
+    3. If `producer()` RAISES — the database call failed and there is no fresh
+       cache — the last-known-good payload is served instead of an error. Only a
+       genuine failure with no stale copy at all propagates.
+
+    This is what keeps a Postgres blip from becoming a wall of 500s for a crowd:
+    the feed keeps rendering yesterday's good answer until the database returns.
+    Success is never stale (step 2 always refreshes), so a healthy path is exactly
+    as fresh as `get_or_set`.
+    """
+    fresh = await get(key)
+    if fresh is not None:
+        return fresh
+    stale_key = f"{key}|swr"
+    try:
+        payload = producer()
+        if hasattr(payload, "__await__"):
+            payload = await payload
+    except Exception:
+        stale = await get(stale_key)
+        if stale is not None:
+            log.warning("cache.swr: producer failed for %s — serving stale", key)
+            return stale
+        raise
+    if payload is not None:
+        await set(key, payload, ttl)
+        await set(stale_key, payload, stale_ttl)
+    return payload
+
+
 async def close() -> None:
     global _client, _client_tried
     if _client is not None:
