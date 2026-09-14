@@ -235,6 +235,56 @@ def test_who_affected_is_capped_at_eight():
     assert len(got["who_affected"]) == 8
 
 
+# ─── the dossier deck: strings / dots ───────────────────────────────────────
+
+def test_strings_and_dots_default_empty_when_absent():
+    """An answer that carries no timeline or sector map is NOT rejected — the
+    body still stands, and myFeed renders those panes as 'pending'."""
+    got = synthesis.parse_synthesis(_answer())
+    assert got["strings"] == []
+    assert got["dots"] == {}
+
+
+def test_strings_and_dots_parse_and_normalise_when_present():
+    got = synthesis.parse_synthesis(_answer(
+        strings=[{"stage": "Origin", "title": "Glut", "detail": "Inventories built."},
+                 {"stage": "x", "title": "y", "detail": ""}],   # no detail → dropped
+        dots={"market_debt": {"summary": "Energy equities rose.",
+                              "impact": "up",
+                              "instruments": [{"name": "Brent", "ticker": "bz"}]},
+              "tech_culture": {"summary": "", "impact": "mixed",
+                               "instruments": []},               # empty → omitted
+              "asymmetric_catch": {"summary": "The storage overhang was ignored."}}))
+    assert len(got["strings"]) == 1 and got["strings"][0]["stage"] == "Origin"
+    assert "tech_culture" not in got["dots"]
+    md = got["dots"]["market_debt"]
+    assert md["impact"] == "up"
+    assert md["instruments"][0]["ticker"] == "BZ"   # normalised to upper-case
+    assert got["dots"]["asymmetric_catch"]["summary"].startswith("The storage")
+
+
+def test_an_out_of_range_impact_falls_back_to_neutral():
+    got = synthesis.parse_synthesis(_answer(
+        dots={"market_debt": {"summary": "Something moved.",
+                              "impact": "skyrocketing", "instruments": []}}))
+    assert got["dots"]["market_debt"]["impact"] == "neutral"
+
+
+def test_a_strings_step_tripping_the_blocklist_is_dropped_not_raised():
+    """The dossier panes never fail the whole call — a step whose prose trips the
+    compliance blocklist is dropped, exactly as the hook is."""
+    narrative = _narrative()
+    got = synthesis.parse_synthesis(
+        _answer(strings=[
+            {"stage": "Origin", "title": "Ok", "detail": "The refiner reported a gain."},
+            {"stage": "Spark", "title": "Bad", "detail": "The stock will rally further."}]),
+        hook_check=narrative.violates_language_rules)
+    details = [s["detail"] for s in got["strings"]]
+    assert "The refiner reported a gain." in details
+    assert all("will rally" not in d for d in details)
+    assert got["content"], "the body survives a dropped timeline step"
+
+
 def _narrative():
     """The engine's ONE blocklist, reached the way the app reaches it — never a
     second copy re-listed in the test (CLAUDE.md)."""

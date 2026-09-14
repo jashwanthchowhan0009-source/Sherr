@@ -456,6 +456,49 @@ clustering is earning its place — 1.0 means every "cluster" was a singleton.
 
 ---
 
+## myFeed is the old Bytes tab, renamed and rebuilt into a dossier surface
+
+The bottom nav is Home · myFeed · Explore · Profile. "Bytes" was renamed to
+myFeed and moved to slot 2 (Explore fell to slot 3). This was a **complete**
+rename in `index.html`: the route/state key `bytes`, the view id `v-bytes`, the
+nav id `nb-bytes`, the feed container, the `.byte*`/`.bytes-*` CSS namespace
+(now `.mf-*` / `.myfeed-*`), the JS identifiers, and every visible label. The
+brand (`SherrByte`, the "Article Byte" share card, `Sherr<span>Byte</span>`) was
+deliberately left untouched — `byte` is a substring of the brand, so the rename
+was done by explicit token, never a blanket `byte`→ replacement.
+
+**`/bytes/<slug>` 301-redirects to `/myfeed/<slug>`** (and `/bytes` → `/myfeed`)
+so links shared before the rename still resolve; the canonical route the app,
+the sitemap and the og:url all write is `/myfeed`. The client also accepts a
+legacy `/bytes/<slug>` on boot in case a redirect is ever missed.
+
+Tapping a myFeed card opens a **dossier** (`openDossier`) — a body-level overlay
+with three segmented pills:
+- **The Node** — the factual shock as a key/value table, built entirely from
+  columns the row already carries (what/who/when/where/how/why + headline +
+  hook). It ALWAYS renders.
+- **The Strings** — the causal timeline (`articles.strings`).
+- **The Dots** — cross-asset contagion + the Asymmetric Catch (`articles.dots`).
+
+`GET /article/<id>/dossier` returns node + strings + dots in one payload, cached
+through `cache.py` at `DOSSIER_CACHE_SECONDS` (120) exactly like `/feed`.
+
+**The degraded path is the normal case, not an edge case.** Most rows have never
+been through synthesis, so `strings`/`dots` are the `'[]'`/`'{}'` defaults; the
+endpoint marks those panes `pending` and the surface renders The Node anyway.
+Malformed JSON in either column degrades to pending too — it never 500s.
+
+`strings` and `dots` are `TEXT` columns holding JSON, NOT a `jsonb` type. That
+is deliberate and matches this schema's existing structured fields
+(`who_affected`, `synthesis_sources`, `originality_json`): JSON-in-TEXT is the
+one shape that works unchanged over both pgcompat/Postgres and the local sqlite
+backend. Both are written ONLY by the synthesis pass, alongside the News node,
+and both are emptyable. The synthesis prompt/schema/parser emit them under the
+same compliance blocklist as the hook — a timeline step or a sector whose prose
+trips the banlist is DROPPED, never raised, so a bad pane never costs the body.
+
+---
+
 ## Real URLs, and the one route that must stay last
 
 The app had a single URL: every screen lived behind a JS view switch, so a

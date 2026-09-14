@@ -175,9 +175,9 @@ html, body {
   text-rendering: optimizeLegibility;
 }
 /* Finishing: tasteful negative tracking on display headings (premium feel). */
-.h-brand, .h-page, .ob-big-title, .exp-hero-title, .nc-title, .byte-headline,
+.h-brand, .h-page, .ob-big-title, .exp-hero-title, .nc-title, .mf-headline,
 .prof-name, .sub-ttl, .exp-cat-sec-title, .hero-card-title, .mkt-d-price,
-.empty-state-msg, .ewc-word, .bytes-empty b {
+.empty-state-msg, .ewc-word, .myfeed-empty b {
   letter-spacing: -0.022em;
 }
 
@@ -212,7 +212,7 @@ html, body {
 /* Finishing: soft depth on imagery so cards read as layered, not flat-pasted. */
 .nc-hero-image { box-shadow: 0 6px 22px rgba(0,0,0,0.22); }
 .exp-rcard img, .exp-rcard-ph { box-shadow: 0 4px 14px rgba(0,0,0,0.20); }
-.byte-media { box-shadow: inset 0 -40px 60px -30px rgba(0,0,0,0.45); }
+.mf-media { box-shadow: inset 0 -40px 60px -30px rgba(0,0,0,0.45); }
 
 /* ─── Liquid-glass polish for primary modules (inert if class absent) ─── */
 .mkt-section, .mkt-tile, .mkt-crypto-tile, .mkt-metals-tile {
@@ -833,7 +833,7 @@ header {
    space as padding rather than a spacer element, so it cannot be scrolled past
    and left behind. */
 :root { --nav-clear: calc(76px + env(safe-area-inset-bottom, 0px) + 18px); }
-#v-home, #v-explore, #v-bytes, #v-profile, #v-bookmarks,
+#v-home, #v-explore, #v-myfeed, #v-profile, #v-bookmarks,
 #v-notifs, #v-feed, #v-spie { padding-bottom: var(--nav-clear); }
 .xp-page, .ao-body { padding-bottom: var(--nav-clear); }
 
@@ -2399,44 +2399,44 @@ body.dp-open .phone { visibility: hidden !important; }
 .spie-banner.is-error { color: #EF4444; background: rgba(239,68,68,0.12);
   border: 1px solid rgba(239,68,68,0.28); }
 
-/* ─── Bytes — one structured card per screen (vertical snap) ─── */
-#v-bytes { inset: 0; }
-.bytes-feed { width: 100%; height: 100%; overflow-y: scroll; scroll-snap-type: y mandatory; }
-.bytes-empty { height: 100%; display: flex; align-items: center; justify-content: center;
+/* ─── myFeed — one structured card per screen (vertical snap) ─── */
+#v-myfeed { inset: 0; }
+.myfeed-feed { width: 100%; height: 100%; overflow-y: scroll; scroll-snap-type: y mandatory; }
+.myfeed-empty { height: 100%; display: flex; align-items: center; justify-content: center;
   text-align: center; color: var(--t1); font-size: 1.05rem; line-height: 1.7; padding: 28px; }
-.bytes-empty span { font-size: 0.82rem; color: var(--t2); font-weight: 500; }
+.myfeed-empty span { font-size: 0.82rem; color: var(--t2); font-weight: 500; }
 /* inshorts-style: full-bleed card, image on top, body, "tap to know more" foot */
-.byte { position: relative; height: 100%; scroll-snap-align: start; scroll-snap-stop: always; scroll-snap-stop: always;
+.mf-item { position: relative; height: 100%; scroll-snap-align: start; scroll-snap-stop: always; scroll-snap-stop: always;
   display: flex; flex-direction: column;
   padding: var(--hh) 0 calc(var(--nh) + 22px);
-  animation: byteIn 0.45s var(--ease); }
-@keyframes byteIn { from { opacity: .35; transform: translateY(20px); } to { opacity: 1; transform: none; } }
-.byte-card { display: flex; flex-direction: column; width: 100%; height: 100%; overflow: hidden;
+  animation: mfIn 0.45s var(--ease); }
+@keyframes mfIn { from { opacity: .35; transform: translateY(20px); } to { opacity: 1; transform: none; } }
+.mf-card { display: flex; flex-direction: column; width: 100%; height: 100%; overflow: hidden;
   background: #0E0E11; color: #fff; }
-[data-theme="light"] .byte-card { background: #FFFFFF; color: #1C1C1E; }
-.byte-media { position: relative; width: 100%; height: 44%; min-height: 190px; flex-shrink: 0;
+[data-theme="light"] .mf-card { background: #FFFFFF; color: #1C1C1E; }
+.mf-media { position: relative; width: 100%; height: 44%; min-height: 190px; flex-shrink: 0;
   background-size: cover; background-position: center; cursor: pointer;
   display: flex; align-items: center; justify-content: center; }
-.byte-media-ico { font-size: 2.4rem; color: rgba(255,255,255,.55); }
-.byte-body { flex: 1; min-height: 0; overflow-y: auto;
+.mf-media-ico { font-size: 2.4rem; color: rgba(255,255,255,.55); }
+.mf-body { flex: 1; min-height: 0; overflow-y: auto;
   padding: 15px 18px 10px; display: flex; flex-direction: column; gap: 11px; }
-.byte-srcrow { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.byte-src { display: flex; align-items: center; gap: 8px; font-size: 0.82rem; font-weight: 800; min-width: 0; }
-.byte-src-logo { width: 22px; height: 22px; border-radius: 6px; flex-shrink: 0; background: var(--accent);
+.mf-srcrow { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.mf-src { display: flex; align-items: center; gap: 8px; font-size: 0.82rem; font-weight: 800; min-width: 0; }
+.mf-src-logo { width: 22px; height: 22px; border-radius: 6px; flex-shrink: 0; background: var(--accent);
   display: flex; align-items: center; justify-content: center; color: #fff; font-size: 0.68rem; font-weight: 800; }
-.byte-src-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.byte-srcacts { display: flex; gap: 18px; flex-shrink: 0; }
-.byte-srcacts span { cursor: pointer; }
-.byte-srcacts i { font-size: 1.05rem; opacity: 0.62; }
-.byte-srcacts .on i { opacity: 1; color: var(--accent); }
-.byte-headline { font-family: var(--fd); font-size: 1.4rem; font-weight: 800; line-height: 1.26;
+.mf-src-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mf-srcacts { display: flex; gap: 18px; flex-shrink: 0; }
+.mf-srcacts span { cursor: pointer; }
+.mf-srcacts i { font-size: 1.05rem; opacity: 0.62; }
+.mf-srcacts .on i { opacity: 1; color: var(--accent); }
+.mf-headline { font-family: var(--fd); font-size: 1.4rem; font-weight: 800; line-height: 1.26;
   letter-spacing: -0.3px; cursor: pointer; }
-.byte-what { font-size: 1rem; line-height: 1.6; opacity: 0.82; }
-.byte-meta { font-size: 0.72rem; opacity: 0.5; margin-top: auto; padding-top: 8px; }
-.byte-foot { flex-shrink: 0; padding: 13px 18px 15px; cursor: pointer;
+.mf-what { font-size: 1rem; line-height: 1.6; opacity: 0.82; }
+.mf-meta { font-size: 0.72rem; opacity: 0.5; margin-top: auto; padding-top: 8px; }
+.mf-foot { flex-shrink: 0; padding: 13px 18px 15px; cursor: pointer;
   border-top: 1px solid rgba(128,128,128,0.22); background: rgba(128,128,128,0.08); }
-.byte-foot-title { font-size: 0.95rem; font-weight: 700; }
-.byte-foot-sub { font-size: 0.78rem; opacity: 0.6; margin-top: 2px;
+.mf-foot-title { font-size: 0.95rem; font-weight: 700; }
+.mf-foot-sub { font-size: 0.78rem; opacity: 0.6; margin-top: 2px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* ─── Phase 6: source links + glass article actions ─── */
@@ -3441,7 +3441,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
      * the floating bottom nav becomes a left sidebar (same <nav>, same tabs);
      * every view keeps a ~720px reading column centred in what is left;
      * the two grids that were built for one narrow column — the Matrix of
-       Markets and the Bytes feed — get the columns they always wanted.
+       Markets and the myFeed feed — get the columns they always wanted.
    ══════════════════════════════════════════════════════════════════════════ */
 @media (min-width: 1024px) {
 
@@ -3531,35 +3531,35 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
      same six into one glance instead of a scroll. */
   .xp-matrix { grid-template-columns: repeat(3, 1fr); margin: 0; }
 
-  /* ── Bytes: a scroll of cards, not one card per screen ───────────────────
+  /* ── myFeed: a scroll of cards, not one card per screen ───────────────────
      Full-screen vertical snap is a phone gesture. On a desktop it wastes a
      1440px-wide screen on one card and makes the wheel fight the snap, so the
      snap comes off and the cards become a two-column scroll. */
-  /* #v-bytes carries its own `inset:0` (an ID rule, so it beats `.view`'s
+  /* #v-myfeed carries its own `inset:0` (an ID rule, so it beats `.view`'s
      `left:var(--sbw)`), which parked the grid at x:0 and slid the left column
-     under the sidebar. Re-apply the sidebar offset here so Bytes sits in the
+     under the sidebar. Re-apply the sidebar offset here so myFeed sits in the
      content area like every other view. */
-  #v-bytes { left: var(--sbw); }
-  .bytes-feed {
+  #v-myfeed { left: var(--sbw); }
+  .myfeed-feed {
     scroll-snap-type: none;
     display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 20px; align-content: start;
     padding: calc(var(--hh) + 20px) 0 40px;
   }
-  .byte {
+  .mf-item {
     height: auto; padding: 0;
     scroll-snap-align: none; scroll-snap-stop: normal;
   }
-  .byte-card {
+  .mf-card {
     height: auto; border-radius: 18px;
     border: 1px solid var(--glassB);
     box-shadow: 0 10px 30px rgba(0,0,0,0.18);
   }
-  .byte-media { height: 200px; min-height: 200px; }
-  .byte-body { flex: 0 0 auto; overflow: visible; min-height: 168px; }
-  .byte-headline { font-size: 1.18rem; }
-  .byte-what { font-size: 0.92rem; }
-  .bytes-empty { grid-column: 1 / -1; height: 50vh; }
+  .mf-media { height: 200px; min-height: 200px; }
+  .mf-body { flex: 0 0 auto; overflow: visible; min-height: 168px; }
+  .mf-headline { font-size: 1.18rem; }
+  .mf-what { font-size: 0.92rem; }
+  .myfeed-empty { grid-column: 1 / -1; height: 50vh; }
 
   /* Home reads as a DESKTOP NEWS PORTAL here, not a phone column: the stories
      flow into a two-column grid in a wider content area, while the hero, the
@@ -3636,9 +3636,9 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   .dp-hero, .dp-row { padding-left: 2px; padding-right: 2px; }
 }
 
-/* Wider still: a third Bytes column, and nothing else changes. */
+/* Wider still: a third myFeed column, and nothing else changes. */
 @media (min-width: 1600px) {
-  .bytes-feed { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .myfeed-feed { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
 
@@ -4938,10 +4938,10 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 </div>
 
 <!-- ════════ FLOATING BOTTOM NAV ════════ -->
-<!-- ════════ BYTES — short-form vertical feed (Phase 9 builds the feed) ════════ -->
-<div id="v-bytes" class="view" style="padding:0;overflow:hidden">
-  <div id="bytes-feed" class="bytes-feed">
-    <div class="bytes-empty glass"><b>Bytes</b><br><span>Loading short news…</span></div>
+<!-- ════════ MYFEED — short-form vertical feed (Phase 9 builds the feed) ════════ -->
+<div id="v-myfeed" class="view" style="padding:0;overflow:hidden">
+  <div id="myfeed-feed" class="myfeed-feed">
+    <div class="myfeed-empty glass"><b>myFeed</b><br><span>Loading your dossier deck…</span></div>
   </div>
 </div>
 
@@ -4969,13 +4969,13 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
       <div class="nb-icon"><i class="fa-solid fa-house"></i></div>
       <span class="nb-lbl">Home</span>
     </div>
-    <div class="nb" id="nb-explore" onclick="navTo('explore')">
-      <div class="nb-icon"><i class="fa-solid fa-compass"></i></div>
-      <span class="nb-lbl">Explore</span>
+    <div class="nb" id="nb-myfeed" onclick="navTo('myfeed')">
+      <div class="nb-icon"><i class="fa-solid fa-layer-group"></i></div>
+      <span class="nb-lbl">myFeed</span>
     </div>
-    <div class="nb" id="nb-bytes" onclick="navTo('bytes')">
-      <div class="nb-icon"><i class="fa-solid fa-bolt"></i></div>
-      <span class="nb-lbl">Bytes</span>
+    <div class="nb" id="nb-explore" onclick="navTo('explore')">
+      <div class="nb-icon"><i class="fa-solid fa-terminal"></i></div>
+      <span class="nb-lbl">Explore</span>
     </div>
     <div class="nb" id="nb-profile" onclick="navTo('profile')">
       <div class="nb-icon"><i class="fa-solid fa-user"></i></div>
@@ -4998,6 +4998,124 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   <div id="xp-sheet-body"></div>
 </div>
 <div id="xp-page" class="xp-page"></div>
+
+<!-- ════════ myFeed DOSSIER — The Node · The Strings · The Dots ════════
+     A body-level, full-bleed overlay opened from a myFeed card (openDossier).
+     Every rule below is a BASE rule — there is no min-width media query here, so
+     the single-desktop-breakpoint guarantee (tests/test_desktop_layout.py) holds;
+     the shell simply centres itself with max-width, which reads fine at every
+     width. -->
+<style>
+body.no-scroll{overflow:hidden;}
+.dossier-overlay{position:fixed;inset:0;z-index:2200;background:var(--bg);
+  transform:translateY(100%);transition:transform .32s var(--ease);
+  overflow-y:auto;-webkit-overflow-scrolling:touch;visibility:hidden;}
+.dossier-overlay.open{transform:translateY(0);visibility:visible;}
+.dossier-shell{max-width:720px;margin:0 auto;padding:0 16px 96px;min-height:100%;}
+.dsr-head{position:relative;padding:20px 0 14px;border-bottom:1px solid var(--line);}
+.dsr-close{position:absolute;top:16px;right:0;width:38px;height:38px;border:0;
+  border-radius:50%;background:var(--glass);color:var(--t1);font-size:1rem;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;}
+.dsr-signal{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  padding-right:46px;margin-bottom:10px;}
+.dsr-sigid{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.72rem;
+  letter-spacing:.08em;color:var(--accent);background:rgba(10,132,255,0.12);
+  padding:3px 9px;border-radius:6px;font-weight:700;}
+.dsr-verify{font-size:.72rem;font-weight:600;display:inline-flex;align-items:center;
+  gap:5px;color:var(--t2);}
+.dsr-verify .dot{width:7px;height:7px;border-radius:50%;background:var(--t3);}
+.dsr-verify.ok .dot{background:#30D158;}
+.dsr-verticals{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;}
+.dsr-vtag{font-size:.68rem;font-weight:600;color:var(--t2);border:1px solid var(--line);
+  padding:2px 9px;border-radius:999px;text-transform:capitalize;}
+.dsr-title{font-size:1.32rem;line-height:1.28;font-weight:800;color:var(--t1);
+  margin:2px 0 8px;letter-spacing:-0.01em;}
+.dsr-hook{font-size:.95rem;line-height:1.45;color:var(--t2);font-style:italic;
+  margin:0;padding-left:12px;border-left:3px solid var(--accent);}
+/* segmented pills */
+.dsr-pills{position:sticky;top:0;z-index:2;display:grid;grid-template-columns:1fr 1fr 1fr;
+  gap:4px;padding:12px 0;background:var(--bg);}
+.dsr-pill{border:1px solid var(--line);background:transparent;color:var(--t2);
+  font-size:.82rem;font-weight:700;padding:10px 6px;border-radius:12px;cursor:pointer;
+  transition:all .18s var(--ease);display:flex;flex-direction:column;align-items:center;gap:2px;}
+.dsr-pill .dsr-pill-sub{font-size:.6rem;font-weight:600;opacity:.7;text-transform:uppercase;letter-spacing:.05em;}
+.dsr-pill.on{background:var(--accent);color:#fff;border-color:var(--accent);}
+.dsr-pill.pending{opacity:.85;}
+.dsr-pane{display:none;padding-top:6px;animation:mfIn .3s var(--ease);}
+.dsr-pane.on{display:block;}
+/* The Node — key/value table */
+.dsr-kv{width:100%;border-collapse:collapse;}
+.dsr-kv tr{border-bottom:1px solid var(--line);}
+.dsr-kv th{text-align:left;vertical-align:top;width:34%;padding:12px 12px 12px 0;
+  font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);}
+.dsr-kv td{padding:12px 0;font-size:.92rem;line-height:1.45;color:var(--t1);}
+.dsr-chips{display:flex;flex-wrap:wrap;gap:6px;}
+.dsr-chips span{font-size:.78rem;background:var(--glass);border:1px solid var(--line);
+  padding:3px 9px;border-radius:8px;color:var(--t1);}
+/* The Strings — vertical timeline */
+.dsr-timeline{position:relative;margin:6px 0 0;padding-left:26px;}
+.dsr-timeline::before{content:'';position:absolute;left:6px;top:6px;bottom:10px;
+  width:2px;background:var(--line);}
+.dsr-step{position:relative;padding:0 0 22px;}
+.dsr-step::before{content:'';position:absolute;left:-26px;top:3px;width:14px;height:14px;
+  border-radius:50%;background:var(--bg);border:2px solid var(--accent);}
+.dsr-step:last-child::before{background:var(--accent);}
+.dsr-step-stage{font-size:.68rem;font-weight:800;text-transform:uppercase;
+  letter-spacing:.07em;color:var(--accent);}
+.dsr-step-title{font-size:.98rem;font-weight:700;color:var(--t1);margin:1px 0 4px;}
+.dsr-step-detail{font-size:.9rem;line-height:1.45;color:var(--t2);}
+/* The Dots — contagion cards */
+.dsr-dot{background:var(--glass);border:1px solid var(--line);border-radius:14px;
+  padding:14px;margin-bottom:12px;}
+.dsr-dot.catch{border-color:rgba(255,159,10,0.5);background:rgba(255,159,10,0.08);}
+.dsr-dot-head{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
+.dsr-dot-ico{width:26px;height:26px;border-radius:8px;display:flex;align-items:center;
+  justify-content:center;font-size:.8rem;background:rgba(10,132,255,0.14);color:var(--accent);}
+.dsr-dot.catch .dsr-dot-ico{background:rgba(255,159,10,0.16);color:#FF9F0A;}
+.dsr-dot-name{font-size:.82rem;font-weight:800;color:var(--t1);flex:1;}
+.dsr-impact{font-size:.68rem;font-weight:800;text-transform:uppercase;letter-spacing:.05em;
+  padding:2px 8px;border-radius:999px;display:inline-flex;align-items:center;gap:4px;}
+.dsr-impact.up{color:#30D158;background:rgba(48,209,88,0.14);}
+.dsr-impact.down{color:#FF453A;background:rgba(255,69,58,0.14);}
+.dsr-impact.mixed{color:#FF9F0A;background:rgba(255,159,10,0.14);}
+.dsr-impact.neutral{color:var(--t2);background:var(--glass);}
+.dsr-dot-summary{font-size:.9rem;line-height:1.45;color:var(--t2);}
+.dsr-instruments{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;}
+.dsr-ins{display:inline-flex;align-items:center;gap:6px;font-size:.78rem;
+  border:1px solid var(--line);border-radius:8px;padding:5px 9px;color:var(--t1);}
+.dsr-ins b{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.74rem;color:var(--accent);}
+.dsr-ins .dsr-tick{font-weight:700;}
+.dsr-ins .dsr-tick.up{color:#30D158;} .dsr-ins .dsr-tick.down{color:#FF453A;}
+/* pending / empty state */
+.dsr-pending{text-align:center;padding:44px 20px;color:var(--t2);}
+.dsr-pending i{font-size:1.6rem;color:var(--t3);margin-bottom:12px;display:block;}
+.dsr-pending b{display:block;color:var(--t1);font-size:1rem;margin-bottom:5px;}
+.dsr-pending span{font-size:.85rem;line-height:1.5;display:block;max-width:320px;margin:0 auto;}
+</style>
+<div id="dossier-overlay" class="dossier-overlay" role="dialog" aria-modal="true" aria-label="Story dossier">
+  <div class="dossier-shell">
+    <header class="dsr-head">
+      <button class="dsr-close" onclick="closeDossier()" aria-label="Close dossier"><i class="fa-solid fa-xmark"></i></button>
+      <div class="dsr-signal">
+        <span class="dsr-sigid" id="dsr-sigid">SB-—</span>
+        <span class="dsr-verify" id="dsr-verify"><span class="dot"></span><span class="dsr-verify-lbl"></span></span>
+      </div>
+      <div class="dsr-verticals" id="dsr-verticals"></div>
+      <h2 class="dsr-title" id="dsr-title"></h2>
+      <p class="dsr-hook" id="dsr-hook" hidden></p>
+    </header>
+    <nav class="dsr-pills" id="dsr-pills">
+      <button class="dsr-pill on" data-pane="node" onclick="dossierPane('node')">The Node<span class="dsr-pill-sub">Facts</span></button>
+      <button class="dsr-pill" data-pane="strings" onclick="dossierPane('strings')">The Strings<span class="dsr-pill-sub">Thread</span></button>
+      <button class="dsr-pill" data-pane="dots" onclick="dossierPane('dots')">The Dots<span class="dsr-pill-sub">Contagion</span></button>
+    </nav>
+    <div class="dsr-panes">
+      <section class="dsr-pane on" id="dsr-pane-node"></section>
+      <section class="dsr-pane" id="dsr-pane-strings"></section>
+      <section class="dsr-pane" id="dsr-pane-dots"></section>
+    </div>
+  </div>
+</div>
 
 <script>
 
@@ -5581,7 +5699,7 @@ function openFAQ(){
   const faqs=[
     ['How does SherrByte pick my news?','Stories are pulled from 50+ trusted sources every ~15 minutes, de-duplicated, and ranked by importance — and personalised as you read, like, and save.'],
     ['What do Local / National / Global mean?','National shows India-focused stories, Local narrows to your region, and Global covers world news. Switch anytime from Explore.'],
-    ['How do Bytes work?','Bytes are swipe-up short cards — pull down at the top for a fresh batch. Tap "know more" to open the full story.'],
+    ['How does myFeed work?','myFeed is the deep-reading deck. Tap any card to open its dossier — The Node (the facts), The Strings (how it unfolded) and The Dots (cross-asset ripples).'],
     ['Is my data safe?','Passwords are stored salted + hashed, never in plain text. You can delete your account and data anytime from Security Center.'],
     ['How do I reset my password?','Use "Forgot password?" on sign-in, or Security Center → Change Password — we email you a 6-digit code.'],
   ];
@@ -5756,7 +5874,7 @@ function _wrapText(ctx, text, maxW, maxLines) {
 }
 
 // Build a shareable "Article Byte" PNG card and return a Blob.
-async function buildByteCard(a) {
+async function buildMyfeedCard(a) {
   const W = 1080, H = 1350, c = document.createElement('canvas');
   c.width = W; c.height = H;
   const ctx = c.getContext('2d');
@@ -5842,7 +5960,7 @@ async function shareArticleCard(a) {
   if (!a || !a.title) return shareArt((a && a.title) || '');
   try {
     toast('🎨 Creating your Article Byte…');
-    const blob = await buildByteCard(a);
+    const blob = await buildMyfeedCard(a);
     if (!blob) throw new Error('no blob');
     const file = new File([blob], 'sherrbyte-article.png', { type: 'image/png' });
     const _sum = (a.summary || a.preview || '').toString().trim();
@@ -6889,7 +7007,7 @@ function openArticle(rawA) {
   if (!_navReplay) {
     try {
       history.pushState({ view: 'article', articleId: a.id }, '',
-                        '/bytes/' + articleSlug(a));
+                        '/myfeed/' + articleSlug(a));
     } catch (e) {}
   }
   logInteract(a.id, a.category, 'read');
@@ -6899,10 +7017,10 @@ function closeArticle() {
   ActivityTracker.closeArticle();
   document.getElementById('article-overlay').classList.remove('open');
   currentArticle = null;
-  // The X button closes without a history.back(), so the /bytes/<slug> path
+  // The X button closes without a history.back(), so the /myfeed/<slug> path
   // would otherwise stay in the address bar over a feed — and a refresh would
   // reopen an article the reader had just dismissed.
-  if (!_navReplay && location.pathname.indexOf('/bytes/') === 0) {
+  if (!_navReplay && location.pathname.indexOf('/myfeed/') === 0) {
     const back = document.querySelector('.view.active');
     const view = back ? String(back.id || '').replace(/^v-/, '') : 'home';
     try { history.replaceState({ view }, '', pathForView(view)); } catch (e) {}
@@ -8157,8 +8275,8 @@ function renderPattern(p) {
   </div>`;
 }
 
-const VIEW_MAP = { home:'v-home', explore:'v-explore', bytes:'v-bytes', profile:'v-profile', bookmarks:'v-bookmarks', notifs:'v-notifs', feed:'v-feed', spie:'v-spie' };
-const NB_MAP   = { home:'nb-home', explore:'nb-explore', bytes:'nb-bytes', profile:'nb-profile', spie:'nb-scan' };
+const VIEW_MAP = { home:'v-home', explore:'v-explore', myfeed:'v-myfeed', profile:'v-profile', bookmarks:'v-bookmarks', notifs:'v-notifs', feed:'v-feed', spie:'v-spie' };
+const NB_MAP   = { home:'nb-home', explore:'nb-explore', myfeed:'nb-myfeed', profile:'nb-profile', spie:'nb-scan' };
 let _navReplay = false;   // true while applying a popstate (suppresses re-push)
 
 function navTo(name) {
@@ -8188,8 +8306,8 @@ function navTo(name) {
     hSearch.style.display='flex';
   } else if (name==='feed') {
     hBrand.style.display='none'; hPage.style.display='block'; hPage.textContent='FEED Pulse';
-  } else if (name==='bytes') {
-    hBrand.style.display='none'; hPage.style.display='block'; hPage.textContent='Bytes';
+  } else if (name==='myfeed') {
+    hBrand.style.display='none'; hPage.style.display='block'; hPage.textContent='myFeed';
   } else if (name==='spie') {
     hBrand.style.display='none'; hPage.style.display='block'; hPage.textContent='Sherr-I';
     loadPatterns();
@@ -8229,10 +8347,10 @@ function navTo(name) {
     if (!_expCurCat) showExpCat('all');   // load category rows only when Explore opens
   }
   if (name==='feed') { loadFeedPulse(); renderFeedFilterChips(); renderFeedTopics(); renderFeedArticles(); }
-  if (name==='bytes') {
-    // Tapping the Bytes icon again while already on Bytes pulls a fresh batch.
-    if (_reTap) { bytesRetryCount = 0; loadBytes(true); }
-    else if (typeof initBytes === 'function') initBytes();
+  if (name==='myfeed') {
+    // Tapping the myFeed icon again while already on myFeed pulls a fresh batch.
+    if (_reTap) { myfeedRetryCount = 0; loadMyfeed(true); }
+    else if (typeof initMyfeed === 'function') initMyfeed();
   }
 
   // Push a history entry so the device/hardware back button returns here — and
@@ -8250,7 +8368,7 @@ function navTo(name) {
 // of main.py), so they work on a cold load and a refresh, not just after an
 // in-app tap. The map is the single source of truth in both directions.
 const VIEW_PATHS = {
-  home: '/', explore: '/explore', bytes: '/bytes', profile: '/profile',
+  home: '/', explore: '/explore', myfeed: '/myfeed', profile: '/profile',
   feed: '/feed', spie: '/spie', bookmarks: '/bookmarks', notifs: '/notifs'
 };
 function pathForView(name) { return VIEW_PATHS[name] || '/'; }
@@ -8278,19 +8396,20 @@ function articleIdFromSlug(slug) {
 // Boot-time routing: whatever path the browser arrived on decides the screen.
 async function routeFromPath() {
   const parts = location.pathname.split('/').filter(Boolean);
-  if (parts[0] === 'bytes' && parts[1]) {
-    // A deep link to one story. Land on Bytes first so closing the article
-    // leaves the reader somewhere real rather than on a blank view, then open
-    // the article itself from the id in the slug.
+  // 'bytes' is the legacy prefix, kept so links shared before the rename still
+  // resolve. The server 301s /bytes/<slug> to /myfeed/<slug>, but a client that
+  // arrives on the old path anyway must still land on the right story.
+  if ((parts[0] === 'myfeed' || parts[0] === 'bytes') && parts[1]) {
+    // A deep link to one story. myFeed is the deep-reading surface, so a shared
+    // link opens the dossier itself — closing it leaves the reader on the myFeed
+    // deck rather than a blank view.
     _navReplay = true;
-    try { navTo('bytes'); } finally { _navReplay = false; }
-    try { history.replaceState({ view: 'bytes' }, '', location.pathname); } catch (e) {}
+    try { navTo('myfeed'); } finally { _navReplay = false; }
+    try { history.replaceState({ view: 'myfeed' }, '', '/myfeed/' + parts[1]); } catch (e) {}
     const id = articleIdFromSlug(parts[1]);
     if (id) {
-      try {
-        const a = await api('/article/' + id);
-        if (a && a.id) { _navReplay = true; try { openArticle(a); } finally { _navReplay = false; } }
-      } catch (e) { /* the story is gone; the reader keeps the Bytes feed */ }
+      try { await openDossier(id, { replace: true }); }
+      catch (e) { /* the story is gone; the reader keeps the myFeed deck */ }
     }
     return;
   }
@@ -8310,12 +8429,14 @@ window.addEventListener('popstate', (e) => {
   try {
     const mv  = document.getElementById('media-viewer');
     const ao  = document.getElementById('article-overlay');
+    const dsr = document.getElementById('dossier-overlay');
     const so  = document.getElementById('search-overlay');
     const mo  = document.getElementById('market-overlay');
     const sb  = document.getElementById('sidebar');
     const sub = document.querySelector('.sub.on');
     // Close the topmost open layer first; otherwise navigate to the routed view.
     if (mv && mv.classList.contains('on'))   closeMediaViewer();
+    else if (dsr && dsr.classList.contains('open')) closeDossier();
     else if (ao && ao.classList.contains('open')) closeArticle();
     else if (so && so.classList.contains('open')) closeSearch();
     else if (mo && mo.classList.contains('open')) closeMarketDetail();
@@ -9620,122 +9741,122 @@ async function doSearch(q){
   } catch (e) { box.innerHTML = '<div class="srch-empty">Search is unavailable right now.</div>'; }
 }
 
-// ── Bytes — vertical short-news feed (WWWW corner + infinite scroll) ──
-let bytesInit = false, bytesPage = 1, bytesLoading = false, _bytesRetried = false; const bytesIds = new Set();
-const BYTES_MAX_RETRIES = 5; let bytesRetryCount = 0;
+// ── myFeed — vertical short-news feed (WWWW corner + infinite scroll) ──
+let myfeedInit = false, myfeedPage = 1, myfeedLoading = false, _myfeedRetried = false; const myfeedIds = new Set();
+const MYFEED_MAX_RETRIES = 5; let myfeedRetryCount = 0;
 function bEsc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function bCap(s){ s=String(s||''); return s.charAt(0).toUpperCase()+s.slice(1); }
-async function initBytes(){
-  if (bytesInit) return; bytesInit = true;
-  await loadBytes(true);
-  const feed = document.getElementById('bytes-feed');
+async function initMyfeed(){
+  if (myfeedInit) return; myfeedInit = true;
+  await loadMyfeed(true);
+  const feed = document.getElementById('myfeed-feed');
   feed.addEventListener('scroll', () => {
-    if (feed.scrollTop + feed.clientHeight >= feed.scrollHeight - feed.clientHeight * 1.5) loadBytes(false);
+    if (feed.scrollTop + feed.clientHeight >= feed.scrollHeight - feed.clientHeight * 1.5) loadMyfeed(false);
     // Collapse the nav to the active pill once past the first byte (like other
     // sections), so the card gets the full screen; expand again at the top.
     navEl.classList.toggle('compact', feed.scrollTop > 24);
   }, { passive: true });
-  attachPullToRefresh(feed, () => { bytesRetryCount = 0; loadBytes(true); });   // pull → fresh batch
+  attachPullToRefresh(feed, () => { myfeedRetryCount = 0; loadMyfeed(true); });   // pull → fresh batch
 }
-async function loadBytes(reset){
-  if (bytesLoading) return; bytesLoading = true;
-  const feed = document.getElementById('bytes-feed');
-  // Instant: paint cached bytes immediately so a cold backend never shows the
+async function loadMyfeed(reset){
+  if (myfeedLoading) return; myfeedLoading = true;
+  const feed = document.getElementById('myfeed-feed');
+  // Instant: paint cached myfeed immediately so a cold backend never shows the
   // "Waking the server" wall (the network load below refreshes them).
-  if (reset && !feed.querySelector('.byte')) {
+  if (reset && !feed.querySelector('.mf-item')) {
     const cached = _readFeedCache();
-    if (cached && cached.length) { feed.innerHTML = ''; try { renderBytes(cached.map(normalizeArticle), feed); } catch (e) {} }
+    if (cached && cached.length) { feed.innerHTML = ''; try { renderMyfeed(cached.map(normalizeArticle), feed); } catch (e) {} }
   }
   try {
-    if (reset){ bytesPage = 1; bytesIds.clear(); }
-    const data = await api(`/feed?page=${bytesPage}&limit=10`, { timeout: 45000 });   // long enough to ride a cold start
-    const arts = (data.articles||[]).map(normalizeArticle).filter(a => a.id && !bytesIds.has(a.id));
-    arts.forEach(a => bytesIds.add(a.id));
-    _bytesRetried = false; bytesRetryCount = 0;  // a successful load re-arms the cold-start budget
+    if (reset){ myfeedPage = 1; myfeedIds.clear(); }
+    const data = await api(`/feed?page=${myfeedPage}&limit=10`, { timeout: 45000 });   // long enough to ride a cold start
+    const arts = (data.articles||[]).map(normalizeArticle).filter(a => a.id && !myfeedIds.has(a.id));
+    arts.forEach(a => myfeedIds.add(a.id));
+    _myfeedRetried = false; myfeedRetryCount = 0;  // a successful load re-arms the cold-start budget
     if (reset) feed.innerHTML = '';              // clear cached placeholder, render fresh
-    if (reset && !arts.length) feed.innerHTML = '<div class="bytes-empty glass">No bytes yet — check back soon.</div>';
-    else renderBytes(arts, feed);
-    if (data.has_more) bytesPage++;
+    if (reset && !arts.length) feed.innerHTML = '<div class="myfeed-empty glass">No stories yet — check back soon.</div>';
+    else renderMyfeed(arts, feed);
+    if (data.has_more) myfeedPage++;
   } catch (e) {
-    const hasContent = !!feed.querySelector('.byte');
+    const hasContent = !!feed.querySelector('.mf-item');
     // Render free tier cold-starts (~30–60s). Retry with backoff; only show the
     // "waking" wall when we have nothing cached to display.
-    if (reset && bytesRetryCount < BYTES_MAX_RETRIES) {
-      bytesRetryCount++; bytesLoading = false;
-      if (!hasContent) feed.innerHTML = '<div class="bytes-empty glass">⏳ Waking the server…<br><span>The free server is starting up — this can take up to a minute.</span></div>';
-      setTimeout(() => loadBytes(true), 3000 + bytesRetryCount * 3000);
+    if (reset && myfeedRetryCount < MYFEED_MAX_RETRIES) {
+      myfeedRetryCount++; myfeedLoading = false;
+      if (!hasContent) feed.innerHTML = '<div class="myfeed-empty glass">⏳ Waking the server…<br><span>The free server is starting up — this can take up to a minute.</span></div>';
+      setTimeout(() => loadMyfeed(true), 3000 + myfeedRetryCount * 3000);
       return;
     }
     if (reset && !hasContent) {
-      feed.innerHTML = '<div class="bytes-empty glass"><b>Bytes</b><br><span>Couldn\'t load — pull down to retry.</span></div>';
+      feed.innerHTML = '<div class="myfeed-empty glass"><b>myFeed</b><br><span>Couldn\'t load — pull down to retry.</span></div>';
     }
-  } finally { bytesLoading = false; }
+  } finally { myfeedLoading = false; }
 }
-function renderBytes(arts, feed){
+function renderMyfeed(arts, feed){
   arts.forEach(a => {
     const cc = CATS[a.category] || CATS.tech;
     const liked = ST.likes.includes(a.id), saved = ST.saves.includes(a.id);
-    const el = document.createElement('div'); el.className = 'byte'; el.dataset.aid = a.id;
+    const el = document.createElement('div'); el.className = 'mf-item'; el.dataset.aid = a.id;
     const src = a.source || 'SherrByte';
     el.innerHTML = `
-      <div class="byte-card">
-        <div class="byte-media b-open" style="${ownImage(a) ? `background-image:url('${a.image_url}')` : `background:${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}`}">
-          ${a.image_url ? '' : '<i class="fa-regular fa-image byte-media-ico"></i>'}
+      <div class="mf-card">
+        <div class="mf-media b-open" style="${ownImage(a) ? `background-image:url('${a.image_url}')` : `background:${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}`}">
+          ${a.image_url ? '' : '<i class="fa-regular fa-image mf-media-ico"></i>'}
         </div>
-        <div class="byte-body">
-          <div class="byte-srcrow">
-            <div class="byte-src">
-              <span class="byte-src-logo">${bEsc(src.charAt(0).toUpperCase())}</span>
-              <span class="byte-src-name">${bEsc(src)}</span>
+        <div class="mf-body">
+          <div class="mf-srcrow">
+            <div class="mf-src">
+              <span class="mf-src-logo">${bEsc(src.charAt(0).toUpperCase())}</span>
+              <span class="mf-src-name">${bEsc(src)}</span>
             </div>
-            <div class="byte-srcacts">
+            <div class="mf-srcacts">
               <span class="b-save ${saved?'on':''}"><i class="fa-${saved?'solid':'regular'} fa-bookmark"></i></span>
               <span class="b-share"><i class="fa-solid fa-arrow-up-from-bracket"></i></span>
             </div>
           </div>
-          <div class="byte-headline b-open">${bEsc(a.title)}</div>
-          <div class="byte-what">${bEsc(a.preview||'')}</div>
-          <div class="byte-meta">${timeAgo(a.published_at)||'Just now'} · ${bEsc(src)}</div>
+          <div class="mf-headline b-open">${bEsc(a.title)}</div>
+          <div class="mf-what">${bEsc(a.preview||'')}</div>
+          <div class="mf-meta">${timeAgo(a.published_at)||'Just now'} · ${bEsc(src)}</div>
         </div>
-        <div class="byte-foot b-open">
-          <div class="byte-foot-title">Tap to know more</div>
-          <div class="byte-foot-sub">Read the full story on ${bEsc(src)}</div>
+        <div class="mf-foot b-open">
+          <div class="mf-foot-title">Open dossier</div>
+          <div class="mf-foot-sub">The Node · The Strings · The Dots</div>
         </div>
       </div>`;
-    el.querySelectorAll('.b-open').forEach(o => o.addEventListener('click', e => { e.stopPropagation(); markSeen(a.id); openArticle(a); }));
-    el.querySelector('.b-save').addEventListener('click', e => { e.stopPropagation(); byteToggle('saves', a, e.currentTarget, 'fa-bookmark', '🔖 Saved', 'save'); });
+    el.querySelectorAll('.b-open').forEach(o => o.addEventListener('click', e => { e.stopPropagation(); markSeen(a.id); openDossier(a.id, { article: a }); }));
+    el.querySelector('.b-save').addEventListener('click', e => { e.stopPropagation(); myfeedToggle('saves', a, e.currentTarget, 'fa-bookmark', '🔖 Saved', 'save'); });
     el.querySelector('.b-share').addEventListener('click', e => { e.stopPropagation(); shareArticleCard(a); });
     feed.appendChild(el);
   });
-  hydrateByteCounts(arts.map(a => a.id));   // real like/comment counts
+  hydrateMyfeedCounts(arts.map(a => a.id));   // real like/comment counts
 }
-async function hydrateByteCounts(ids) {
+async function hydrateMyfeedCounts(ids) {
   ids = (ids || []).filter(Boolean);
   if (!ids.length) return;
   // The like and comment pills were removed from the byte card (same as the
   // feed card), so there is nothing left to fill — and /signal/counts is a
-  // node that does not exist. Without this guard every Bytes load fired a
+  // node that does not exist. Without this guard every myFeed load fired a
   // request whose only result was a 404 in the console.
-  if (!document.querySelector('.byte .b-like, .byte .b-comment')) return;
+  if (!document.querySelector('.mf-item .b-like, .mf-item .b-comment')) return;
   try {
     const res = await api('/signal/counts?ids=' + encodeURIComponent(ids.join(',')));
     const counts = (res && res.counts) || {};
-    document.querySelectorAll('.byte[data-aid]').forEach(b => {
+    document.querySelectorAll('.mf-item[data-aid]').forEach(b => {
       const d = counts[b.dataset.aid]; if (!d) return;
-      const ln = b.querySelector('.b-like .byte-n');
-      const cn = b.querySelector('.b-comment .byte-n');
+      const ln = b.querySelector('.b-like .mf-n');
+      const cn = b.querySelector('.b-comment .mf-n');
       if (ln) ln.textContent = Math.max(d.likes || 0, ST.likes.includes(b.dataset.aid) ? 1 : 0);
       if (cn) cn.textContent = d.comments || 0;
     });
   } catch (e) { /* counts live once backend deployed */ }
 }
-function byteToggle(key, a, el, icon, msg, action){
+function myfeedToggle(key, a, el, icon, msg, action){
   const arr = ST[key], i = arr.indexOf(a.id);
   // Saves go through the bookmarks endpoint (which also logs the save signal);
   // other actions (likes) keep using /interact.
   if (i === -1){ arr.push(a.id); el.classList.add('on'); el.querySelector('i').className = 'fa-solid '+icon; toast(msg); if (action !== 'save') logInteract(a.id, a.category, action); }
   else { arr.splice(i,1); el.classList.remove('on'); el.querySelector('i').className = 'fa-regular '+icon; }
-  const n = el.querySelector('.byte-n');   // keep the like count in sync
+  const n = el.querySelector('.mf-n');   // keep the like count in sync
   if (n) n.textContent = Math.max(0, (parseInt(n.textContent) || 0) + (i === -1 ? 1 : -1));
   persist();
   if (key === 'saves'){
@@ -9744,6 +9865,244 @@ function byteToggle(key, a, el, icon, msg, action){
     syncBookmark(a.id);
     const sc = document.getElementById('saved-ct'); if (sc) sc.textContent = ST.saves.length;
   }
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// myFeed DOSSIER — The Node · The Strings · The Dots
+// One tapped card → one payload from /article/<id>/dossier. THE NODE ALWAYS
+// RENDERS (it is built from columns the row already carries); The Strings and
+// The Dots are marked "pending" when the synthesis pass has not written them
+// yet — which is the common case at first, not an error.
+// ══════════════════════════════════════════════════════════════════════
+let _dossierId = null, _dossierLoading = false;
+
+const DOTS_META = {
+  market_debt:       { label: 'Public Markets & Debt', icon: 'fa-chart-line' },
+  policy_governance: { label: 'Policy & Governance',    icon: 'fa-landmark' },
+  tech_culture:      { label: 'Tech / Culture Vector',  icon: 'fa-microchip' },
+  asymmetric_catch:  { label: 'The Asymmetric Catch',   icon: 'fa-bullseye' },
+};
+
+async function openDossier(id, opts) {
+  opts = opts || {};
+  if (!id) return;
+  _dossierId = id;
+  const ov = document.getElementById('dossier-overlay');
+  // Instant paint from the card we already hold, so the surface is never blank
+  // while the payload is in flight (a cold backend can take a moment).
+  if (opts.article) _dossierHeader({
+    signal_id: 'SB-' + id,
+    headline: opts.article.title || opts.article.headline || '',
+    verticals: opts.article.micro_tags || [],
+    verification: { state: 'single', label: 'Loading…' },
+  });
+  _dossierPaneLoading();
+  ov.classList.add('open');
+  document.body.classList.add('no-scroll');
+  dossierPane('node');
+
+  // Real path + history entry, so back/refresh/share all land on this story.
+  if (!_navReplay) {
+    const slug = articleSlug({ id: id, title: (opts.article && (opts.article.title || opts.article.headline)) || '' });
+    try {
+      if (opts.replace) history.replaceState({ view: 'dossier', articleId: id }, '', '/myfeed/' + slug);
+      else history.pushState({ view: 'dossier', articleId: id }, '', '/myfeed/' + slug);
+    } catch (e) {}
+  }
+
+  if (_dossierLoading) return;
+  _dossierLoading = true;
+  try {
+    const d = await api('/article/' + id + '/dossier', { timeout: 45000 });
+    if (_dossierId !== id) return;   // a newer card was tapped mid-flight
+    renderDossier(d);
+    logInteract(id, d.category || '', 'read');
+  } catch (e) {
+    _dossierError();
+  } finally { _dossierLoading = false; }
+}
+
+function closeDossier() {
+  const ov = document.getElementById('dossier-overlay');
+  ov.classList.remove('open');
+  document.body.classList.remove('no-scroll');
+  _dossierId = null;
+  // The X closes without history.back(), so a /myfeed/<slug> path left in the
+  // bar would reopen the dossier on refresh over the deck. Restore the deck path.
+  if (!_navReplay && location.pathname.indexOf('/myfeed/') === 0) {
+    try { history.replaceState({ view: 'myfeed' }, '', '/myfeed'); } catch (e) {}
+  }
+}
+
+function dossierPane(name) {
+  document.querySelectorAll('.dsr-pill').forEach(p =>
+    p.classList.toggle('on', p.dataset.pane === name));
+  document.querySelectorAll('.dsr-pane').forEach(s =>
+    s.classList.toggle('on', s.id === 'dsr-pane-' + name));
+}
+
+function _dossierHeader(d) {
+  document.getElementById('dsr-sigid').textContent = d.signal_id || ('SB-' + (d.id || ''));
+  document.getElementById('dsr-title').textContent = d.headline || '';
+  const hookEl = document.getElementById('dsr-hook');
+  if (d.hook) { hookEl.textContent = d.hook; hookEl.hidden = false; }
+  else { hookEl.hidden = true; }
+  const vfy = document.getElementById('dsr-verify');
+  const v = d.verification || {};
+  vfy.classList.toggle('ok', v.state === 'corroborated');
+  vfy.querySelector('.dsr-verify-lbl').textContent = v.label || '';
+  const vt = document.getElementById('dsr-verticals');
+  const tags = (d.verticals || []).slice(0, 6);
+  vt.innerHTML = tags.map(t => `<span class="dsr-vtag">${bEsc(t)}</span>`).join('');
+}
+
+function renderDossier(d) {
+  _dossierHeader(d);
+  _renderNode(d.node || {}, d.headline || '');
+  _renderStrings(d.strings || [], d.strings_status);
+  _renderDots(d.dots || {}, d.dots_status);
+  // Mark pending pills so the reader knows before tapping.
+  _markPill('strings', d.strings_status !== 'ready');
+  _markPill('dots', d.dots_status !== 'ready');
+}
+
+function _markPill(name, pending) {
+  const p = document.querySelector(`.dsr-pill[data-pane="${name}"]`);
+  if (p) p.classList.toggle('pending', !!pending);
+}
+
+function _renderNode(node, headline) {
+  // Who — subject + affected rendered as chips.
+  const who = [];
+  if (node.who_subject) who.push(`<span>${bEsc(node.who_subject)}</span>`);
+  (node.who_affected || []).forEach(a => who.push(`<span>${bEsc(a)}</span>`));
+  const whoHtml = who.length ? `<div class="dsr-chips">${who.join('')}</div>` : '';
+  let html = '<table class="dsr-kv"><tbody>';
+  html += `<tr><th>What</th><td>${bEsc(node.what || headline || '—')}</td></tr>`;
+  if (whoHtml) html += `<tr><th>Who</th><td>${whoHtml}</td></tr>`;
+  if (node.when)      html += `<tr><th>When</th><td>${bEsc(node.when)}</td></tr>`;
+  if (node.where)     html += `<tr><th>Where</th><td>${bEsc(node.where)}</td></tr>`;
+  if (node.mechanism) html += `<tr><th>Mechanism</th><td>${bEsc(node.mechanism)}</td></tr>`;
+  if (node.why)       html += `<tr><th>Why</th><td>${bEsc(node.why)}</td></tr>`;
+  html += '</tbody></table>';
+  document.getElementById('dsr-pane-node').innerHTML = html;
+}
+
+function _renderStrings(strings, status) {
+  const pane = document.getElementById('dsr-pane-strings');
+  if (!strings || !strings.length) {
+    pane.innerHTML = _pending('The Strings',
+      status === 'pending'
+        ? 'The causal thread for this story has not been mapped yet. It appears here once the synthesis pass links its sources.'
+        : 'No causal thread was found in the sources for this story.');
+    return;
+  }
+  const steps = strings.map(s => `
+    <div class="dsr-step">
+      ${s.stage ? `<div class="dsr-step-stage">${bEsc(s.stage)}</div>` : ''}
+      ${s.title ? `<div class="dsr-step-title">${bEsc(s.title)}</div>` : ''}
+      <div class="dsr-step-detail">${bEsc(s.detail || '')}</div>
+    </div>`).join('');
+  pane.innerHTML = `<div class="dsr-timeline">${steps}</div>`;
+}
+
+function _renderDots(dots, status) {
+  const pane = document.getElementById('dsr-pane-dots');
+  const keys = Object.keys(dots || {});
+  if (!keys.length) {
+    pane.innerHTML = _pending('The Dots',
+      status === 'pending'
+        ? 'The cross-asset contagion map has not been drawn for this story yet. It appears here once the synthesis pass reaches it.'
+        : 'No cross-asset ripples were identified in the sources for this story.');
+    return;
+  }
+  // Fixed order; the Asymmetric Catch always closes the deck.
+  const order = ['market_debt', 'policy_governance', 'tech_culture', 'asymmetric_catch'];
+  const html = order.filter(k => dots[k]).map(k => _dotCard(k, dots[k])).join('');
+  pane.innerHTML = html;
+  _hydrateDossierTickers();
+}
+
+function _dotCard(key, dot) {
+  const meta = DOTS_META[key] || { label: key, icon: 'fa-circle-dot' };
+  const isCatch = key === 'asymmetric_catch';
+  let impact = '';
+  if (!isCatch && dot.impact) {
+    const cls = ['up', 'down', 'mixed', 'neutral'].includes(dot.impact) ? dot.impact : 'neutral';
+    const arrow = cls === 'up' ? '▲' : cls === 'down' ? '▼' : cls === 'mixed' ? '◆' : '●';
+    impact = `<span class="dsr-impact ${cls}">${arrow} ${bEsc(dot.impact)}</span>`;
+  }
+  let ins = '';
+  if (!isCatch && dot.instruments && dot.instruments.length) {
+    ins = `<div class="dsr-instruments">` + dot.instruments.map(i => {
+      const tk = (i.ticker || '').toUpperCase();
+      return `<span class="dsr-ins" ${tk ? `data-ticker="${bEsc(tk)}"` : ''}>${bEsc(i.name || tk)}`
+        + (tk ? ` <b>${bEsc(tk)}</b>` : '')
+        + (tk ? ` <span class="dsr-tick" data-tickfor="${bEsc(tk)}"></span>` : '')
+        + `</span>`;
+    }).join('') + `</div>`;
+  }
+  return `
+    <div class="dsr-dot ${isCatch ? 'catch' : ''}">
+      <div class="dsr-dot-head">
+        <span class="dsr-dot-ico"><i class="fa-solid ${meta.icon}"></i></span>
+        <span class="dsr-dot-name">${bEsc(meta.label)}</span>
+        ${impact}
+      </div>
+      <div class="dsr-dot-summary">${bEsc(dot.summary || '')}</div>
+      ${ins}
+    </div>`;
+}
+
+// Live tickers where an instrument is named — read from the one market store the
+// Explore tab already fills (window._lastMkt). Best-effort: if markets have not
+// loaded, kick one fetch and re-hydrate; if a symbol is not covered, the chip
+// just shows its ticker with no move, never an error.
+function dossierQuote(sym) {
+  const data = window._lastMkt;
+  if (!data || !sym) return null;
+  const S = String(sym).toUpperCase();
+  for (const k in data) {
+    const grp = data[k];
+    if (grp && typeof grp === 'object' && grp[S] && grp[S].change_pct != null) return grp[S];
+  }
+  return null;
+}
+function _hydrateDossierTickers() {
+  const marks = document.querySelectorAll('.dsr-tick[data-tickfor]');
+  if (!marks.length) return;
+  let anyMissing = false;
+  marks.forEach(m => {
+    const q = dossierQuote(m.dataset.tickfor);
+    if (q && q.change_pct != null) {
+      const up = q.change_pct >= 0;
+      m.textContent = (up ? '▲ +' : '▼ ') + Math.abs(q.change_pct).toFixed(2) + '%';
+      m.classList.add(up ? 'up' : 'down');
+    } else { anyMissing = true; }
+  });
+  // Markets never fetched this session → fill the store once, then re-hydrate.
+  if (anyMissing && !window._lastMkt && typeof loadMarkets === 'function') {
+    loadMarkets();
+    setTimeout(_hydrateDossierTickers, 4000);
+  }
+}
+
+function _pending(title, msg) {
+  return `<div class="dsr-pending">
+    <i class="fa-regular fa-hourglass-half"></i>
+    <b>${bEsc(title)} — pending</b>
+    <span>${bEsc(msg)}</span>
+  </div>`;
+}
+function _dossierPaneLoading() {
+  ['node', 'strings', 'dots'].forEach(n => {
+    const el = document.getElementById('dsr-pane-' + n);
+    if (el) el.innerHTML = `<div class="dsr-pending"><i class="fa-solid fa-circle-notch fa-spin"></i><b>Loading dossier…</b></div>`;
+  });
+}
+function _dossierError() {
+  const el = document.getElementById('dsr-pane-node');
+  if (el) el.innerHTML = _pending('Dossier', 'Couldn\'t load this dossier — close and tap the card again.');
 }
 
 // ── Live: weather (Open-Meteo), word-of-day + dictionary (dictionaryapi.dev) ──
@@ -10244,7 +10603,7 @@ function renderXpBreak() {
   if (!el) return;
   const b = MOCK_EXPLORE.break_;
   el.innerHTML = `<div class="q">${bEsc(b.q)}</div><div class="b">${bEsc(b.b)}</div>`;
-  el.onclick = () => xpSoon('Bytes');
+  el.onclick = () => xpSoon('myFeed');
 }
 
 function xpSoon(what){ if (typeof toast === 'function') toast(what + ' — coming soon'); }

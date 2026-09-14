@@ -57,7 +57,7 @@ def test_every_desktop_rule_lives_inside_it(html):
     overrides anywhere else — a bare `nav { flex-direction: column }` outside
     the block would turn the phone's bottom bar into a sidebar."""
     block = _block(html, "@media (min-width: 1024px)")
-    for selector in (".xp-matrix", ".bytes-feed", ".byte-card", "nav {",
+    for selector in (".xp-matrix", ".myfeed-feed", ".mf-card", "nav {",
                      "header {", ".nb-tabs", ".view {"):
         assert selector in block, f"{selector} is not restyled for desktop"
     outside = html.replace(block, "")
@@ -131,7 +131,7 @@ def test_the_client_and_the_server_agree_on_every_path(html):
 
 
 def test_the_slug_is_built_identically_on_both_sides(html):
-    """The server writes /bytes/<slug> into the sitemap and the og:url; the
+    """The server writes /myfeed/<slug> into the sitemap and the og:url; the
     client writes it into the address bar. If they disagree, a shared link and
     an indexed link point at different URLs for the same story."""
     import main
@@ -147,13 +147,14 @@ def test_a_deep_link_opens_the_story_on_boot(html):
     """Without this the server's og: tags would be right and the reader would
     still land on the feed — the exact failure the URLs exist to fix."""
     assert "async function routeFromPath()" in html
-    assert "openArticle(a)" in html
+    # myFeed is the deep-reading surface, so a deep link opens the dossier.
+    assert "openDossier(" in html
     assert "routeFromPath()" in html.split("DOMContentLoaded")[1][:200]
 
 
 def test_navigation_pushes_the_path_not_just_the_state(html):
     assert "history.pushState({ view: name }, '', pathForView(name))" in html
-    assert "'/bytes/' + articleSlug(a)" in html
+    assert "'/myfeed/' + articleSlug(a)" in html
 
 
 def test_the_desktop_nav_is_a_full_height_rail_not_a_floating_card(html):
