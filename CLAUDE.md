@@ -472,16 +472,30 @@ so links shared before the rename still resolve; the canonical route the app,
 the sitemap and the og:url all write is `/myfeed`. The client also accepts a
 legacy `/bytes/<slug>` on boot in case a redirect is ever missed.
 
-Tapping a myFeed card opens a **dossier** (`openDossier`) — a body-level overlay
-with three segmented pills:
-- **The Node** — the factual shock as a key/value table, built entirely from
-  columns the row already carries (what/who/when/where/how/why + headline +
-  hook). It ALWAYS renders.
-- **The Strings** — the causal timeline (`articles.strings`).
-- **The Dots** — cross-asset contagion + the Asymmetric Catch (`articles.dots`).
+The dossier is rendered **INLINE ON EACH CARD**, not behind a tap (the earlier
+tap-to-open overlay was removed). A card carries segmented tabs at the top —
+labelled exactly **News · Strings · Dots** — and per-card lazy hydration: an
+`IntersectionObserver` (`myfeedObserver`) fetches `/article/<id>/dossier` the
+first time a card nears the viewport, so the deck stays cheap (one fetch per card
+actually seen). `buildMyfeedCard` builds the card; `renderStringsPane` /
+`renderDotsPane` fill the panes.
+- **News** — a TL;DR box, then "What happened", then "Who & Where" (chips +
+  when/where). Built from The Node, which is assembled from columns the row
+  already carries. It ALWAYS renders.
+- **Strings** — a HORIZONTAL timeline (`.mfd-timeline-h`): dots connected
+  left→right, each labelled beneath. Vertical was explicitly wrong.
+- **Dots** — labelled rows "Dot: Markets / Governance / Tech/Social" plus a
+  closing "The Catch", each with a red/green/amber impact pill and live tickers
+  where an instrument is named (read from Explore's `window._lastMkt`).
+Sector chips are colourful ticket-shaped badges (`.mf-badge`, per-sector colour
+via `--bd`), not grey pills. `openDossier` survives as the deep-link entry
+(`/myfeed/<slug>`): it prepends that story as the first card rather than opening
+an overlay.
 
 `GET /article/<id>/dossier` returns node + strings + dots in one payload, cached
-through `cache.py` at `DOSSIER_CACHE_SECONDS` (120) exactly like `/feed`.
+through `cache.py` at `DOSSIER_CACHE_SECONDS` (raised to 600s) and it **serves
+stale on a DB error**, which is what stops `/myfeed` hanging on
+"Loading dossier…" when Postgres is refusing connections.
 
 **The degraded path is the normal case, not an edge case.** Most rows have never
 been through synthesis, so `strings`/`dots` are the `'[]'`/`'{}'` defaults; the
@@ -496,6 +510,67 @@ backend. Both are written ONLY by the synthesis pass, alongside the News node,
 and both are emptyable. The synthesis prompt/schema/parser emit them under the
 same compliance blocklist as the hook — a timeline step or a sector whose prose
 trips the banlist is DROPPED, never raised, so a bad pane never costs the body.
+
+---
+
+## Staying up under a blown Supabase quota (egress, size, cache)
+
+The database blew its free-tier caps (egress ~487%, size ~248%) and started
+returning 402. Four things address it; the code half is landed, the DB half is
+scripted for you to run.
+
+### The egress leak was embeddings SELECTed into Python
+
+`info_objects.embedding` is `vector(384)` (~1.5 KB/row). Three paths pulled it
+into the app and compared there instead of in the database:
+
+- `recommender/hybrid_scorer.score_feed` selected `embedding` for **all** up to
+  `CANDIDATE_LIMIT` (500) rows on **every** feed call, then MMR did cosine in
+  numpy. It now scores WITHOUT embeddings and fetches vectors only for the top
+  `EMBED_POOL` (150) by relevance, in one `= ANY($1::uuid[])` query, degrading to
+  score-only order if that fetch fails. ~70% fewer embedding rows per call.
+- `pipeline/connector.connect` and `sherr/rag.retrieve_consensus` fetched the
+  subject vector then shipped it back as a bind parameter. Both now reference it
+  by id through an in-DB subquery (`(SELECT embedding FROM info_objects WHERE
+  id=$1)`) — the operand never leaves Postgres, matching the `<=>` operator that
+  already ran there.
+
+**Rule: never SELECT an embedding column into application code.** Compare in the
+database, or reference the vector by id in a subquery.
+
+### The read cache raises TTLs and serves stale on a DB error
+
+`cache.get_or_set_stale(key, ttl, producer, stale_ttl=86400)` stores a long-lived
+last-good copy under `stale:<key>` and, when the producer RAISES (a 402/5xx
+reaching through), returns that instead of propagating. This is NOT caching an
+error (still forbidden) — it serves the last SUCCESSFUL answer so the site stays
+readable while the DB is down. Wired on `/explore`, `/explore/pillars`,
+`/explore/snapshot`, `/patterns` (which returns an `unavailable` payload rather
+than raising, so it serves stale on that) and the dossier. TTLs raised to 600s
+(`PATTERNS_/EXPLORE_/DOSSIER_CACHE_SECONDS`) while restricted.
+
+### RSS ingestion: a semaphore, not a batch, plus DNS backoff
+
+`collect_rss` caps concurrency with an `asyncio.Semaphore(RSS_CONCURRENCY=10)` —
+10 fetches in flight continuously, which is what actually bounds the DNS pressure
+that made Render's resolver fail ("No address associated with hostname").
+`_get_with_dns_backoff` retries ONLY connect/DNS-class errors (`RSS_DNS_RETRIES`,
+1s→2s→4s), never a real HTTP status. NASA APOD now needs a real `NASA_API_KEY`
+and is skipped cleanly when unset (DEMO_KEY dropped) — matching FRED and
+data.gov.in, which already raised-to-skip.
+
+### The DB size half is scripted, not run from here
+
+- `scripts/db_cleanup.py` — **dry-run by default**: measures sizes and prints how
+  many rows each step would touch. `--apply` prunes `{schema}.articles` +
+  `public.info_objects` older than `--days` (60), rolls the engine's bigger
+  `public.articles` to `--public-articles-days` (30), nulls embeddings older than
+  `--embedding-days` (90), then `VACUUM FULL`s to return space to the OS.
+- `scripts/migrate_to_neon.py` — **prints the plan by default**, `--run` executes:
+  `pg_dump` the `sherrbyte_app` + `public` schemas → restore into Neon → enable
+  pgvector → rebuild the HNSW indexes. Run `db_cleanup --apply` first. The env
+  swaps (Render `DATABASE_URL`/`SHERR_I_DATABASE_URL`, the GitHub Actions
+  `DATABASE_URL` secret) are documented in the script header; no code changes.
 
 ---
 

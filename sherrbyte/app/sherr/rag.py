@@ -21,8 +21,13 @@ log = logging.getLogger("sherbyte.rag")
 
 async def retrieve_consensus(info_object_id: str, k: int = 5) -> list[str]:
     """Return up to k corroborating source summaries for grounding."""
+    # The subject's embedding is NOT pulled into Python — only a presence flag.
+    # A 1536-float vector is ~6 KB, and fetching it here just to send it back as
+    # a bind parameter for the neighbour search was pure Supabase egress. The
+    # neighbour query below references it by id through an in-DB subquery instead.
     subject = await db.fetchrow(
-        "SELECT embedding, thread_id, source_name, summary FROM info_objects WHERE id=$1",
+        "SELECT thread_id, source_name, summary, (embedding IS NOT NULL) AS has_embedding "
+        "FROM info_objects WHERE id=$1",
         info_object_id,
     )
     if not subject:
@@ -48,17 +53,20 @@ async def retrieve_consensus(info_object_id: str, k: int = 5) -> list[str]:
                 seen.add(line)
                 consensus.append(line)
 
-    # 2) Top up with global vector neighbours.
-    if len(consensus) < k and subject["embedding"] is not None:
+    # 2) Top up with global vector neighbours. The subject vector is referenced
+    #    by id in-DB, so the pgvector search runs entirely server-side and no
+    #    embedding column ever crosses the wire.
+    if len(consensus) < k and subject["has_embedding"]:
         nn = await db.fetch(
             """
-            SELECT source_name, summary, 1 - (embedding <=> $1) AS sim
+            SELECT source_name, summary,
+                   1 - (embedding <=> (SELECT embedding FROM info_objects WHERE id=$1)) AS sim
             FROM info_objects
-            WHERE id <> $2 AND embedding IS NOT NULL AND summary <> ''
-            ORDER BY embedding <=> $1
-            LIMIT $3
+            WHERE id <> $1 AND embedding IS NOT NULL AND summary <> ''
+            ORDER BY embedding <=> (SELECT embedding FROM info_objects WHERE id=$1)
+            LIMIT $2
             """,
-            subject["embedding"], info_object_id, k * 2,
+            info_object_id, k * 2,
         )
         for r in nn:
             if r["sim"] < 0.5:

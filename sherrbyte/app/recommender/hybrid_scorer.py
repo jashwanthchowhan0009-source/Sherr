@@ -29,6 +29,12 @@ log = logging.getLogger("sherbyte.scorer")
 
 CANDIDATE_WINDOW_DAYS = 7
 CANDIDATE_LIMIT = 500
+# How many candidates the MMR diversifier gets embeddings for. The scoring pass
+# runs WITHOUT embeddings (they were the egress leak — 500 rows × ~6 KB every
+# feed call); only this many top-ranked rows have their vectors fetched, in one
+# bounded query, so diversity is applied where it matters and the tail is ordered
+# by relevance alone. 500 → 150 is a ~70% cut in embedding egress per call.
+EMBED_POOL = 150
 
 
 def _minmax(values: dict[str, float]) -> dict[str, float]:
@@ -85,10 +91,14 @@ async def score_feed(user_id: str, limit: int = 50,
     muted = await _mutes(user_id)
     alpha, beta, gamma = await _user_weights(user_id)
 
+    # NB: `embedding` is deliberately NOT selected here. Pulling a 1536-float
+    # vector for every one of up to CANDIDATE_LIMIT rows on every feed call was
+    # the dominant Supabase egress; embeddings are fetched below for the MMR
+    # shortlist only.
     q = """
         SELECT id, headline, summary, topic, pillar_id, micro_tags, scope,
                importance, sentiment, is_trending, source_name, image_url,
-               thread_id, published_at, embedding, entities
+               thread_id, published_at, entities
         FROM info_objects
         WHERE published_at > now() - ($1 || ' days')::interval
     """
@@ -131,9 +141,29 @@ async def score_feed(user_id: str, limit: int = 50,
         scored.append({
             "id": iid,
             "score": final,
-            "embedding": list(r["embedding"]) if r["embedding"] is not None else None,
+            "embedding": None,   # filled below for the shortlist only
             "row": r,
         })
+
+    # Fetch embeddings for the top EMBED_POOL by relevance ONLY, in one bounded
+    # query, and attach them. MMR then diversifies that shortlist; the tail keeps
+    # embedding=None and rerank() falls back to relevance order for it. A failure
+    # here degrades to score-only ranking rather than breaking the feed — the
+    # vectors are an optimisation, not correctness.
+    shortlist = sorted(scored, key=lambda s: s["score"], reverse=True)[:EMBED_POOL]
+    short_ids = [s["id"] for s in shortlist]
+    if short_ids:
+        try:
+            emb_rows = await db.fetch(
+                "SELECT id, embedding FROM info_objects "
+                "WHERE id = ANY($1::uuid[]) AND embedding IS NOT NULL",
+                short_ids,
+            )
+            emb_by_id = {str(r["id"]): list(r["embedding"]) for r in emb_rows}
+            for s in shortlist:
+                s["embedding"] = emb_by_id.get(s["id"])
+        except Exception as e:                                     # noqa: BLE001
+            log.warning("shortlist embedding fetch failed, ranking by score: %s", e)
 
     # Diversify, then keep top `limit`.
     ranked = rerank(scored, top_k=limit)

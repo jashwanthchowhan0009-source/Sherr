@@ -182,6 +182,45 @@ async def get_or_set(key: str, ttl: int, producer):
     return payload
 
 
+# How long a last-good payload is retained for the stale-on-error fallback. Long
+# — a whole day — because the whole point is to outlive a database outage. This
+# is NOT the same as caching an error (which we never do): it serves the last
+# SUCCESSFUL answer when the producer fails, so the site stays readable while
+# Postgres is refusing connections (e.g. a 402 over a blown quota).
+STALE_TTL = int(os.getenv("CACHE_STALE_TTL", "86400"))
+
+
+async def get_or_set_stale(key: str, ttl: int, producer, stale_ttl: int = None):
+    """Fresh cache → producer → last-good stale, in that order.
+
+    On a fresh HIT, return it. On a MISS, run the producer: on success store the
+    value under both the fresh key (`ttl`) and a long-lived stale key
+    (`stale_ttl`), and return it. If the producer RAISES — which is how a DB 402
+    or 5xx reaches here — return the last-good stale copy instead of propagating,
+    so a reader still gets content the site served minutes ago rather than an
+    error page or a spinner that never resolves. Only when there is no stale copy
+    at all does the exception propagate.
+    """
+    stale_ttl = STALE_TTL if stale_ttl is None else stale_ttl
+    hit = await get(key)
+    if hit is not None:
+        return hit
+    try:
+        payload = producer()
+        if hasattr(payload, "__await__"):
+            payload = await payload
+    except Exception:                                             # noqa: BLE001
+        stale = await get("stale:" + key)
+        if stale is not None:
+            STATS["stale_served"] = STATS.get("stale_served", 0) + 1
+            log.warning("cache: producer failed for %s, serving stale", key)
+            return stale
+        raise
+    await set(key, payload, ttl)
+    await set("stale:" + key, payload, stale_ttl)
+    return payload
+
+
 async def close() -> None:
     global _client, _client_tried
     if _client is not None:

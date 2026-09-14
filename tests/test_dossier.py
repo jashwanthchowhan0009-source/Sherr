@@ -116,6 +116,30 @@ def test_a_missing_article_is_404(tmp_path, monkeypatch, client):
     assert client.get("/article/999/dossier").status_code == 404
 
 
+def test_dossier_serves_stale_when_the_db_is_down(tmp_path, monkeypatch, client):
+    """A blown Supabase quota returns 402 and every query raises. The dossier
+    must then serve its last-good payload — this is what stops /myfeed hanging on
+    'Loading dossier…' — rather than propagating the error."""
+    _seed(tmp_path, monkeypatch, [dict(
+        _BASE, id=21, headline="Gravity storage tested in China",
+        what_info="A gravity-based power store was tested.")])
+    # First call succeeds and populates the stale copy.
+    assert client.get("/article/21/dossier").json()["node"]["what"] \
+        == "A gravity-based power store was tested."
+    # Expire only the FRESH entry (the stale copy must survive), then take the DB
+    # down. Without Redis in tests both live in the local dict, so drop just the
+    # fresh key rather than clearing everything.
+    cache._local.pop("dossier:21", None)
+
+    def _dead_db():
+        raise RuntimeError("FATAL: 402 Payment Required (quota exceeded)")
+    monkeypatch.setattr(main, "get_db", _dead_db)
+
+    r = client.get("/article/21/dossier")
+    assert r.status_code == 200, "a DB outage must serve stale, not error"
+    assert r.json()["node"]["what"] == "A gravity-based power store was tested."
+
+
 def test_malformed_strings_dots_degrade_to_pending_not_error(
         tmp_path, monkeypatch, client):
     # A row whose JSON columns are junk must not 500 — the reader still gets the

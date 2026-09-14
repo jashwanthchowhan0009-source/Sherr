@@ -265,7 +265,10 @@ async def news_top(client: httpx.AsyncClient) -> dict:
 
 # ─── second tranche: zero-key public datasets ─────────────────────────────────
 FRED_API_KEY = os.getenv("FRED_API_KEY") or ""
-NASA_API_KEY = os.getenv("NASA_API_KEY") or "DEMO_KEY"   # DEMO_KEY works, rate-limited
+# A REAL key from the env, or nothing. DEMO_KEY was shared, throttled to ~30
+# req/hr across every caller, and its 429s read as an outage; the APOD section is
+# now skipped cleanly when no real key is set, exactly like FRED and data.gov.in.
+NASA_API_KEY = os.getenv("NASA_API_KEY") or ""
 DATA_GOV_IN_KEY = os.getenv("DATA_GOV_IN_KEY") or ""
 
 
@@ -297,7 +300,11 @@ async def world_bank(client: httpx.AsyncClient) -> dict:
 
 
 async def nasa(client: httpx.AsyncClient) -> dict:
-    """Astronomy Picture of the Day. Image URL is NASA-hosted and free to use."""
+    """Astronomy Picture of the Day. Image URL is NASA-hosted and free to use.
+
+    Skipped cleanly when no real key is configured (same posture as FRED)."""
+    if not NASA_API_KEY:
+        raise RuntimeError("NASA_API_KEY not set")
     r = await client.get("https://api.nasa.gov/planetary/apod",
                          params={"api_key": NASA_API_KEY}, timeout=12)
     r.raise_for_status()

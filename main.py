@@ -229,12 +229,20 @@ PATTERN_MAX_AGE_HOURS = int(os.getenv("PATTERN_MAX_AGE_HOURS", "72"))
 # ingest schedule, which is measured in minutes, so a reader never sees data
 # these windows made stale in any way they could notice.
 FEED_CACHE_SECONDS = int(os.getenv("FEED_CACHE_SECONDS", "30"))
-PATTERNS_CACHE_SECONDS = int(os.getenv("PATTERNS_CACHE_SECONDS", "60"))
+# Raised 60 → 600 while the database is quota-restricted (a blown Supabase cap
+# returns 402 and every uncached query fails). A longer window means far fewer
+# reads reach Postgres, and these endpoints all serve last-good stale content on
+# a DB error, so the site stays readable even when the DB refuses connections.
+PATTERNS_CACHE_SECONDS = int(os.getenv("PATTERNS_CACHE_SECONDS", "600"))
 ANALOG_CACHE_SECONDS = int(os.getenv("ANALOG_CACHE_SECONDS", "120"))
+# The Explore surfaces (feed, per-pillar, snapshot). Static enough to hold for
+# minutes, and the first line of defence for keeping the app up under a 402.
+EXPLORE_CACHE_SECONDS = int(os.getenv("EXPLORE_CACHE_SECONDS", "600"))
 # The myFeed dossier (node + strings + dots) for one story. It changes only when
-# the synthesis pass rewrites the row, so a couple of minutes is generous — and
-# a tapped card is a burst of reads for the same id, exactly what the cache is for.
-DOSSIER_CACHE_SECONDS = int(os.getenv("DOSSIER_CACHE_SECONDS", "120"))
+# the synthesis pass rewrites the row; raised 120 → 600 for the same reason as
+# the others, and it serves stale on a DB error so /myfeed never hangs on
+# "Loading dossier…" when Postgres is down.
+DOSSIER_CACHE_SECONDS = int(os.getenv("DOSSIER_CACHE_SECONDS", "600"))
 # Rendered <head> blocks for /myfeed/<slug>. A crawler fetch is a database read
 # for a row that changes once, when it is written.
 OG_CACHE_SECONDS = int(os.getenv("OG_CACHE_SECONDS", "600"))
@@ -565,6 +573,11 @@ def extract_image(entry, pillar_id: int) -> str:
 
 
 # ─── RSS FEEDS ───────────────────────────────────────────────────────────────
+# At most this many feed fetches in flight at once (semaphore in collect_rss).
+# 10 is what keeps Render's DNS resolver from failing under the ~100-feed burst.
+RSS_CONCURRENCY = int(os.getenv("RSS_CONCURRENCY", "10"))
+# DNS/connect failures are retried this many times with 1s→2s→4s backoff.
+RSS_DNS_RETRIES = int(os.getenv("RSS_DNS_RETRIES", "2"))
 RSS_FEEDS = [
     ("https://feeds.feedburner.com/ndtvnews-top-stories", "NDTV"),
     ("https://timesofindia.indiatimes.com/rssfeedstopstories.cms", "Times of India"),
@@ -1295,14 +1308,40 @@ def verify_token(token: str) -> Optional[int]:
 
 
 # ─── NEWS COLLECTION ─────────────────────────────────────────────────────────
+async def _get_with_dns_backoff(client: httpx.AsyncClient, feed_url: str,
+                                source_name: str):
+    """GET a feed, retrying transient DNS/connect failures with backoff.
+
+    Render's DNS resolver fails intermittently under a burst of concurrent feed
+    fetches — 'No address associated with hostname', sometimes as a blank-message
+    ConnectError. That is not the feed being down; a second attempt a moment later
+    almost always resolves. Retries ONLY connect/DNS-class errors (httpx.ConnectError
+    covers gaierror), never a real HTTP status, and backs off 1s → 2s → 4s.
+    """
+    delay = 1.0
+    last_exc = None
+    for attempt in range(RSS_DNS_RETRIES + 1):
+        try:
+            return await client.get(
+                feed_url,
+                headers={"User-Agent": "SherByte/5.0 (+https://sherbyte.in)"},
+                timeout=12,
+            )
+        except (httpx.ConnectError, httpx.ConnectTimeout) as e:  # DNS / connect
+            last_exc = e
+            if attempt >= RSS_DNS_RETRIES:
+                break
+            log.info("[RSS] %s DNS/connect retry %d after %.0fs: %s",
+                     source_name, attempt + 1, delay, e or type(e).__name__)
+            await asyncio.sleep(delay)
+            delay *= 2
+    raise last_exc if last_exc else httpx.ConnectError("unknown connect failure")
+
+
 async def fetch_feed_async(feed_url: str, source_name: str, client: httpx.AsyncClient) -> list[dict]:
     articles = []
     try:
-        r = await client.get(
-            feed_url,
-            headers={"User-Agent": "SherByte/5.0 (+https://sherbyte.in)"},
-            timeout=12,
-        )
+        r = await _get_with_dns_backoff(client, feed_url, source_name)
         if r.status_code != 200:
             return articles
         feed = await asyncio.get_event_loop().run_in_executor(None, feedparser.parse, r.text)
@@ -1363,17 +1402,30 @@ async def fetch_feed_async(feed_url: str, source_name: str, client: httpx.AsyncC
 
 
 async def collect_rss() -> list[dict]:
+    """Fetch every RSS feed with concurrency capped by a semaphore.
+
+    A semaphore of RSS_CONCURRENCY (10) keeps at most that many requests in
+    flight AT ONCE — continuously, not in lock-step batches — which is what
+    actually bounds the DNS pressure that was making Render's resolver fail. The
+    old batch-of-10 loop stalled each group on its slowest feed; the semaphore
+    starts a new fetch the instant a slot frees, so it is both gentler on DNS and
+    faster overall.
+    """
     all_articles = []
-    batch_size = 10
+    sem = asyncio.Semaphore(RSS_CONCURRENCY)
+
+    async def _one(url, name, client):
+        async with sem:
+            return await fetch_feed_async(url, name, client)
+
     async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
-        for i in range(0, len(RSS_FEEDS), batch_size):
-            batch = RSS_FEEDS[i:i + batch_size]
-            tasks = [fetch_feed_async(url, name, client) for url, name in batch]
-            results = await asyncio.gather(*tasks, return_exceptions=True)
-            for res in results:
-                if isinstance(res, list):
-                    all_articles.extend(res)
-            await asyncio.sleep(0.4)
+        tasks = [_one(url, name, client) for url, name in RSS_FEEDS]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+    for res in results:
+        if isinstance(res, list):
+            all_articles.extend(res)
+        elif isinstance(res, Exception):
+            log.debug("[RSS] feed task failed: %s", res)
     log.info("[RSS] Collected %d raw from %d feeds", len(all_articles), len(RSS_FEEDS))
     return all_articles
 
@@ -2335,35 +2387,49 @@ async def explore_feed(
     if page_html is not None:
         return page_html
     get_current_user(authorization)
-    offset = (page - 1) * limit
-    conn = get_db()
-    # Scope soft-fallback, matching /feed. Ingest classifies almost everything
-    # 'global', so a reader on Local was served an empty Explore page — every
-    # category row reading "No stories yet" while the same articles sat one
-    # filter away. An empty scope broadens rather than starving.
-    if scope and scope.lower() != "global":
-        sc_sql, sc_params = _scope_clause(scope)
-        have = conn.execute(
-            "SELECT COUNT(*) AS c FROM articles WHERE ai_processed=1 "
-            "AND status='published'" + sc_sql, sc_params).fetchone()["c"]
-        if have == 0:
-            scope = ""
-    q = "SELECT * FROM articles WHERE ai_processed=1 AND status='published'"
-    p = []
-    if category and not pillar:
-        resolved = FRONTEND_SLUG_MAP.get(category.lower())
-        if resolved:
-            pillar = resolved
-    if pillar:
-        q += " AND pillar_id=?"; p.append(pillar)
-    sc_sql, sc_params = _scope_clause(scope)
-    q += sc_sql; p += sc_params
-    q += " ORDER BY published_at DESC, id DESC LIMIT ? OFFSET ?"
-    p += [limit + 1, offset]
-    rows = conn.execute(q, p).fetchall()
-    conn.close()
-    has_more = len(rows) > limit
-    return {"articles": [article_row_to_dict(r) for r in rows[:limit]], "has_more": has_more}
+    # Cached shared (not per-reader — Explore does not personalise) and served
+    # stale on a DB error, so a 402 over a blown quota leaves Explore populated
+    # rather than blank.
+    ck = f"explore:{category}:{pillar}:{scope}:{page}:{limit}"
+
+    def _produce():
+        offset = (page - 1) * limit
+        sc = scope
+        conn = get_db()
+        try:
+            # Scope soft-fallback, matching /feed. Ingest classifies almost
+            # everything 'global', so a reader on Local was served an empty
+            # Explore page. An empty scope broadens rather than starving.
+            if sc and sc.lower() != "global":
+                sc_sql, sc_params = _scope_clause(sc)
+                have = conn.execute(
+                    "SELECT COUNT(*) AS c FROM articles WHERE ai_processed=1 "
+                    "AND status='published'" + sc_sql, sc_params).fetchone()["c"]
+                if have == 0:
+                    sc = ""
+            q = "SELECT * FROM articles WHERE ai_processed=1 AND status='published'"
+            p = []
+            pil = pillar
+            if category and not pil:
+                resolved = FRONTEND_SLUG_MAP.get(category.lower())
+                if resolved:
+                    pil = resolved
+            if pil:
+                q += " AND pillar_id=?"; p.append(pil)
+            sc_sql, sc_params = _scope_clause(sc)
+            q += sc_sql; p += sc_params
+            q += " ORDER BY published_at DESC, id DESC LIMIT ? OFFSET ?"
+            p += [limit + 1, offset]
+            rows = conn.execute(q, p).fetchall()
+        finally:
+            conn.close()
+        has_more = len(rows) > limit
+        return {"articles": [article_row_to_dict(r) for r in rows[:limit]],
+                "has_more": has_more}
+
+    return await cache.get_or_set_stale(
+        ck, EXPLORE_CACHE_SECONDS,
+        lambda: asyncio.get_event_loop().run_in_executor(None, _produce))
 
 
 # ─── Explore page snapshot ────────────────────────────────────────────────────
@@ -2515,7 +2581,9 @@ async def live_dictionary(word: str):
 async def explore_snapshot():
     """All Explore sections from cache in one call — no upstream API on this path."""
     import explore_feeds
-    return await explore_feeds.snapshot()
+    return await cache.get_or_set_stale(
+        "explore:snapshot", EXPLORE_CACHE_SECONDS,
+        lambda: explore_feeds.snapshot())
 
 
 @app.post("/admin/explore/refresh")
@@ -2544,37 +2612,46 @@ async def explore_by_pillar(
     material while others stay fresh, which is a different kind of uneven.
     """
     get_current_user(authorization)
-    conn = get_db()
-    try:
-        sc_sql, sc_params = _scope_clause(scope)
-        base = ("SELECT COUNT(*) AS c FROM articles "
-                "WHERE ai_processed=1 AND status='published' AND pillar_id=?" + sc_sql)
-        avail = {pid: conn.execute(base, [pid] + sc_params).fetchone()["c"]
-                 for pid in PILLARS}
-        stocked = [c for c in avail.values() if c > 0]
-        # Clamp to the thinnest STOCKED pillar; an empty pillar is reported as empty
-        # rather than dragging every other row to zero.
-        n = min(per, min(stocked)) if stocked else 0
+    # Shared cache + stale-on-error (see /explore): a 402 leaves the pillar rows
+    # showing their last-good content instead of an error.
+    ck = f"explore:pillars:{per}:{scope}"
 
-        out = []
-        for pid, meta in PILLARS.items():
-            rows = conn.execute(
-                "SELECT * FROM articles WHERE ai_processed=1 AND status='published' "
-                "AND pillar_id=?" + sc_sql +
-                " ORDER BY published_at DESC, id DESC LIMIT ?",
-                [pid] + sc_params + [n]).fetchall() if n else []
-            out.append({
-                "pillar_id": pid, "name": meta["name"], "slug": meta["slug"],
-                "color": meta["color"], "emoji": meta["emoji"],
-                "available": avail[pid],
-                "articles": [article_row_to_dict(r) for r in rows],
-            })
-        return {"per_pillar": n, "requested": per, "pillars": out,
-                # Surfaced so a short row is explainable rather than looking broken.
-                "limited_by": (min(avail, key=lambda k: avail[k] if avail[k] else 10**9)
-                               if stocked and n < per else None)}
-    finally:
-        conn.close()
+    def _produce():
+        conn = get_db()
+        try:
+            sc_sql, sc_params = _scope_clause(scope)
+            base = ("SELECT COUNT(*) AS c FROM articles "
+                    "WHERE ai_processed=1 AND status='published' AND pillar_id=?" + sc_sql)
+            avail = {pid: conn.execute(base, [pid] + sc_params).fetchone()["c"]
+                     for pid in PILLARS}
+            stocked = [c for c in avail.values() if c > 0]
+            # Clamp to the thinnest STOCKED pillar; an empty pillar is reported as
+            # empty rather than dragging every other row to zero.
+            n = min(per, min(stocked)) if stocked else 0
+
+            out = []
+            for pid, meta in PILLARS.items():
+                rows = conn.execute(
+                    "SELECT * FROM articles WHERE ai_processed=1 AND status='published' "
+                    "AND pillar_id=?" + sc_sql +
+                    " ORDER BY published_at DESC, id DESC LIMIT ?",
+                    [pid] + sc_params + [n]).fetchall() if n else []
+                out.append({
+                    "pillar_id": pid, "name": meta["name"], "slug": meta["slug"],
+                    "color": meta["color"], "emoji": meta["emoji"],
+                    "available": avail[pid],
+                    "articles": [article_row_to_dict(r) for r in rows],
+                })
+            return {"per_pillar": n, "requested": per, "pillars": out,
+                    # Surfaced so a short row is explainable, not broken-looking.
+                    "limited_by": (min(avail, key=lambda k: avail[k] if avail[k] else 10**9)
+                                   if stocked and n < per else None)}
+        finally:
+            conn.close()
+
+    return await cache.get_or_set_stale(
+        ck, EXPLORE_CACHE_SECONDS,
+        lambda: asyncio.get_event_loop().run_in_executor(None, _produce))
 
 
 @app.get("/trending")
@@ -2670,6 +2747,15 @@ async def patterns(
                                        max_age_hours=max_age_hours)
     if payload.get("source") != "unavailable":
         await cache.set(ck, payload, PATTERNS_CACHE_SECONDS)
+        # Keep a long-lived last-good copy for the stale fallback below.
+        await cache.set("stale:" + ck, payload, cache.STALE_TTL)
+        return payload
+    # The engine DB was unreachable (a 402 over a blown quota reads as
+    # unavailable here, not an exception). Serve the last-good patterns rather
+    # than an "unavailable" wall, so the surface stays populated while it is down.
+    stale = await cache.get("stale:" + ck)
+    if stale is not None:
+        return stale
     return payload
 
 
@@ -2883,12 +2969,16 @@ async def get_dossier(article_id: int, authorization: str = Header("")):
     tapped card is a burst of reads for one id, and the row only changes when the
     synthesis pass rewrites it. A MISS is one query; everything else is served
     from the local or Redis layer.
+
+    SERVES STALE ON A DB ERROR. If Postgres refuses the query (a 402 over a blown
+    quota, or a 5xx), the last-good dossier is returned instead of propagating —
+    this is what stops /myfeed/<slug> from hanging forever on "Loading dossier…"
+    while the database is down. A genuinely missing row still 404s.
     """
     get_current_user(authorization)
     ck = f"dossier:{article_id}"
-    hit = await cache.get(ck)
-    if hit is not None:
-        return hit
+
+    _missing = {"__404__": True}
 
     def _row():
         conn = get_db()
@@ -2899,11 +2989,17 @@ async def get_dossier(article_id: int, authorization: str = Header("")):
         finally:
             conn.close()
 
-    row = await asyncio.get_event_loop().run_in_executor(None, _row)
-    if not row:
+    async def _produce():
+        row = await asyncio.get_event_loop().run_in_executor(None, _row)
+        if not row:
+            # A real 404 must NOT be cached as stale — sentinel it so the wrapper
+            # stores nothing durable and we can raise below.
+            return _missing
+        return _dossier_payload(row)
+
+    payload = await cache.get_or_set_stale(ck, DOSSIER_CACHE_SECONDS, _produce)
+    if payload is _missing or (isinstance(payload, dict) and payload.get("__404__")):
         raise HTTPException(404, "Article not found")
-    payload = _dossier_payload(row)
-    await cache.set(ck, payload, DOSSIER_CACHE_SECONDS)
     return payload
 
 
