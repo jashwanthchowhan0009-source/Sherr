@@ -31,7 +31,11 @@ router = APIRouter()
 ALPHAVANTAGE_KEY = os.getenv("ALPHAVANTAGE_KEY", "")
 FINNHUB_KEY      = os.getenv("FINNHUB_KEY", "")
 METALS_API_KEY   = os.getenv("METALS_API_KEY", "")
-EXCHANGE_RATE_KEY= os.getenv("EXCHANGE_RATE_KEY", "")
+# Also accept the name actually set on Render (FOREX_ExchangeRate-API_KEY) so the
+# ExchangeRate-API forex path uses the configured key without a rename; a hyphen
+# is fine in os.getenv since Render injects the var directly.
+EXCHANGE_RATE_KEY= (os.getenv("EXCHANGE_RATE_KEY")
+                    or os.getenv("FOREX_ExchangeRate-API_KEY") or "")
 
 # ─── Symbol catalogue ────────────────────────────────────────────────────
 # Every symbol this module quotes, in one place, keyed by market_type.
