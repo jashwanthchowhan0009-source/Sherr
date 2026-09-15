@@ -54,11 +54,16 @@ services:
       # Which imagery policy the app serves. Declared rather than left to a
       # default, because main.py and image_service.py each carried their own and
       # a silent disagreement decides what every card looks like.
-      #   thumbnail — the publisher's image, size-capped and credited
       #   stock     — Pexels, no third-party exposure (needs PEXELS_API_KEY)
+      #   thumbnail — the publisher's image, size-capped and credited
       #   art       — generated category art only
+      # `stock` is the default: hotlinking the publisher's own image is bandwidth
+      # theft and a copyright exposure. Set PEXELS_API_KEY or stock falls back to
+      # generated art (never a publisher hotlink).
       - key: IMAGE_MODE
-        value: thumbnail
+        value: stock
+      - key: PEXELS_API_KEY
+        sync: false            # set in the dashboard; enables dynamic stock imagery
       - key: ADMIN_TOKEN
         generateValue: true    # /admin/* is refused entirely without it in prod
       - key: JWT_SECRET

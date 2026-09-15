@@ -577,6 +577,38 @@ data.gov.in, which already raised-to-skip.
 
 ---
 
+## Card imagery is dynamic Pexels stock now, not the publisher's image
+
+`IMAGE_MODE` defaults to **`stock`** (was `thumbnail`). Hotlinking the
+publisher's own image is bandwidth theft and a copyright exposure — a publisher
+can block it or turn on hotlink protection — so cards serve licensed Pexels
+imagery keyed on each article's subject instead. Headlines stay as ingested; a
+`Source:` credit carries the attribution. (Q chosen by the product owner: the
+risk is the image, not the text.)
+
+**`image_service.resolve_image` was DEAD CODE** — it existed but nothing called
+it, so `stock` mode never did anything and a card could only ever show the
+publisher image or the generated-art placeholder. `main._apply_stock_images`
+now wires it into every card endpoint (`/feed`, `/explore`, `/explore/pillars`,
+`/trending`, `/search`, `/bookmarks`, `/article/<id>`): it resolves each
+article's image from Pexels (cached BY QUERY inside image_service, so shared
+subjects cost one call), replaces any publisher hotlink, and on a miss leaves
+`image_url` empty so the client shows art — imagery never blocks a response.
+
+Two guards keep it safe:
+- **No-op without `PEXELS_API_KEY`.** A mis-set `stock` mode with no key must not
+  blank every card, so `_apply_stock_images` returns early and leaves whatever
+  `article_row_to_dict` set.
+- **Our own hosted images are kept** (`image_source == 'own'`); only publisher
+  hotlinks / empties are resolved to stock.
+
+To make it live: set `IMAGE_MODE=stock` (now the render.yaml default) **and**
+`PEXELS_API_KEY` on Render. Without the key, stock falls back to generated art,
+never a publisher hotlink. The frontend already renders `stock` (Pexels) hosts
+with attribution via `imagePlan()`; no client change was needed.
+
+---
+
 ## Real URLs, and the one route that must stay last
 
 The app had a single URL: every screen lived behind a JS view switch, so a

@@ -137,16 +137,28 @@ def test_the_document_sets_a_referrer_policy_too():
 
 # ─── 2. IMAGE_MODE agreed with itself ───────────────────────────────────────
 def test_image_mode_defaults_match_across_modules():
-    """They disagreed — "stock" in image_service, "thumbnail" in main — so which
-    imagery policy applied depended on which module happened to read it."""
-    import image_service
-    import main
-    assert main.IMAGE_MODE == image_service.IMAGE_MODE == "thumbnail"
+    """The invariant is AGREEMENT: the two modules once disagreed ("stock" vs
+    "thumbnail") so the imagery policy depended on which read the env first. They
+    now share one default — `stock`, dynamic Pexels imagery rather than a
+    publisher hotlink.
+
+    Read the default LITERAL from source, not the imported constant: this module's
+    own `app` fixture sets IMAGE_MODE and reloads main, which would otherwise leak
+    that value into the imported constant here."""
+    import re
+
+    def _default(path):
+        src = open(os.path.join(ROOT, path), encoding="utf-8").read()
+        m = re.search(r'IMAGE_MODE\s*=\s*\(os\.getenv\("IMAGE_MODE"\)\s*or\s*"(\w+)"\)', src)
+        assert m, f"could not find the IMAGE_MODE default in {path}"
+        return m.group(1)
+
+    assert _default("main.py") == _default("image_service.py") == "stock"
 
 
 def test_image_mode_is_declared_in_the_blueprint():
     y = open(os.path.join(ROOT, "render.yaml"), encoding="utf-8").read()
-    assert "IMAGE_MODE" in y and "thumbnail" in y
+    assert "IMAGE_MODE" in y and "stock" in y
 
 
 # ─── a dead session is 401, not 404 ─────────────────────────────────────────
