@@ -1,0 +1,31 @@
+name: db-cleanup-dryrun
+
+# EPHEMERAL diagnostic workflow. Runs scripts/db_cleanup.py with NO flags, so it
+# is DRY-RUN by default — it MEASURES current sizes and prints how many rows each
+# prune step WOULD touch, and deletes nothing (never passes --apply).
+#
+# Fires on push to the working branch so the report lands in the Actions log
+# without needing a manual dispatch. Uses the existing DATABASE_URL secret (the
+# Supabase transaction-pooler URI the engine and app share). Delete this file
+# once the report has been read.
+on:
+  push:
+    branches: [claude/vibrant-archimedes-se9lx1]
+  workflow_dispatch:
+
+jobs:
+  db-cleanup-dryrun:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # db_cleanup.py imports only asyncpg (see requirements.txt), so install
+      # just that rather than the full app dependency set.
+      - run: pip install asyncpg==0.29.0
+      - name: db_cleanup.py — dry-run (measure + plan only, no --apply)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python scripts/db_cleanup.py
