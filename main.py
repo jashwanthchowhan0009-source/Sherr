@@ -54,7 +54,11 @@ import feeds_financial
 import timestamps
 
 # Which imagery the feed serves: stock | thumbnail | art. See image_service.py.
-IMAGE_MODE = (os.getenv("IMAGE_MODE") or "thumbnail").strip().lower()
+# Default is `stock` (dynamic Pexels photos): hotlinking the publisher's own image
+# is bandwidth theft and a copyright exposure, so the deployment serves licensed
+# stock keyed on each article's subject instead. Needs PEXELS_API_KEY; without it
+# stock falls back to generated art, never a publisher hotlink.
+IMAGE_MODE = (os.getenv("IMAGE_MODE") or "stock").strip().lower()
 # Imported as a MODULE as well as by name: _synthesise_clusters calls
 # ai_processor.synthesize through the module so a test can patch that one
 # seam. A from-import would bind the function here and the patch would
@@ -2119,6 +2123,73 @@ def article_row_to_dict(row) -> dict:
     return d
 
 
+def _image_query_entity(d: dict) -> "Optional[str]":
+    """The subject to query stock imagery on: the first micro-tag (a proper
+    entity), else the who_subject, else nothing (the pillar term alone carries)."""
+    tags = d.get("micro_tags") or []
+    if tags and str(tags[0]).strip():
+        return str(tags[0]).strip()
+    who = (d.get("who_subject") or "").strip()
+    return who or None
+
+
+async def _apply_stock_images(dicts: list) -> None:
+    """Replace publisher-hotlinked/placeholder imagery with a dynamic Pexels photo.
+
+    THE STOCK PATH WAS DEAD CODE — image_service.resolve_image existed but nothing
+    called it, so a card could only ever show the publisher's own image (bandwidth
+    theft + copyright exposure) or the generated-art placeholder. In `stock` mode
+    this resolves each article's image from Pexels, queried on its top entity +
+    pillar and cached BY QUERY inside image_service, so shared subjects cost one
+    call. A miss (no key, rate cap, nothing matched) leaves image_url empty and the
+    client falls back to art — imagery never blocks a response.
+
+    No-op unless IMAGE_MODE=stock, so thumbnail/art deployments are unchanged.
+    """
+    if not dicts:
+        return
+    try:
+        import image_service                                     # noqa: PLC0415
+    except Exception:                                            # noqa: BLE001
+        return
+    if image_service.mode() != "stock":
+        return
+    # Without a Pexels key there is nothing to resolve TO — do not touch the
+    # images article_row_to_dict already set, so a mis-set stock mode with no key
+    # degrades to the existing behaviour rather than blanking every card.
+    if not image_service.PEXELS_API_KEY:
+        return
+    # An article that already carries OUR OWN hosted image keeps it; everything
+    # else (a stored publisher hotlink, or nothing) is resolved to stock.
+    targets = [d for d in dicts
+               if str(d.get("image_source") or "").lower() not in ("own", "stock")]
+    if not targets:
+        return
+    async with httpx.AsyncClient() as client:
+        async def _one(d):
+            try:
+                res = await image_service.resolve_image(
+                    top_entity=_image_query_entity(d),
+                    pillar_slug=d.get("pillar_slug") or d.get("category"),
+                    source_og_image=None,   # stock mode never hotlinks the publisher
+                    source_name=d.get("orig_source"),
+                    client=client)
+            except Exception:                                    # noqa: BLE001
+                res = None
+            if res and res.get("image_url"):
+                d["image_url"] = res["image_url"]
+                d["image_source"] = res["image_source"]
+                d["image_credit"] = res["image_credit"]
+                d["image_query"] = res.get("image_query", "")
+            else:
+                # No stock image: make sure we are NOT left showing a publisher
+                # hotlink — clear it so the client renders generated art instead.
+                d["image_url"] = ""
+                d["image_source"] = "art"
+                d["image_credit"] = ""
+        await asyncio.gather(*[_one(d) for d in targets])
+
+
 # ─── CACHED STATIC ENDPOINTS ─────────────────────────────────────────────────
 @lru_cache(maxsize=1)
 def _topics_payload():
@@ -2342,6 +2413,7 @@ async def get_feed(
     has_more = len(rows) > limit
     payload = {"articles": [article_row_to_dict(r) for r in rows[:limit]],
                "page": page, "has_more": has_more, "has_preferences": has_p}
+    await _apply_stock_images(payload["articles"])
     await cache.set(ck, payload, FEED_CACHE_SECONDS)
     return payload
 
@@ -2431,9 +2503,13 @@ async def explore_feed(
         return {"articles": [article_row_to_dict(r) for r in rows[:limit]],
                 "has_more": has_more}
 
+    async def _produce_with_images():
+        payload = await asyncio.get_event_loop().run_in_executor(None, _produce)
+        await _apply_stock_images(payload.get("articles") or [])
+        return payload
+
     return await cache.get_or_set_stale(
-        ck, EXPLORE_CACHE_SECONDS,
-        lambda: asyncio.get_event_loop().run_in_executor(None, _produce))
+        ck, EXPLORE_CACHE_SECONDS, _produce_with_images)
 
 
 # ─── Explore page snapshot ────────────────────────────────────────────────────
@@ -2653,9 +2729,14 @@ async def explore_by_pillar(
         finally:
             conn.close()
 
+    async def _produce_with_images():
+        payload = await asyncio.get_event_loop().run_in_executor(None, _produce)
+        for row in payload.get("pillars") or []:
+            await _apply_stock_images(row.get("articles") or [])
+        return payload
+
     return await cache.get_or_set_stale(
-        ck, EXPLORE_CACHE_SECONDS,
-        lambda: asyncio.get_event_loop().run_in_executor(None, _produce))
+        ck, EXPLORE_CACHE_SECONDS, _produce_with_images)
 
 
 @app.get("/trending")
@@ -2671,7 +2752,9 @@ async def trending_feed(
         (limit,)
     ).fetchall()
     conn.close()
-    return {"articles": [article_row_to_dict(r) for r in rows]}
+    arts = [article_row_to_dict(r) for r in rows]
+    await _apply_stock_images(arts)
+    return {"articles": arts}
 
 
 def insight_row_to_dict(row) -> dict:
@@ -2856,7 +2939,9 @@ async def get_article(article_id: int, authorization: str = Header("")):
     )
     conn.commit()
     conn.close()
-    return article_row_to_dict(row)
+    d = article_row_to_dict(row)
+    await _apply_stock_images([d])
+    return d
 
 
 @app.get("/article/{article_id}/full")
@@ -3095,7 +3180,9 @@ async def search(request: Request, q: str = Query(""),
         (q_like, q_like)
     ).fetchall()
     conn.close()
-    return {"articles": [article_row_to_dict(r) for r in rows]}
+    arts = [article_row_to_dict(r) for r in rows]
+    await _apply_stock_images(arts)
+    return {"articles": arts}
 
 
 @app.get("/stats/categories")
@@ -3214,7 +3301,9 @@ async def get_bookmarks(request: Request, authorization: str = Header("")):
         WHERE b.user_id=? ORDER BY b.saved_at DESC
     """, (uid,)).fetchall()
     conn.close()
-    return {"articles": [article_row_to_dict(r) for r in rows]}
+    arts = [article_row_to_dict(r) for r in rows]
+    await _apply_stock_images(arts)
+    return {"articles": arts}
 
 
 @app.post("/bookmarks/{article_id}")

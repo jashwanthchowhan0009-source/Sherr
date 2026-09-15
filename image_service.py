@@ -38,8 +38,9 @@ log = logging.getLogger("sherbyte.images")
 
 # Must match main.py's default. These disagreed — "stock" here, "thumbnail"
 # there — so which imagery policy applied depended on which module happened
-# to read it. Unified on thumbnail, which is what the app actually serves.
-IMAGE_MODE = (os.getenv("IMAGE_MODE") or "thumbnail").strip().lower()
+# to read it. Both default to `stock`: dynamic, licensed Pexels imagery keyed on
+# the article's subject, rather than hotlinking the publisher's copyrighted image.
+IMAGE_MODE = (os.getenv("IMAGE_MODE") or "stock").strip().lower()
 PEXELS_API_KEY = (os.getenv("PEXELS_API_KEY") or "").strip()
 VALID_MODES = ("stock", "thumbnail", "art")
 
