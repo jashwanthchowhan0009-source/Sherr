@@ -214,6 +214,11 @@ async def plan_and_run(conn, args) -> None:
               "reclaims space where the pooler allows it).")
 
 
+def _qi(ident: str) -> str:
+    """Quote an identifier for safe interpolation (double any embedded quote)."""
+    return '"' + ident.replace('"', '""') + '"'
+
+
 def _mb(n) -> str:
     return "—" if n is None else f"{n / 1024 / 1024:,.1f} MB"
 
