@@ -388,6 +388,145 @@ async def _embedding_age_report(conn) -> None:
               f"{_mb(r['with_emb'] * _EMB_BYTES):>14}")
 
 
+def _parse_vec(text: str) -> list[float]:
+    return [float(x) for x in text.strip().lstrip("[").rstrip("]").split(",") if x]
+
+
+def _cos(a: list[float], b: list[float]) -> float:
+    dot = sum(x * y for x, y in zip(a, b))
+    na = sum(x * x for x in a) ** 0.5
+    nb = sum(y * y for y in b) ** 0.5
+    return dot / (na * nb) if na and nb else 0.0
+
+
+async def embed_probe(conn) -> None:
+    """Read-only. Settles whether public.info_objects.embedding holds real MiniLM
+    vectors or the md5-hash fallback, by inspecting the STORED vectors directly:
+
+      • fingerprint — a hash vector is SPARSE (nonzero dims ≈ distinct token
+        buckets, ≪ 384) and ALL-NON-NEGATIVE (it sums token counts); a MiniLM
+        vector is DENSE (all 384 nonzero) and MIXED-SIGN. This alone identifies
+        the code path that wrote them.
+      • cosine spread over a sample, plus the nearest neighbour of a few seeds
+        (headlines), so 'are neighbours actually related' is answerable, not
+        assumed."""
+    import itertools
+    import statistics
+
+    print("\n  === EMBEDDING PROBE (read-only) ===\n")
+    if not await _table_exists(conn, "public", "info_objects"):
+        print("  info_objects absent")
+        return
+    rows = await conn.fetch(
+        """SELECT id, left(headline, 68) AS h, embedding::text AS vec
+           FROM public.info_objects
+           WHERE embedding IS NOT NULL
+           ORDER BY published_at DESC NULLS LAST
+           LIMIT 24""")
+    if not rows:
+        print("  no rows carry an embedding")
+        return
+
+    print("  per-vector fingerprint  (hash = sparse & all ≥0; MiniLM = dense & mixed-sign):\n")
+    print(f"  {'nonzero/dim':>13}{'min':>9}{'max':>9}{'neg dims':>10}{'norm':>7}  headline")
+    print("  " + "-" * 92)
+    vecs: list[list[float]] = []
+    for r in rows:
+        v = _parse_vec(r["vec"])
+        vecs.append(v)
+        nz = sum(1 for x in v if x != 0.0)
+        neg = sum(1 for x in v if x < 0.0)
+        norm = sum(x * x for x in v) ** 0.5
+        print(f"  {nz:>7}/{len(v):<5}{min(v):>9.3f}{max(v):>9.3f}{neg:>10}"
+              f"{norm:>7.2f}  {r['h']}")
+
+    pair = [_cos(vecs[i], vecs[j])
+            for i, j in itertools.combinations(range(len(vecs)), 2)]
+    print(f"\n  pairwise cosine over {len(vecs)} sampled vectors: "
+          f"min {min(pair):.3f}  mean {statistics.mean(pair):.3f}  "
+          f"median {statistics.median(pair):.3f}  max {max(pair):.3f}")
+
+    print("\n  nearest neighbours by pgvector <=> (computed in-DB) for 3 seeds — "
+          "are they topically related?")
+    for s in rows[:3]:
+        nn = await conn.fetch(
+            """SELECT left(headline, 68) AS h,
+                      1 - (embedding <=> (SELECT embedding FROM public.info_objects WHERE id=$1)) AS sim
+               FROM public.info_objects
+               WHERE id <> $1 AND embedding IS NOT NULL
+               ORDER BY embedding <=> (SELECT embedding FROM public.info_objects WHERE id=$1)
+               LIMIT 3""",
+            s["id"])
+        print(f"\n    seed: {s['h']}")
+        for x in nn:
+            print(f"       sim {x['sim']:.3f}  {x['h']}")
+
+
+async def embed_purge(conn) -> None:
+    """DESTRUCTIVE, but chosen for what actually reclaims space on THIS DB.
+
+    DROP INDEX frees the HNSW index's pages to the OS immediately — a single
+    fast catalog DDL, no scan, no statement_timeout risk. That is the real,
+    reclaimable chunk.
+
+    It deliberately does NOT bulk-NULL the 93k embedding values, even though the
+    vectors are the md5-hash fallback. On this quota-throttled pooler a mass
+    UPDATE (a) hits the same statement_timeout that cancels a 5k-row DELETE, and
+    (b) writes 93k dead tuples whose space is not returned until a VACUUM FULL
+    the pooler won't run — so it would raise pg_database_size, not lower it. The
+    column should be nulled during the Neon migration / a maintenance window on a
+    direct (session-mode) connection instead. Pass --embed-null-force to attempt
+    it here anyway (tolerant: stops and reports on the first timeout)."""
+    force_null = "--embed-null-force" in sys.argv
+
+    print("\n  === EMBEDDING PURGE (DESTRUCTIVE) ===\n")
+    if not await _table_exists(conn, "public", "info_objects"):
+        print("  info_objects absent — nothing to do")
+        return
+    db = await conn.fetchval("SELECT current_database()")
+    size_before = await conn.fetchval("SELECT pg_database_size($1)", db)
+    idx_before = await conn.fetchval(
+        "SELECT pg_relation_size(to_regclass('public.idx_info_embedding_hnsw'))")
+    with_emb = await conn.fetchval(
+        "SELECT count(*) FROM public.info_objects WHERE embedding IS NOT NULL")
+    print(f"  {with_emb:,} rows carry an embedding; "
+          f"idx_info_embedding_hnsw = {_mb(idx_before or 0)}; "
+          f"database = {_mb(size_before)}\n")
+
+    print("  DROP INDEX idx_info_embedding_hnsw …", flush=True)
+    await conn.execute("DROP INDEX IF EXISTS public.idx_info_embedding_hnsw")
+    print("    ✓ dropped")
+    size_after_drop = await conn.fetchval("SELECT pg_database_size($1)", db)
+    print(f"  database {_mb(size_before)} → {_mb(size_after_drop)} "
+          f"(freed {_mb((size_before or 0) - (size_after_drop or 0))} immediately)")
+
+    if not force_null:
+        print("\n  NOT bulk-nulling the embedding values (see the note in the "
+              "source): on this throttled pooler it times out and adds dead-tuple "
+              "bloat that only VACUUM FULL can reclaim. Null the column during the "
+              "migration/maintenance window instead.")
+        return
+
+    print("\n  --embed-null-force: nulling embeddings in batches "
+          "(will stop cleanly on the first timeout)…")
+    total = 0
+    try:
+        while True:
+            status = await conn.execute(
+                "UPDATE public.info_objects SET embedding=NULL WHERE ctid = ANY(ARRAY("
+                "  SELECT ctid FROM public.info_objects WHERE embedding IS NOT NULL "
+                f"  LIMIT {BATCH}))")
+            n = int(status.rsplit(" ", 1)[-1]) if status.startswith("UPDATE") else 0
+            total += n
+            if n:
+                print(f"    … nulled {total:,}", flush=True)
+            if n < BATCH:
+                break
+        print(f"  nulled {total:,} embeddings.")
+    except Exception as ex:                                        # noqa: BLE001
+        print(f"  stopped after {total:,}: {type(ex).__name__}: {ex}")
+
+
 async def deep_audit(conn) -> None:
     """Read-only. Everything here is SELECT/catalog only — it never deletes and
     is wrapped so a failure in any section prints and moves on rather than
@@ -421,6 +560,19 @@ async def main() -> None:
                          "(table/toast/index split), large indexes by method, the "
                          "per-column footprint of the app articles table, and the "
                          "embedding cost by row age")
+    ap.add_argument("--embed-probe", action="store_true",
+                    help="read-only: inspect stored info_objects.embedding vectors "
+                         "(fingerprint + cosine + nearest neighbours) to confirm "
+                         "whether they are real MiniLM or the md5-hash fallback")
+    ap.add_argument("--embed-purge", action="store_true",
+                    help="DESTRUCTIVE: DROP the info_objects HNSW index (reclaims it "
+                         "immediately). Standalone — does not run the row-pruning "
+                         "plan, and does NOT bulk-null embeddings unless "
+                         "--embed-null-force is also given.")
+    ap.add_argument("--embed-null-force", action="store_true",
+                    help="with --embed-purge: also attempt to NULL every embedding "
+                         "in batches (tolerant of the pooler timeout). Off by default "
+                         "because on a throttled DB it adds unreclaimable bloat.")
     args = ap.parse_args()
 
     # statement_cache_size=0 is REQUIRED against Supabase's transaction pooler
@@ -429,6 +581,14 @@ async def main() -> None:
     # the same fix schema_audit.py already carries for the same DSN.
     conn = await asyncpg.connect(_dsn(), statement_cache_size=0)
     try:
+        if args.embed_probe:
+            await embed_probe(conn)
+            return
+        if args.embed_purge:
+            await embed_purge(conn)
+            print("\n  --- sizes after purge ---")
+            await measure(conn)
+            return
         await measure(conn)
         await plan_and_run(conn, args)
         if args.apply and not args.no_vacuum:

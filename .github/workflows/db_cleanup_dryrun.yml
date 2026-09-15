@@ -23,6 +23,16 @@ on:
         required: false
         default: false
         type: boolean
+      probe:
+        description: "Read-only: inspect stored info_objects.embedding vectors (hash vs MiniLM)."
+        required: false
+        default: false
+        type: boolean
+      purge_embeddings:
+        description: "DESTRUCTIVE: NULL every info_objects.embedding and DROP its HNSW index, then re-measure."
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   db-cleanup:
@@ -42,6 +52,18 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: python scripts/db_cleanup.py --apply
+
+      - name: PROBE — inspect stored embedding vectors (read-only)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.probe }}
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python scripts/db_cleanup.py --embed-probe
+
+      - name: PURGE EMBEDDINGS — null all + drop HNSW index (DESTRUCTIVE)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.purge_embeddings }}
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python scripts/db_cleanup.py --embed-purge
 
       # Always runs: on push, and after an --apply dispatch it reports the
       # reclaimed (post-VACUUM) sizes. Never passes --apply, so it only measures.
