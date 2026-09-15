@@ -45,7 +45,10 @@ jobs:
 
       # Always runs: on push, and after an --apply dispatch it reports the
       # reclaimed (post-VACUUM) sizes. Never passes --apply, so it only measures.
-      - name: db_cleanup.py — dry-run (measure + plan only, no --apply)
+      # --audit adds the read-only breakdown: every relation > 5 MB split into
+      # table/toast/index, large indexes by access method (HNSW visible), the
+      # per-column footprint of the app articles table, and embedding cost by age.
+      - name: db_cleanup.py — dry-run + audit (measure only, no --apply)
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: python scripts/db_cleanup.py
+        run: python scripts/db_cleanup.py --audit

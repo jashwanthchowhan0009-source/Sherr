@@ -161,6 +161,180 @@ async def plan_and_run(conn, args) -> None:
         print("  Re-run with --apply to execute, then it VACUUM FULLs to reclaim space.")
 
 
+def _mb(n) -> str:
+    return "—" if n is None else f"{n / 1024 / 1024:,.1f} MB"
+
+
+# Fixed display order for the embedding age buckets below.
+_AGE_BUCKETS = ["0-30 d", "31-90 d", "91-365 d", ">365 d", "no/blank date"]
+
+
+async def _relation_breakdown(conn, schemas) -> None:
+    """Every relation > 5 MB in the given schemas, split table / toast / index.
+
+    `pg_total_relation_size` = heap + toast (large-value overflow) + all indexes,
+    so the earlier three-table report (which summed pg_total_relation_size) was
+    already counting each table's own indexes and toast — the "missing" space is
+    the OTHER relations this lists. Splitting the total makes it obvious where a
+    relation's bytes actually live (a fat toast = big text/blob columns; a fat
+    index total = an ANN/HNSW index, itemised separately below)."""
+    print("\n  relations > 5 MB  (total = heap + toast + indexes):\n")
+    print(f"  {'relation':<40}{'total':>11}{'heap':>11}{'toast':>11}{'indexes':>11}")
+    print("  " + "-" * 84)
+    rows = await conn.fetch(
+        """
+        SELECT n.nspname AS schema, c.relname AS name,
+               pg_total_relation_size(c.oid)                       AS total,
+               pg_relation_size(c.oid)                             AS heap,
+               COALESCE(pg_total_relation_size(c.reltoastrelid),0) AS toast,
+               pg_indexes_size(c.oid)                              AS indexes
+        FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = ANY($1::text[])
+          AND c.relkind IN ('r', 'm', 'p')
+          AND pg_total_relation_size(c.oid) > 5 * 1024 * 1024
+        ORDER BY total DESC
+        """,
+        list(schemas),
+    )
+    total = 0
+    for r in rows:
+        total += r["total"]
+        print(f"  {r['schema'] + '.' + r['name']:<40}"
+              f"{_mb(r['total']):>11}{_mb(r['heap']):>11}"
+              f"{_mb(r['toast']):>11}{_mb(r['indexes']):>11}")
+    print("  " + "-" * 84)
+    print(f"  {'sum of relations > 5 MB':<40}{_mb(total):>11}")
+
+
+async def _index_breakdown(conn, schemas) -> None:
+    """Individual indexes > 5 MB, tagged with their access method — so an HNSW
+    vector index on an embedding column is visible on its own line, separately
+    from the b-tree indexes, rather than folded into a table's index total."""
+    print("\n  indexes > 5 MB  (method exposes hnsw/ivfflat vector indexes):\n")
+    print(f"  {'index':<48}{'method':>9}{'size':>11}")
+    print("  " + "-" * 68)
+    rows = await conn.fetch(
+        """
+        SELECT n.nspname AS schema, c.relname AS index_name,
+               t.relname AS on_table, am.amname AS method,
+               pg_relation_size(c.oid) AS size
+        FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        JOIN pg_index i ON i.indexrelid = c.oid
+        JOIN pg_class t ON t.oid = i.indrelid
+        JOIN pg_am am ON am.oid = c.relam
+        WHERE n.nspname = ANY($1::text[])
+          AND c.relkind = 'i'
+          AND pg_relation_size(c.oid) > 5 * 1024 * 1024
+        ORDER BY size DESC
+        """,
+        list(schemas),
+    )
+    for r in rows:
+        print(f"  {r['schema'] + '.' + r['index_name']:<48}"
+              f"{r['method']:>9}{_mb(r['size']):>11}   on {r['on_table']}")
+
+
+async def _column_footprint(conn, schema, table) -> None:
+    """Per-column bytes for one table, so 'this table is big' becomes 'THIS
+    column is big'. One sequential pass summing pg_column_size() per column,
+    ranked so the dominant column (full body text, raw HTML, a base64 image, an
+    embedding) is unambiguous."""
+    print(f"\n  per-column footprint of {schema}.{table} "
+          f"(sum of pg_column_size, ranked):\n")
+    if not await _table_exists(conn, schema, table):
+        print("  (absent)")
+        return
+    cols = await conn.fetch(
+        """SELECT column_name, data_type FROM information_schema.columns
+           WHERE table_schema = $1 AND table_name = $2
+           ORDER BY ordinal_position""",
+        schema, table,
+    )
+    n = await conn.fetchval(f"SELECT count(*) FROM {schema}.{table}")
+    if not cols or not n:
+        print("  (no columns / empty)")
+        return
+    select = ", ".join(
+        f'sum(pg_column_size({_qi(c["column_name"])}))::bigint AS c{i}'
+        for i, c in enumerate(cols))
+    row = await conn.fetchrow(f"SELECT {select} FROM {schema}.{table}")
+    stats = sorted(
+        ((c["column_name"], c["data_type"], row[f"c{i}"] or 0)
+         for i, c in enumerate(cols)),
+        key=lambda x: x[2], reverse=True)
+    print(f"  {n:,} rows\n")
+    print(f"  {'column':<26}{'type':<24}{'total':>11}{'avg/row':>12}")
+    print("  " + "-" * 73)
+    for name, typ, tot in stats:
+        print(f"  {name:<26}{typ:<24}{_mb(tot):>11}{tot / n:>10,.0f} B")
+
+
+async def _embedding_age_report(conn) -> None:
+    """public.info_objects embeddings bucketed by row age, with the byte cost of
+    each bucket. This is the number the retention-window question turns on: how
+    many embeddings (and MB) live in each age band, so shortening the window from
+    90 to 30 days has a measured cost rather than an assumed one."""
+    print("\n  public.info_objects — embedding cost by row age:\n")
+    if not await _table_exists(conn, "public", "info_objects"):
+        print("  (absent)")
+        return
+    rows = await conn.fetch(
+        """
+        SELECT bucket,
+               count(*)                            AS rows,
+               count(*) FILTER (WHERE has_emb)     AS with_emb,
+               COALESCE(sum(emb_bytes), 0)::bigint AS emb_bytes
+        FROM (
+          SELECT
+            CASE
+              WHEN age IS NULL                THEN 'no/blank date'
+              WHEN age <= interval '30 days'  THEN '0-30 d'
+              WHEN age <= interval '90 days'  THEN '31-90 d'
+              WHEN age <= interval '365 days' THEN '91-365 d'
+              ELSE '>365 d'
+            END                       AS bucket,
+            (embedding IS NOT NULL)   AS has_emb,
+            pg_column_size(embedding) AS emb_bytes
+          FROM (
+            SELECT embedding,
+                   now() - NULLIF(published_at::text, '')::timestamptz AS age
+            FROM public.info_objects
+          ) a
+        ) b
+        GROUP BY bucket
+        """)
+    by = {r["bucket"]: r for r in rows}
+    print(f"  {'age bucket':<16}{'rows':>12}{'with embedding':>16}{'embedding bytes':>18}")
+    print("  " + "-" * 62)
+    for bucket in _AGE_BUCKETS:
+        r = by.get(bucket)
+        if not r:
+            continue
+        print(f"  {bucket:<16}{r['rows']:>12,}{r['with_emb']:>16,}"
+              f"{_mb(r['emb_bytes']):>18}")
+
+
+async def deep_audit(conn) -> None:
+    """Read-only. Everything here is SELECT/catalog only — it never deletes and
+    is wrapped so a failure in any section prints and moves on rather than
+    aborting the run (important: measure/plan already ran by the time this is
+    called)."""
+    schemas = ["public", APP_SCHEMA]
+    print("\n  === DEEP AUDIT (read-only) ===")
+    for section in (
+        lambda: _relation_breakdown(conn, schemas),
+        lambda: _index_breakdown(conn, schemas),
+        lambda: _column_footprint(conn, APP_SCHEMA, "articles"),
+        lambda: _embedding_age_report(conn),
+    ):
+        try:
+            await section()
+        except Exception as ex:                                    # noqa: BLE001
+            print(f"  [section failed: {type(ex).__name__}: {ex}]")
+
+
 async def main() -> None:
     ap = argparse.ArgumentParser(description="Prune the Supabase DB under its cap.")
     ap.add_argument("--days", type=int, default=60)
@@ -170,6 +344,11 @@ async def main() -> None:
                     help="actually delete + VACUUM FULL (default is dry-run)")
     ap.add_argument("--no-vacuum", action="store_true",
                     help="skip VACUUM FULL (deletes still run under --apply)")
+    ap.add_argument("--audit", action="store_true",
+                    help="read-only: after measuring, print every relation > 5 MB "
+                         "(table/toast/index split), large indexes by method, the "
+                         "per-column footprint of the app articles table, and the "
+                         "embedding cost by row age")
     args = ap.parse_args()
 
     conn = await asyncpg.connect(_dsn())
@@ -179,6 +358,8 @@ async def main() -> None:
         if args.apply and not args.no_vacuum:
             print("\n  --- sizes after cleanup ---")
             await measure(conn)
+        if args.audit:
+            await deep_audit(conn)
     finally:
         await conn.close()
 
