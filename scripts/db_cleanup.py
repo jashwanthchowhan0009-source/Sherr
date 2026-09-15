@@ -105,9 +105,52 @@ async def measure(conn) -> None:
         print(f"\n  public.info_objects with a non-NULL embedding: {with_emb:,}")
 
 
+BATCH = 5000  # rows per statement — small enough to finish under statement_timeout
+
+
+async def _batched_delete(conn, table, where, arg) -> int:
+    """DELETE in ctid-bounded batches. A single bulk DELETE of tens of thousands
+    of rows exceeds Supabase's server-side statement_timeout and is cancelled
+    (observed: 82k rows → QueryCanceledError). Each batch is its own autocommit
+    statement, so progress survives even if a later batch is interrupted."""
+    total = 0
+    while True:
+        status = await conn.execute(
+            f"DELETE FROM {table} WHERE ctid = ANY(ARRAY("
+            f"  SELECT ctid FROM {table} WHERE {where} LIMIT {BATCH}))",
+            arg,
+        )
+        n = int(status.rsplit(" ", 1)[-1]) if status.startswith("DELETE") else 0
+        total += n
+        if n:
+            print(f"    … deleted {total:,} from {table}", flush=True)
+        if n < BATCH:
+            return total
+
+
+async def _batched_null(conn, table, col, where, arg) -> int:
+    """SET col=NULL in batches. The `col IS NOT NULL` predicate in `where` makes
+    each updated row drop out of the next batch, so the loop always makes
+    progress and terminates."""
+    total = 0
+    while True:
+        status = await conn.execute(
+            f"UPDATE {table} SET {col}=NULL WHERE ctid = ANY(ARRAY("
+            f"  SELECT ctid FROM {table} WHERE {where} LIMIT {BATCH}))",
+            arg,
+        )
+        n = int(status.rsplit(" ", 1)[-1]) if status.startswith("UPDATE") else 0
+        total += n
+        if n:
+            print(f"    … nulled {total:,} {col} in {table}", flush=True)
+        if n < BATCH:
+            return total
+
+
 async def plan_and_run(conn, args) -> None:
     apply = args.apply
-    header = "APPLYING" if apply else "DRY-RUN (nothing deleted — pass --apply)"
+    header = ("APPLYING (batched to fit statement_timeout)" if apply
+              else "DRY-RUN (nothing deleted — pass --apply)")
     print(f"\n  === {header} ===\n")
     total = 0
 
@@ -123,10 +166,9 @@ async def plan_and_run(conn, args) -> None:
             f"SELECT count(*) FROM {schema}.{table} WHERE {where}", str(days))
         total += n
         print(f"  {schema}.{table}: {n:,} rows older than {days}d"
-              + (" → DELETE" if apply else " would be deleted"))
+              + (" → DELETE (batched)" if apply else " would be deleted"))
         if apply and n:
-            await conn.execute(
-                f"DELETE FROM {schema}.{table} WHERE {where}", str(days))
+            await _batched_delete(conn, f"{schema}.{table}", where, str(days))
 
     # Drop old embeddings (keep the row, null the vector).
     if await _table_exists(conn, "public", "info_objects"):
@@ -137,28 +179,39 @@ async def plan_and_run(conn, args) -> None:
             str(args.embedding_days))
         print(f"  public.info_objects: {n:,} embeddings older than "
               f"{args.embedding_days}d"
-              + (" → SET NULL" if apply else " would be nulled"))
+              + (" → SET NULL (batched)" if apply else " would be nulled"))
         if apply and n:
-            await conn.execute(
-                f"UPDATE public.info_objects SET embedding=NULL WHERE {where}",
-                str(args.embedding_days))
+            await _batched_null(conn, "public.info_objects", "embedding",
+                                where, str(args.embedding_days))
 
     print(f"\n  {'DELETED' if apply else 'would delete'} {total:,} rows total.")
 
     if apply:
-        # VACUUM FULL returns the freed pages to the OS. It takes an ACCESS
-        # EXCLUSIVE lock and cannot run in a transaction — asyncpg is autocommit
-        # here, so these run one at a time. Skippable with --no-vacuum on a busy DB.
+        # VACUUM FULL is what actually returns freed pages to the OS, but it takes
+        # an ACCESS EXCLUSIVE lock, cannot run in a transaction, and through the
+        # transaction pooler routinely exceeds statement_timeout on a large table
+        # (and would lock the live app for the rewrite). Each table is attempted
+        # independently and a timeout/refusal is reported per table rather than
+        # failing the whole run — so the batched deletes above still stand.
         if args.no_vacuum:
-            print("  skipping VACUUM FULL (--no-vacuum).")
+            print("  skipping VACUUM FULL (--no-vacuum). NOTE: the deleted rows are "
+                  "now dead tuples — their space is reused by future writes but is "
+                  "NOT returned to the OS, so pg_database_size stays flat until a "
+                  "VACUUM FULL (or pg_repack) runs.")
         else:
             for schema, table, _ in PRUNE_TARGETS + [("public", "info_objects", "")]:
                 if await _table_exists(conn, schema, table):
                     print(f"  VACUUM FULL {schema}.{table} …", flush=True)
-                    await conn.execute(f"VACUUM FULL {schema}.{table}")
+                    try:
+                        await conn.execute(f"VACUUM FULL {schema}.{table}")
+                        print(f"    ✓ reclaimed {schema}.{table}")
+                    except Exception as ex:                        # noqa: BLE001
+                        print(f"    ✗ {schema}.{table}: {type(ex).__name__}: {ex}")
+                        print("      (space NOT returned to OS for this table)")
         print("\n  Done. Re-run without --apply to confirm the new sizes.")
     else:
-        print("  Re-run with --apply to execute, then it VACUUM FULLs to reclaim space.")
+        print("  Re-run with --apply to execute (batched deletes; VACUUM FULL "
+              "reclaims space where the pooler allows it).")
 
 
 def _mb(n) -> str:
@@ -238,11 +291,14 @@ async def _index_breakdown(conn, schemas) -> None:
 
 async def _column_footprint(conn, schema, table) -> None:
     """Per-column bytes for one table, so 'this table is big' becomes 'THIS
-    column is big'. One sequential pass summing pg_column_size() per column,
-    ranked so the dominant column (full body text, raw HTML, a base64 image, an
-    embedding) is unambiguous."""
+    column is big', ranked so the dominant column (full body text, raw HTML, a
+    base64 image, an embedding) is unambiguous.
+
+    SAMPLED with TABLESAMPLE SYSTEM (reads a few random pages, not the whole
+    116 MB table) so it never trips statement_timeout on the toasted text
+    columns; the per-column average is extrapolated to the full row count."""
     print(f"\n  per-column footprint of {schema}.{table} "
-          f"(sum of pg_column_size, ranked):\n")
+          f"(sampled avg × row count):\n")
     if not await _table_exists(conn, schema, table):
         print("  (absent)")
         return
@@ -257,63 +313,74 @@ async def _column_footprint(conn, schema, table) -> None:
         print("  (no columns / empty)")
         return
     select = ", ".join(
-        f'sum(pg_column_size({_qi(c["column_name"])}))::bigint AS c{i}'
+        f'avg(pg_column_size({_qi(c["column_name"])}))::float8 AS c{i}'
         for i, c in enumerate(cols))
-    row = await conn.fetchrow(f"SELECT {select} FROM {schema}.{table}")
+    row, sampled = None, 0
+    for pct in (3, 15, 60):                       # widen until a page is sampled
+        r = await conn.fetchrow(
+            f"SELECT count(*) AS s, {select} FROM {schema}.{table} "
+            f"TABLESAMPLE SYSTEM ({pct})")
+        if r and r["s"]:
+            row, sampled = r, r["s"]
+            break
+    if row is None:                               # tiny table — a full scan is cheap
+        row = await conn.fetchrow(
+            f"SELECT count(*) AS s, {select} FROM {schema}.{table}")
+        sampled = row["s"] or 1
     stats = sorted(
-        ((c["column_name"], c["data_type"], row[f"c{i}"] or 0)
+        ((c["column_name"], c["data_type"], (row[f"c{i}"] or 0.0))
          for i, c in enumerate(cols)),
         key=lambda x: x[2], reverse=True)
-    print(f"  {n:,} rows\n")
-    print(f"  {'column':<26}{'type':<24}{'total':>11}{'avg/row':>12}")
+    print(f"  {n:,} rows total; sampled {sampled:,}\n")
+    print(f"  {'column':<26}{'type':<22}{'avg/row':>12}{'est. total':>13}")
     print("  " + "-" * 73)
-    for name, typ, tot in stats:
-        print(f"  {name:<26}{typ:<24}{_mb(tot):>11}{tot / n:>10,.0f} B")
+    for name, typ, avg in stats:
+        print(f"  {name:<26}{typ:<22}{avg:>10,.0f} B{_mb(avg * n):>13}")
+
+
+_EMB_BYTES = 384 * 4 + 8  # vector(384) on-disk ≈ 1544 B/row
 
 
 async def _embedding_age_report(conn) -> None:
-    """public.info_objects embeddings bucketed by row age, with the byte cost of
-    each bucket. This is the number the retention-window question turns on: how
-    many embeddings (and MB) live in each age band, so shortening the window from
-    90 to 30 days has a measured cost rather than an assumed one."""
-    print("\n  public.info_objects — embedding cost by row age:\n")
+    """public.info_objects embeddings bucketed by row age. This is the number the
+    retention-window question turns on: how many embeddings live in each age
+    band, so shortening 90 → 30 days has a measured cost rather than an assumed
+    one. Counts only (the NULL check reads the null bitmap, never detoasts the
+    vector), with size estimated as rows × the fixed 384-d vector width, so the
+    query stays well under statement_timeout."""
+    print(f"\n  public.info_objects — embeddings by row age "
+          f"(size ≈ rows × {_EMB_BYTES} B for a 384-d vector):\n")
     if not await _table_exists(conn, "public", "info_objects"):
         print("  (absent)")
         return
     rows = await conn.fetch(
         """
-        SELECT bucket,
-               count(*)                            AS rows,
-               count(*) FILTER (WHERE has_emb)     AS with_emb,
-               COALESCE(sum(emb_bytes), 0)::bigint AS emb_bytes
+        SELECT
+          CASE
+            WHEN age IS NULL                THEN 'no/blank date'
+            WHEN age <= interval '30 days'  THEN '0-30 d'
+            WHEN age <= interval '90 days'  THEN '31-90 d'
+            WHEN age <= interval '365 days' THEN '91-365 d'
+            ELSE '>365 d'
+          END                             AS bucket,
+          count(*)                        AS rows,
+          count(*) FILTER (WHERE has_emb) AS with_emb
         FROM (
-          SELECT
-            CASE
-              WHEN age IS NULL                THEN 'no/blank date'
-              WHEN age <= interval '30 days'  THEN '0-30 d'
-              WHEN age <= interval '90 days'  THEN '31-90 d'
-              WHEN age <= interval '365 days' THEN '91-365 d'
-              ELSE '>365 d'
-            END                       AS bucket,
-            (embedding IS NOT NULL)   AS has_emb,
-            pg_column_size(embedding) AS emb_bytes
-          FROM (
-            SELECT embedding,
-                   now() - NULLIF(published_at::text, '')::timestamptz AS age
-            FROM public.info_objects
-          ) a
-        ) b
-        GROUP BY bucket
+          SELECT (embedding IS NOT NULL) AS has_emb,
+                 now() - NULLIF(published_at::text, '')::timestamptz AS age
+          FROM public.info_objects
+        ) a
+        GROUP BY 1
         """)
     by = {r["bucket"]: r for r in rows}
-    print(f"  {'age bucket':<16}{'rows':>12}{'with embedding':>16}{'embedding bytes':>18}")
-    print("  " + "-" * 62)
+    print(f"  {'age bucket':<16}{'rows':>12}{'with embedding':>16}{'≈ size':>14}")
+    print("  " + "-" * 58)
     for bucket in _AGE_BUCKETS:
         r = by.get(bucket)
         if not r:
             continue
         print(f"  {bucket:<16}{r['rows']:>12,}{r['with_emb']:>16,}"
-              f"{_mb(r['emb_bytes']):>18}")
+              f"{_mb(r['with_emb'] * _EMB_BYTES):>14}")
 
 
 async def deep_audit(conn) -> None:
@@ -351,7 +418,11 @@ async def main() -> None:
                          "embedding cost by row age")
     args = ap.parse_args()
 
-    conn = await asyncpg.connect(_dsn())
+    # statement_cache_size=0 is REQUIRED against Supabase's transaction pooler
+    # (pgbouncer): cached server-side prepared statements collide across pooled
+    # backends and raise DuplicatePreparedStatementError intermittently. This is
+    # the same fix schema_audit.py already carries for the same DSN.
+    conn = await asyncpg.connect(_dsn(), statement_cache_size=0)
     try:
         await measure(conn)
         await plan_and_run(conn, args)
