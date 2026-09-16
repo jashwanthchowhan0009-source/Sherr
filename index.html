@@ -2401,37 +2401,43 @@ body.dp-open .phone { visibility: hidden !important; }
 .spie-banner.is-error { color: #EF4444; background: rgba(239,68,68,0.12);
   border: 1px solid rgba(239,68,68,0.28); }
 
-/* ─── myFeed — one dossier card per screen (vertical snap) ─── */
+/* ─── myFeed — one dossier card per screen (vertical snap), Inshorts-style ─── */
 #v-myfeed { inset: 0; }
+/* myFeed reclaims the top of the screen: the global header is hidden on this
+   view, and the satellite FAB is removed app-wide for now. */
+body[data-view="myfeed"] #hdr { display: none; }
+#nb-scan { display: none; }
 .myfeed-feed { width: 100%; height: 100%; overflow-y: scroll; scroll-snap-type: y mandatory; }
 .myfeed-empty { height: 100%; display: flex; align-items: center; justify-content: center;
   text-align: center; color: var(--t1); font-size: 1.05rem; line-height: 1.7; padding: 28px; }
 .myfeed-empty span { font-size: 0.82rem; color: var(--t2); font-weight: 500; }
-/* Design template: rounded image on top, News·Strings·Dots tabs + logo beneath it,
-   a persistent headline + id chip, then a swipeable body, then the action bar. */
 .mf-item { position: relative; height: 100%; scroll-snap-align: start; scroll-snap-stop: always;
   display: flex; flex-direction: column;
-  padding: calc(var(--hh) + 10px) 11px calc(var(--nh) + 12px);
+  padding: calc(env(safe-area-inset-top,0px) + 6px) 10px calc(var(--nh) + 10px);
   animation: mfIn 0.42s var(--ease); }
 @keyframes mfIn { from { opacity: .35; transform: translateY(18px); } to { opacity: 1; transform: none; } }
-.mf-card { display: flex; flex-direction: column; width: 100%; height: 100%; overflow: hidden;
-  background: #0E0E11; color: #F3F3F5; border-radius: 24px;
+/* The whole card is ONE vertical scroll: image (with the tabs on it), headline,
+   the active pane, then a sticky action bar — so reading scrolls the image up
+   out of view (Inshorts) instead of a fixed image over a separate scroller. */
+.mf-card { position: relative; display: flex; flex-direction: column; width: 100%; height: 100%;
+  overflow-y: auto; -webkit-overflow-scrolling: touch;
+  background: #0E0E11; color: #F3F3F5; border-radius: 22px;
   border: 1px solid rgba(255,255,255,.06); }
 [data-theme="light"] .mf-card { background: #FFFFFF; color: #16171A;
   border-color: rgba(0,0,0,.07); box-shadow: 0 12px 34px rgba(0,0,0,.10); }
-/* image — a rounded block at the TOP of the card */
-.mf-media { position: relative; width: 100%; height: 37%; min-height: 166px; flex-shrink: 0;
-  background-size: cover; background-position: center; cursor: pointer;
-  border-radius: 24px 24px 0 0;
+/* image — big block at the top; scrolls with the content, tabs sit on its lower edge */
+.mf-media { position: relative; width: 100%; height: 33vh; min-height: 176px; max-height: 280px;
+  flex-shrink: 0; background-size: cover; background-position: center; cursor: pointer;
+  border-radius: 22px 22px 0 0;
   display: flex; align-items: center; justify-content: center; }
 .mf-media::after { content: ''; position: absolute; inset: 0; border-radius: inherit;
-  background: linear-gradient(180deg, transparent 58%, rgba(0,0,0,.30)); pointer-events: none; }
+  background: linear-gradient(180deg, transparent 42%, rgba(0,0,0,.55)); pointer-events: none; }
 .mf-media-ico { width: 46px; height: 46px; fill: none; stroke: rgba(255,255,255,.5);
   stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
-/* persistent headline + id chip (shared across all three tabs, per the sketch) */
-.mfd-head { flex-shrink: 0; display: flex; flex-direction: column; gap: 9px; padding: 2px 16px 11px; }
-.mf-headline { font-family: var(--fd); font-size: 1.5rem; font-weight: 800; line-height: 1.3;
-  letter-spacing: -0.4px; cursor: pointer; margin: 0; }
+/* headline + id chip — scroll WITH the content (not pinned), smaller than before */
+.mfd-head { flex-shrink: 0; display: flex; flex-direction: column; gap: 8px; padding: 13px 16px 4px; }
+.mf-headline { font-family: var(--fd); font-size: 1.18rem; font-weight: 700; line-height: 1.32;
+  letter-spacing: -0.2px; cursor: pointer; margin: 0; }
 
 /* ─── Phase 6: source links + glass article actions ─── */
 .ao-sources { margin: 16px 0 6px; }
@@ -5011,45 +5017,45 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 .mf-badge::before{content:'';position:absolute;left:8px;top:4px;bottom:4px;
   border-left:2px dotted rgba(255,255,255,.6);}
 .mf-badge.dark::before{border-color:rgba(0,0,0,.35);}
-/* tab row under the image: segmented News · Strings · Dots + brand logo at right */
-.mf-tabrow{display:flex;align-items:center;gap:10px;flex-shrink:0;padding:11px 14px 8px;}
-.mfd-tabs{display:flex;gap:4px;flex:1;border-radius:13px;padding:3px;
-  background:rgba(255,255,255,.06);}
-[data-theme="light"] .mfd-tabs{background:rgba(0,0,0,.05);}
-.mfd-tab{flex:1;border:0;background:transparent;color:var(--t2);
-  font-size:.86rem;font-weight:700;padding:8px 4px;border-radius:10px;cursor:pointer;
+/* tab row — overlaid on the LOWER edge of the image (sketch #5): segmented
+   News · Strings · Dots on the left, the brand logo on the right. */
+.mf-tabrow{position:absolute;left:0;right:0;bottom:0;z-index:2;
+  display:flex;align-items:center;gap:10px;padding:10px 12px;}
+.mfd-tabs{display:flex;gap:4px;flex:1;border-radius:12px;padding:3px;
+  background:rgba(12,12,15,.55);-webkit-backdrop-filter:blur(9px);backdrop-filter:blur(9px);
+  border:1px solid rgba(255,255,255,.14);}
+.mfd-tab{flex:1;border:0;background:transparent;color:rgba(255,255,255,.74);
+  font-size:.82rem;font-weight:700;padding:7px 4px;border-radius:9px;cursor:pointer;
   transition:color .15s var(--ease),background .15s var(--ease);}
-.mfd-tab.on{background:#26262d;color:#fff;box-shadow:0 1px 2px rgba(0,0,0,.28);}
-[data-theme="light"] .mfd-tab.on{background:#fff;color:#16171A;box-shadow:0 1px 3px rgba(0,0,0,.12);}
-.mfd-tab.pending{opacity:.5;}
-.mf-logo{width:32px;height:32px;border-radius:9px;flex-shrink:0;overflow:hidden;
+.mfd-tab.on{background:#fff;color:#111214;box-shadow:0 1px 3px rgba(0,0,0,.3);}
+.mfd-tab.pending{opacity:.55;}
+.mf-logo{width:40px;height:40px;border-radius:11px;flex-shrink:0;overflow:hidden;
   display:flex;align-items:center;justify-content:center;
-  background:#0E0E11;border:1px solid rgba(255,255,255,.14);}
-[data-theme="light"] .mf-logo{border-color:rgba(0,0,0,.18);}
+  background:rgba(12,12,15,.55);-webkit-backdrop-filter:blur(9px);backdrop-filter:blur(9px);
+  border:1px solid rgba(255,255,255,.18);}
 .mf-logo img{width:100%;height:100%;object-fit:cover;display:block;}
-.mf-logo-svg{width:19px;height:19px;fill:none;stroke:#fff;stroke-width:1.9;
-  stroke-linecap:round;}
-/* swipeable pane viewport — slide left/right between News/Strings/Dots */
-.mfd-view{position:relative;flex:1;min-height:0;overflow:hidden;}
-.mfd-track{display:flex;height:100%;transition:transform .3s var(--ease);will-change:transform;}
-.mfd-track.dragging{transition:none;}
-.mfd-pane{flex:0 0 100%;height:100%;overflow:hidden;}
-.mfd-scroll{height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch;
-  padding:2px 16px 15px;display:flex;flex-direction:column;gap:13px;}
+.mf-logo-svg{width:20px;height:20px;fill:none;stroke:#fff;stroke-width:1.9;stroke-linecap:round;}
+/* the three panes — only the active one shows; a tap or a sideways swipe on the
+   text switches with a slide-in. The card (not the pane) owns vertical scroll. */
+.mfd-panes{position:relative;flex:1 0 auto;}
+.mfd-pane{display:none;}
+.mfd-pane.on{display:block;animation:mfPaneIn .26s var(--ease);}
+@keyframes mfPaneIn{from{opacity:0;transform:translateX(var(--mf-in,10px));}to{opacity:1;transform:none;}}
+.mfd-scroll{padding:12px 16px 8px;display:flex;flex-direction:column;gap:12px;}
 /* News pane — id chip + status, then badge-led blocks (the "colour box" leads each) */
 .mfd-sig{display:flex;align-items:center;gap:9px;flex-wrap:wrap;font-size:.72rem;}
-.mfd-sigid{font-family:ui-monospace,Menlo,monospace;color:var(--accent);
-  background:rgba(10,132,255,.12);padding:3px 9px;border-radius:7px;font-weight:800;letter-spacing:.05em;}
+.mfd-sigid{font-family:ui-monospace,Menlo,monospace;color:var(--accent);font-size:.82rem;
+  background:rgba(10,132,255,.14);padding:5px 12px;border-radius:8px;font-weight:800;letter-spacing:.04em;}
 .mfd-verify{display:inline-flex;align-items:center;gap:6px;color:var(--t2);font-weight:600;}
 .mfd-verify .d{width:7px;height:7px;border-radius:50%;background:var(--t3);}
 .mfd-verify.ok .d{background:#30D158;}
 .mfd-block{display:flex;flex-direction:column;gap:8px;}
 .mfd-block .mf-badge{align-self:flex-start;}
-.mfd-lead{margin:0;font-size:1.06rem;line-height:1.62;color:var(--t1);}
-.mfd-sub{margin:0;font-weight:800;font-size:1.02rem;line-height:1.34;color:var(--t1);font-family:var(--fd);}
-.mfd-block p{margin:0;font-size:1.02rem;line-height:1.6;color:var(--t2);}
+.mfd-lead{margin:0;font-size:.96rem;line-height:1.55;color:var(--t1);}
+.mfd-sub{margin:0;font-weight:700;font-size:.98rem;line-height:1.32;color:var(--t1);font-family:var(--fd);}
+.mfd-block p{margin:0;font-size:.94rem;line-height:1.55;color:var(--t2);}
 .mfd-chips{display:flex;flex-wrap:wrap;gap:6px;}
-.mfd-chips span{font-size:.82rem;background:var(--glass);border:1px solid var(--line);
+.mfd-chips span{font-size:.78rem;background:var(--glass);border:1px solid var(--line);
   padding:4px 10px;border-radius:9px;color:var(--t1);}
 /* Strings pane — VERTICAL timeline (dots connected top→bottom), per the sketch */
 .mfd-tl{position:relative;padding:6px 0 2px 6px;}
@@ -5062,16 +5068,16 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 [data-theme="light"] .mfd-tl-dot{box-shadow:0 0 0 3px #fff;}
 .mfd-tl-item.now .mfd-tl-dot{background:#30D158;}
 .mfd-tl-stage{font-size:.66rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);}
-.mfd-tl-title{margin:2px 0 3px;font-size:1.02rem;font-weight:800;line-height:1.3;color:var(--t1);font-family:var(--fd);}
-.mfd-tl-desc{margin:0;font-size:.98rem;line-height:1.55;color:var(--t2);}
+.mfd-tl-title{margin:2px 0 3px;font-size:.95rem;font-weight:700;line-height:1.3;color:var(--t1);font-family:var(--fd);}
+.mfd-tl-desc{margin:0;font-size:.9rem;line-height:1.5;color:var(--t2);}
 /* Dots pane — labelled cross-asset rows */
 .mfd-dotrow{display:flex;flex-direction:column;gap:6px;padding:13px 0;border-bottom:1px solid var(--line);}
 .mfd-dotrow:first-child{padding-top:4px;}
 .mfd-dotrow:last-child{border-bottom:0;}
 .mfd-dothead{display:flex;align-items:center;gap:9px;}
-.mfd-dotlabel{font-weight:800;font-size:.98rem;color:var(--t1);flex:1;font-family:var(--fd);}
+.mfd-dotlabel{font-weight:700;font-size:.92rem;color:var(--t1);flex:1;font-family:var(--fd);}
 .mfd-dotrow.catch .mfd-dotlabel{color:#FF9F0A;}
-.mfd-dotbody{font-size:.98rem;line-height:1.55;color:var(--t2);}
+.mfd-dotbody{font-size:.9rem;line-height:1.5;color:var(--t2);}
 .mfd-impact{font-size:.62rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em;
   padding:3px 9px;border-radius:999px;}
 .mfd-impact.up{color:#30D158;background:rgba(48,209,88,.14);}
@@ -5088,9 +5094,12 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 .mfd-empty i{color:var(--t3);font-size:1rem;margin-top:2px;}
 .mfd-empty b{display:block;color:var(--t1);font-size:.95rem;margin-bottom:3px;font-weight:800;}
 .mfd-empty span{font-size:.9rem;line-height:1.5;}
-/* bottom action bar — comment pill + heart / bookmark / share */
-.mf-actions{flex-shrink:0;display:flex;align-items:center;gap:12px;padding:10px 14px 12px;
-  border-top:1px solid var(--line);}
+/* bottom action bar — comment pill + heart / bookmark / share; sticks to the
+   card's bottom edge so it stays reachable while the story scrolls under it. */
+.mf-actions{position:sticky;bottom:0;z-index:3;flex-shrink:0;display:flex;align-items:center;gap:12px;
+  padding:10px 14px calc(10px + env(safe-area-inset-bottom,0px));
+  border-top:1px solid var(--line);background:#0E0E11;}
+[data-theme="light"] .mf-actions{background:#FFFFFF;}
 .mf-comment{flex:1;text-align:left;border:1px solid var(--line);background:transparent;
   color:var(--t3);font-size:.9rem;padding:10px 15px;border-radius:999px;cursor:pointer;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
@@ -8272,6 +8281,7 @@ function navTo(name) {
   // Was the nav collapsed when tapped? A re-tap of the *minimized* pill should be
   // an inert click (just re-expand the bar) — only a full-bar re-tap scrolls to top.
   const _wasCompact = navEl.classList.contains('compact');
+  try { document.body.dataset.view = name; } catch (e) {}   // CSS hook (e.g. hide header on myFeed)
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.querySelectorAll('.nb').forEach(b => b.classList.remove('on'));
   document.getElementById(VIEW_MAP[name])?.classList.add('active');
@@ -9853,9 +9863,9 @@ const MF_ICON = {
   share: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4"/><path d="M8.5 7.5 12 4l3.5 3.5"/><path d="M6 11H5a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7a1 1 0 0 0-1-1h-1"/></svg>',
   image: '<svg viewBox="0 0 24 24" aria-hidden="true" class="mf-media-ico"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.6"/><path d="M21 16l-5-5L5 20"/></svg>',
 };
-// Brand logo: drop the real PNG's URL (or a data: URI) into SHERR_LOGO_URL and it
-// renders as an <img>; until then a monochrome claw-slash stand-in is drawn.
-const SHERR_LOGO_URL = '';
+// Brand logo: the White Tiger mark, served by main.py at /tiger-logo.png. Set to
+// '' to fall back to the monochrome claw-slash stand-in below.
+const SHERR_LOGO_URL = '/tiger-logo.png';
 const SHERR_LOGO_SVG = '<svg viewBox="0 0 24 24" class="mf-logo-svg" aria-hidden="true"><path d="M7 3.2c-1 4.6-1.1 9.6.4 17.2"/><path d="M12 2.4c-1 4.8-1.1 10.2.4 18.6"/><path d="M17 3.2c-1 4.6-1.1 9.6.4 17.2"/></svg>';
 function mfLogoMarkup(src){
   return SHERR_LOGO_URL
@@ -9876,14 +9886,14 @@ function buildMyfeedCard(a){
     <article class="mf-card">
       <div class="mf-media b-open" style="${ownImage(a) ? `background-image:url('${a.image_url}')` : `background:${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}`}">
         ${ownImage(a) ? '' : MF_ICON.image}
-      </div>
-      <div class="mf-tabrow">
-        <div class="mfd-tabs" role="tablist">
-          <button class="mfd-tab on" data-tab="news" role="tab">News</button>
-          <button class="mfd-tab" data-tab="strings" role="tab">Strings</button>
-          <button class="mfd-tab" data-tab="dots" role="tab">Dots</button>
+        <div class="mf-tabrow">
+          <div class="mfd-tabs" role="tablist">
+            <button class="mfd-tab on" data-tab="news" role="tab">News</button>
+            <button class="mfd-tab" data-tab="strings" role="tab">Strings</button>
+            <button class="mfd-tab" data-tab="dots" role="tab">Dots</button>
+          </div>
+          <span class="mf-logo" title="${bEsc(src)}">${mfLogoMarkup(src)}</span>
         </div>
-        <span class="mf-logo" title="${bEsc(src)}">${mfLogoMarkup(src)}</span>
       </div>
       <div class="mfd-head">
         <h2 class="mf-headline b-open">${bEsc(a.title)}</h2>
@@ -9892,22 +9902,20 @@ function buildMyfeedCard(a){
           <span class="mfd-verify"><span class="d"></span><span class="mfd-verify-lbl">${timeAgo(a.published_at)||'Just now'} · ${bEsc(src)}</span></span>
         </div>
       </div>
-      <div class="mfd-view">
-        <div class="mfd-track">
-          <section class="mfd-pane news on" data-pane="news">
-            <div class="mfd-scroll">
-              <div class="mfd-block mfd-tldr">${leadBadge}<p class="mfd-lead">${tldr || 'Sherr AI is preparing an original summary of this story.'}</p></div>
-              <div class="mfd-block mfd-what" hidden><p></p></div>
-              <div class="mfd-block mfd-whowhere" hidden></div>
-            </div>
-          </section>
-          <section class="mfd-pane strings" data-pane="strings">
-            <div class="mfd-scroll">${renderStringsPane([], 'loading', a)}</div>
-          </section>
-          <section class="mfd-pane dots" data-pane="dots">
-            <div class="mfd-scroll">${renderDotsPane({}, 'loading', a)}</div>
-          </section>
-        </div>
+      <div class="mfd-panes">
+        <section class="mfd-pane news on" data-pane="news">
+          <div class="mfd-scroll">
+            <div class="mfd-block mfd-tldr">${leadBadge}<p class="mfd-lead">${tldr || 'Sherr AI is preparing an original summary of this story.'}</p></div>
+            <div class="mfd-block mfd-what" hidden><p></p></div>
+            <div class="mfd-block mfd-whowhere" hidden></div>
+          </div>
+        </section>
+        <section class="mfd-pane strings" data-pane="strings">
+          <div class="mfd-scroll">${renderStringsPane([], 'loading', a)}</div>
+        </section>
+        <section class="mfd-pane dots" data-pane="dots">
+          <div class="mfd-scroll">${renderDotsPane({}, 'loading', a)}</div>
+        </section>
       </div>
       <div class="mf-actions">
         <button class="mf-comment b-open" type="button">Add a comment…</button>
@@ -9924,50 +9932,50 @@ function buildMyfeedCard(a){
   return el;
 }
 
-// Tabs + horizontal swipe (News ↔ Strings ↔ Dots) + card actions, scoped to one card.
-// A vertical gesture is left alone so the feed's vertical snap still works; only a
-// clearly-horizontal drag moves the pane track.
+// Tabs + a sideways swipe on the text switch News ↔ Strings ↔ Dots (only the
+// active pane shows; a slide-in plays on change). A vertical gesture is left
+// alone so the whole card scrolls — the image scrolls up with the text.
 function mfBindCard(el, a){
-  const view = el.querySelector('.mfd-view');
-  const track = el.querySelector('.mfd-track');
+  const panesEl = el.querySelector('.mfd-panes');
   const tabs = [...el.querySelectorAll('.mfd-tab')];
   const panes = [...el.querySelectorAll('.mfd-pane')];
   let idx = 0;
-  function setPane(i){
-    idx = Math.max(0, Math.min(panes.length - 1, i));
-    track.style.transform = `translateX(${-idx * 100}%)`;
-    tabs.forEach((t, k) => t.classList.toggle('on', k === idx));
-    panes.forEach((p, k) => p.classList.toggle('on', k === idx));
+  function setPane(i, dir){
+    i = Math.max(0, Math.min(panes.length - 1, i));
+    if (dir) panesEl.style.setProperty('--mf-in', (dir > 0 ? 14 : -14) + 'px');
+    idx = i;
+    panesEl.style.transform = ''; panesEl.style.opacity = '';
+    tabs.forEach((t, k) => t.classList.toggle('on', k === i));
+    panes.forEach((p, k) => p.classList.toggle('on', k === i));
   }
   el._mfSetPane = setPane;
-  tabs.forEach((t, i) => t.addEventListener('click', e => { e.stopPropagation(); setPane(i); }));
-  // Swipe.
+  tabs.forEach((t, i) => t.addEventListener('click', e => { e.stopPropagation(); setPane(i, i - idx); }));
+  // Sideways swipe on the pane area; vertical is left to the card's own scroll.
   let x0 = 0, y0 = 0, dx = 0, axis = null, active = false;
-  view.addEventListener('touchstart', e => {
+  panesEl.addEventListener('touchstart', e => {
     if (e.touches.length !== 1) return;
     x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; dx = 0; axis = null; active = true;
-    track.classList.add('dragging');
   }, { passive: true });
-  view.addEventListener('touchmove', e => {
+  panesEl.addEventListener('touchmove', e => {
     if (!active) return;
     const mx = e.touches[0].clientX - x0, my = e.touches[0].clientY - y0;
     if (axis === null && (Math.abs(mx) > 8 || Math.abs(my) > 8)) axis = Math.abs(mx) > Math.abs(my) ? 'x' : 'y';
-    if (axis !== 'x') return;                    // vertical → let scroll / feed-snap handle it
+    if (axis !== 'x') return;                    // vertical → let the card scroll
     e.preventDefault();
     dx = mx;
     let d = dx;
-    if ((idx === 0 && dx > 0) || (idx === panes.length - 1 && dx < 0)) d = dx * 0.35;  // rubber-band ends
-    track.style.transform = `translateX(calc(${-idx * 100}% + ${d}px))`;
+    if ((idx === 0 && dx > 0) || (idx === panes.length - 1 && dx < 0)) d = dx * 0.3;  // rubber-band at ends
+    panesEl.style.transform = `translateX(${d * 0.4}px)`;
+    panesEl.style.opacity = String(Math.max(0.55, 1 - Math.abs(dx) / 520));
   }, { passive: false });
   const end = () => {
     if (!active) return;
-    active = false; track.classList.remove('dragging');
-    const w = view.clientWidth || 1;
-    if (axis === 'x' && Math.abs(dx) > Math.min(64, w * 0.18)) setPane(idx + (dx < 0 ? 1 : -1));
-    else setPane(idx);
+    active = false;
+    if (axis === 'x' && Math.abs(dx) > 52) setPane(idx + (dx < 0 ? 1 : -1), dx < 0 ? 1 : -1);
+    else { panesEl.style.transform = ''; panesEl.style.opacity = ''; }
   };
-  view.addEventListener('touchend', end);
-  view.addEventListener('touchcancel', end);
+  panesEl.addEventListener('touchend', end);
+  panesEl.addEventListener('touchcancel', end);
   // Actions.
   el.querySelector('.b-like').addEventListener('click', e => { e.stopPropagation(); myfeedToggle('likes', a, e.currentTarget, 'fa-heart', '❤️ Liked', 'like'); });
   el.querySelector('.b-save').addEventListener('click', e => { e.stopPropagation(); myfeedToggle('saves', a, e.currentTarget, 'fa-bookmark', '🔖 Saved', 'save'); });
