@@ -33,9 +33,11 @@
    Font: Poppins
 ══════════════════════════════════════════════════ */
 :root {
-  /* App font — Apple system (SF Pro) with graceful fallbacks */
-  --f:   -apple-system, "SF Pro Text", "SF Pro Display", "Inter", system-ui, sans-serif;
-  --fd:  -apple-system, "SF Pro Display", "Inter", system-ui, sans-serif;
+  /* App font — Inter for body, Poppins for display/headlines (loaded in <head>),
+     with system fallbacks. Inshorts-grade readability; a real change from the
+     previous SF-system default that made the imported webfonts never apply. */
+  --f:   "Inter", -apple-system, "SF Pro Text", system-ui, sans-serif;
+  --fd:  "Poppins", "Inter", -apple-system, system-ui, sans-serif;
 
   /* Brand palette — reserved for the logo / splash only, NOT app chrome */
   --p-deep:  #011A7D; --p-blue: #02239E; --p-blue2: #0652B5; --p-blue3: #0EB7D6;
@@ -2424,7 +2426,8 @@ body.dp-open .phone { visibility: hidden !important; }
   display: flex; align-items: center; justify-content: center; }
 .mf-media::after { content: ''; position: absolute; inset: 0; border-radius: inherit;
   background: linear-gradient(180deg, transparent 58%, rgba(0,0,0,.30)); pointer-events: none; }
-.mf-media-ico { font-size: 2.4rem; color: rgba(255,255,255,.5); }
+.mf-media-ico { width: 46px; height: 46px; fill: none; stroke: rgba(255,255,255,.5);
+  stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 /* persistent headline + id chip (shared across all three tabs, per the sketch) */
 .mfd-head { flex-shrink: 0; display: flex; flex-direction: column; gap: 9px; padding: 2px 16px 11px; }
 .mf-headline { font-family: var(--fd); font-size: 1.5rem; font-weight: 800; line-height: 1.3;
@@ -5019,9 +5022,13 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 .mfd-tab.on{background:#26262d;color:#fff;box-shadow:0 1px 2px rgba(0,0,0,.28);}
 [data-theme="light"] .mfd-tab.on{background:#fff;color:#16171A;box-shadow:0 1px 3px rgba(0,0,0,.12);}
 .mfd-tab.pending{opacity:.5;}
-.mf-logo{width:30px;height:30px;border-radius:9px;flex-shrink:0;
+.mf-logo{width:32px;height:32px;border-radius:9px;flex-shrink:0;overflow:hidden;
   display:flex;align-items:center;justify-content:center;
-  background:var(--accent);color:#fff;font-family:var(--fd);font-weight:800;font-size:.92rem;}
+  background:#0E0E11;border:1px solid rgba(255,255,255,.14);}
+[data-theme="light"] .mf-logo{border-color:rgba(0,0,0,.18);}
+.mf-logo img{width:100%;height:100%;object-fit:cover;display:block;}
+.mf-logo-svg{width:19px;height:19px;fill:none;stroke:#fff;stroke-width:1.9;
+  stroke-linecap:round;}
 /* swipeable pane viewport — slide left/right between News/Strings/Dots */
 .mfd-view{position:relative;flex:1;min-height:0;overflow:hidden;}
 .mfd-track{display:flex;height:100%;transition:transform .3s var(--ease);will-change:transform;}
@@ -5087,10 +5094,14 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 .mf-comment{flex:1;text-align:left;border:1px solid var(--line);background:transparent;
   color:var(--t3);font-size:.9rem;padding:10px 15px;border-radius:999px;cursor:pointer;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.mf-acts{display:flex;gap:18px;flex-shrink:0;}
-.mf-acts span{cursor:pointer;color:var(--t2);font-size:1.15rem;line-height:1;}
-.mf-acts .on i{color:var(--accent);}
-.mf-acts .b-like.on i{color:#FF375F;}
+.mf-acts{display:flex;gap:17px;flex-shrink:0;}
+.mf-acts span{cursor:pointer;color:var(--t2);display:inline-flex;
+  transition:color .15s var(--ease),transform .08s var(--ease);}
+.mf-acts span:active{transform:scale(.88);}
+.mf-acts svg{width:23px;height:23px;fill:none;stroke:currentColor;stroke-width:2;
+  stroke-linecap:round;stroke-linejoin:round;display:block;}
+.mf-acts .b-like.on{color:#FF375F;} .mf-acts .b-like.on svg{fill:#FF375F;}
+.mf-acts .b-save.on{color:var(--accent);} .mf-acts .b-save.on svg{fill:var(--accent);}
 </style>
 
 <script>
@@ -9834,6 +9845,24 @@ function myfeedBadges(a){
   return tags.map(sectorBadge).join('');
 }
 
+// Inline SVGs so the action bar and brand mark render WITHOUT depending on the
+// Font Awesome web font (which is a CDN load — blank if it hasn't arrived).
+const MF_ICON = {
+  heart: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>',
+  bookmark: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4.2L5 21V4a1 1 0 0 1 1-1z"/></svg>',
+  share: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4"/><path d="M8.5 7.5 12 4l3.5 3.5"/><path d="M6 11H5a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7a1 1 0 0 0-1-1h-1"/></svg>',
+  image: '<svg viewBox="0 0 24 24" aria-hidden="true" class="mf-media-ico"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.6"/><path d="M21 16l-5-5L5 20"/></svg>',
+};
+// Brand logo: drop the real PNG's URL (or a data: URI) into SHERR_LOGO_URL and it
+// renders as an <img>; until then a monochrome claw-slash stand-in is drawn.
+const SHERR_LOGO_URL = '';
+const SHERR_LOGO_SVG = '<svg viewBox="0 0 24 24" class="mf-logo-svg" aria-hidden="true"><path d="M7 3.2c-1 4.6-1.1 9.6.4 17.2"/><path d="M12 2.4c-1 4.8-1.1 10.2.4 18.6"/><path d="M17 3.2c-1 4.6-1.1 9.6.4 17.2"/></svg>';
+function mfLogoMarkup(src){
+  return SHERR_LOGO_URL
+    ? `<img src="${SHERR_LOGO_URL}" alt="${bEsc(src)}">`
+    : SHERR_LOGO_SVG;
+}
+
 function buildMyfeedCard(a){
   const saved = ST.saves.includes(a.id);
   const liked = ST.likes.includes(a.id);
@@ -9843,11 +9872,10 @@ function buildMyfeedCard(a){
   const tldr = bEsc(a.preview || a.summary || a.cached_summary || '');
   const cat = (a.category || a.pillar_slug || '').trim();
   const leadBadge = sectorBadge(cat || src);     // the "colour box" that leads the lead block
-  const logoCh = bEsc((src.trim().charAt(0) || 'S').toUpperCase());
   el.innerHTML = `
     <article class="mf-card">
       <div class="mf-media b-open" style="${ownImage(a) ? `background-image:url('${a.image_url}')` : `background:${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}`}">
-        ${ownImage(a) ? '' : '<i class="fa-regular fa-image mf-media-ico"></i>'}
+        ${ownImage(a) ? '' : MF_ICON.image}
       </div>
       <div class="mf-tabrow">
         <div class="mfd-tabs" role="tablist">
@@ -9855,7 +9883,7 @@ function buildMyfeedCard(a){
           <button class="mfd-tab" data-tab="strings" role="tab">Strings</button>
           <button class="mfd-tab" data-tab="dots" role="tab">Dots</button>
         </div>
-        <span class="mf-logo" title="${bEsc(src)}">${logoCh}</span>
+        <span class="mf-logo" title="${bEsc(src)}">${mfLogoMarkup(src)}</span>
       </div>
       <div class="mfd-head">
         <h2 class="mf-headline b-open">${bEsc(a.title)}</h2>
@@ -9884,9 +9912,9 @@ function buildMyfeedCard(a){
       <div class="mf-actions">
         <button class="mf-comment b-open" type="button">Add a comment…</button>
         <div class="mf-acts">
-          <span class="b-like ${liked?'on':''}"><i class="fa-${liked?'solid':'regular'} fa-heart"></i></span>
-          <span class="b-save ${saved?'on':''}"><i class="fa-${saved?'solid':'regular'} fa-bookmark"></i></span>
-          <span class="b-share"><i class="fa-solid fa-arrow-up-from-bracket"></i></span>
+          <span class="b-like ${liked?'on':''}" role="button" aria-label="Like">${MF_ICON.heart}</span>
+          <span class="b-save ${saved?'on':''}" role="button" aria-label="Save">${MF_ICON.bookmark}</span>
+          <span class="b-share" role="button" aria-label="Share">${MF_ICON.share}</span>
         </div>
       </div>
     </article>`;
@@ -10036,8 +10064,11 @@ function myfeedToggle(key, a, el, icon, msg, action){
   const arr = ST[key], i = arr.indexOf(a.id);
   // Saves go through the bookmarks endpoint (which also logs the save signal);
   // other actions (likes) keep using /interact.
-  if (i === -1){ arr.push(a.id); el.classList.add('on'); el.querySelector('i').className = 'fa-solid '+icon; toast(msg); if (action !== 'save') logInteract(a.id, a.category, action); }
-  else { arr.splice(i,1); el.classList.remove('on'); el.querySelector('i').className = 'fa-regular '+icon; }
+  // The button's filled/outline look is driven by the `on` class (inline-SVG
+  // icons now); the optional `<i>` swap is kept only for any legacy FA button.
+  const _ic = el.querySelector('i');
+  if (i === -1){ arr.push(a.id); el.classList.add('on'); if (_ic) _ic.className = 'fa-solid '+icon; toast(msg); if (action !== 'save') logInteract(a.id, a.category, action); }
+  else { arr.splice(i,1); el.classList.remove('on'); if (_ic) _ic.className = 'fa-regular '+icon; }
   const n = el.querySelector('.mf-n');   // keep the like count in sync
   if (n) n.textContent = Math.max(0, (parseInt(n.textContent) || 0) + (i === -1 ? 1 : -1));
   persist();
