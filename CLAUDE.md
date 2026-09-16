@@ -476,24 +476,40 @@ the sitemap and the og:url all write is `/myfeed`. The client also accepts a
 legacy `/bytes/<slug>` on boot in case a redirect is ever missed.
 
 The dossier is rendered **INLINE ON EACH CARD**, not behind a tap (the earlier
-tap-to-open overlay was removed). A card carries segmented tabs at the top —
-labelled exactly **News · Strings · Dots** — and per-card lazy hydration: an
+tap-to-open overlay was removed). The card follows the design sketch top→bottom:
+a rounded **image**, then a **segmented tab row** (labelled exactly
+**News · Strings · Dots**) with the brand **logo** at its right, then a
+**persistent headline + `SB-<id>` chip** shared across all three tabs, then the
+active pane, then a bottom **action bar** (an "Add a comment" pill + heart /
+bookmark / share). Panes live in a horizontal swipe track (`.mfd-view` /
+`.mfd-track`): a clearly-horizontal drag slides News↔Strings↔Dots (tabs also
+switch); a vertical gesture is left alone so the feed's vertical card-snap still
+works (`mfBindCard` decides the axis). Per-card lazy hydration: an
 `IntersectionObserver` (`myfeedObserver`) fetches `/article/<id>/dossier` the
 first time a card nears the viewport, so the deck stays cheap (one fetch per card
 actually seen). `buildMyfeedCard` builds the card; `renderStringsPane` /
-`renderDotsPane` fill the panes.
-- **News** — a TL;DR box, then "What happened", then "Who & Where" (chips +
-  when/where). Built from The Node, which is assembled from columns the row
-  already carries. It ALWAYS renders.
-- **Strings** — a HORIZONTAL timeline (`.mfd-timeline-h`): dots connected
-  left→right, each labelled beneath. Vertical was explicitly wrong.
+`renderDotsPane` fill the panes (each returns the inner content, and hydrate
+swaps it into `.mfd-pane.<name> .mfd-scroll`).
+- **News** — the lead paragraph (TL;DR/hook) led by a sector "colour box" badge,
+  then optional "What happened" and "Who & Where" (chips + when/where). Built from
+  The Node, which is assembled from columns the row already carries. It ALWAYS
+  renders.
+- **Strings** — a **VERTICAL** timeline (`.mfd-tl`): dots connected top→bottom, a
+  stage label + title + description per node, matching the design sketch. It is
+  **seeded with a truthful "Present" node** built from the article itself so the
+  thread is never blank; synthesis adds prior/later milestones. (This reverses the
+  earlier horizontal-`.mfd-timeline-h` decision — the design PDF the owner
+  supplied on 2026-09-16 draws it vertical, which is now the spec.)
 - **Dots** — labelled rows "Dot: Markets / Governance / Tech/Social" plus a
   closing "The Catch", each with a red/green/amber impact pill and live tickers
-  where an instrument is named (read from Explore's `window._lastMkt`).
+  where an instrument is named (read from Explore's `window._lastMkt`). Ripples
+  are only shown when synthesis wrote them — never fabricated; the empty state is a
+  compact on-brand `.mfd-empty` card, not a blank slate.
 Sector chips are colourful ticket-shaped badges (`.mf-badge`, per-sector colour
-via `--bd`), not grey pills. `openDossier` survives as the deep-link entry
-(`/myfeed/<slug>`): it prepends that story as the first card rather than opening
-an overlay.
+via `--bd`) — the ONE place colour lives; the rest of the card stays near-
+monochrome (Twitter-minimal), leaning on space and curvature. `openDossier`
+survives as the deep-link entry (`/myfeed/<slug>`): it prepends that story as the
+first card rather than opening an overlay.
 
 `GET /article/<id>/dossier` returns node + strings + dots in one payload, cached
 through `cache.py` at `DOSSIER_CACHE_SECONDS` (raised to 600s) and it **serves

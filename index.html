@@ -2399,45 +2399,36 @@ body.dp-open .phone { visibility: hidden !important; }
 .spie-banner.is-error { color: #EF4444; background: rgba(239,68,68,0.12);
   border: 1px solid rgba(239,68,68,0.28); }
 
-/* ─── myFeed — one structured card per screen (vertical snap) ─── */
+/* ─── myFeed — one dossier card per screen (vertical snap) ─── */
 #v-myfeed { inset: 0; }
 .myfeed-feed { width: 100%; height: 100%; overflow-y: scroll; scroll-snap-type: y mandatory; }
 .myfeed-empty { height: 100%; display: flex; align-items: center; justify-content: center;
   text-align: center; color: var(--t1); font-size: 1.05rem; line-height: 1.7; padding: 28px; }
 .myfeed-empty span { font-size: 0.82rem; color: var(--t2); font-weight: 500; }
-/* inshorts-style: full-bleed card, image on top, body, "tap to know more" foot */
-.mf-item { position: relative; height: 100%; scroll-snap-align: start; scroll-snap-stop: always; scroll-snap-stop: always;
+/* Design template: rounded image on top, News·Strings·Dots tabs + logo beneath it,
+   a persistent headline + id chip, then a swipeable body, then the action bar. */
+.mf-item { position: relative; height: 100%; scroll-snap-align: start; scroll-snap-stop: always;
   display: flex; flex-direction: column;
-  padding: var(--hh) 0 calc(var(--nh) + 22px);
-  animation: mfIn 0.45s var(--ease); }
-@keyframes mfIn { from { opacity: .35; transform: translateY(20px); } to { opacity: 1; transform: none; } }
+  padding: calc(var(--hh) + 10px) 11px calc(var(--nh) + 12px);
+  animation: mfIn 0.42s var(--ease); }
+@keyframes mfIn { from { opacity: .35; transform: translateY(18px); } to { opacity: 1; transform: none; } }
 .mf-card { display: flex; flex-direction: column; width: 100%; height: 100%; overflow: hidden;
-  background: #0E0E11; color: #fff; }
-[data-theme="light"] .mf-card { background: #FFFFFF; color: #1C1C1E; }
-.mf-media { position: relative; width: 100%; height: 44%; min-height: 190px; flex-shrink: 0;
+  background: #0E0E11; color: #F3F3F5; border-radius: 24px;
+  border: 1px solid rgba(255,255,255,.06); }
+[data-theme="light"] .mf-card { background: #FFFFFF; color: #16171A;
+  border-color: rgba(0,0,0,.07); box-shadow: 0 12px 34px rgba(0,0,0,.10); }
+/* image — a rounded block at the TOP of the card */
+.mf-media { position: relative; width: 100%; height: 37%; min-height: 166px; flex-shrink: 0;
   background-size: cover; background-position: center; cursor: pointer;
+  border-radius: 24px 24px 0 0;
   display: flex; align-items: center; justify-content: center; }
-.mf-media-ico { font-size: 2.4rem; color: rgba(255,255,255,.55); }
-.mf-body { flex: 1; min-height: 0; overflow-y: auto;
-  padding: 15px 18px 10px; display: flex; flex-direction: column; gap: 11px; }
-.mf-srcrow { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.mf-src { display: flex; align-items: center; gap: 8px; font-size: 0.82rem; font-weight: 800; min-width: 0; }
-.mf-src-logo { width: 22px; height: 22px; border-radius: 6px; flex-shrink: 0; background: var(--accent);
-  display: flex; align-items: center; justify-content: center; color: #fff; font-size: 0.68rem; font-weight: 800; }
-.mf-src-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.mf-srcacts { display: flex; gap: 18px; flex-shrink: 0; }
-.mf-srcacts span { cursor: pointer; }
-.mf-srcacts i { font-size: 1.05rem; opacity: 0.62; }
-.mf-srcacts .on i { opacity: 1; color: var(--accent); }
-.mf-headline { font-family: var(--fd); font-size: 1.4rem; font-weight: 800; line-height: 1.26;
-  letter-spacing: -0.3px; cursor: pointer; }
-.mf-what { font-size: 1rem; line-height: 1.6; opacity: 0.82; }
-.mf-meta { font-size: 0.72rem; opacity: 0.5; margin-top: auto; padding-top: 8px; }
-.mf-foot { flex-shrink: 0; padding: 13px 18px 15px; cursor: pointer;
-  border-top: 1px solid rgba(128,128,128,0.22); background: rgba(128,128,128,0.08); }
-.mf-foot-title { font-size: 0.95rem; font-weight: 700; }
-.mf-foot-sub { font-size: 0.78rem; opacity: 0.6; margin-top: 2px;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mf-media::after { content: ''; position: absolute; inset: 0; border-radius: inherit;
+  background: linear-gradient(180deg, transparent 58%, rgba(0,0,0,.30)); pointer-events: none; }
+.mf-media-ico { font-size: 2.4rem; color: rgba(255,255,255,.5); }
+/* persistent headline + id chip (shared across all three tabs, per the sketch) */
+.mfd-head { flex-shrink: 0; display: flex; flex-direction: column; gap: 9px; padding: 2px 16px 11px; }
+.mf-headline { font-family: var(--fd); font-size: 1.5rem; font-weight: 800; line-height: 1.3;
+  letter-spacing: -0.4px; cursor: pointer; margin: 0; }
 
 /* ─── Phase 6: source links + glass article actions ─── */
 .ao-sources { margin: 16px 0 6px; }
@@ -3551,14 +3542,15 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
     scroll-snap-align: none; scroll-snap-stop: normal;
   }
   .mf-card {
-    height: auto; border-radius: 18px;
+    height: auto; border-radius: 20px;
     border: 1px solid var(--glassB);
     box-shadow: 0 10px 30px rgba(0,0,0,0.18);
   }
-  .mf-media { height: 200px; min-height: 200px; }
-  .mf-body { flex: 0 0 auto; overflow: visible; min-height: 168px; }
-  .mf-headline { font-size: 1.18rem; }
-  .mf-what { font-size: 0.92rem; }
+  .mf-media { height: 188px; min-height: 188px; border-radius: 20px 20px 0 0; }
+  /* card height is auto on desktop, so the swipe viewport needs an explicit
+     height for the horizontal slider to have room to work. */
+  .mfd-view { height: 300px; }
+  .mf-headline { font-size: 1.3rem; }
   .myfeed-empty { grid-column: 1 / -1; height: 50vh; }
 
   /* Home reads as a DESKTOP NEWS PORTAL here, not a phone column: the stories
@@ -5005,84 +4997,100 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
      is a BASE rule (no min-width media query), so the single-desktop-breakpoint
      guarantee in tests/test_desktop_layout.py holds. -->
 <style>
-/* colourful ticket-shaped sector badges (per-sector colour set inline via --bd) */
+/* colourful ticket-shaped sector badges — the ONE place colour lives; the rest of
+   the card stays near-monochrome (Twitter-minimal), leaning on space + curvature. */
 .mf-badges{display:flex;flex-wrap:wrap;gap:7px;}
 .mf-badge{position:relative;display:inline-flex;align-items:center;
-  padding:4px 11px 4px 18px;border-radius:6px;font-size:.62rem;font-weight:800;
-  letter-spacing:.04em;text-transform:uppercase;color:#fff;white-space:nowrap;
-  background:var(--bd,#5661f0);box-shadow:0 1px 3px rgba(0,0,0,.28);}
-.mf-badge.dark{color:#1c1c1e;}
-.mf-badge::before{content:'';position:absolute;left:9px;top:4px;bottom:4px;
-  border-left:2px dotted rgba(255,255,255,.55);}
+  padding:4px 11px 4px 17px;border-radius:7px;font-size:.6rem;font-weight:800;
+  letter-spacing:.05em;text-transform:uppercase;color:#fff;white-space:nowrap;
+  background:var(--bd,#5661f0);}
+.mf-badge.dark{color:#151517;}
+.mf-badge::before{content:'';position:absolute;left:8px;top:4px;bottom:4px;
+  border-left:2px dotted rgba(255,255,255,.6);}
 .mf-badge.dark::before{border-color:rgba(0,0,0,.35);}
-/* segmented tabs, at the TOP of the card content */
-.mfd-tabs{display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;
-  position:sticky;top:0;z-index:2;padding:2px 0 8px;
-  background:inherit;}
-.mfd-tab{border:1px solid var(--line);background:transparent;color:var(--t2);
-  font-size:.82rem;font-weight:800;padding:9px 4px;border-radius:11px;cursor:pointer;
-  transition:all .16s var(--ease);}
-.mfd-tab.on{background:var(--accent);color:#fff;border-color:var(--accent);}
-.mfd-tab.pending{opacity:.7;}
-.mfd-pane{display:none;animation:mfIn .28s var(--ease);}
-.mfd-pane.on{display:block;}
-/* News pane */
-.mfd-tldr{background:var(--glass);border:1px solid var(--line);
-  border-left:3px solid var(--accent);border-radius:11px;padding:11px 13px;
-  font-size:.93rem;line-height:1.5;color:var(--t1);}
-.mfd-tldr b{display:block;font-size:.6rem;text-transform:uppercase;
-  letter-spacing:.09em;color:var(--accent);margin-bottom:4px;}
-.mfd-sec{margin-top:13px;}
-.mfd-sec h4{font-size:.64rem;text-transform:uppercase;letter-spacing:.07em;
-  color:var(--t3);margin:0 0 5px;font-weight:800;}
-.mfd-sec p{margin:0;font-size:.9rem;line-height:1.5;color:var(--t1);}
+/* tab row under the image: segmented News · Strings · Dots + brand logo at right */
+.mf-tabrow{display:flex;align-items:center;gap:10px;flex-shrink:0;padding:11px 14px 8px;}
+.mfd-tabs{display:flex;gap:4px;flex:1;border-radius:13px;padding:3px;
+  background:rgba(255,255,255,.06);}
+[data-theme="light"] .mfd-tabs{background:rgba(0,0,0,.05);}
+.mfd-tab{flex:1;border:0;background:transparent;color:var(--t2);
+  font-size:.86rem;font-weight:700;padding:8px 4px;border-radius:10px;cursor:pointer;
+  transition:color .15s var(--ease),background .15s var(--ease);}
+.mfd-tab.on{background:#26262d;color:#fff;box-shadow:0 1px 2px rgba(0,0,0,.28);}
+[data-theme="light"] .mfd-tab.on{background:#fff;color:#16171A;box-shadow:0 1px 3px rgba(0,0,0,.12);}
+.mfd-tab.pending{opacity:.5;}
+.mf-logo{width:30px;height:30px;border-radius:9px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  background:var(--accent);color:#fff;font-family:var(--fd);font-weight:800;font-size:.92rem;}
+/* swipeable pane viewport — slide left/right between News/Strings/Dots */
+.mfd-view{position:relative;flex:1;min-height:0;overflow:hidden;}
+.mfd-track{display:flex;height:100%;transition:transform .3s var(--ease);will-change:transform;}
+.mfd-track.dragging{transition:none;}
+.mfd-pane{flex:0 0 100%;height:100%;overflow:hidden;}
+.mfd-scroll{height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch;
+  padding:2px 16px 15px;display:flex;flex-direction:column;gap:13px;}
+/* News pane — id chip + status, then badge-led blocks (the "colour box" leads each) */
+.mfd-sig{display:flex;align-items:center;gap:9px;flex-wrap:wrap;font-size:.72rem;}
+.mfd-sigid{font-family:ui-monospace,Menlo,monospace;color:var(--accent);
+  background:rgba(10,132,255,.12);padding:3px 9px;border-radius:7px;font-weight:800;letter-spacing:.05em;}
+.mfd-verify{display:inline-flex;align-items:center;gap:6px;color:var(--t2);font-weight:600;}
+.mfd-verify .d{width:7px;height:7px;border-radius:50%;background:var(--t3);}
+.mfd-verify.ok .d{background:#30D158;}
+.mfd-block{display:flex;flex-direction:column;gap:8px;}
+.mfd-block .mf-badge{align-self:flex-start;}
+.mfd-lead{margin:0;font-size:1.06rem;line-height:1.62;color:var(--t1);}
+.mfd-sub{margin:0;font-weight:800;font-size:1.02rem;line-height:1.34;color:var(--t1);font-family:var(--fd);}
+.mfd-block p{margin:0;font-size:1.02rem;line-height:1.6;color:var(--t2);}
 .mfd-chips{display:flex;flex-wrap:wrap;gap:6px;}
-.mfd-chips span{font-size:.78rem;background:var(--glass);border:1px solid var(--line);
-  padding:3px 9px;border-radius:8px;color:var(--t1);}
-/* Strings pane — HORIZONTAL timeline (dots connected left→right) */
-.mfd-timeline-h{display:flex;overflow-x:auto;padding:20px 2px 6px;-webkit-overflow-scrolling:touch;}
-.mfd-tstep{flex:0 0 auto;min-width:132px;max-width:170px;position:relative;
-  padding:0 12px;text-align:center;}
-.mfd-tstep::before{content:'';position:absolute;top:-13px;left:0;right:0;height:2px;
-  background:var(--line);}
-.mfd-tstep:first-child::before{left:50%;}
-.mfd-tstep:last-child::before{right:50%;}
-.mfd-tdot{position:absolute;top:-19px;left:50%;transform:translateX(-50%);
-  width:13px;height:13px;border-radius:50%;background:var(--accent);
-  border:2px solid var(--bg);z-index:1;}
-.mfd-tstage{font-size:.58rem;font-weight:800;text-transform:uppercase;
-  letter-spacing:.06em;color:var(--accent);}
-.mfd-ttitle{font-size:.84rem;font-weight:700;color:var(--t1);margin:2px 0 3px;line-height:1.25;}
-.mfd-tmeta{font-size:.72rem;color:var(--t2);line-height:1.4;}
-/* Dots pane — labelled contagion rows */
-.mfd-dotrow{display:flex;flex-direction:column;gap:5px;padding:12px 0;
-  border-bottom:1px solid var(--line);}
+.mfd-chips span{font-size:.82rem;background:var(--glass);border:1px solid var(--line);
+  padding:4px 10px;border-radius:9px;color:var(--t1);}
+/* Strings pane — VERTICAL timeline (dots connected top→bottom), per the sketch */
+.mfd-tl{position:relative;padding:6px 0 2px 6px;}
+.mfd-tl-item{position:relative;padding:0 0 20px 24px;}
+.mfd-tl-item:last-child{padding-bottom:2px;}
+.mfd-tl-item::before{content:'';position:absolute;left:5px;top:15px;bottom:-3px;width:2px;background:var(--line);}
+.mfd-tl-item:last-child::before{display:none;}
+.mfd-tl-dot{position:absolute;left:0;top:3px;width:12px;height:12px;border-radius:50%;
+  background:var(--accent);box-shadow:0 0 0 3px #0E0E11;}
+[data-theme="light"] .mfd-tl-dot{box-shadow:0 0 0 3px #fff;}
+.mfd-tl-item.now .mfd-tl-dot{background:#30D158;}
+.mfd-tl-stage{font-size:.66rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);}
+.mfd-tl-title{margin:2px 0 3px;font-size:1.02rem;font-weight:800;line-height:1.3;color:var(--t1);font-family:var(--fd);}
+.mfd-tl-desc{margin:0;font-size:.98rem;line-height:1.55;color:var(--t2);}
+/* Dots pane — labelled cross-asset rows */
+.mfd-dotrow{display:flex;flex-direction:column;gap:6px;padding:13px 0;border-bottom:1px solid var(--line);}
+.mfd-dotrow:first-child{padding-top:4px;}
 .mfd-dotrow:last-child{border-bottom:0;}
 .mfd-dothead{display:flex;align-items:center;gap:9px;}
-.mfd-dotlabel{font-weight:800;font-size:.84rem;color:var(--t1);flex:1;}
+.mfd-dotlabel{font-weight:800;font-size:.98rem;color:var(--t1);flex:1;font-family:var(--fd);}
 .mfd-dotrow.catch .mfd-dotlabel{color:#FF9F0A;}
-.mfd-dotbody{font-size:.86rem;line-height:1.45;color:var(--t2);}
-.mfd-impact{font-size:.64rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em;
-  padding:2px 8px;border-radius:999px;}
+.mfd-dotbody{font-size:.98rem;line-height:1.55;color:var(--t2);}
+.mfd-impact{font-size:.62rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em;
+  padding:3px 9px;border-radius:999px;}
 .mfd-impact.up{color:#30D158;background:rgba(48,209,88,.14);}
 .mfd-impact.down{color:#FF453A;background:rgba(255,69,58,.14);}
 .mfd-impact.mixed{color:#FF9F0A;background:rgba(255,159,10,.14);}
 .mfd-impact.neutral{color:var(--t2);background:var(--glass);}
-.mfd-ins{display:inline-flex;align-items:center;gap:6px;font-size:.76rem;
-  border:1px solid var(--line);border-radius:8px;padding:4px 8px;color:var(--t1);margin:6px 6px 0 0;}
-.mfd-ins b{font-family:ui-monospace,Menlo,monospace;font-size:.72rem;color:var(--accent);}
+.mfd-ins{display:inline-flex;align-items:center;gap:6px;font-size:.82rem;
+  border:1px solid var(--line);border-radius:9px;padding:5px 9px;color:var(--t1);margin:7px 7px 0 0;}
+.mfd-ins b{font-family:ui-monospace,Menlo,monospace;font-size:.76rem;color:var(--accent);}
 .mfd-ins .mfd-tick.up{color:#30D158;font-weight:700;} .mfd-ins .mfd-tick.down{color:#FF453A;font-weight:700;}
-/* pending / loading */
-.mfd-pending{text-align:center;padding:26px 16px;color:var(--t2);}
-.mfd-pending i{font-size:1.4rem;color:var(--t3);display:block;margin-bottom:9px;}
-.mfd-pending b{display:block;color:var(--t1);font-size:.95rem;margin-bottom:4px;}
-.mfd-pending span{font-size:.82rem;line-height:1.45;display:block;max-width:300px;margin:0 auto;}
-.mfd-sig{display:flex;align-items:center;gap:9px;flex-wrap:wrap;font-size:.68rem;}
-.mfd-sigid{font-family:ui-monospace,Menlo,monospace;color:var(--accent);
-  background:rgba(10,132,255,.12);padding:2px 8px;border-radius:6px;font-weight:800;letter-spacing:.06em;}
-.mfd-verify{display:inline-flex;align-items:center;gap:5px;color:var(--t2);font-weight:600;}
-.mfd-verify .d{width:7px;height:7px;border-radius:50%;background:var(--t3);}
-.mfd-verify.ok .d{background:#30D158;}
+/* empty / pending — compact and on-brand, never a big blank slate */
+.mfd-empty{display:flex;gap:11px;align-items:flex-start;padding:14px 15px;border-radius:14px;
+  background:var(--glass);border:1px solid var(--line);color:var(--t2);}
+.mfd-empty i{color:var(--t3);font-size:1rem;margin-top:2px;}
+.mfd-empty b{display:block;color:var(--t1);font-size:.95rem;margin-bottom:3px;font-weight:800;}
+.mfd-empty span{font-size:.9rem;line-height:1.5;}
+/* bottom action bar — comment pill + heart / bookmark / share */
+.mf-actions{flex-shrink:0;display:flex;align-items:center;gap:12px;padding:10px 14px 12px;
+  border-top:1px solid var(--line);}
+.mf-comment{flex:1;text-align:left;border:1px solid var(--line);background:transparent;
+  color:var(--t3);font-size:.9rem;padding:10px 15px;border-radius:999px;cursor:pointer;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.mf-acts{display:flex;gap:18px;flex-shrink:0;}
+.mf-acts span{cursor:pointer;color:var(--t2);font-size:1.15rem;line-height:1;}
+.mf-acts .on i{color:var(--accent);}
+.mf-acts .b-like.on i{color:#FF375F;}
 </style>
 
 <script>
@@ -9828,60 +9836,115 @@ function myfeedBadges(a){
 
 function buildMyfeedCard(a){
   const saved = ST.saves.includes(a.id);
+  const liked = ST.likes.includes(a.id);
   const el = document.createElement('div'); el.className = 'mf-item'; el.dataset.aid = a.id;
+  el._mfa = a;                                   // stashed for lazy hydration
   const src = a.source || 'SherrByte';
   const tldr = bEsc(a.preview || a.summary || a.cached_summary || '');
+  const cat = (a.category || a.pillar_slug || '').trim();
+  const leadBadge = sectorBadge(cat || src);     // the "colour box" that leads the lead block
+  const logoCh = bEsc((src.trim().charAt(0) || 'S').toUpperCase());
   el.innerHTML = `
-    <div class="mf-card">
+    <article class="mf-card">
       <div class="mf-media b-open" style="${ownImage(a) ? `background-image:url('${a.image_url}')` : `background:${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}`}">
-        ${a.image_url ? '' : '<i class="fa-regular fa-image mf-media-ico"></i>'}
+        ${ownImage(a) ? '' : '<i class="fa-regular fa-image mf-media-ico"></i>'}
       </div>
-      <div class="mf-body">
-        <div class="mf-srcrow">
-          <div class="mf-src">
-            <span class="mf-src-logo">${bEsc(src.charAt(0).toUpperCase())}</span>
-            <span class="mf-src-name">${bEsc(src)}</span>
-          </div>
-          <div class="mf-srcacts">
-            <span class="b-save ${saved?'on':''}"><i class="fa-${saved?'solid':'regular'} fa-bookmark"></i></span>
-            <span class="b-share"><i class="fa-solid fa-arrow-up-from-bracket"></i></span>
-          </div>
+      <div class="mf-tabrow">
+        <div class="mfd-tabs" role="tablist">
+          <button class="mfd-tab on" data-tab="news" role="tab">News</button>
+          <button class="mfd-tab" data-tab="strings" role="tab">Strings</button>
+          <button class="mfd-tab" data-tab="dots" role="tab">Dots</button>
         </div>
-        <div class="mf-badges">${myfeedBadges(a)}</div>
-        <div class="mf-headline b-open">${bEsc(a.title)}</div>
+        <span class="mf-logo" title="${bEsc(src)}">${logoCh}</span>
+      </div>
+      <div class="mfd-head">
+        <h2 class="mf-headline b-open">${bEsc(a.title)}</h2>
         <div class="mfd-sig">
           <span class="mfd-sigid">SB-${a.id}</span>
           <span class="mfd-verify"><span class="d"></span><span class="mfd-verify-lbl">${timeAgo(a.published_at)||'Just now'} · ${bEsc(src)}</span></span>
         </div>
-        <div class="mfd-tabs" role="tablist">
-          <button class="mfd-tab on" data-tab="news">News</button>
-          <button class="mfd-tab" data-tab="strings">Strings</button>
-          <button class="mfd-tab" data-tab="dots">Dots</button>
-        </div>
-        <div class="mfd-panes">
-          <div class="mfd-pane news on" data-pane="news">
-            <div class="mfd-tldr"><b>TL;DR</b>${tldr || 'Loading…'}</div>
-            <div class="mfd-sec mfd-what"><h4>What happened</h4><p>${tldr || '—'}</p></div>
-            <div class="mfd-sec mfd-whowhere" hidden><h4>Who &amp; Where</h4><p></p></div>
-          </div>
-          <div class="mfd-pane strings" data-pane="strings">${mfdPending('The Strings','Loading the causal thread…', true)}</div>
-          <div class="mfd-pane dots" data-pane="dots">${mfdPending('The Dots','Loading the contagion map…', true)}</div>
+      </div>
+      <div class="mfd-view">
+        <div class="mfd-track">
+          <section class="mfd-pane news on" data-pane="news">
+            <div class="mfd-scroll">
+              <div class="mfd-block mfd-tldr">${leadBadge}<p class="mfd-lead">${tldr || 'Sherr AI is preparing an original summary of this story.'}</p></div>
+              <div class="mfd-block mfd-what" hidden><p></p></div>
+              <div class="mfd-block mfd-whowhere" hidden></div>
+            </div>
+          </section>
+          <section class="mfd-pane strings" data-pane="strings">
+            <div class="mfd-scroll">${renderStringsPane([], 'loading', a)}</div>
+          </section>
+          <section class="mfd-pane dots" data-pane="dots">
+            <div class="mfd-scroll">${renderDotsPane({}, 'loading', a)}</div>
+          </section>
         </div>
       </div>
-    </div>`;
-  // Tab switching (scoped to this card).
-  el.querySelectorAll('.mfd-tab').forEach(t => t.addEventListener('click', e => {
-    e.stopPropagation();
-    const name = t.dataset.tab;
-    el.querySelectorAll('.mfd-tab').forEach(x => x.classList.toggle('on', x === t));
-    el.querySelectorAll('.mfd-pane').forEach(p => p.classList.toggle('on', p.dataset.pane === name));
-  }));
-  el.querySelector('.b-save').addEventListener('click', e => { e.stopPropagation(); myfeedToggle('saves', a, e.currentTarget, 'fa-bookmark', '🔖 Saved', 'save'); });
-  el.querySelector('.b-share').addEventListener('click', e => { e.stopPropagation(); shareArticleCard(a); });
-  el.querySelectorAll('.b-open').forEach(o => o.addEventListener('click', e => { e.stopPropagation(); markSeen(a.id); }));
+      <div class="mf-actions">
+        <button class="mf-comment b-open" type="button">Add a comment…</button>
+        <div class="mf-acts">
+          <span class="b-like ${liked?'on':''}"><i class="fa-${liked?'solid':'regular'} fa-heart"></i></span>
+          <span class="b-save ${saved?'on':''}"><i class="fa-${saved?'solid':'regular'} fa-bookmark"></i></span>
+          <span class="b-share"><i class="fa-solid fa-arrow-up-from-bracket"></i></span>
+        </div>
+      </div>
+    </article>`;
+  mfBindCard(el, a);
   // Lazily fill the dossier (node / strings / dots) once the card is on screen.
   myfeedObserver.observe(el);
   return el;
+}
+
+// Tabs + horizontal swipe (News ↔ Strings ↔ Dots) + card actions, scoped to one card.
+// A vertical gesture is left alone so the feed's vertical snap still works; only a
+// clearly-horizontal drag moves the pane track.
+function mfBindCard(el, a){
+  const view = el.querySelector('.mfd-view');
+  const track = el.querySelector('.mfd-track');
+  const tabs = [...el.querySelectorAll('.mfd-tab')];
+  const panes = [...el.querySelectorAll('.mfd-pane')];
+  let idx = 0;
+  function setPane(i){
+    idx = Math.max(0, Math.min(panes.length - 1, i));
+    track.style.transform = `translateX(${-idx * 100}%)`;
+    tabs.forEach((t, k) => t.classList.toggle('on', k === idx));
+    panes.forEach((p, k) => p.classList.toggle('on', k === idx));
+  }
+  el._mfSetPane = setPane;
+  tabs.forEach((t, i) => t.addEventListener('click', e => { e.stopPropagation(); setPane(i); }));
+  // Swipe.
+  let x0 = 0, y0 = 0, dx = 0, axis = null, active = false;
+  view.addEventListener('touchstart', e => {
+    if (e.touches.length !== 1) return;
+    x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; dx = 0; axis = null; active = true;
+    track.classList.add('dragging');
+  }, { passive: true });
+  view.addEventListener('touchmove', e => {
+    if (!active) return;
+    const mx = e.touches[0].clientX - x0, my = e.touches[0].clientY - y0;
+    if (axis === null && (Math.abs(mx) > 8 || Math.abs(my) > 8)) axis = Math.abs(mx) > Math.abs(my) ? 'x' : 'y';
+    if (axis !== 'x') return;                    // vertical → let scroll / feed-snap handle it
+    e.preventDefault();
+    dx = mx;
+    let d = dx;
+    if ((idx === 0 && dx > 0) || (idx === panes.length - 1 && dx < 0)) d = dx * 0.35;  // rubber-band ends
+    track.style.transform = `translateX(calc(${-idx * 100}% + ${d}px))`;
+  }, { passive: false });
+  const end = () => {
+    if (!active) return;
+    active = false; track.classList.remove('dragging');
+    const w = view.clientWidth || 1;
+    if (axis === 'x' && Math.abs(dx) > Math.min(64, w * 0.18)) setPane(idx + (dx < 0 ? 1 : -1));
+    else setPane(idx);
+  };
+  view.addEventListener('touchend', end);
+  view.addEventListener('touchcancel', end);
+  // Actions.
+  el.querySelector('.b-like').addEventListener('click', e => { e.stopPropagation(); myfeedToggle('likes', a, e.currentTarget, 'fa-heart', '❤️ Liked', 'like'); });
+  el.querySelector('.b-save').addEventListener('click', e => { e.stopPropagation(); myfeedToggle('saves', a, e.currentTarget, 'fa-bookmark', '🔖 Saved', 'save'); });
+  el.querySelector('.b-share').addEventListener('click', e => { e.stopPropagation(); shareArticleCard(a); });
+  el.querySelectorAll('.b-open').forEach(o => o.addEventListener('click', e => { e.stopPropagation(); markSeen(a.id); }));
 }
 
 // One IntersectionObserver hydrates each card's dossier the first time it nears
@@ -9906,14 +9969,16 @@ async function hydrateDossier(el, id){
   catch (e) { _mfdHydrated.delete(id); return; }   // allow a retry on next view
   if (!el.isConnected) return;
   markSeen(id);
-  // News — enrich TL;DR / What happened / Who & Where from The Node.
+  // News — enrich the lead (TL;DR/hook), What happened, and Who & Where from The Node.
   const node = d.node || {};
+  const hook = (d.hook || '').trim();
   const what = (node.what || '').trim();
-  if (what) {
-    const w = el.querySelector('.mfd-what p'); if (w) w.textContent = what;
-    const tl = el.querySelector('.mfd-tldr'); if (tl && (d.hook || '').trim()) {
-      tl.innerHTML = '<b>TL;DR</b>' + bEsc(d.hook);
-    }
+  const lead = el.querySelector('.mfd-lead');
+  if (lead && (hook || what)) lead.textContent = hook || what;
+  // Only show a separate "What happened" block when it adds to the lead.
+  if (what && !(hook && what === hook)) {
+    const wSec = el.querySelector('.mfd-what');
+    if (wSec) { wSec.querySelector('p').textContent = what; wSec.hidden = false; }
   }
   const whoBits = [];
   if (node.who_subject) whoBits.push(node.who_subject);
@@ -9925,7 +9990,7 @@ async function hydrateDossier(el, id){
     if (whoBits.length) parts.push(`<div class="mfd-chips">${whoBits.map(x=>`<span>${bEsc(x)}</span>`).join('')}</div>`);
     const line = [when, where].filter(Boolean).join(' · ');
     if (line) parts.push(`<p>${bEsc(line)}</p>`);
-    wwSec.querySelector('p').outerHTML = parts.join('');
+    wwSec.innerHTML = parts.join('');
     wwSec.hidden = false;
   }
   // Verification badge.
@@ -9935,9 +10000,10 @@ async function hydrateDossier(el, id){
     vfy.classList.toggle('ok', v.state === 'corroborated');
     vfy.querySelector('.mfd-verify-lbl').textContent = v.label;
   }
-  // Strings + Dots panes.
-  el.querySelector('.mfd-pane.strings').innerHTML = renderStringsPane(d.strings || [], d.strings_status);
-  el.querySelector('.mfd-pane.dots').innerHTML = renderDotsPane(d.dots || {}, d.dots_status);
+  // Strings + Dots panes (the inner scroller is replaced, the pane shell stays).
+  const a = el._mfa || {};
+  el.querySelector('.mfd-pane.strings .mfd-scroll').innerHTML = renderStringsPane(d.strings || [], d.strings_status, a);
+  el.querySelector('.mfd-pane.dots .mfd-scroll').innerHTML = renderDotsPane(d.dots || {}, d.dots_status, a);
   _mfdMarkPending(el, 'strings', d.strings_status !== 'ready');
   _mfdMarkPending(el, 'dots', d.dots_status !== 'ready');
   hydrateMyfeedTickers(el);
@@ -9997,36 +10063,56 @@ const DOTS_META = {
   asymmetric_catch:  { label: 'The Catch' },
 };
 
-function mfdPending(title, msg, loading){
-  return `<div class="mfd-pending"><i class="fa-solid ${loading?'fa-circle-notch fa-spin':'fa-hourglass-half'}"></i>`
-    + `<b>${bEsc(title)}${loading?'':' — pending'}</b><span>${bEsc(msg)}</span></div>`;
+// Compact, on-brand empty/pending state (never a big blank slate).
+function mfdEmpty(title, msg){
+  return `<div class="mfd-empty"><i class="fa-regular fa-hourglass-half"></i>`
+    + `<div><b>${bEsc(title)}</b><span>${bEsc(msg)}</span></div></div>`;
 }
 
-// The Strings — a HORIZONTAL timeline: dots connected left→right by a line, each
-// labelled beneath. (The wireframe's key ask — the old vertical layout was wrong.)
-function renderStringsPane(strings, status){
-  if (!strings || !strings.length){
-    return mfdPending('The Strings', status === 'pending'
-      ? 'The causal thread has not been mapped for this story yet. It appears here once synthesis links its sources.'
-      : 'No causal thread was found in the sources.', false);
+// The Strings — a VERTICAL timeline (dots connected top→bottom), matching the
+// design sketch. It is seeded with a truthful "Present" node built from the
+// article itself, so the thread is never blank; synthesis adds prior milestones
+// above/below as it links corroborating sources.
+function renderStringsPane(strings, status, a){
+  const items = (strings && strings.length) ? strings.slice() : [];
+  const seeded = !items.length;
+  if (seeded && a && a.title){
+    // The headline already sits directly above the timeline, so the seeded node
+    // omits the title and just carries the one-line state of the story now.
+    items.push({ stage: 'Present',
+      detail: (a.preview || a.summary || a.cached_summary || 'This is the latest report in this thread.').trim(),
+      now: true });
   }
-  const steps = strings.map(s => `
-    <div class="mfd-tstep">
-      <span class="mfd-tdot"></span>
-      ${s.stage ? `<div class="mfd-tstage">${bEsc(s.stage)}</div>` : ''}
-      ${s.title ? `<div class="mfd-ttitle">${bEsc(s.title)}</div>` : ''}
-      <div class="mfd-tmeta">${bEsc(s.detail || '')}</div>
-    </div>`).join('');
-  return `<div class="mfd-timeline-h">${steps}</div>`;
+  if (!items.length){
+    return mfdEmpty('The Strings', status === 'pending'
+      ? 'The causal thread builds here as synthesis links corroborating sources.'
+      : 'No causal thread was found in the sources.');
+  }
+  const rows = items.map((s, i) => {
+    const now = s.now || (i === 0 && /present|now/i.test(String(s.stage || '')));
+    return `<div class="mfd-tl-item${now ? ' now' : ''}">
+      <span class="mfd-tl-dot"></span>
+      ${s.stage ? `<div class="mfd-tl-stage">${bEsc(s.stage)}</div>` : ''}
+      ${s.title ? `<div class="mfd-tl-title">${bEsc(s.title)}</div>` : ''}
+      ${s.detail ? `<p class="mfd-tl-desc">${bEsc(s.detail)}</p>` : ''}
+    </div>`;
+  }).join('');
+  const foot = seeded
+    ? `<div class="mfd-empty" style="margin-top:4px"><i class="fa-regular fa-clock"></i>`
+      + `<span>More milestones appear here as other sources corroborate this story.</span></div>`
+    : '';
+  return `<div class="mfd-tl">${rows}</div>${foot}`;
 }
 
-// The Dots — labelled contagion rows ("Dot: Markets" …) each with its impact line.
-function renderDotsPane(dots, status){
+// The Dots — labelled cross-asset rows ("Dot: Markets" …) each with its impact
+// line. Left honest: ripples are only rendered when synthesis has connected the
+// story to markets/policy/tech — never fabricated.
+function renderDotsPane(dots, status, a){
   const keys = Object.keys(dots || {});
   if (!keys.length){
-    return mfdPending('The Dots', status === 'pending'
-      ? 'The cross-asset contagion map has not been drawn for this story yet.'
-      : 'No cross-asset ripples were identified in the sources.', false);
+    return mfdEmpty('The Dots', status === 'pending'
+      ? 'Cross-asset ripples map here once synthesis connects this story to markets, policy and tech.'
+      : 'No cross-asset ripples were identified in the sources.');
   }
   const order = ['market_debt', 'policy_governance', 'tech_culture', 'asymmetric_catch'];
   return order.filter(k => dots[k]).map(k => mfdDotRow(k, dots[k])).join('');
