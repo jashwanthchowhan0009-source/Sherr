@@ -476,15 +476,22 @@ the sitemap and the og:url all write is `/myfeed`. The client also accepts a
 legacy `/bytes/<slug>` on boot in case a redirect is ever missed.
 
 The dossier is rendered **INLINE ON EACH CARD**, not behind a tap (the earlier
-tap-to-open overlay was removed). The card follows the design sketch top→bottom:
-a rounded **image**, then a **segmented tab row** (labelled exactly
-**News · Strings · Dots**) with the brand **logo** at its right, then a
-**persistent headline + `SB-<id>` chip** shared across all three tabs, then the
-active pane, then a bottom **action bar** (an "Add a comment" pill + heart /
-bookmark / share). Panes live in a horizontal swipe track (`.mfd-view` /
-`.mfd-track`): a clearly-horizontal drag slides News↔Strings↔Dots (tabs also
-switch); a vertical gesture is left alone so the feed's vertical card-snap still
-works (`mfBindCard` decides the axis). Per-card lazy hydration: an
+tap-to-open overlay was removed). The card is **one vertical scroll** (`.mf-card`
+is `overflow-y:auto`), Inshorts-style, top→bottom: a large **image** with the
+**segmented tab row** (labelled exactly **News · Strings · Dots**) and the brand
+**logo** overlaid on its lower edge; then the **headline + `SB-<id>` chip** (which
+scroll WITH the content, not pinned); then the active pane; then a **sticky
+action bar** (an "Add a comment" pill + heart / bookmark / share) glued to the
+card's bottom. Reading scrolls the image up out of view rather than keeping it
+fixed. Only the active pane shows (`.mfd-pane.on`, display-toggle with a slide-in);
+`mfBindCard` switches it on tab tap or a **sideways swipe on the text**, while a
+vertical gesture is left to the card's own scroll (axis decided per-gesture).
+myFeed also **hides the global `#hdr`** (`body[data-view="myfeed"]`, set in
+`navTo`) to reclaim the top, and the satellite FAB `#nb-scan` is hidden app-wide
+for now. The tab-row logo is the White Tiger mark served at `/tiger-logo.png`
+(`SHERR_LOGO_URL`); the action icons are inline SVG (no Font-Awesome dependency).
+Fonts: body **Inter**, headline **Poppins** (`--f`/`--fd`), sized down to
+Inshorts scale (headline ~1.18rem, body ~0.95rem). Per-card lazy hydration: an
 `IntersectionObserver` (`myfeedObserver`) fetches `/article/<id>/dossier` the
 first time a card nears the viewport, so the deck stays cheap (one fetch per card
 actually seen). `buildMyfeedCard` builds the card; `renderStringsPane` /
