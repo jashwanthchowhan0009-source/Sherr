@@ -5096,24 +5096,24 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 .mf-badge::before{content:'';position:absolute;left:8px;top:4px;bottom:4px;
   border-left:2px dotted rgba(255,255,255,.6);}
 .mf-badge.dark::before{border-color:rgba(0,0,0,.35);}
-/* tab row — overlaid on the LOWER edge of the image (sketch #5): segmented
-   News · Strings · Dots on the left, the brand logo on the right. */
-.mf-tabrow{position:absolute;left:0;right:0;bottom:0;z-index:2;
-  display:flex;align-items:center;gap:10px;padding:10px 12px;}
+/* tab row — an INLINE bar BETWEEN the image and the headline (not overlaid on
+   the image any more): segmented News · Strings · Dots on the left, the brand
+   logo on the right. Sits on the card surface, so no backdrop blur needed. */
+.mf-tabrow{display:flex;align-items:center;gap:10px;padding:11px 14px 4px;}
 .mfd-tabs{display:flex;gap:4px;flex:1;border-radius:12px;padding:3px;
-  background:rgba(12,12,15,.55);-webkit-backdrop-filter:blur(9px);backdrop-filter:blur(9px);
-  border:1px solid rgba(255,255,255,.14);}
-.mfd-tab{flex:1;border:0;background:transparent;color:rgba(255,255,255,.74);
+  background:var(--surface-2,rgba(255,255,255,.06));
+  border:1px solid var(--line,rgba(255,255,255,.10));}
+.mfd-tab{flex:1;border:0;background:transparent;color:var(--t2);
   font-size:.82rem;font-weight:700;padding:7px 4px;border-radius:9px;cursor:pointer;
   transition:color .15s var(--ease),background .15s var(--ease);}
-.mfd-tab.on{background:#fff;color:#111214;box-shadow:0 1px 3px rgba(0,0,0,.3);}
+.mfd-tab.on{background:var(--t1);color:var(--bg);box-shadow:0 1px 3px rgba(0,0,0,.3);}
 .mfd-tab.pending{opacity:.55;}
 .mf-logo{width:40px;height:40px;border-radius:11px;flex-shrink:0;overflow:hidden;
   display:flex;align-items:center;justify-content:center;
-  background:rgba(12,12,15,.55);-webkit-backdrop-filter:blur(9px);backdrop-filter:blur(9px);
-  border:1px solid rgba(255,255,255,.18);}
+  background:var(--surface-2,rgba(255,255,255,.06));
+  border:1px solid var(--line,rgba(255,255,255,.12));}
 .mf-logo img{width:100%;height:100%;object-fit:cover;display:block;}
-.mf-logo-svg{width:20px;height:20px;fill:none;stroke:#fff;stroke-width:1.9;stroke-linecap:round;}
+.mf-logo-svg{width:20px;height:20px;fill:none;stroke:var(--t1);stroke-width:1.9;stroke-linecap:round;}
 /* the three panes — only the active one shows; a tap or a sideways swipe on the
    text switches with a slide-in. The card (not the pane) owns vertical scroll. */
 .mfd-panes{position:relative;flex:1 0 auto;}
@@ -5136,6 +5136,23 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 .mfd-chips{display:flex;flex-wrap:wrap;gap:6px;}
 .mfd-chips span{font-size:.78rem;background:var(--glass);border:1px solid var(--line);
   padding:4px 10px;border-radius:9px;color:var(--t1);}
+/* News-pane TL;DR button (bottom-right) + the KEY POINTS card it reveals */
+.mfd-tldr-row{display:flex;justify-content:flex-end;margin-top:2px;}
+.mfd-tldr-btn{display:inline-flex;align-items:center;gap:6px;border:1px solid rgba(168,85,247,.32);
+  background:rgba(168,85,247,.12);color:#C084FC;font:800 .72rem/1 var(--f);letter-spacing:.03em;
+  padding:9px 14px;border-radius:11px;cursor:pointer;transition:all .15s var(--ease);}
+.mfd-tldr-btn.on{background:#A855F7;color:#fff;border-color:#A855F7;}
+.mfd-tldr-btn:active{transform:scale(.95);}
+.mfd-keypoints{background:rgba(10,132,255,.06);border:1px solid rgba(10,132,255,.16);
+  border-radius:14px;padding:14px 15px;display:flex;flex-direction:column;gap:9px;}
+.mfd-kp-hd{color:var(--accent);font:800 .72rem/1 var(--f);letter-spacing:.09em;
+  display:flex;align-items:center;gap:7px;margin-bottom:2px;}
+.mfd-kp-row{display:flex;gap:12px;align-items:flex-start;}
+.mfd-kp-k{flex:0 0 52px;color:var(--accent);font-weight:800;font-size:.68rem;
+  text-transform:uppercase;letter-spacing:.05em;padding-top:2px;}
+.mfd-kp-v{flex:1;color:var(--t1);font-size:.9rem;line-height:1.42;}
+.mfd-kp-tldr{border-top:1px solid var(--line);padding-top:10px;}
+.mfd-kp-tldr p{margin:5px 0 0;color:var(--t2);font-size:.9rem;line-height:1.5;}
 /* Strings pane — VERTICAL timeline (dots connected top→bottom), per the sketch */
 .mfd-tl{position:relative;padding:6px 0 2px 6px;}
 .mfd-tl-item{position:relative;padding:0 0 20px 24px;}
@@ -6084,6 +6101,54 @@ function selectChip(el, cat) {
   structuredFeedOffset = 0;
   document.getElementById('home-feed').innerHTML = '';
   loadFeed(true);
+}
+
+// ── Home category swipe ──────────────────────────────────────────────────────
+// A sideways swipe on the feed steps between the chip categories (All → Arts →
+// …), exactly like the News → Strings → Dots swipe on a dossier card. A vertical
+// gesture is left alone so the feed scrolls; the chip row keeps its own
+// horizontal scroll (the swipe zone is the article list, not the chips).
+function homeChips() { return [...document.querySelectorAll('#chip-row .chip')]; }
+function homeGoRel(dir) {
+  const chips = homeChips(); if (!chips.length) return;
+  let i = chips.findIndex(c => c.classList.contains('on')); if (i < 0) i = 0;
+  const ni = Math.max(0, Math.min(chips.length - 1, i + dir));
+  if (ni === i) return;
+  const m = (chips[ni].getAttribute('onclick') || '').match(/'([^']+)'/);
+  chips[ni].scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
+  const feed = document.getElementById('home-feed');
+  if (feed) {   // brief slide-in cue in the swipe direction
+    feed.style.transition = 'none';
+    feed.style.transform = `translateX(${dir > 0 ? 22 : -22}px)`;
+    feed.style.opacity = '0.4';
+    requestAnimationFrame(() => {
+      feed.style.transition = 'transform .28s cubic-bezier(.22,1,.32,1), opacity .28s';
+      feed.style.transform = ''; feed.style.opacity = '';
+    });
+  }
+  selectChip(chips[ni], m ? m[1] : 'all');
+}
+function bindHomeSwipe() {
+  const zone = document.getElementById('home-feed');
+  if (!zone || zone._swipeBound) return;
+  zone._swipeBound = true;
+  let x0 = 0, y0 = 0, axis = null, active = false;
+  zone.addEventListener('touchstart', e => {
+    if (e.touches.length !== 1) { active = false; return; }
+    x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; axis = null; active = true;
+  }, { passive: true });
+  zone.addEventListener('touchmove', e => {
+    if (!active) return;
+    const mx = e.touches[0].clientX - x0, my = e.touches[0].clientY - y0;
+    if (axis === null && (Math.abs(mx) > 10 || Math.abs(my) > 10)) axis = Math.abs(mx) > Math.abs(my) ? 'x' : 'y';
+  }, { passive: true });
+  zone.addEventListener('touchend', e => {
+    if (!active) { return; } active = false;
+    if (axis !== 'x') return;
+    const mx = e.changedTouches[0].clientX - x0;
+    if (Math.abs(mx) < 60) return;            // ignore small drags
+    homeGoRel(mx < 0 ? 1 : -1);               // left → next, right → previous
+  });
 }
 
 // ── SCOPE TOGGLE ──
@@ -8639,7 +8704,7 @@ window.addEventListener('popstate', (e) => {
 // hardcoded 'home'. This is the half of real URLs that makes a refresh and a
 // pasted link work; the server serving index.html at these paths is the other.
 try { history.replaceState({ view: viewForPath(location.pathname) }, ''); } catch (e) {}
-document.addEventListener('DOMContentLoaded', () => { try { routeFromPath(); } catch (e) {} });
+document.addEventListener('DOMContentLoaded', () => { try { routeFromPath(); } catch (e) {} try { bindHomeSwipe(); } catch (e) {} });
 
 // Apply a /me payload to the profile UI — real data only, no placeholders.
 function applyMe(me) {
@@ -10081,14 +10146,14 @@ function buildMyfeedCard(a){
     <article class="mf-card">
       <div class="mf-media b-open" style="${ownImage(a) ? `background-image:url('${a.image_url}')` : `background:${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}`}">
         ${ownImage(a) ? '' : MF_ICON.image}
-        <div class="mf-tabrow">
-          <div class="mfd-tabs" role="tablist">
-            <button class="mfd-tab on" data-tab="news" role="tab">News</button>
-            <button class="mfd-tab" data-tab="strings" role="tab">Strings</button>
-            <button class="mfd-tab" data-tab="dots" role="tab">Dots</button>
-          </div>
-          <span class="mf-logo" title="${bEsc(src)}">${mfLogoMarkup(src)}</span>
+      </div>
+      <div class="mf-tabrow">
+        <div class="mfd-tabs" role="tablist">
+          <button class="mfd-tab on" data-tab="news" role="tab">News</button>
+          <button class="mfd-tab" data-tab="strings" role="tab">Strings</button>
+          <button class="mfd-tab" data-tab="dots" role="tab">Dots</button>
         </div>
+        <span class="mf-logo" title="${bEsc(src)}">${mfLogoMarkup(src)}</span>
       </div>
       <div class="mfd-head">
         <h2 class="mf-headline b-open">${bEsc(a.title)}</h2>
@@ -10103,6 +10168,11 @@ function buildMyfeedCard(a){
             <div class="mfd-block mfd-tldr">${leadBadge}<p class="mfd-lead">${tldr || 'Sherr AI is preparing an original summary of this story.'}</p></div>
             <div class="mfd-block mfd-what" hidden><p></p></div>
             <div class="mfd-block mfd-whowhere" hidden></div>
+            <div class="mfd-keypoints" hidden></div>
+            <div class="mfd-tldr-row">
+              <button class="mfd-tldr-btn" type="button" aria-expanded="false">
+                <i class="fa-solid fa-wand-magic-sparkles"></i> TL;DR</button>
+            </div>
           </div>
         </section>
         <section class="mfd-pane strings" data-pane="strings">
@@ -10179,6 +10249,23 @@ function mfBindCard(el, a){
   // nothing but mark the card seen — the reason comments felt disabled).
   const cbtn = el.querySelector('.mf-comment');
   if (cbtn) cbtn.addEventListener('click', e => { e.stopPropagation(); openComments(a.id, a); });
+  // TL;DR button: reveal the KEY POINTS block (built from The Node during
+  // hydration). If the card has not hydrated yet, show a short holding line.
+  const tbtn = el.querySelector('.mfd-tldr-btn');
+  if (tbtn) tbtn.addEventListener('click', e => {
+    e.stopPropagation();
+    const kp = el.querySelector('.mfd-keypoints'); if (!kp) return;
+    const open = kp.hidden;
+    if (open && !kp.dataset.ready) {
+      kp.innerHTML = mfdKeyPointsHTML({
+        what: a.title || '', where: '', when: '',
+        tldr: (el.querySelector('.mfd-lead') ? el.querySelector('.mfd-lead').textContent : (a.preview || a.summary || '')),
+      });
+    }
+    kp.hidden = !open;
+    tbtn.setAttribute('aria-expanded', String(open));
+    tbtn.classList.toggle('on', open);
+  });
   el.querySelectorAll('.b-open').forEach(o => o.addEventListener('click', e => {
     if (o.classList.contains('mf-comment')) return;   // handled above
     e.stopPropagation(); markSeen(a.id);
@@ -10200,6 +10287,19 @@ const myfeedObserver = new IntersectionObserver((entries) => {
     hydrateDossier(el, id);
   });
 }, { rootMargin: '300px 0px' });
+
+// KEY POINTS card for the News-pane TL;DR — pure template over The Node data
+// that is already loaded, so it never fires a request that can fail.
+function mfdKeyPointsHTML(k){
+  const row = (label, val) => val ? `<div class="mfd-kp-row"><span class="mfd-kp-k">${label}</span><span class="mfd-kp-v">${bEsc(val)}</span></div>` : '';
+  const fmtWhen = (w) => { if(!w) return ''; const d=new Date(w);
+    return isNaN(d) ? String(w) : d.toLocaleString(undefined,{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}); };
+  return `<div class="mfd-kp-hd"><i class="fa-solid fa-list-check"></i> KEY POINTS</div>
+    ${row('What', k.what)}
+    ${row('Where', k.where || 'Not specified')}
+    ${row('When', fmtWhen(k.when))}
+    ${k.tldr ? `<div class="mfd-kp-tldr"><span class="mfd-kp-k">TL;DR</span><p>${bEsc(k.tldr)}</p></div>` : ''}`;
+}
 
 async function hydrateDossier(el, id){
   let d;
@@ -10230,6 +10330,18 @@ async function hydrateDossier(el, id){
     if (line) parts.push(`<p>${bEsc(line)}</p>`);
     wwSec.innerHTML = parts.join('');
     wwSec.hidden = false;
+  }
+  // TL;DR / KEY POINTS — built from The Node we already fetched, so it never
+  // makes a second call that can fail ("Summarize failed"). Hidden until the
+  // reader taps the TL;DR button.
+  const kp = el.querySelector('.mfd-keypoints');
+  if (kp) {
+    const tldrLine = hook || what || (el.querySelector('.mfd-lead') ? el.querySelector('.mfd-lead').textContent : '');
+    kp.innerHTML = mfdKeyPointsHTML({
+      what: what || (el._mfa && el._mfa.title) || '',
+      where, when, tldr: tldrLine,
+    });
+    kp.dataset.ready = '1';
   }
   // Verification badge.
   const v = d.verification || {};
