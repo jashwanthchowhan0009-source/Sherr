@@ -75,6 +75,16 @@ def test_home_content_is_blanked_under_a_full_page(html):
     assert "body.dp-open .phone { visibility: hidden !important; }" in html
 
 
+def test_the_drilldown_page_itself_stays_visible_under_dp_open(html):
+    """The overlays are 'body level' by TEXT ORDER only — in the parsed DOM the
+    browser keeps #xp-page a descendant of .phone (the tests above check string
+    position, not real nesting). So `body.dp-open .phone{visibility:hidden}`
+    ALSO hid the drill-down page itself: every Explore tile/tab opened to a
+    blank black screen with its back arrow hidden, and the reader was stuck.
+    This asserts the re-assert-visibility guard that fixes it stays present."""
+    assert "body.dp-open #xp-page { visibility: visible !important; }" in html
+
+
 def test_desktop_offsets_the_page_beside_the_sidebar(html):
     block = html[html.index("@media (min-width: 1024px)"):html.index("/* Wider still")]
     assert ".xp-page {" in block and "left: var(--sbw)" in block

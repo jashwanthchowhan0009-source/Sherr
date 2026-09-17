@@ -1946,6 +1946,13 @@ body.dp-open > header, body.dp-open #hdr { display:none !important }
    structural fact rather than a bet on the overlay being perfectly opaque and
    full-height. */
 body.dp-open .phone { visibility: hidden !important; }
+/* …but #xp-page IS a descendant of .phone (the intended body-level move never
+   actually happened in the markup), so the rule above also hid the drill-down
+   page itself — every Explore tile/tab opened to a BLANK black screen with its
+   back arrow hidden too, so the reader was stuck. Re-assert visibility on the
+   page and its subtree: visibility is inherited, so only #xp-page comes back
+   while the home content behind it stays hidden. */
+body.dp-open #xp-page { visibility: visible !important; }
 .xp-page.on{transform:translateX(0)}
 .xp-pg-hd{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:12px;
   padding:14px 16px;background:var(--bg);border-bottom:1px solid var(--xp-line)}
