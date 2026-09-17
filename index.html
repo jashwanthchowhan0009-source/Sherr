@@ -1325,6 +1325,34 @@ header {
   border: 1px solid rgba(0,62,145,0.3);
 }
 
+/* Profile quick-access grid */
+.prof-quick { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 12px; }
+.pq { display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 12px 4px;
+  border-radius: 15px; background: var(--bg2); border: 1px solid var(--line); cursor: pointer;
+  transition: transform .12s var(--spring); }
+.pq:active { transform: scale(0.95); }
+.pq-ic { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; font-size: 1.02rem; }
+.pq span { font-size: 0.64rem; font-weight: 600; color: var(--t2); }
+
+/* P6 — "mostly black" profile: push the card surfaces toward true black in the
+   dark/navy themes (light theme keeps its paper look). */
+:root:not([data-theme="light"]) #v-profile {
+  --prof-card: #0d0d10;
+}
+:root:not([data-theme="light"]) #v-profile .prof-stats,
+:root:not([data-theme="light"]) #v-profile .pq,
+:root:not([data-theme="light"]) #v-profile .pb-sec,
+:root:not([data-theme="light"]) #v-profile .set-grp,
+:root:not([data-theme="light"]) #v-profile .analytics-hero,
+:root:not([data-theme="light"]) #v-profile .analytics-tile,
+:root:not([data-theme="light"]) #v-profile .cat-donut-wrap,
+:root:not([data-theme="light"]) #v-profile .activity-feed,
+:root:not([data-theme="light"]) #v-profile .streak-strip {
+  background: #0d0d10 !important;
+  border: 1px solid rgba(255,255,255,0.055) !important;
+}
+:root:not([data-theme="light"]) #v-profile { background: #060608; }
+
 /* Settings rows */
 .set-sec { padding: 12px 14px 0; }
 .set-lbl {
@@ -1842,43 +1870,34 @@ nav.compact .nb.on { flex: 0 0 auto; padding-left: 16px; padding-right: 16px; }
 .xp-cats.grid .xp-cat{width:auto;}
 .xp-cats.grid .xp-cat .ic{margin:0 auto;}
 
-/* ── "Exploring the World" banner ── */
-.xp-world{position:relative;margin:12px 16px 2px;border-radius:20px;overflow:hidden;
-  min-height:130px;display:flex;align-items:center;
-  background:linear-gradient(135deg,#141726,#0b0d16 72%);border:1px solid var(--xp-line);}
-.xp-world-glow{position:absolute;inset:-45% -25% auto auto;width:72%;height:190%;
-  background:radial-gradient(circle,rgba(124,58,237,.55),rgba(124,58,237,0) 62%);
+/* ── Immersive POP-style hero (full-bleed, edge to edge — no box/frame) ── */
+.xp-hero-pop{position:relative;overflow:hidden;cursor:pointer;margin:0 0 6px;padding:0;
+  min-height:256px;display:flex;align-items:flex-end;
+  background:radial-gradient(125% 82% at 50% -12%,#9a4dff 0%,#6a24e0 38%,#3a148f 66%,#150a30 86%,var(--bg) 100%);}
+/* Vertical "curtain" light streaks, POP-style — fade out toward the bottom. */
+.xp-hero-curtain{position:absolute;inset:0;pointer-events:none;opacity:.5;mix-blend-mode:screen;
+  background:repeating-linear-gradient(90deg,rgba(255,255,255,.12) 0 2px,rgba(255,255,255,0) 2px 17px);
+  -webkit-mask:linear-gradient(180deg,#000 0%,transparent 76%);mask:linear-gradient(180deg,#000 0%,transparent 76%);}
+.xp-hero-glow{position:absolute;top:-34%;left:50%;transform:translateX(-50%);width:130%;height:130%;
+  background:radial-gradient(circle,rgba(190,130,255,.55),rgba(190,130,255,0) 60%);
   animation:xpWorldGlow 7s ease-in-out infinite;pointer-events:none;}
-@keyframes xpWorldGlow{0%,100%{transform:translate(0,0) scale(1);opacity:.9}
-  50%{transform:translate(-14%,10%) scale(1.16);opacity:.55}}
-.xp-world-txt{position:relative;z-index:1;padding:20px;}
-.xp-world-kicker{font:800 .56rem/1 var(--f);letter-spacing:.26em;color:#A78BFA;}
-.xp-world h2{font:700 1.68rem/1.05 var(--xf);color:#fff;margin:8px 0 6px;letter-spacing:-.01em;}
-.xp-world p{margin:0;font:500 .74rem/1.4 var(--f);color:rgba(255,255,255,.62);max-width:250px;}
-[data-theme="light"] .xp-world{background:linear-gradient(135deg,#eef1ff,#f7f9ff 72%);}
-[data-theme="light"] .xp-world h2{color:#14161c;}
-[data-theme="light"] .xp-world p{color:rgba(20,22,28,.6);}
-
-/* ── POP-style animated promo banner ── */
-.xp-promo{position:relative;margin:10px 16px;border-radius:16px;overflow:hidden;cursor:pointer;
-  background:linear-gradient(120deg,#7C3AED,#5661f0 55%,#0ea5e9);
-  box-shadow:0 12px 30px -14px rgba(124,58,237,.85);transition:transform .12s;}
-.xp-promo:active{transform:scale(.99);}
-.xp-promo-shine{position:absolute;top:0;left:-60%;width:40%;height:100%;
-  background:linear-gradient(100deg,rgba(255,255,255,0),rgba(255,255,255,.38),rgba(255,255,255,0));
-  transform:skewX(-18deg);animation:xpShine 3.4s ease-in-out infinite;pointer-events:none;}
-@keyframes xpShine{0%{left:-60%}55%,100%{left:130%}}
-.xp-promo-body{position:relative;z-index:1;display:flex;align-items:center;gap:13px;padding:15px 16px;}
-.xp-promo-badge{flex:0 0 auto;width:40px;height:40px;border-radius:12px;display:grid;place-items:center;
-  background:rgba(255,255,255,.2);color:#fff;font-size:1.1rem;animation:xpBolt 1.8s ease-in-out infinite;}
-@keyframes xpBolt{0%,100%{transform:scale(1)}50%{transform:scale(1.15)}}
-.xp-promo-txt{flex:1;color:#fff;display:flex;flex-direction:column;gap:2px;min-width:0;}
-.xp-promo-txt b{font:700 .95rem/1.2 var(--f);}
-.xp-promo-txt span{font:500 .72rem/1.2 var(--f);color:rgba(255,255,255,.82);}
-.xp-promo-arrow{color:#fff;opacity:.9;}
-@media (prefers-reduced-motion: reduce){
-  .xp-world-glow,.xp-promo-shine,.xp-promo-badge{animation:none;}
-}
+@keyframes xpWorldGlow{0%,100%{transform:translateX(-50%) scale(1);opacity:.9}
+  50%{transform:translateX(-46%) scale(1.14);opacity:.6}}
+.xp-hero-shine{position:absolute;top:0;left:-60%;width:38%;height:100%;pointer-events:none;
+  background:linear-gradient(100deg,rgba(255,255,255,0),rgba(255,255,255,.28),rgba(255,255,255,0));
+  transform:skewX(-18deg);animation:xpShine 4.2s ease-in-out infinite;}
+@keyframes xpShine{0%{left:-60%}55%,100%{left:135%}}
+.xp-hero-inner{position:relative;z-index:1;padding:22px 20px 20px;}
+.xp-hero-kicker{display:inline-flex;align-items:center;gap:6px;font:800 .58rem/1 var(--f);
+  letter-spacing:.2em;color:#EBD9FF;}
+.xp-hero-title{font:800 2.15rem/1.02 var(--xf);color:#fff;margin:11px 0 8px;letter-spacing:-.02em;
+  text-shadow:0 6px 26px rgba(0,0,0,.45);}
+.xp-hero-sub{margin:0 0 15px;font:500 .8rem/1.45 var(--f);color:rgba(255,255,255,.82);max-width:272px;}
+.xp-hero-cta{display:inline-flex;align-items:center;gap:8px;font:700 .78rem/1 var(--f);color:#fff;
+  background:rgba(255,255,255,.17);border:1px solid rgba(255,255,255,.30);
+  padding:11px 16px;border-radius:100px;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);}
+.xp-hero-pop:active .xp-hero-cta{background:rgba(255,255,255,.26);}
+@media (prefers-reduced-motion: reduce){ .xp-hero-glow,.xp-hero-shine{animation:none;} }
 
 /* ── 3. bulletin hero — content IS the card ── */
 .xp-hero{position:relative;margin:2px 0 0}
@@ -4327,24 +4346,17 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 
   <!-- ════════ EXPLORE v8 ════════ -->
   <div class="xp">
-    <!-- "Exploring the World" banner (replaces the old RBI bulletin hero) -->
-    <div class="xp-world">
-      <div class="xp-world-glow"></div>
-      <div class="xp-world-txt">
-        <span class="xp-world-kicker">SHERRBYTE</span>
-        <h2>Exploring<br>the World</h2>
-        <p>55+ sources, de-duplicated and ranked — your world, in one place.</p>
-      </div>
-    </div>
-
-    <!-- POP-style animated promo banner -->
-    <div class="xp-promo" onclick="navTo('myfeed')">
-      <div class="xp-promo-shine"></div>
-      <div class="xp-promo-body">
-        <div class="xp-promo-badge"><i class="fa-solid fa-bolt"></i></div>
-        <div class="xp-promo-txt"><b>Your daily dossier is ready</b>
-          <span>Open myFeed — News · Strings · Dots</span></div>
-        <i class="fa-solid fa-chevron-right xp-promo-arrow"></i>
+    <!-- Immersive, full-bleed POP-style hero: "Exploring the World" merged with
+         the dossier CTA (no box/frame — content IS the surface, edge to edge). -->
+    <div class="xp-hero-pop" onclick="navTo('myfeed')">
+      <div class="xp-hero-curtain"></div>
+      <div class="xp-hero-glow"></div>
+      <div class="xp-hero-shine"></div>
+      <div class="xp-hero-inner">
+        <span class="xp-hero-kicker"><i class="fa-solid fa-bolt"></i> SHERRBYTE</span>
+        <h2 class="xp-hero-title">Exploring<br>the World</h2>
+        <p class="xp-hero-sub">55+ sources, de-duplicated and ranked — your daily dossier, ready.</p>
+        <span class="xp-hero-cta">Open myFeed — News · Strings · Dots <i class="fa-solid fa-arrow-right"></i></span>
       </div>
     </div>
 
@@ -4885,6 +4897,21 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
       <button class="pb pb-sec tap" onclick="openEditProfile()">Edit Profile</button>
       <button class="pb pb-sec tap" onclick="toast('🔗 Link copied')"><i class="fa-solid fa-share-nodes"></i></button>
       <button class="pb pb-feed tap" onclick="navTo('feed')"><i class="fa-solid fa-wave-square"></i> FEED</button>
+    </div>
+    <!-- Quick access — always visible, real destinations. -->
+    <div class="prof-quick">
+      <div class="pq tap" onclick="navTo('bookmarks')">
+        <div class="pq-ic" style="background:rgba(10,132,255,.16);color:#4C9CFF"><i class="fa-solid fa-bookmark"></i></div>
+        <span>Bookmarks</span></div>
+      <div class="pq tap" onclick="navTo('feed')">
+        <div class="pq-ic" style="background:rgba(82,193,122,.16);color:#52C17A"><i class="fa-solid fa-chart-simple"></i></div>
+        <span>Reading</span></div>
+      <div class="pq tap" onclick="navTo('notifs')">
+        <div class="pq-ic" style="background:rgba(251,140,0,.16);color:#FB8C00"><i class="fa-solid fa-bell"></i></div>
+        <span>Alerts</span></div>
+      <div class="pq tap" onclick="openFeedEditModal()">
+        <div class="pq-ic" style="background:rgba(168,85,247,.16);color:#A855F7"><i class="fa-solid fa-bullseye"></i></div>
+        <span>Interests</span></div>
     </div>
   </div>
   <!-- v5.1 — dynamic analytics populated by loadProfileAnalytics() -->
