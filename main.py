@@ -1303,14 +1303,28 @@ def needs_rehash(hashed: str) -> bool:
         return True
 
 
-def make_token(user_id: int) -> str:
+def make_token(user_id: int, days: int = 30, typ: str = "access") -> str:
     payload = json.dumps({
         "id": user_id,
-        "exp": (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()
+        "typ": typ,
+        "exp": (datetime.now(timezone.utc) + timedelta(days=days)).isoformat()
     })
     raw = base64.urlsafe_b64encode(payload.encode()).decode()
     sig = hmac_module.new(JWT_SECRET.encode(), raw.encode(), hashlib.sha256).hexdigest()
     return f"{raw}.{sig}"
+
+
+def make_refresh_token(user_id: int) -> str:
+    # Long-lived (180d) so a session survives well past the access token; the
+    # client swaps it for a fresh access token via /auth/refresh. Without this
+    # the whole client refresh path was dead and any 401 was a hard logout.
+    return make_token(user_id, days=180, typ="refresh")
+
+
+def auth_pair(user_id: int) -> dict:
+    """The token pair every auth path returns, shaped for the client's applyAuth."""
+    return {"token": make_token(user_id), "access_token": make_token(user_id),
+            "refresh_token": make_refresh_token(user_id)}
 
 
 def verify_token(token: str) -> Optional[int]:
@@ -2250,6 +2264,10 @@ class CommentReq(BaseModel):
     body: str
 
 
+class RefreshReq(BaseModel):
+    refresh_token: str
+
+
 class UpdateProfileReq(BaseModel):
     name: Optional[str] = None
     bio: Optional[str] = None
@@ -2293,7 +2311,7 @@ async def signup(req: SignupReq):
     conn.commit()
     conn.close()
     asyncio.create_task(asyncio.to_thread(compute_feed_for_user, user_id))
-    return {"token": make_token(user_id), "user_id": user_id,
+    return {**auth_pair(user_id), "user_id": user_id,
             "display_name": req.name or req.email.split("@")[0], "message": "Account created"}
 
 
@@ -2356,13 +2374,33 @@ async def login(req: LoginReq, request: Request):
         "SELECT COUNT(*) as c FROM user_preferences WHERE user_id=?", (user["id"],)
     ).fetchone()["c"]
     conn.close()
-    return {"token": make_token(user["id"]), "user_id": user["id"], "name": user["name"],
+    return {**auth_pair(user["id"]), "user_id": user["id"], "name": user["name"],
             "display_name": user["name"], "email": user["email"], "has_topics": pref_count > 0}
 
 
 @app.post("/auth/register")
 async def register(req: SignupReq):
     return await signup(req)
+
+
+@app.post("/auth/refresh")
+async def auth_refresh(req: RefreshReq):
+    """Swap a valid refresh token for a fresh access token (and rotate the
+    refresh token). This is what keeps a login durable: the client calls it on a
+    401 instead of dropping the user to sign-in. A signature/expiry failure is a
+    real 401 — the client then, and only then, signs out."""
+    uid = verify_token(req.refresh_token or "")
+    if not uid:
+        raise HTTPException(401, "Session expired — sign in again")
+    conn = get_db()
+    try:
+        exists = conn.execute("SELECT 1 FROM users WHERE id=? LIMIT 1", (uid,)).fetchone()
+    finally:
+        conn.close()
+    if not exists:
+        raise HTTPException(401, "Session expired — sign in again")
+    return {"access_token": make_token(uid), "token": make_token(uid),
+            "refresh_token": make_refresh_token(uid)}
 
 
 @app.get("/topics")
