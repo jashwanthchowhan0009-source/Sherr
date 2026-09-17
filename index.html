@@ -6409,8 +6409,8 @@ function renderStandardCard(rawA, container) {
         <i class="fa-${liked?'solid':'regular'} fa-heart"></i><span>${liked?1:0}</span></button>
       <button class="nca nca-cmt" data-act="cmt" aria-label="Comment">
         <i class="fa-regular fa-comment"></i><span>0</span></button>
-      <button class="nca nca-rp${rpd?' on':''}" data-act="rp" aria-label="Repost">
-        <i class="fa-solid fa-retweet"></i><span>${rpd?1:0}</span></button>
+      <button class="nca nca-share" data-act="share" aria-label="Share">
+        <i class="fa-solid fa-arrow-up-from-bracket"></i></button>
       <button class="nca nca-save${saved?' on':''}" data-act="save" aria-label="Save">
         <i class="fa-${saved?'solid':'regular'} fa-bookmark"></i></button>
     </div>
@@ -6424,10 +6424,10 @@ function renderStandardCard(rawA, container) {
 // One dispatcher for the feed action bar. Each button stops propagation (the
 // card itself opens the article), so these never double-fire an open.
 function ncAct(act, a, btn) {
-  if (act === 'like') return ncLike(a, btn);
-  if (act === 'save') return ncSave(a, btn);
-  if (act === 'rp')   return ncRepost(a, btn);
-  if (act === 'cmt')  return openComments(a.id, a);
+  if (act === 'like')  return ncLike(a, btn);
+  if (act === 'save')  return ncSave(a, btn);
+  if (act === 'share') return shareArticleCard(a);
+  if (act === 'cmt')   return openComments(a.id, a);
 }
 async function ncLike(a, btn) {
   const span = btn.querySelector('span');
