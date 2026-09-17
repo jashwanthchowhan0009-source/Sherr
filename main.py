@@ -921,6 +921,12 @@ _MIGRATIONS = [
     #                   asymmetric_catch} — cross-asset contagion
     "ALTER TABLE articles ADD COLUMN strings TEXT DEFAULT '[]'",
     "ALTER TABLE articles ADD COLUMN dots TEXT DEFAULT '{}'",
+    # ── account handle ────────────────────────────────────────────────────────
+    # The @username was client-only (localStorage), so it never crossed devices
+    # and the profile's name/bio looked empty on a fresh sign-in. It lives on the
+    # user row now, set through PUT /me and returned by GET /me, so the identity
+    # is server-side and follows the account to any device.
+    "ALTER TABLE users ADD COLUMN username TEXT DEFAULT ''",
 ]
 
 # Publisher image URLs are never persisted again (P0.1). Existing rows are scrubbed
@@ -2275,6 +2281,7 @@ class UpdateProfileReq(BaseModel):
     avatar_url: Optional[str] = None
     language: Optional[str] = None
     link: Optional[str] = None
+    username: Optional[str] = None
 
 
 class UpdateTopicsReq(BaseModel):
@@ -3289,6 +3296,7 @@ async def get_me(authorization: str = Header("")):
     return {
         "id": user["id"], "email": user["email"], "name": user["name"],
         "display_name": user["name"], "bio": user["bio"],
+        "username": (dict(user).get("username") or ""),
         "avatar_url": user["avatar_url"], "language": user["language"],
         "created_at": user["created_at"],
         "preferences": [
@@ -3307,20 +3315,38 @@ async def get_me(authorization: str = Header("")):
 
 @app.put("/me")
 async def update_profile(req: UpdateProfileReq, authorization: str = Header("")):
-    uid = get_current_user(authorization)
+    # require_user, NOT get_current_user: the lenient path returns anonymous
+    # uid=1 on a missing/expired token, so an edit made with a stale session was
+    # silently written to the shared anonymous row — the reader's bio "vanished"
+    # on their next real /me. A 401 here is correct: the client refreshes the
+    # token (see /auth/refresh) and retries, so the write lands on the real user.
+    uid = require_user(authorization)
     conn = get_db()
     updates = {}
     display = req.display_name or req.name
     if display: updates["name"] = display
-    if req.bio: updates["bio"] = req.bio
+    if req.bio is not None: updates["bio"] = req.bio      # allow clearing the bio
     if req.avatar_url: updates["avatar_url"] = req.avatar_url
     if req.language: updates["language"] = req.language
+    if req.username is not None:
+        uname = re.sub(r"[^a-z0-9_]", "", (req.username or "").strip().lstrip("@").lower())[:20]
+        if uname:
+            if len(uname) < 3:
+                conn.close()
+                raise HTTPException(400, "Username must be 3–20 letters, numbers or _")
+            taken = conn.execute(
+                "SELECT 1 FROM users WHERE username=? AND id<>? LIMIT 1", (uname, uid)
+            ).fetchone()
+            if taken:
+                conn.close()
+                raise HTTPException(409, "That username is taken")
+            updates["username"] = uname
     if updates:
         set_clause = ", ".join(f"{k}=?" for k in updates)
         conn.execute(f"UPDATE users SET {set_clause} WHERE id=?", list(updates.values()) + [uid])
         conn.commit()
     conn.close()
-    return {"status": "updated"}
+    return {"status": "updated", **({"username": updates["username"]} if "username" in updates else {})}
 
 
 @app.put("/me/topics")
