@@ -1699,17 +1699,19 @@ header {
 /* Transparent positioning shell — the tab group and the Scan orb are two
    separate glass elements (Pop-style), not one bar. */
 nav {
-  position: absolute; bottom: max(16px, env(safe-area-inset-bottom));
+  /* Smaller + a little lower (10px vs 16px), so the gap between the last card
+     and the bar reads even. */
+  position: absolute; bottom: max(10px, env(safe-area-inset-bottom));
   left: 50%; transform: translateX(-50%);
-  width: calc(100% - 16px); max-width: 480px;
-  display: flex; align-items: center; gap: 10px;
+  width: calc(100% - 16px); max-width: 468px;
+  display: flex; align-items: center; gap: 9px;
   z-index: 600;
 }
 
 /* The tab group — a frosted glass pill holding the stacked tabs. */
 .nb-tabs {
   display: flex; align-items: stretch; gap: 2px; flex: 1 1 auto; min-width: 0;
-  padding: 6px; border-radius: 30px;
+  padding: 5px; border-radius: 26px;
   background: rgba(255,255,255,0.07);
   backdrop-filter: blur(34px) saturate(180%);
   -webkit-backdrop-filter: blur(34px) saturate(180%);
@@ -1834,6 +1836,49 @@ nav.compact .nb.on { flex: 0 0 auto; padding-left: 16px; padding-right: 16px; }
 .xp-cat.on .ic{box-shadow:0 0 0 2px var(--xp-ink), 0 0 0 4px rgba(0,0,0,.55);}
 .xp-cat span{display:block;font:600 .6rem/1.2 var(--f);color:var(--xp-mute);margin-top:6px;}
 .xp-cat.on span{color:var(--xp-ink)}
+/* "Top brands"-style pillar GRID (wrapped, labelled) instead of the scroll rail */
+.xp-cats.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px 4px;
+  overflow:visible;padding:8px 16px 4px;}
+.xp-cats.grid .xp-cat{width:auto;}
+.xp-cats.grid .xp-cat .ic{margin:0 auto;}
+
+/* ── "Exploring the World" banner ── */
+.xp-world{position:relative;margin:12px 16px 2px;border-radius:20px;overflow:hidden;
+  min-height:130px;display:flex;align-items:center;
+  background:linear-gradient(135deg,#141726,#0b0d16 72%);border:1px solid var(--xp-line);}
+.xp-world-glow{position:absolute;inset:-45% -25% auto auto;width:72%;height:190%;
+  background:radial-gradient(circle,rgba(124,58,237,.55),rgba(124,58,237,0) 62%);
+  animation:xpWorldGlow 7s ease-in-out infinite;pointer-events:none;}
+@keyframes xpWorldGlow{0%,100%{transform:translate(0,0) scale(1);opacity:.9}
+  50%{transform:translate(-14%,10%) scale(1.16);opacity:.55}}
+.xp-world-txt{position:relative;z-index:1;padding:20px;}
+.xp-world-kicker{font:800 .56rem/1 var(--f);letter-spacing:.26em;color:#A78BFA;}
+.xp-world h2{font:700 1.68rem/1.05 var(--xf);color:#fff;margin:8px 0 6px;letter-spacing:-.01em;}
+.xp-world p{margin:0;font:500 .74rem/1.4 var(--f);color:rgba(255,255,255,.62);max-width:250px;}
+[data-theme="light"] .xp-world{background:linear-gradient(135deg,#eef1ff,#f7f9ff 72%);}
+[data-theme="light"] .xp-world h2{color:#14161c;}
+[data-theme="light"] .xp-world p{color:rgba(20,22,28,.6);}
+
+/* ── POP-style animated promo banner ── */
+.xp-promo{position:relative;margin:10px 16px;border-radius:16px;overflow:hidden;cursor:pointer;
+  background:linear-gradient(120deg,#7C3AED,#5661f0 55%,#0ea5e9);
+  box-shadow:0 12px 30px -14px rgba(124,58,237,.85);transition:transform .12s;}
+.xp-promo:active{transform:scale(.99);}
+.xp-promo-shine{position:absolute;top:0;left:-60%;width:40%;height:100%;
+  background:linear-gradient(100deg,rgba(255,255,255,0),rgba(255,255,255,.38),rgba(255,255,255,0));
+  transform:skewX(-18deg);animation:xpShine 3.4s ease-in-out infinite;pointer-events:none;}
+@keyframes xpShine{0%{left:-60%}55%,100%{left:130%}}
+.xp-promo-body{position:relative;z-index:1;display:flex;align-items:center;gap:13px;padding:15px 16px;}
+.xp-promo-badge{flex:0 0 auto;width:40px;height:40px;border-radius:12px;display:grid;place-items:center;
+  background:rgba(255,255,255,.2);color:#fff;font-size:1.1rem;animation:xpBolt 1.8s ease-in-out infinite;}
+@keyframes xpBolt{0%,100%{transform:scale(1)}50%{transform:scale(1.15)}}
+.xp-promo-txt{flex:1;color:#fff;display:flex;flex-direction:column;gap:2px;min-width:0;}
+.xp-promo-txt b{font:700 .95rem/1.2 var(--f);}
+.xp-promo-txt span{font:500 .72rem/1.2 var(--f);color:rgba(255,255,255,.82);}
+.xp-promo-arrow{color:#fff;opacity:.9;}
+@media (prefers-reduced-motion: reduce){
+  .xp-world-glow,.xp-promo-shine,.xp-promo-badge{animation:none;}
+}
 
 /* ── 3. bulletin hero — content IS the card ── */
 .xp-hero{position:relative;margin:2px 0 0}
@@ -4282,11 +4327,30 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 
   <!-- ════════ EXPLORE v8 ════════ -->
   <div class="xp">
-    <!-- 2. category rail — the icon tiles, not named tabs -->
-    <div class="xp-cats" id="xp-cats"></div>
+    <!-- "Exploring the World" banner (replaces the old RBI bulletin hero) -->
+    <div class="xp-world">
+      <div class="xp-world-glow"></div>
+      <div class="xp-world-txt">
+        <span class="xp-world-kicker">SHERRBYTE</span>
+        <h2>Exploring<br>the World</h2>
+        <p>55+ sources, de-duplicated and ranked — your world, in one place.</p>
+      </div>
+    </div>
 
-    <!-- 3. bulletin hero carousel -->
-    <div class="xp-hero" id="xp-hero"></div>
+    <!-- POP-style animated promo banner -->
+    <div class="xp-promo" onclick="navTo('myfeed')">
+      <div class="xp-promo-shine"></div>
+      <div class="xp-promo-body">
+        <div class="xp-promo-badge"><i class="fa-solid fa-bolt"></i></div>
+        <div class="xp-promo-txt"><b>Your daily dossier is ready</b>
+          <span>Open myFeed — News · Strings · Dots</span></div>
+        <i class="fa-solid fa-chevron-right xp-promo-arrow"></i>
+      </div>
+    </div>
+
+    <!-- pillars grid — "Top brands"-style labelled tiles -->
+    <div class="xp-hd"><h3>Pillars</h3></div>
+    <div class="xp-cats grid" id="xp-cats"></div>
 
     <!-- 4. matrix of markets -->
     <div class="xp-hd"><h3>Matrix of markets</h3></div>
@@ -5037,7 +5101,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
       <span class="nb-lbl">myFeed</span>
     </div>
     <div class="nb" id="nb-explore" onclick="navTo('explore')">
-      <div class="nb-icon"><i class="fa-solid fa-terminal"></i></div>
+      <div class="nb-icon"><i class="fa-solid fa-compass"></i></div>
       <span class="nb-lbl">Explore</span>
     </div>
     <div class="nb" id="nb-profile" onclick="navTo('profile')">
@@ -5096,24 +5160,27 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 .mf-badge::before{content:'';position:absolute;left:8px;top:4px;bottom:4px;
   border-left:2px dotted rgba(255,255,255,.6);}
 .mf-badge.dark::before{border-color:rgba(0,0,0,.35);}
-/* tab row — an INLINE bar BETWEEN the image and the headline (not overlaid on
-   the image any more): segmented News · Strings · Dots on the left, the brand
-   logo on the right. Sits on the card surface, so no backdrop blur needed. */
-.mf-tabrow{display:flex;align-items:center;gap:10px;padding:11px 14px 4px;}
-.mfd-tabs{display:flex;gap:4px;flex:1;border-radius:12px;padding:3px;
-  background:var(--surface-2,rgba(255,255,255,.06));
-  border:1px solid var(--line,rgba(255,255,255,.10));}
-.mfd-tab{flex:1;border:0;background:transparent;color:var(--t2);
-  font-size:.82rem;font-weight:700;padding:7px 4px;border-radius:9px;cursor:pointer;
+/* tab row — STRADDLES the image's bottom edge (centred on the boundary: the top
+   half floats over the image, the bottom half over the card), segmented
+   News · Strings · Dots on the left, the brand logo on the right. Pulled up with
+   a negative margin so its middle sits on the edge; dark translucent chrome so
+   it reads over both the image and the card in either theme. */
+.mf-tabrow{display:flex;align-items:center;gap:10px;padding:0 12px;
+  margin-top:-27px;position:relative;z-index:3;}
+.mfd-tabs{display:flex;gap:4px;flex:1;border-radius:14px;padding:4px;
+  background:rgba(12,12,15,.62);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+  border:1px solid rgba(255,255,255,.14);box-shadow:0 8px 22px -10px rgba(0,0,0,.7);}
+.mfd-tab{flex:1;border:0;background:transparent;color:rgba(255,255,255,.76);
+  font-size:.82rem;font-weight:700;padding:8px 4px;border-radius:10px;cursor:pointer;
   transition:color .15s var(--ease),background .15s var(--ease);}
-.mfd-tab.on{background:var(--t1);color:var(--bg);box-shadow:0 1px 3px rgba(0,0,0,.3);}
+.mfd-tab.on{background:#fff;color:#111214;box-shadow:0 1px 3px rgba(0,0,0,.3);}
 .mfd-tab.pending{opacity:.55;}
-.mf-logo{width:40px;height:40px;border-radius:11px;flex-shrink:0;overflow:hidden;
+.mf-logo{width:44px;height:44px;border-radius:13px;flex-shrink:0;overflow:hidden;
   display:flex;align-items:center;justify-content:center;
-  background:var(--surface-2,rgba(255,255,255,.06));
-  border:1px solid var(--line,rgba(255,255,255,.12));}
+  background:rgba(12,12,15,.62);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+  border:1px solid rgba(255,255,255,.18);box-shadow:0 8px 22px -10px rgba(0,0,0,.7);}
 .mf-logo img{width:100%;height:100%;object-fit:cover;display:block;}
-.mf-logo-svg{width:20px;height:20px;fill:none;stroke:var(--t1);stroke-width:1.9;stroke-linecap:round;}
+.mf-logo-svg{width:20px;height:20px;fill:none;stroke:#fff;stroke-width:1.9;stroke-linecap:round;}
 /* the three panes — only the active one shows; a tap or a sideways swipe on the
    text switches with a slide-in. The card (not the pane) owns vertical scroll. */
 .mfd-panes{position:relative;flex:1 0 auto;}
@@ -5631,6 +5698,15 @@ function applyTheme() {
   // system → navy gradient, dark → black, light → white
   const effective = pref === 'dark' ? 'dark' : pref === 'light' ? 'light' : 'navy';
   document.documentElement.setAttribute('data-theme', effective);
+  // Keep the mobile status/notification bar the SAME colour as the app surface,
+  // so the browser chrome and the app read as one (the "full integration into
+  // the mobile" ask). navy/dark → near-black, light → white.
+  try {
+    const barColor = effective === 'light' ? '#FFFFFF' : (effective === 'navy' ? '#06101c' : '#0A0A0C');
+    let m = document.querySelector('meta[name="theme-color"]');
+    if (!m) { m = document.createElement('meta'); m.name = 'theme-color'; document.head.appendChild(m); }
+    m.setAttribute('content', barColor);
+  } catch (e) {}
   const ic = document.querySelector('#h-theme i');
   if (ic) ic.className = 'fa-solid ' + _THEME_ICON[pref];
   document.querySelectorAll('.theme-check').forEach(el => {
@@ -11308,12 +11384,8 @@ async function initExploreV8() {
   // shimmer, and the real values swap in if they arrive.
   try { xpSnap = await api('/explore/snapshot', { timeout: 2000 }); }
   catch (e) { xpSnap = null; }
-  let arts = [];
-  try {
-    const d = await api('/explore?page=1&limit=6', { timeout: 2000 });
-    arts = (d.articles||[]).map(normalizeArticle).filter(a=>a.title);
-  } catch (e) { arts = []; }
-  renderXpHero(arts);
+  // The RBI bulletin hero was removed; nothing on Explore reads that /explore
+  // page-1 fetch any more, so it is gone too (one fewer cold-start request).
   renderXpMatrix(); renderXpTal(); renderXpBTick();
   renderXpGov(); renderXpAlso(); renderXpSpace(); renderXpBreak(); renderXpAi();
 }
