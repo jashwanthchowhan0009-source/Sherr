@@ -804,6 +804,18 @@ CREATE TABLE IF NOT EXISTS bookmarks (
     UNIQUE(user_id, article_id)
 );
 
+-- Reader comments on a feed article. One row per comment; the count per article
+-- is COUNT(*) here, and likes come from user_interactions (action='like'). The
+-- frontend's /signal/* endpoints read and write this table — before it existed
+-- those calls 404'd silently, which is why the comment box never did anything.
+CREATE TABLE IF NOT EXISTS article_comments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    article_id INTEGER NOT NULL,
+    body TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+
 -- Sherr-I demo rows for the "seed" tier, and NOTHING ELSE.
 --
 -- NAMED demo_insights, NOT insights, deliberately. This app runs its DDL through
@@ -2233,6 +2245,11 @@ class InteractReq(BaseModel):
     duration_sec: int = 0
 
 
+class CommentReq(BaseModel):
+    info_object_id: int          # the feed article id (the frontend's field name)
+    body: str
+
+
 class UpdateProfileReq(BaseModel):
     name: Optional[str] = None
     bio: Optional[str] = None
@@ -3323,6 +3340,121 @@ async def toggle_bookmark(article_id: int, authorization: str = Header("")):
     conn.commit()
     conn.close()
     return {"saved": saved}
+
+
+# ── Engagement signals: real like/comment counts, and working comments ────────
+# The frontend has always called these paths; they simply never existed on the
+# server, so counts stayed blank and the comment box was inert. Likes live in
+# user_interactions (action='like'); comments in article_comments.
+@app.get("/signal/counts")
+async def signal_counts(ids: str = Query(""), authorization: str = Header("")):
+    """Aggregate {likes, comments} per article id. Anonymous-readable."""
+    id_list = [int(x) for x in ids.split(",") if x.strip().isdigit()][:100]
+    if not id_list:
+        return {"counts": {}}
+    placeholders = ",".join("?" for _ in id_list)
+    conn = get_db()
+    out = {str(i): {"likes": 0, "comments": 0} for i in id_list}
+    try:
+        for r in conn.execute(
+            f"SELECT article_id, COUNT(DISTINCT user_id) AS n FROM user_interactions "
+            f"WHERE action='like' AND article_id IN ({placeholders}) GROUP BY article_id",
+            tuple(id_list),
+        ).fetchall():
+            out.setdefault(str(r["article_id"]), {"likes": 0, "comments": 0})["likes"] = r["n"]
+        for r in conn.execute(
+            f"SELECT article_id, COUNT(*) AS n FROM article_comments "
+            f"WHERE article_id IN ({placeholders}) GROUP BY article_id",
+            tuple(id_list),
+        ).fetchall():
+            out.setdefault(str(r["article_id"]), {"likes": 0, "comments": 0})["comments"] = r["n"]
+    finally:
+        conn.close()
+    return {"counts": out}
+
+
+@app.get("/signal/comments/{article_id}")
+async def signal_comments(article_id: int, authorization: str = Header("")):
+    """Comment thread for one article, newest last. Anonymous-readable."""
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            "SELECT c.body, c.created_at, u.name AS name, u.email AS email "
+            "FROM article_comments c LEFT JOIN users u ON u.id=c.user_id "
+            "WHERE c.article_id=? ORDER BY c.created_at ASC LIMIT 200",
+            (article_id,),
+        ).fetchall()
+    finally:
+        conn.close()
+    comments = []
+    for r in rows:
+        d = dict(r)
+        author = (d.get("name") or "").strip() or (d.get("email") or "").split("@")[0] or "Reader"
+        comments.append({"author": author, "body": d.get("body") or "", "created_at": d.get("created_at")})
+    return {"comments": comments}
+
+
+@app.post("/signal/comment")
+async def signal_post_comment(req: CommentReq, authorization: str = Header("")):
+    """Post a comment. Requires a real session (401 otherwise)."""
+    uid = require_user(authorization)
+    body = (req.body or "").strip()[:2000]
+    if not body:
+        raise HTTPException(400, "Empty comment")
+    conn = get_db()
+    try:
+        art = conn.execute("SELECT id FROM articles WHERE id=?", (req.info_object_id,)).fetchone()
+        if not art:
+            raise HTTPException(404, "Article not found")
+        conn.execute(
+            "INSERT INTO article_comments (user_id, article_id, body) VALUES(?,?,?)",
+            (uid, req.info_object_id, body),
+        )
+        n = conn.execute(
+            "SELECT COUNT(*) AS n FROM article_comments WHERE article_id=?",
+            (req.info_object_id,),
+        ).fetchone()["n"]
+        conn.commit()
+        u = conn.execute("SELECT name, email FROM users WHERE id=?", (uid,)).fetchone()
+    finally:
+        conn.close()
+    author = ((u["name"] if u else "") or "").strip() or ((u["email"] if u else "") or "").split("@")[0] or "You"
+    return {"ok": True, "count": n, "comment": {"author": author, "body": body, "created_at": None}}
+
+
+@app.post("/signal/like/{article_id}")
+async def signal_like(article_id: int, authorization: str = Header("")):
+    """Toggle the caller's like on an article; returns the fresh aggregate.
+
+    user_interactions has no unique key, so a plain toggle would leave duplicate
+    'like' rows behind. Delete every like row for this (user, article) and re-add
+    one only when turning the like ON — idempotent whatever the prior state."""
+    uid = require_user(authorization)
+    conn = get_db()
+    try:
+        existing = conn.execute(
+            "SELECT 1 FROM user_interactions WHERE user_id=? AND article_id=? AND action='like' LIMIT 1",
+            (uid, article_id),
+        ).fetchone()
+        conn.execute(
+            "DELETE FROM user_interactions WHERE user_id=? AND article_id=? AND action='like'",
+            (uid, article_id),
+        )
+        liked = not existing
+        if liked:
+            conn.execute(
+                "INSERT INTO user_interactions (user_id, article_id, action) VALUES(?,?,'like')",
+                (uid, article_id),
+            )
+        n = conn.execute(
+            "SELECT COUNT(DISTINCT user_id) AS n FROM user_interactions "
+            "WHERE article_id=? AND action='like'",
+            (article_id,),
+        ).fetchone()["n"]
+        conn.commit()
+    finally:
+        conn.close()
+    return {"liked": liked, "likes": n}
 
 
 @app.get("/notifications")
