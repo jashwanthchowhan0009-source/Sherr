@@ -1872,12 +1872,18 @@ nav.compact .nb.on { flex: 0 0 auto; padding-left: 16px; padding-right: 16px; }
 
 /* ── Immersive POP-style hero (full-bleed, edge to edge — no box/frame) ── */
 .xp-hero-pop{position:relative;overflow:hidden;cursor:pointer;margin:0 0 6px;padding:0;
-  min-height:256px;display:flex;align-items:flex-end;
-  background:radial-gradient(125% 82% at 50% -12%,#9a4dff 0%,#6a24e0 38%,#3a148f 66%,#150a30 86%,var(--bg) 100%);}
-/* Vertical "curtain" light streaks, POP-style — fade out toward the bottom. */
+  min-height:272px;display:flex;align-items:flex-end;
+  /* A bright spotlight at the top over a solid purple body that stays DARK all
+     the way to the bottom — so the white subtitle + CTA are readable regardless
+     of the app theme (it used to fade into var(--bg), which is light in light
+     mode and swallowed the text). */
+  background:
+    radial-gradient(95% 62% at 50% 0%, rgba(198,132,255,.60) 0%, rgba(198,132,255,0) 56%),
+    linear-gradient(180deg,#7b2fe8 0%,#5a1fd6 38%,#3a148f 68%,#26095f 100%);}
+/* Vertical "curtain" light streaks — now carried lower so they sit behind the text. */
 .xp-hero-curtain{position:absolute;inset:0;pointer-events:none;opacity:.5;mix-blend-mode:screen;
   background:repeating-linear-gradient(90deg,rgba(255,255,255,.12) 0 2px,rgba(255,255,255,0) 2px 17px);
-  -webkit-mask:linear-gradient(180deg,#000 0%,transparent 76%);mask:linear-gradient(180deg,#000 0%,transparent 76%);}
+  -webkit-mask:linear-gradient(180deg,#000 0%,transparent 92%);mask:linear-gradient(180deg,#000 0%,transparent 92%);}
 .xp-hero-glow{position:absolute;top:-34%;left:50%;transform:translateX(-50%);width:130%;height:130%;
   background:radial-gradient(circle,rgba(190,130,255,.55),rgba(190,130,255,0) 60%);
   animation:xpWorldGlow 7s ease-in-out infinite;pointer-events:none;}
@@ -1898,6 +1904,40 @@ nav.compact .nb.on { flex: 0 0 auto; padding-left: 16px; padding-right: 16px; }
   padding:11px 16px;border-radius:100px;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);}
 .xp-hero-pop:active .xp-hero-cta{background:rgba(255,255,255,.26);}
 @media (prefers-reduced-motion: reduce){ .xp-hero-glow,.xp-hero-shine{animation:none;} }
+
+/* ── Immersive "rewards" band — floating gold tokens + italic display text on
+   black, in the POP-app style (the closing moment of Explore). ── */
+.xp-rewards{position:relative;overflow:hidden;cursor:pointer;margin:16px 0 4px;min-height:290px;
+  display:flex;align-items:center;justify-content:center;text-align:center;
+  background:radial-gradient(120% 95% at 50% 42%,#171008 0%,#0b0b0d 58%,#050506 100%);}
+.xr-inner{position:relative;z-index:3;padding:20px;}
+.xr-tag{display:inline-flex;align-items:center;gap:6px;font:800 .56rem/1 var(--f);
+  letter-spacing:.26em;color:#F4C77A;}
+.xr-title{font-family:Georgia,'Times New Roman',serif;font-style:italic;font-weight:700;
+  font-size:2.2rem;line-height:1.06;color:#fff;margin:12px 0 16px;text-shadow:0 6px 30px rgba(0,0,0,.6);}
+.xr-title em{font-style:italic;color:#FBBB4E;}
+.xr-cta{display:inline-flex;align-items:center;gap:8px;font:700 .76rem/1 var(--f);color:#0c0c0e;
+  background:linear-gradient(180deg,#ffe08a,#f5b73c);border-radius:100px;padding:11px 18px;
+  box-shadow:0 10px 26px -10px rgba(245,183,60,.6);}
+.xp-rewards:active .xr-cta{transform:scale(.97);}
+/* floating coin-like orbs */
+.xr-orb{position:absolute;border-radius:50%;z-index:1;
+  background:radial-gradient(circle at 32% 26%,#fff2cc 0%,#f6c451 46%,#c88f1f 82%,#9a6b12 100%);
+  box-shadow:0 10px 22px rgba(210,140,30,.35),inset 0 2px 6px rgba(255,255,255,.6),
+    inset 0 -4px 8px rgba(120,80,10,.5);
+  animation:xrFloat 6s ease-in-out infinite;}
+.xr-orb::after{content:'';position:absolute;inset:22%;border-radius:50%;
+  border:1px solid rgba(120,80,10,.35);}
+.xr-orb.o1{width:54px;height:54px;left:8%;top:60%;animation-delay:0s;}
+.xr-orb.o2{width:30px;height:30px;left:20%;top:30%;animation-delay:.6s;}
+.xr-orb.o3{width:40px;height:40px;right:12%;top:26%;animation-delay:1.1s;}
+.xr-orb.o4{width:64px;height:64px;right:6%;top:58%;animation-delay:.3s;}
+.xr-orb.o5{width:22px;height:22px;left:38%;top:14%;animation-delay:1.6s;}
+.xr-orb.o6{width:26px;height:26px;right:34%;top:78%;animation-delay:.9s;}
+.xr-orb.o7{width:18px;height:18px;left:12%;top:20%;animation-delay:2.1s;}
+.xr-orb.o8{width:34px;height:34px;left:46%;top:82%;animation-delay:1.4s;}
+@keyframes xrFloat{0%,100%{transform:translateY(0) rotate(-6deg);}50%{transform:translateY(-14px) rotate(6deg);}}
+@media (prefers-reduced-motion: reduce){ .xr-orb{animation:none;} }
 
 /* ── 3. bulletin hero — content IS the card ── */
 .xp-hero{position:relative;margin:2px 0 0}
@@ -2201,6 +2241,11 @@ body.dp-open #xp-page { visibility: visible !important; }
    keeps retiring anything added there later. Hidden, not deleted: the renderers
    still run and still populate these nodes. */
 #v-explore #exp-hero-wrap{display:none!important;}
+/* Retire the entire legacy module block (At a Glance, Live Data, the bento, the
+   module preview sheet) in ONE rule: it is every sibling that comes AFTER the
+   .xp v8 container inside #v-explore. #xp-page is body-level so it is untouched.
+   The renderers still populate these nodes; they are simply never shown. */
+#v-explore > .xp ~ * { display:none !important; }
 /* The old `#v-explore > #xp-page ~ *` hide rule is gone: #xp-page is a body-
    level overlay now (below </nav>), not a sibling of the explore modules, so it
    simply covers them when open. That also fixes the bleed the ~ combinator
@@ -4373,33 +4418,36 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
     <div class="xp-tabs" id="xp-tal-tabs"></div>
     <div id="xp-tal"></div>
 
-    <!-- 6. bulletin ticker -->
-    <div class="xp-btick" id="xp-btick"></div>
+    <!-- Immersive POP-style "rewards" band — floating gold tokens + italic
+         display text on black; the closing moment of the Explore page. -->
+    <div class="xp-rewards" onclick="navTo('profile')">
+      <span class="xr-orb o1"></span><span class="xr-orb o2"></span><span class="xr-orb o3"></span>
+      <span class="xr-orb o4"></span><span class="xr-orb o5"></span><span class="xr-orb o6"></span>
+      <span class="xr-orb o7"></span><span class="xr-orb o8"></span>
+      <div class="xr-inner">
+        <div class="xr-tag"><i class="fa-solid fa-bolt"></i> SHERRBYTE</div>
+        <h2 class="xr-title">Your curiosity,<br><em>Rewarded</em></h2>
+        <span class="xr-cta">See your reading streak <i class="fa-solid fa-arrow-right"></i></span>
+      </div>
+    </div>
 
-    <!-- 7. government -->
-    <div class="xp-hd"><h3>Government</h3></div>
-    <div class="xp-gov" id="xp-gov"></div>
-
-    <!-- 8. also -->
-    <div class="xp-also" id="xp-also"></div>
-
-    <!-- 9. space -->
-    <div id="xp-space"></div>
-
-    <!-- editorial break: one non-data moment between the data modules -->
-    <div class="xp-break" id="xp-break"></div>
-
-    <!-- 10. ai & tech -->
-    <div class="xp-hd"><h3>AI &amp; Tech</h3></div>
-    <div class="xp-ai" id="xp-ai"></div>
-
-    <!-- 11. connections — Sherr-I pattern output -->
-    <div class="xp-hd" id="xp-conn-hd" style="display:none">
-      <h3>Connections</h3><span class="all" onclick="xpConnAll()">All</span></div>
-    <div class="xp-conn" id="xp-conn"></div>
-
-    <!-- 12. closing line -->
-    <div class="xp-close">Exploring<br>the World</div>
+    <!-- The v8 data modules below (bulletin, government, space, AI, connections,
+         the faded closing line) are superseded and kept HIDDEN — their renderers
+         still populate the nodes, but the rewards band is the closing moment. -->
+    <div class="xp-legacy-lower" style="display:none">
+      <div class="xp-btick" id="xp-btick"></div>
+      <div class="xp-hd"><h3>Government</h3></div>
+      <div class="xp-gov" id="xp-gov"></div>
+      <div class="xp-also" id="xp-also"></div>
+      <div id="xp-space"></div>
+      <div class="xp-break" id="xp-break"></div>
+      <div class="xp-hd"><h3>AI &amp; Tech</h3></div>
+      <div class="xp-ai" id="xp-ai"></div>
+      <div class="xp-hd" id="xp-conn-hd" style="display:none">
+        <h3>Connections</h3><span class="all" onclick="xpConnAll()">All</span></div>
+      <div class="xp-conn" id="xp-conn"></div>
+      <div class="xp-close">Exploring<br>the World</div>
+    </div>
   </div>
 
   <!-- Part C — the expanded drill-down page moved to BODY LEVEL (see below </nav>) -->
