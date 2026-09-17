@@ -804,6 +804,18 @@ CREATE TABLE IF NOT EXISTS bookmarks (
     UNIQUE(user_id, article_id)
 );
 
+-- Reader comments on a feed article. One row per comment; the count per article
+-- is COUNT(*) here, and likes come from user_interactions (action='like'). The
+-- frontend's /signal/* endpoints read and write this table — before it existed
+-- those calls 404'd silently, which is why the comment box never did anything.
+CREATE TABLE IF NOT EXISTS article_comments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    article_id INTEGER NOT NULL,
+    body TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+
 -- Sherr-I demo rows for the "seed" tier, and NOTHING ELSE.
 --
 -- NAMED demo_insights, NOT insights, deliberately. This app runs its DDL through
@@ -1291,14 +1303,28 @@ def needs_rehash(hashed: str) -> bool:
         return True
 
 
-def make_token(user_id: int) -> str:
+def make_token(user_id: int, days: int = 30, typ: str = "access") -> str:
     payload = json.dumps({
         "id": user_id,
-        "exp": (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()
+        "typ": typ,
+        "exp": (datetime.now(timezone.utc) + timedelta(days=days)).isoformat()
     })
     raw = base64.urlsafe_b64encode(payload.encode()).decode()
     sig = hmac_module.new(JWT_SECRET.encode(), raw.encode(), hashlib.sha256).hexdigest()
     return f"{raw}.{sig}"
+
+
+def make_refresh_token(user_id: int) -> str:
+    # Long-lived (180d) so a session survives well past the access token; the
+    # client swaps it for a fresh access token via /auth/refresh. Without this
+    # the whole client refresh path was dead and any 401 was a hard logout.
+    return make_token(user_id, days=180, typ="refresh")
+
+
+def auth_pair(user_id: int) -> dict:
+    """The token pair every auth path returns, shaped for the client's applyAuth."""
+    return {"token": make_token(user_id), "access_token": make_token(user_id),
+            "refresh_token": make_refresh_token(user_id)}
 
 
 def verify_token(token: str) -> Optional[int]:
@@ -2233,6 +2259,15 @@ class InteractReq(BaseModel):
     duration_sec: int = 0
 
 
+class CommentReq(BaseModel):
+    info_object_id: int          # the feed article id (the frontend's field name)
+    body: str
+
+
+class RefreshReq(BaseModel):
+    refresh_token: str
+
+
 class UpdateProfileReq(BaseModel):
     name: Optional[str] = None
     bio: Optional[str] = None
@@ -2276,7 +2311,7 @@ async def signup(req: SignupReq):
     conn.commit()
     conn.close()
     asyncio.create_task(asyncio.to_thread(compute_feed_for_user, user_id))
-    return {"token": make_token(user_id), "user_id": user_id,
+    return {**auth_pair(user_id), "user_id": user_id,
             "display_name": req.name or req.email.split("@")[0], "message": "Account created"}
 
 
@@ -2339,13 +2374,33 @@ async def login(req: LoginReq, request: Request):
         "SELECT COUNT(*) as c FROM user_preferences WHERE user_id=?", (user["id"],)
     ).fetchone()["c"]
     conn.close()
-    return {"token": make_token(user["id"]), "user_id": user["id"], "name": user["name"],
+    return {**auth_pair(user["id"]), "user_id": user["id"], "name": user["name"],
             "display_name": user["name"], "email": user["email"], "has_topics": pref_count > 0}
 
 
 @app.post("/auth/register")
 async def register(req: SignupReq):
     return await signup(req)
+
+
+@app.post("/auth/refresh")
+async def auth_refresh(req: RefreshReq):
+    """Swap a valid refresh token for a fresh access token (and rotate the
+    refresh token). This is what keeps a login durable: the client calls it on a
+    401 instead of dropping the user to sign-in. A signature/expiry failure is a
+    real 401 — the client then, and only then, signs out."""
+    uid = verify_token(req.refresh_token or "")
+    if not uid:
+        raise HTTPException(401, "Session expired — sign in again")
+    conn = get_db()
+    try:
+        exists = conn.execute("SELECT 1 FROM users WHERE id=? LIMIT 1", (uid,)).fetchone()
+    finally:
+        conn.close()
+    if not exists:
+        raise HTTPException(401, "Session expired — sign in again")
+    return {"access_token": make_token(uid), "token": make_token(uid),
+            "refresh_token": make_refresh_token(uid)}
 
 
 @app.get("/topics")
@@ -3323,6 +3378,121 @@ async def toggle_bookmark(article_id: int, authorization: str = Header("")):
     conn.commit()
     conn.close()
     return {"saved": saved}
+
+
+# ── Engagement signals: real like/comment counts, and working comments ────────
+# The frontend has always called these paths; they simply never existed on the
+# server, so counts stayed blank and the comment box was inert. Likes live in
+# user_interactions (action='like'); comments in article_comments.
+@app.get("/signal/counts")
+async def signal_counts(ids: str = Query(""), authorization: str = Header("")):
+    """Aggregate {likes, comments} per article id. Anonymous-readable."""
+    id_list = [int(x) for x in ids.split(",") if x.strip().isdigit()][:100]
+    if not id_list:
+        return {"counts": {}}
+    placeholders = ",".join("?" for _ in id_list)
+    conn = get_db()
+    out = {str(i): {"likes": 0, "comments": 0} for i in id_list}
+    try:
+        for r in conn.execute(
+            f"SELECT article_id, COUNT(DISTINCT user_id) AS n FROM user_interactions "
+            f"WHERE action='like' AND article_id IN ({placeholders}) GROUP BY article_id",
+            tuple(id_list),
+        ).fetchall():
+            out.setdefault(str(r["article_id"]), {"likes": 0, "comments": 0})["likes"] = r["n"]
+        for r in conn.execute(
+            f"SELECT article_id, COUNT(*) AS n FROM article_comments "
+            f"WHERE article_id IN ({placeholders}) GROUP BY article_id",
+            tuple(id_list),
+        ).fetchall():
+            out.setdefault(str(r["article_id"]), {"likes": 0, "comments": 0})["comments"] = r["n"]
+    finally:
+        conn.close()
+    return {"counts": out}
+
+
+@app.get("/signal/comments/{article_id}")
+async def signal_comments(article_id: int, authorization: str = Header("")):
+    """Comment thread for one article, newest last. Anonymous-readable."""
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            "SELECT c.body, c.created_at, u.name AS name, u.email AS email "
+            "FROM article_comments c LEFT JOIN users u ON u.id=c.user_id "
+            "WHERE c.article_id=? ORDER BY c.created_at ASC LIMIT 200",
+            (article_id,),
+        ).fetchall()
+    finally:
+        conn.close()
+    comments = []
+    for r in rows:
+        d = dict(r)
+        author = (d.get("name") or "").strip() or (d.get("email") or "").split("@")[0] or "Reader"
+        comments.append({"author": author, "body": d.get("body") or "", "created_at": d.get("created_at")})
+    return {"comments": comments}
+
+
+@app.post("/signal/comment")
+async def signal_post_comment(req: CommentReq, authorization: str = Header("")):
+    """Post a comment. Requires a real session (401 otherwise)."""
+    uid = require_user(authorization)
+    body = (req.body or "").strip()[:2000]
+    if not body:
+        raise HTTPException(400, "Empty comment")
+    conn = get_db()
+    try:
+        art = conn.execute("SELECT id FROM articles WHERE id=?", (req.info_object_id,)).fetchone()
+        if not art:
+            raise HTTPException(404, "Article not found")
+        conn.execute(
+            "INSERT INTO article_comments (user_id, article_id, body) VALUES(?,?,?)",
+            (uid, req.info_object_id, body),
+        )
+        n = conn.execute(
+            "SELECT COUNT(*) AS n FROM article_comments WHERE article_id=?",
+            (req.info_object_id,),
+        ).fetchone()["n"]
+        conn.commit()
+        u = conn.execute("SELECT name, email FROM users WHERE id=?", (uid,)).fetchone()
+    finally:
+        conn.close()
+    author = ((u["name"] if u else "") or "").strip() or ((u["email"] if u else "") or "").split("@")[0] or "You"
+    return {"ok": True, "count": n, "comment": {"author": author, "body": body, "created_at": None}}
+
+
+@app.post("/signal/like/{article_id}")
+async def signal_like(article_id: int, authorization: str = Header("")):
+    """Toggle the caller's like on an article; returns the fresh aggregate.
+
+    user_interactions has no unique key, so a plain toggle would leave duplicate
+    'like' rows behind. Delete every like row for this (user, article) and re-add
+    one only when turning the like ON — idempotent whatever the prior state."""
+    uid = require_user(authorization)
+    conn = get_db()
+    try:
+        existing = conn.execute(
+            "SELECT 1 FROM user_interactions WHERE user_id=? AND article_id=? AND action='like' LIMIT 1",
+            (uid, article_id),
+        ).fetchone()
+        conn.execute(
+            "DELETE FROM user_interactions WHERE user_id=? AND article_id=? AND action='like'",
+            (uid, article_id),
+        )
+        liked = not existing
+        if liked:
+            conn.execute(
+                "INSERT INTO user_interactions (user_id, article_id, action) VALUES(?,?,'like')",
+                (uid, article_id),
+            )
+        n = conn.execute(
+            "SELECT COUNT(DISTINCT user_id) AS n FROM user_interactions "
+            "WHERE article_id=? AND action='like'",
+            (article_id,),
+        ).fetchone()["n"]
+        conn.commit()
+    finally:
+        conn.close()
+    return {"liked": liked, "likes": n}
 
 
 @app.get("/notifications")

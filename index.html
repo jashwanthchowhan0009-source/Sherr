@@ -491,6 +491,61 @@ header {
 .nc-like.on { color: #FF5B7F; background: rgba(255,91,127,0.12); border-color: rgba(255,91,127,0.3); }
 .nc-share { margin-left: auto; }
 
+/* ─── Feed action bar (like · comment · repost … bookmark) BELOW the article ─── */
+.nc-actbar { display: flex; align-items: center; gap: 6px; margin-top: 14px; }
+.nca { display: inline-flex; align-items: center; gap: 7px; padding: 7px 6px; border: 0;
+  background: transparent; color: var(--t3); font: 600 0.8rem/1 var(--f); cursor: pointer;
+  border-radius: 10px; transition: color .15s, transform .1s; -webkit-tap-highlight-color: transparent; }
+.nca i { font-size: 1.02rem; }
+.nca span { min-width: 8px; }
+.nca:active { transform: scale(0.9); }
+.nca-save { margin-left: auto; }
+.nca-like.on { color: #FF3B5C; }
+.nca-cmt.on, .nca-cmt:active { color: var(--accent); }
+.nca-rp.on { color: #2EC27E; }
+.nca-save.on { color: var(--accent); }
+
+/* ─── Comments bottom sheet ─── */
+.cmt-scrim { position: fixed; inset: 0; z-index: 940; background: rgba(0,0,0,0.55);
+  opacity: 0; pointer-events: none; transition: opacity .25s; }
+.cmt-scrim.on { opacity: 1; pointer-events: auto; }
+.cmt-sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 950;
+  max-height: 82vh; display: flex; flex-direction: column;
+  background: var(--surface, #0f0f12); border-top-left-radius: 22px; border-top-right-radius: 22px;
+  border-top: 1px solid rgba(255,255,255,0.08); box-shadow: 0 -18px 50px rgba(0,0,0,0.6);
+  transform: translateY(102%); transition: transform .32s cubic-bezier(.22,1,.32,1);
+  padding-bottom: env(safe-area-inset-bottom, 0px); }
+.cmt-sheet.on { transform: translateY(0); }
+.cmt-grab { width: 38px; height: 4px; border-radius: 3px; background: rgba(255,255,255,0.22);
+  margin: 9px auto 4px; flex: none; }
+.cmt-hd { display: flex; align-items: center; gap: 8px; padding: 6px 18px 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.06); }
+.cmt-hd b { font: 700 1rem/1 var(--fd, var(--f)); color: var(--t1); }
+.cmt-hd #cmt-count { color: var(--t3); font-size: 0.82rem; font-weight: 600; }
+.cmt-x { margin-left: auto; background: rgba(255,255,255,0.06); border: 0; color: var(--t2);
+  width: 30px; height: 30px; border-radius: 50%; cursor: pointer; }
+.cmt-list { overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 12px 16px; flex: 1; min-height: 120px; }
+.cmt-item { display: flex; gap: 11px; padding: 10px 0; }
+.cmt-av { flex: none; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center;
+  background: linear-gradient(150deg, var(--accent), #5661f0); color: #fff; font-weight: 800; font-size: 0.85rem; }
+.cmt-b { flex: 1; min-width: 0; }
+.cmt-meta { display: flex; gap: 8px; align-items: baseline; }
+.cmt-meta b { color: var(--t1); font-size: 0.85rem; font-weight: 700; }
+.cmt-meta span { color: var(--t3); font-size: 0.68rem; }
+.cmt-text { color: var(--t2); font-size: 0.9rem; line-height: 1.4; margin-top: 3px; word-wrap: break-word; }
+.cmt-empty { text-align: center; color: var(--t3); padding: 34px 12px; }
+.cmt-empty b { display: block; color: var(--t2); font-size: 0.95rem; margin-bottom: 4px; }
+.cmt-empty span { font-size: 0.82rem; }
+.cmt-inputbar { display: flex; gap: 9px; align-items: center; padding: 11px 14px 14px;
+  border-top: 1px solid rgba(255,255,255,0.07); background: var(--surface, #0f0f12); }
+.cmt-inputbar input { flex: 1; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 100px; padding: 11px 16px; color: var(--t1); font-size: 0.9rem; outline: none; }
+.cmt-inputbar input:focus { border-color: var(--accent); }
+.cmt-send { flex: none; width: 42px; height: 42px; border-radius: 50%; border: 0; cursor: pointer;
+  background: var(--accent); color: #fff; font-size: 0.95rem; }
+[data-theme="light"] .cmt-sheet, [data-theme="light"] .cmt-inputbar { background: #fff; }
+[data-theme="light"] .cmt-inputbar input { background: rgba(0,0,0,0.04); border-color: rgba(0,0,0,0.10); }
+
 /* ─── Article comments ─── */
 .ao-cmt-sec { margin-top: 24px; }
 .ao-cmt-hdr { font-size: 0.64rem; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; color: var(--t3); margin: 0 0 6px; text-align: center; }
@@ -1270,6 +1325,34 @@ header {
   border: 1px solid rgba(0,62,145,0.3);
 }
 
+/* Profile quick-access grid */
+.prof-quick { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 12px; }
+.pq { display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 12px 4px;
+  border-radius: 15px; background: var(--bg2); border: 1px solid var(--line); cursor: pointer;
+  transition: transform .12s var(--spring); }
+.pq:active { transform: scale(0.95); }
+.pq-ic { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; font-size: 1.02rem; }
+.pq span { font-size: 0.64rem; font-weight: 600; color: var(--t2); }
+
+/* P6 — "mostly black" profile: push the card surfaces toward true black in the
+   dark/navy themes (light theme keeps its paper look). */
+:root:not([data-theme="light"]) #v-profile {
+  --prof-card: #0d0d10;
+}
+:root:not([data-theme="light"]) #v-profile .prof-stats,
+:root:not([data-theme="light"]) #v-profile .pq,
+:root:not([data-theme="light"]) #v-profile .pb-sec,
+:root:not([data-theme="light"]) #v-profile .set-grp,
+:root:not([data-theme="light"]) #v-profile .analytics-hero,
+:root:not([data-theme="light"]) #v-profile .analytics-tile,
+:root:not([data-theme="light"]) #v-profile .cat-donut-wrap,
+:root:not([data-theme="light"]) #v-profile .activity-feed,
+:root:not([data-theme="light"]) #v-profile .streak-strip {
+  background: #0d0d10 !important;
+  border: 1px solid rgba(255,255,255,0.055) !important;
+}
+:root:not([data-theme="light"]) #v-profile { background: #060608; }
+
 /* Settings rows */
 .set-sec { padding: 12px 14px 0; }
 .set-lbl {
@@ -1644,17 +1727,19 @@ header {
 /* Transparent positioning shell — the tab group and the Scan orb are two
    separate glass elements (Pop-style), not one bar. */
 nav {
-  position: absolute; bottom: max(16px, env(safe-area-inset-bottom));
+  /* Smaller + a little lower (10px vs 16px), so the gap between the last card
+     and the bar reads even. */
+  position: absolute; bottom: max(10px, env(safe-area-inset-bottom));
   left: 50%; transform: translateX(-50%);
-  width: calc(100% - 16px); max-width: 480px;
-  display: flex; align-items: center; gap: 10px;
+  width: calc(100% - 16px); max-width: 468px;
+  display: flex; align-items: center; gap: 9px;
   z-index: 600;
 }
 
 /* The tab group — a frosted glass pill holding the stacked tabs. */
 .nb-tabs {
   display: flex; align-items: stretch; gap: 2px; flex: 1 1 auto; min-width: 0;
-  padding: 6px; border-radius: 30px;
+  padding: 5px; border-radius: 26px;
   background: rgba(255,255,255,0.07);
   backdrop-filter: blur(34px) saturate(180%);
   -webkit-backdrop-filter: blur(34px) saturate(180%);
@@ -1779,6 +1864,40 @@ nav.compact .nb.on { flex: 0 0 auto; padding-left: 16px; padding-right: 16px; }
 .xp-cat.on .ic{box-shadow:0 0 0 2px var(--xp-ink), 0 0 0 4px rgba(0,0,0,.55);}
 .xp-cat span{display:block;font:600 .6rem/1.2 var(--f);color:var(--xp-mute);margin-top:6px;}
 .xp-cat.on span{color:var(--xp-ink)}
+/* "Top brands"-style pillar GRID (wrapped, labelled) instead of the scroll rail */
+.xp-cats.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px 4px;
+  overflow:visible;padding:8px 16px 4px;}
+.xp-cats.grid .xp-cat{width:auto;}
+.xp-cats.grid .xp-cat .ic{margin:0 auto;}
+
+/* ── Immersive POP-style hero (full-bleed, edge to edge — no box/frame) ── */
+.xp-hero-pop{position:relative;overflow:hidden;cursor:pointer;margin:0 0 6px;padding:0;
+  min-height:256px;display:flex;align-items:flex-end;
+  background:radial-gradient(125% 82% at 50% -12%,#9a4dff 0%,#6a24e0 38%,#3a148f 66%,#150a30 86%,var(--bg) 100%);}
+/* Vertical "curtain" light streaks, POP-style — fade out toward the bottom. */
+.xp-hero-curtain{position:absolute;inset:0;pointer-events:none;opacity:.5;mix-blend-mode:screen;
+  background:repeating-linear-gradient(90deg,rgba(255,255,255,.12) 0 2px,rgba(255,255,255,0) 2px 17px);
+  -webkit-mask:linear-gradient(180deg,#000 0%,transparent 76%);mask:linear-gradient(180deg,#000 0%,transparent 76%);}
+.xp-hero-glow{position:absolute;top:-34%;left:50%;transform:translateX(-50%);width:130%;height:130%;
+  background:radial-gradient(circle,rgba(190,130,255,.55),rgba(190,130,255,0) 60%);
+  animation:xpWorldGlow 7s ease-in-out infinite;pointer-events:none;}
+@keyframes xpWorldGlow{0%,100%{transform:translateX(-50%) scale(1);opacity:.9}
+  50%{transform:translateX(-46%) scale(1.14);opacity:.6}}
+.xp-hero-shine{position:absolute;top:0;left:-60%;width:38%;height:100%;pointer-events:none;
+  background:linear-gradient(100deg,rgba(255,255,255,0),rgba(255,255,255,.28),rgba(255,255,255,0));
+  transform:skewX(-18deg);animation:xpShine 4.2s ease-in-out infinite;}
+@keyframes xpShine{0%{left:-60%}55%,100%{left:135%}}
+.xp-hero-inner{position:relative;z-index:1;padding:22px 20px 20px;}
+.xp-hero-kicker{display:inline-flex;align-items:center;gap:6px;font:800 .58rem/1 var(--f);
+  letter-spacing:.2em;color:#EBD9FF;}
+.xp-hero-title{font:800 2.15rem/1.02 var(--xf);color:#fff;margin:11px 0 8px;letter-spacing:-.02em;
+  text-shadow:0 6px 26px rgba(0,0,0,.45);}
+.xp-hero-sub{margin:0 0 15px;font:500 .8rem/1.45 var(--f);color:rgba(255,255,255,.82);max-width:272px;}
+.xp-hero-cta{display:inline-flex;align-items:center;gap:8px;font:700 .78rem/1 var(--f);color:#fff;
+  background:rgba(255,255,255,.17);border:1px solid rgba(255,255,255,.30);
+  padding:11px 16px;border-radius:100px;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);}
+.xp-hero-pop:active .xp-hero-cta{background:rgba(255,255,255,.26);}
+@media (prefers-reduced-motion: reduce){ .xp-hero-glow,.xp-hero-shine{animation:none;} }
 
 /* ── 3. bulletin hero — content IS the card ── */
 .xp-hero{position:relative;margin:2px 0 0}
@@ -4227,11 +4346,23 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 
   <!-- ════════ EXPLORE v8 ════════ -->
   <div class="xp">
-    <!-- 2. category rail — the icon tiles, not named tabs -->
-    <div class="xp-cats" id="xp-cats"></div>
+    <!-- Immersive, full-bleed POP-style hero: "Exploring the World" merged with
+         the dossier CTA (no box/frame — content IS the surface, edge to edge). -->
+    <div class="xp-hero-pop" onclick="navTo('myfeed')">
+      <div class="xp-hero-curtain"></div>
+      <div class="xp-hero-glow"></div>
+      <div class="xp-hero-shine"></div>
+      <div class="xp-hero-inner">
+        <span class="xp-hero-kicker"><i class="fa-solid fa-bolt"></i> SHERRBYTE</span>
+        <h2 class="xp-hero-title">Exploring<br>the World</h2>
+        <p class="xp-hero-sub">55+ sources, de-duplicated and ranked — your daily dossier, ready.</p>
+        <span class="xp-hero-cta">Open myFeed — News · Strings · Dots <i class="fa-solid fa-arrow-right"></i></span>
+      </div>
+    </div>
 
-    <!-- 3. bulletin hero carousel -->
-    <div class="xp-hero" id="xp-hero"></div>
+    <!-- pillars grid — "Top brands"-style labelled tiles -->
+    <div class="xp-hd"><h3>Pillars</h3></div>
+    <div class="xp-cats grid" id="xp-cats"></div>
 
     <!-- 4. matrix of markets -->
     <div class="xp-hd"><h3>Matrix of markets</h3></div>
@@ -4767,6 +4898,21 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
       <button class="pb pb-sec tap" onclick="toast('🔗 Link copied')"><i class="fa-solid fa-share-nodes"></i></button>
       <button class="pb pb-feed tap" onclick="navTo('feed')"><i class="fa-solid fa-wave-square"></i> FEED</button>
     </div>
+    <!-- Quick access — always visible, real destinations. -->
+    <div class="prof-quick">
+      <div class="pq tap" onclick="navTo('bookmarks')">
+        <div class="pq-ic" style="background:rgba(10,132,255,.16);color:#4C9CFF"><i class="fa-solid fa-bookmark"></i></div>
+        <span>Bookmarks</span></div>
+      <div class="pq tap" onclick="navTo('feed')">
+        <div class="pq-ic" style="background:rgba(82,193,122,.16);color:#52C17A"><i class="fa-solid fa-chart-simple"></i></div>
+        <span>Reading</span></div>
+      <div class="pq tap" onclick="navTo('notifs')">
+        <div class="pq-ic" style="background:rgba(251,140,0,.16);color:#FB8C00"><i class="fa-solid fa-bell"></i></div>
+        <span>Alerts</span></div>
+      <div class="pq tap" onclick="openFeedEditModal()">
+        <div class="pq-ic" style="background:rgba(168,85,247,.16);color:#A855F7"><i class="fa-solid fa-bullseye"></i></div>
+        <span>Interests</span></div>
+    </div>
   </div>
   <!-- v5.1 — dynamic analytics populated by loadProfileAnalytics() -->
   <div id="prof-analytics-wrap"></div>
@@ -4982,7 +5128,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
       <span class="nb-lbl">myFeed</span>
     </div>
     <div class="nb" id="nb-explore" onclick="navTo('explore')">
-      <div class="nb-icon"><i class="fa-solid fa-terminal"></i></div>
+      <div class="nb-icon"><i class="fa-solid fa-compass"></i></div>
       <span class="nb-lbl">Explore</span>
     </div>
     <div class="nb" id="nb-profile" onclick="navTo('profile')">
@@ -5007,6 +5153,23 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 </div>
 <div id="xp-page" class="xp-page"></div>
 
+<!-- ════════ COMMENTS BOTTOM SHEET ════════
+     One sheet reused by every surface that has a comment button — the home feed
+     action bar and the myFeed dossier. Reads /signal/comments/<id>, posts to
+     /signal/comment. Body-level (outside .phone's transform) like the others. -->
+<div class="cmt-scrim" id="cmt-scrim" onclick="closeComments()"></div>
+<div class="cmt-sheet" id="cmt-sheet" role="dialog" aria-modal="true" aria-label="Comments">
+  <div class="cmt-grab"></div>
+  <div class="cmt-hd"><b>Comments</b><span id="cmt-count"></span>
+    <button class="cmt-x" onclick="closeComments()" aria-label="Close"><i class="fa-solid fa-xmark"></i></button></div>
+  <div class="cmt-list" id="cmt-list"></div>
+  <div class="cmt-inputbar">
+    <input id="cmt-input" placeholder="Add a comment…" maxlength="2000" autocomplete="off"
+           onkeydown="if(event.key==='Enter'){event.preventDefault();postComment();}">
+    <button class="cmt-send tap" onclick="postComment()" aria-label="Send"><i class="fa-solid fa-paper-plane"></i></button>
+  </div>
+</div>
+
 <!-- ════════ myFeed inline dossier — News · Strings · Dots ════════
      The dossier is rendered INLINE on each myFeed card (no tap-to-open overlay):
      segmented tabs at the top of the card, then the active pane. Every rule here
@@ -5024,22 +5187,25 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 .mf-badge::before{content:'';position:absolute;left:8px;top:4px;bottom:4px;
   border-left:2px dotted rgba(255,255,255,.6);}
 .mf-badge.dark::before{border-color:rgba(0,0,0,.35);}
-/* tab row — overlaid on the LOWER edge of the image (sketch #5): segmented
-   News · Strings · Dots on the left, the brand logo on the right. */
-.mf-tabrow{position:absolute;left:0;right:0;bottom:0;z-index:2;
-  display:flex;align-items:center;gap:10px;padding:10px 12px;}
-.mfd-tabs{display:flex;gap:4px;flex:1;border-radius:12px;padding:3px;
-  background:rgba(12,12,15,.55);-webkit-backdrop-filter:blur(9px);backdrop-filter:blur(9px);
-  border:1px solid rgba(255,255,255,.14);}
-.mfd-tab{flex:1;border:0;background:transparent;color:rgba(255,255,255,.74);
-  font-size:.82rem;font-weight:700;padding:7px 4px;border-radius:9px;cursor:pointer;
+/* tab row — STRADDLES the image's bottom edge (centred on the boundary: the top
+   half floats over the image, the bottom half over the card), segmented
+   News · Strings · Dots on the left, the brand logo on the right. Pulled up with
+   a negative margin so its middle sits on the edge; dark translucent chrome so
+   it reads over both the image and the card in either theme. */
+.mf-tabrow{display:flex;align-items:center;gap:10px;padding:0 12px;
+  margin-top:-27px;position:relative;z-index:3;}
+.mfd-tabs{display:flex;gap:4px;flex:1;border-radius:14px;padding:4px;
+  background:rgba(12,12,15,.62);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+  border:1px solid rgba(255,255,255,.14);box-shadow:0 8px 22px -10px rgba(0,0,0,.7);}
+.mfd-tab{flex:1;border:0;background:transparent;color:rgba(255,255,255,.76);
+  font-size:.82rem;font-weight:700;padding:8px 4px;border-radius:10px;cursor:pointer;
   transition:color .15s var(--ease),background .15s var(--ease);}
 .mfd-tab.on{background:#fff;color:#111214;box-shadow:0 1px 3px rgba(0,0,0,.3);}
 .mfd-tab.pending{opacity:.55;}
-.mf-logo{width:40px;height:40px;border-radius:11px;flex-shrink:0;overflow:hidden;
+.mf-logo{width:44px;height:44px;border-radius:13px;flex-shrink:0;overflow:hidden;
   display:flex;align-items:center;justify-content:center;
-  background:rgba(12,12,15,.55);-webkit-backdrop-filter:blur(9px);backdrop-filter:blur(9px);
-  border:1px solid rgba(255,255,255,.18);}
+  background:rgba(12,12,15,.62);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+  border:1px solid rgba(255,255,255,.18);box-shadow:0 8px 22px -10px rgba(0,0,0,.7);}
 .mf-logo img{width:100%;height:100%;object-fit:cover;display:block;}
 .mf-logo-svg{width:20px;height:20px;fill:none;stroke:#fff;stroke-width:1.9;stroke-linecap:round;}
 /* the three panes — only the active one shows; a tap or a sideways swipe on the
@@ -5064,6 +5230,23 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 .mfd-chips{display:flex;flex-wrap:wrap;gap:6px;}
 .mfd-chips span{font-size:.78rem;background:var(--glass);border:1px solid var(--line);
   padding:4px 10px;border-radius:9px;color:var(--t1);}
+/* News-pane TL;DR button (bottom-right) + the KEY POINTS card it reveals */
+.mfd-tldr-row{display:flex;justify-content:flex-end;margin-top:2px;}
+.mfd-tldr-btn{display:inline-flex;align-items:center;gap:6px;border:1px solid rgba(168,85,247,.32);
+  background:rgba(168,85,247,.12);color:#C084FC;font:800 .72rem/1 var(--f);letter-spacing:.03em;
+  padding:9px 14px;border-radius:11px;cursor:pointer;transition:all .15s var(--ease);}
+.mfd-tldr-btn.on{background:#A855F7;color:#fff;border-color:#A855F7;}
+.mfd-tldr-btn:active{transform:scale(.95);}
+.mfd-keypoints{background:rgba(10,132,255,.06);border:1px solid rgba(10,132,255,.16);
+  border-radius:14px;padding:14px 15px;display:flex;flex-direction:column;gap:9px;}
+.mfd-kp-hd{color:var(--accent);font:800 .72rem/1 var(--f);letter-spacing:.09em;
+  display:flex;align-items:center;gap:7px;margin-bottom:2px;}
+.mfd-kp-row{display:flex;gap:12px;align-items:flex-start;}
+.mfd-kp-k{flex:0 0 52px;color:var(--accent);font-weight:800;font-size:.68rem;
+  text-transform:uppercase;letter-spacing:.05em;padding-top:2px;}
+.mfd-kp-v{flex:1;color:var(--t1);font-size:.9rem;line-height:1.42;}
+.mfd-kp-tldr{border-top:1px solid var(--line);padding-top:10px;}
+.mfd-kp-tldr p{margin:5px 0 0;color:var(--t2);font-size:.9rem;line-height:1.5;}
 /* Strings pane — VERTICAL timeline (dots connected top→bottom), per the sketch */
 .mfd-tl{position:relative;padding:6px 0 2px 6px;}
 .mfd-tl-item{position:relative;padding:0 0 20px 24px;}
@@ -5362,7 +5545,7 @@ function catPlaceholderHtml(category, style) {
 }
 
 // ── STATE ──
-const ST_DEFAULTS = { likes:[], saves:[], savedCache:{}, token:null, refresh:null, userId:null, username:'', interests:{}, scope:'global', seen:[], settings:{}, privacy:'friends', feedCats:null, feedTopics:null };
+const ST_DEFAULTS = { likes:[], saves:[], reposts:[], savedCache:{}, token:null, refresh:null, userId:null, username:'', interests:{}, scope:'global', seen:[], settings:{}, privacy:'friends', feedCats:null, feedTopics:null };
 let ST = { ...ST_DEFAULTS };
 // Per-user persistence: each account (and the logged-out "anon" state) keeps its
 // OWN bookmarks/likes/cache/prefs, so nothing bleeds between users on a shared
@@ -5542,6 +5725,15 @@ function applyTheme() {
   // system → navy gradient, dark → black, light → white
   const effective = pref === 'dark' ? 'dark' : pref === 'light' ? 'light' : 'navy';
   document.documentElement.setAttribute('data-theme', effective);
+  // Keep the mobile status/notification bar the SAME colour as the app surface,
+  // so the browser chrome and the app read as one (the "full integration into
+  // the mobile" ask). navy/dark → near-black, light → white.
+  try {
+    const barColor = effective === 'light' ? '#FFFFFF' : (effective === 'navy' ? '#06101c' : '#0A0A0C');
+    let m = document.querySelector('meta[name="theme-color"]');
+    if (!m) { m = document.createElement('meta'); m.name = 'theme-color'; document.head.appendChild(m); }
+    m.setAttribute('content', barColor);
+  } catch (e) {}
   const ic = document.querySelector('#h-theme i');
   if (ic) ic.className = 'fa-solid ' + _THEME_ICON[pref];
   document.querySelectorAll('.theme-check').forEach(el => {
@@ -6014,6 +6206,54 @@ function selectChip(el, cat) {
   loadFeed(true);
 }
 
+// ── Home category swipe ──────────────────────────────────────────────────────
+// A sideways swipe on the feed steps between the chip categories (All → Arts →
+// …), exactly like the News → Strings → Dots swipe on a dossier card. A vertical
+// gesture is left alone so the feed scrolls; the chip row keeps its own
+// horizontal scroll (the swipe zone is the article list, not the chips).
+function homeChips() { return [...document.querySelectorAll('#chip-row .chip')]; }
+function homeGoRel(dir) {
+  const chips = homeChips(); if (!chips.length) return;
+  let i = chips.findIndex(c => c.classList.contains('on')); if (i < 0) i = 0;
+  const ni = Math.max(0, Math.min(chips.length - 1, i + dir));
+  if (ni === i) return;
+  const m = (chips[ni].getAttribute('onclick') || '').match(/'([^']+)'/);
+  chips[ni].scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
+  const feed = document.getElementById('home-feed');
+  if (feed) {   // brief slide-in cue in the swipe direction
+    feed.style.transition = 'none';
+    feed.style.transform = `translateX(${dir > 0 ? 22 : -22}px)`;
+    feed.style.opacity = '0.4';
+    requestAnimationFrame(() => {
+      feed.style.transition = 'transform .28s cubic-bezier(.22,1,.32,1), opacity .28s';
+      feed.style.transform = ''; feed.style.opacity = '';
+    });
+  }
+  selectChip(chips[ni], m ? m[1] : 'all');
+}
+function bindHomeSwipe() {
+  const zone = document.getElementById('home-feed');
+  if (!zone || zone._swipeBound) return;
+  zone._swipeBound = true;
+  let x0 = 0, y0 = 0, axis = null, active = false;
+  zone.addEventListener('touchstart', e => {
+    if (e.touches.length !== 1) { active = false; return; }
+    x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; axis = null; active = true;
+  }, { passive: true });
+  zone.addEventListener('touchmove', e => {
+    if (!active) return;
+    const mx = e.touches[0].clientX - x0, my = e.touches[0].clientY - y0;
+    if (axis === null && (Math.abs(mx) > 10 || Math.abs(my) > 10)) axis = Math.abs(mx) > Math.abs(my) ? 'x' : 'y';
+  }, { passive: true });
+  zone.addEventListener('touchend', e => {
+    if (!active) { return; } active = false;
+    if (axis !== 'x') return;
+    const mx = e.changedTouches[0].clientX - x0;
+    if (Math.abs(mx) < 60) return;            // ignore small drags
+    homeGoRel(mx < 0 ? 1 : -1);               // left → next, right → previous
+  });
+}
+
 // ── SCOPE TOGGLE ──
 function selScope(btn, scope) {
   btn.closest('.scope-toggle').querySelectorAll('.scope-btn').forEach(b => b.classList.remove('on'));
@@ -6144,31 +6384,92 @@ function feedLike(a, el){
 function renderStandardCard(rawA, container) {
   const a = normalizeArticle(rawA);
   const cc = CATS[a.category] || CATS.tech;
-  const liked = ST.likes.includes(a.id);
-  const likeN = liked ? 1 : 0;   // real aggregate filled in by hydrateFeedCounts()
-  const cmtN  = 0;
+  ST.reposts = ST.reposts || [];
+  const idIn = (arr) => arr.some(x => String(x) === String(a.id));
+  const liked = idIn(ST.likes), saved = idIn(ST.saves), rpd = idIn(ST.reposts);
 
   const d = document.createElement('div');
   d.className = 'nc fadein';
   d.dataset.aid = a.id;
   d.onclick = () => openArticle(a);
+  // Order per the design: image → meta → headline → description → action bar.
+  // The old mid-card share pill (between image and text) is gone; like /
+  // comment / repost / bookmark now live in ONE bar BELOW the article, and the
+  // counts are real (hydrateFeedCounts fills them from /signal/counts).
   d.innerHTML = `
     ${articleImage(a, 'nc-hero-image')}
-    <!-- Like and comment removed: both read 0 on every card, which is worse
-         than absent — an empty counter says nobody is here. Share stays, since
-         it does something without needing an audience. -->
-    <div class="nc-acts-row">
-      <div class="nc-pill nc-share"><i class="fa-solid fa-arrow-up-from-bracket"></i></div>
-    </div>
     <div class="nc-meta" style="margin-top:12px">
       <span class="nc-tag" style="background:${cc.bg};color:${cc.hex}">${cc.icon} ${cc.short}</span>
       <span class="nc-src" style="margin-left:auto">${a.source} · ${timeAgo(a.published_at)}</span>
     </div>
     <div class="nc-title">${a.title}</div>
     ${cardSummary(a) ? `<div class="nc-desc">${bEsc(cardSummary(a))}</div>` : ''}
+    <div class="nc-actbar">
+      <button class="nca nca-like${liked?' on':''}" data-act="like" aria-label="Like">
+        <i class="fa-${liked?'solid':'regular'} fa-heart"></i><span>${liked?1:0}</span></button>
+      <button class="nca nca-cmt" data-act="cmt" aria-label="Comment">
+        <i class="fa-regular fa-comment"></i><span>0</span></button>
+      <button class="nca nca-rp${rpd?' on':''}" data-act="rp" aria-label="Repost">
+        <i class="fa-solid fa-retweet"></i><span>${rpd?1:0}</span></button>
+      <button class="nca nca-save${saved?' on':''}" data-act="save" aria-label="Save">
+        <i class="fa-${saved?'solid':'regular'} fa-bookmark"></i></button>
+    </div>
   `;
-  d.querySelector('.nc-share').addEventListener('click', e => { e.stopPropagation(); shareArticleCard(a); });
+  d.querySelectorAll('.nca').forEach(btn => btn.addEventListener('click', e => {
+    e.stopPropagation(); ncAct(btn.dataset.act, a, btn);
+  }));
   container.appendChild(d);
+}
+
+// One dispatcher for the feed action bar. Each button stops propagation (the
+// card itself opens the article), so these never double-fire an open.
+function ncAct(act, a, btn) {
+  if (act === 'like') return ncLike(a, btn);
+  if (act === 'save') return ncSave(a, btn);
+  if (act === 'rp')   return ncRepost(a, btn);
+  if (act === 'cmt')  return openComments(a.id, a);
+}
+async function ncLike(a, btn) {
+  const span = btn.querySelector('span');
+  const i = ST.likes.findIndex(x => String(x) === String(a.id));
+  const now = i === -1;
+  if (now) ST.likes.push(a.id); else ST.likes.splice(i, 1);
+  btn.classList.toggle('on', now);
+  btn.querySelector('i').className = 'fa-' + (now ? 'solid' : 'regular') + ' fa-heart';
+  span.textContent = Math.max(0, (parseInt(span.textContent) || 0) + (now ? 1 : -1));
+  persist();
+  if (now) { logInteract(a.id, a.category, 'like'); markSeen(a.id); }
+  btn.style.animation = 'heartPop .35s forwards';
+  btn.addEventListener('animationend', () => btn.style.animation = '', { once: true });
+  if (ST.token) {   // reconcile to the server's real aggregate when signed in
+    try {
+      const r = await api('/signal/like/' + encodeURIComponent(a.id), { method: 'POST' });
+      if (r && typeof r.likes === 'number') span.textContent = r.likes;
+    } catch (e) {}
+  }
+}
+function ncSave(a, btn) {
+  const i = ST.saves.findIndex(x => String(x) === String(a.id));
+  const now = i === -1;
+  if (now) { ST.saves.push(a.id); cacheSavedArticle(a); toast('🔖 Saved'); }
+  else { ST.saves.splice(i, 1); uncacheSaved(a.id); toast('✓ Removed'); }
+  btn.classList.toggle('on', now);
+  btn.querySelector('i').className = 'fa-' + (now ? 'solid' : 'regular') + ' fa-bookmark';
+  syncBookmark(a.id); persist();
+  const sc = document.getElementById('saved-ct'); if (sc) sc.textContent = ST.saves.length;
+  btn.style.animation = 'heartPop .3s forwards';
+  btn.addEventListener('animationend', () => btn.style.animation = '', { once: true });
+}
+function ncRepost(a, btn) {
+  ST.reposts = ST.reposts || [];
+  const i = ST.reposts.findIndex(x => String(x) === String(a.id));
+  const now = i === -1;
+  if (now) ST.reposts.push(a.id); else ST.reposts.splice(i, 1);
+  btn.classList.toggle('on', now);
+  const span = btn.querySelector('span');
+  span.textContent = Math.max(0, (parseInt(span.textContent) || 0) + (now ? 1 : -1));
+  persist();
+  if (now) shareArticleCard(a);   // a repost pushes the story back out via share
 }
 
 // Fill the feed pills with REAL aggregate like/comment counts (batched).
@@ -6176,21 +6477,19 @@ async function hydrateFeedCounts() {
   const cards = Array.from(document.querySelectorAll('.nc[data-aid]:not([data-eng])')).slice(0, 100);
   if (!cards.length) return;
   cards.forEach(c => c.dataset.eng = '1');
-  // The like and comment pills are gone from the card, so there is nothing left
-  // to hydrate — and a request whose result cannot be rendered is just latency.
-  if (!document.querySelector('.nc-like span, .nc-comment span')) return;
   const ids = cards.map(c => c.dataset.aid);
   try {
     const res = await api('/signal/counts?ids=' + encodeURIComponent(ids.join(',')));
     const counts = (res && res.counts) || {};
     cards.forEach(c => {
       const d = counts[c.dataset.aid]; if (!d) return;
-      const likeSpan = c.querySelector('.nc-like span');
-      const cmtSpan  = c.querySelector('.nc-comment span');
-      if (likeSpan) likeSpan.textContent = Math.max(d.likes || 0, ST.likes.includes(c.dataset.aid) ? 1 : 0);
+      const likeSpan = c.querySelector('.nca-like span');
+      const cmtSpan  = c.querySelector('.nca-cmt span');
+      const ownLiked = ST.likes.some(x => String(x) === c.dataset.aid);
+      if (likeSpan) likeSpan.textContent = Math.max(d.likes || 0, ownLiked ? 1 : 0);
       if (cmtSpan)  cmtSpan.textContent  = d.comments || 0;
     });
-  } catch (e) { /* counts endpoint goes live once the backend deploys */ }
+  } catch (e) { /* counts endpoint unreachable — cards keep their own-state numbers */ }
 }
 
 // ── Article comments (read + post) ──
@@ -6236,6 +6535,61 @@ async function postArticleComment() {
     // comments removed app-wide
   } catch (e) { toast('Could not post comment'); }
   finally { inp.disabled = false; }
+}
+
+// ── Comments bottom sheet (shared: feed action bar + myFeed dossier) ──────────
+let _cmtArticleId = null;
+async function openComments(id, a) {
+  _cmtArticleId = id;
+  document.getElementById('cmt-scrim').classList.add('on');
+  document.getElementById('cmt-sheet').classList.add('on');
+  if (!_navReplay) { try { history.pushState({ view: 'comments' }, ''); } catch (e) {} }
+  const list = document.getElementById('cmt-list');
+  list.innerHTML = '<div class="cmt-empty"><span>Loading…</span></div>';
+  document.getElementById('cmt-count').textContent = '';
+  try {
+    const res = await api('/signal/comments/' + encodeURIComponent(id));
+    renderComments((res && res.comments) || []);
+  } catch (e) { list.innerHTML = '<div class="cmt-empty"><span>Couldn’t load comments.</span></div>'; }
+  setTimeout(() => { const inp = document.getElementById('cmt-input'); if (inp && ST.token) inp.focus(); }, 220);
+}
+function renderComments(cs) {
+  const list = document.getElementById('cmt-list');
+  document.getElementById('cmt-count').textContent = cs.length ? '· ' + cs.length : '';
+  list.innerHTML = cs.length
+    ? cs.map(c => `<div class="cmt-item">
+        <div class="cmt-av">${bEsc(((c.author || 'R')[0] || 'R').toUpperCase())}</div>
+        <div class="cmt-b">
+          <div class="cmt-meta"><b>${bEsc(c.author || 'Reader')}</b><span>${bEsc(timeAgo(c.created_at) || 'now')}</span></div>
+          <div class="cmt-text">${bEsc(c.body || '')}</div>
+        </div></div>`).join('')
+    : '<div class="cmt-empty"><b>No comments yet</b><span>Start the conversation.</span></div>';
+}
+function closeComments() {
+  document.getElementById('cmt-scrim').classList.remove('on');
+  document.getElementById('cmt-sheet').classList.remove('on');
+  _cmtArticleId = null;
+}
+async function postComment() {
+  if (!_cmtArticleId) return;
+  if (!ST.token) { toast('🔒 Log in to comment'); return; }
+  const inp = document.getElementById('cmt-input');
+  const body = (inp.value || '').trim();
+  if (!body) return;
+  inp.disabled = true;
+  try {
+    const res = await api('/signal/comment', { method: 'POST',
+      body: JSON.stringify({ info_object_id: _cmtArticleId, body }) });
+    inp.value = '';
+    const r = await api('/signal/comments/' + encodeURIComponent(_cmtArticleId));
+    renderComments((r && r.comments) || []);
+    const pill = document.querySelector('.nc[data-aid="' + _cmtArticleId + '"] .nca-cmt span');
+    if (pill && res && typeof res.count === 'number') pill.textContent = res.count;
+    const list = document.getElementById('cmt-list');
+    if (list) list.scrollTop = list.scrollHeight;
+  } catch (e) {
+    toast(e && e.status === 401 ? '🔒 Log in to comment' : 'Could not post comment');
+  } finally { inp.disabled = false; }
 }
 
 // Dispatcher — keeps backward compat; renderBulletinBlock/renderLatestBlock still call this
@@ -8435,10 +8789,12 @@ window.addEventListener('popstate', (e) => {
     const ao  = document.getElementById('article-overlay');
     const so  = document.getElementById('search-overlay');
     const mo  = document.getElementById('market-overlay');
+    const cmt = document.getElementById('cmt-sheet');
     const sb  = document.getElementById('sidebar');
     const sub = document.querySelector('.sub.on');
     // Close the topmost open layer first; otherwise navigate to the routed view.
     if (mv && mv.classList.contains('on'))   closeMediaViewer();
+    else if (cmt && cmt.classList.contains('on')) closeComments();
     else if (ao && ao.classList.contains('open')) closeArticle();
     else if (so && so.classList.contains('open')) closeSearch();
     else if (mo && mo.classList.contains('open')) closeMarketDetail();
@@ -8451,7 +8807,7 @@ window.addEventListener('popstate', (e) => {
 // hardcoded 'home'. This is the half of real URLs that makes a refresh and a
 // pasted link work; the server serving index.html at these paths is the other.
 try { history.replaceState({ view: viewForPath(location.pathname) }, ''); } catch (e) {}
-document.addEventListener('DOMContentLoaded', () => { try { routeFromPath(); } catch (e) {} });
+document.addEventListener('DOMContentLoaded', () => { try { routeFromPath(); } catch (e) {} try { bindHomeSwipe(); } catch (e) {} });
 
 // Apply a /me payload to the profile UI — real data only, no placeholders.
 function applyMe(me) {
@@ -9893,14 +10249,14 @@ function buildMyfeedCard(a){
     <article class="mf-card">
       <div class="mf-media b-open" style="${ownImage(a) ? `background-image:url('${a.image_url}')` : `background:${CAT_GRADIENTS[a.category]||CAT_GRADIENTS.tech}`}">
         ${ownImage(a) ? '' : MF_ICON.image}
-        <div class="mf-tabrow">
-          <div class="mfd-tabs" role="tablist">
-            <button class="mfd-tab on" data-tab="news" role="tab">News</button>
-            <button class="mfd-tab" data-tab="strings" role="tab">Strings</button>
-            <button class="mfd-tab" data-tab="dots" role="tab">Dots</button>
-          </div>
-          <span class="mf-logo" title="${bEsc(src)}">${mfLogoMarkup(src)}</span>
+      </div>
+      <div class="mf-tabrow">
+        <div class="mfd-tabs" role="tablist">
+          <button class="mfd-tab on" data-tab="news" role="tab">News</button>
+          <button class="mfd-tab" data-tab="strings" role="tab">Strings</button>
+          <button class="mfd-tab" data-tab="dots" role="tab">Dots</button>
         </div>
+        <span class="mf-logo" title="${bEsc(src)}">${mfLogoMarkup(src)}</span>
       </div>
       <div class="mfd-head">
         <h2 class="mf-headline b-open">${bEsc(a.title)}</h2>
@@ -9915,6 +10271,11 @@ function buildMyfeedCard(a){
             <div class="mfd-block mfd-tldr">${leadBadge}<p class="mfd-lead">${tldr || 'Sherr AI is preparing an original summary of this story.'}</p></div>
             <div class="mfd-block mfd-what" hidden><p></p></div>
             <div class="mfd-block mfd-whowhere" hidden></div>
+            <div class="mfd-keypoints" hidden></div>
+            <div class="mfd-tldr-row">
+              <button class="mfd-tldr-btn" type="button" aria-expanded="false">
+                <i class="fa-solid fa-wand-magic-sparkles"></i> TL;DR</button>
+            </div>
           </div>
         </section>
         <section class="mfd-pane strings" data-pane="strings">
@@ -9987,7 +10348,31 @@ function mfBindCard(el, a){
   el.querySelector('.b-like').addEventListener('click', e => { e.stopPropagation(); myfeedToggle('likes', a, e.currentTarget, 'fa-heart', '❤️ Liked', 'like'); });
   el.querySelector('.b-save').addEventListener('click', e => { e.stopPropagation(); myfeedToggle('saves', a, e.currentTarget, 'fa-bookmark', '🔖 Saved', 'save'); });
   el.querySelector('.b-share').addEventListener('click', e => { e.stopPropagation(); shareArticleCard(a); });
-  el.querySelectorAll('.b-open').forEach(o => o.addEventListener('click', e => { e.stopPropagation(); markSeen(a.id); }));
+  // The "Add a comment…" pill opens the shared comments sheet (it used to do
+  // nothing but mark the card seen — the reason comments felt disabled).
+  const cbtn = el.querySelector('.mf-comment');
+  if (cbtn) cbtn.addEventListener('click', e => { e.stopPropagation(); openComments(a.id, a); });
+  // TL;DR button: reveal the KEY POINTS block (built from The Node during
+  // hydration). If the card has not hydrated yet, show a short holding line.
+  const tbtn = el.querySelector('.mfd-tldr-btn');
+  if (tbtn) tbtn.addEventListener('click', e => {
+    e.stopPropagation();
+    const kp = el.querySelector('.mfd-keypoints'); if (!kp) return;
+    const open = kp.hidden;
+    if (open && !kp.dataset.ready) {
+      kp.innerHTML = mfdKeyPointsHTML({
+        what: a.title || '', where: '', when: '',
+        tldr: (el.querySelector('.mfd-lead') ? el.querySelector('.mfd-lead').textContent : (a.preview || a.summary || '')),
+      });
+    }
+    kp.hidden = !open;
+    tbtn.setAttribute('aria-expanded', String(open));
+    tbtn.classList.toggle('on', open);
+  });
+  el.querySelectorAll('.b-open').forEach(o => o.addEventListener('click', e => {
+    if (o.classList.contains('mf-comment')) return;   // handled above
+    e.stopPropagation(); markSeen(a.id);
+  }));
 }
 
 // One IntersectionObserver hydrates each card's dossier the first time it nears
@@ -10005,6 +10390,19 @@ const myfeedObserver = new IntersectionObserver((entries) => {
     hydrateDossier(el, id);
   });
 }, { rootMargin: '300px 0px' });
+
+// KEY POINTS card for the News-pane TL;DR — pure template over The Node data
+// that is already loaded, so it never fires a request that can fail.
+function mfdKeyPointsHTML(k){
+  const row = (label, val) => val ? `<div class="mfd-kp-row"><span class="mfd-kp-k">${label}</span><span class="mfd-kp-v">${bEsc(val)}</span></div>` : '';
+  const fmtWhen = (w) => { if(!w) return ''; const d=new Date(w);
+    return isNaN(d) ? String(w) : d.toLocaleString(undefined,{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}); };
+  return `<div class="mfd-kp-hd"><i class="fa-solid fa-list-check"></i> KEY POINTS</div>
+    ${row('What', k.what)}
+    ${row('Where', k.where || 'Not specified')}
+    ${row('When', fmtWhen(k.when))}
+    ${k.tldr ? `<div class="mfd-kp-tldr"><span class="mfd-kp-k">TL;DR</span><p>${bEsc(k.tldr)}</p></div>` : ''}`;
+}
 
 async function hydrateDossier(el, id){
   let d;
@@ -10035,6 +10433,18 @@ async function hydrateDossier(el, id){
     if (line) parts.push(`<p>${bEsc(line)}</p>`);
     wwSec.innerHTML = parts.join('');
     wwSec.hidden = false;
+  }
+  // TL;DR / KEY POINTS — built from The Node we already fetched, so it never
+  // makes a second call that can fail ("Summarize failed"). Hidden until the
+  // reader taps the TL;DR button.
+  const kp = el.querySelector('.mfd-keypoints');
+  if (kp) {
+    const tldrLine = hook || what || (el.querySelector('.mfd-lead') ? el.querySelector('.mfd-lead').textContent : '');
+    kp.innerHTML = mfdKeyPointsHTML({
+      what: what || (el._mfa && el._mfa.title) || '',
+      where, when, tldr: tldrLine,
+    });
+    kp.dataset.ready = '1';
   }
   // Verification badge.
   const v = d.verification || {};
@@ -11001,12 +11411,8 @@ async function initExploreV8() {
   // shimmer, and the real values swap in if they arrive.
   try { xpSnap = await api('/explore/snapshot', { timeout: 2000 }); }
   catch (e) { xpSnap = null; }
-  let arts = [];
-  try {
-    const d = await api('/explore?page=1&limit=6', { timeout: 2000 });
-    arts = (d.articles||[]).map(normalizeArticle).filter(a=>a.title);
-  } catch (e) { arts = []; }
-  renderXpHero(arts);
+  // The RBI bulletin hero was removed; nothing on Explore reads that /explore
+  // page-1 fetch any more, so it is gone too (one fewer cold-start request).
   renderXpMatrix(); renderXpTal(); renderXpBTick();
   renderXpGov(); renderXpAlso(); renderXpSpace(); renderXpBreak(); renderXpAi();
 }
