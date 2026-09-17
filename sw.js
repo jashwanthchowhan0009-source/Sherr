@@ -1,5 +1,5 @@
 /* SherrByte service worker — installability, offline shell, push-ready. */
-const CACHE = 'sherrbyte-v3';
+const CACHE = 'sherrbyte-v4';
 self.addEventListener('install', (e) => { self.skipWaiting(); });
 self.addEventListener('activate', (e) => {
   e.waitUntil((async () => {
@@ -16,13 +16,21 @@ self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET') return;
   if (req.mode === 'navigate') {
-    // Only manage the app shell ('/'). Any other navigation goes straight to the
-    // network so it never overwrites the cached app shell.
+    // Network-first for EVERY same-origin navigation, so a deep link or the
+    // installed PWA is never served a cached OLD bundle after a deploy — /myfeed
+    // and /myfeed/<slug> return the same SPA shell as '/', and the previous "only
+    // manage '/'" rule let those paths pin a stale build. Fetch fresh (no-store);
+    // fall back to the cached shell only when the network is unreachable.
     const url = new URL(req.url);
-    if (url.origin !== location.origin || (url.pathname !== '/' && url.pathname !== '/index.html')) return;
+    if (url.origin !== location.origin) return;
+    // Only refresh the offline shell from the canonical shell path — a navigation
+    // to a non-SPA page (/docs, /health) must never overwrite it.
+    const isShell = (url.pathname === '/' || url.pathname === '/index.html');
     e.respondWith(
-      fetch(req, { cache: 'no-store' }).then((r) => { const c = r.clone(); caches.open(CACHE).then((ca) => ca.put('/', c)); return r; })
-                .catch(() => caches.match('/'))
+      fetch(req, { cache: 'no-store' }).then((r) => {
+        if (isShell) { const c = r.clone(); caches.open(CACHE).then((ca) => ca.put('/', c)); }
+        return r;
+      }).catch(() => caches.match('/'))
     );
   }
 });
