@@ -1935,10 +1935,11 @@ nav.compact .nb.on { flex: 0 0 auto; padding-left: 16px; padding-right: 16px; }
   box-shadow:0 12px 24px rgba(60,20,140,.45),inset 0 2px 6px rgba(255,255,255,.35),
     inset 0 -6px 10px rgba(20,6,60,.6);
   animation:xrFloat 6s ease-in-out infinite;}
-/* the White Tiger mark struck on the coin face */
-.xr-orb::after{content:'';position:absolute;inset:19%;
+/* the White Tiger mark struck on the coin face — bigger + brighter */
+.xr-orb::after{content:'';position:absolute;inset:8%;
   background:url('/tiger-logo.png') center/contain no-repeat;
-  filter:drop-shadow(0 1px 1px rgba(0,0,0,.45));}
+  filter:brightness(1.6) contrast(1.12)
+    drop-shadow(0 0 3px rgba(255,255,255,.55)) drop-shadow(0 1px 1px rgba(0,0,0,.5));}
 .xr-orb.o1{width:66px;height:66px;left:7%;top:58%;animation-delay:0s;}
 .xr-orb.o2{width:36px;height:36px;left:20%;top:26%;animation-delay:.6s;}
 .xr-orb.o3{width:46px;height:46px;right:12%;top:24%;animation-delay:1.1s;}
