@@ -6831,7 +6831,7 @@ function _writeFeedCache(arts) {
 
 let _feedWatchdog = 0;
 
-async function loadFeed(reset = false) {
+async function loadFeed(reset = false, hard = false) {
   if (feedLoading) return;
   if (!reset && feedExhausted) return;          // no more genuinely-new pages → stop infinite scroll
   if (reset) {
@@ -6878,16 +6878,20 @@ async function loadFeed(reset = false) {
   try {
     // Region: national/local filter the feed; global = broadest (no filter).
     const sc = (ST.scope && ST.scope !== 'global') ? '&scope=' + ST.scope : '';
+    // A hard refresh (pull-to-refresh, re-tap) tells the server to skip its read
+    // cache so stories ingested inside the cache window show up now — that is what
+    // makes "pull down and see something new" actually deliver new articles.
+    const fr = hard ? '&fresh=1' : '';
     // Choose endpoint: a selected category always filters; tabs only apply to "All".
     let url;
     if (curChip !== 'all') {
-      url = `/explore?category=${curChip}&page=${feedPage}&limit=30${sc}`;
+      url = `/explore?category=${curChip}&page=${feedPage}&limit=30${sc}${fr}`;
     } else if (homeActiveTab === 'trending') {
       url = `/trending?limit=30`;
     } else if (homeActiveTab === 'latest') {
-      url = `/explore?page=${feedPage}&limit=30${sc}`;
+      url = `/explore?page=${feedPage}&limit=30${sc}${fr}`;
     } else {
-      url = `/feed?page=${feedPage}&limit=30${sc}`;
+      url = `/feed?page=${feedPage}&limit=30${sc}${fr}`;
     }
     let data = await api(url, { timeout: 45000 });   // long enough to ride a free-tier cold start
     // Region soft-fallback: if a scoped fetch is empty on page 1, broaden so the
@@ -8758,7 +8762,7 @@ function navTo(name) {
     } else if (_reTap) {
       // Full-bar re-tap while on the All feed → scroll to top + pull fresh articles.
       document.getElementById('v-home')?.scrollTo({ top: 0, behavior: 'smooth' });
-      loadFeed(true);
+      loadFeed(true, true);
     } else {
       document.getElementById('v-home')?.scrollTo({ top: 0, behavior: 'smooth' });
     }
@@ -8900,7 +8904,12 @@ function applyMe(me) {
   const setStat = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = (v ?? 0); };
   setStat('prof-stat-read', s.articles_read);
   setStat('prof-stat-saved', s.bookmarks);
-  ST.interests = me.interests || {}; persist();
+  ST.interests = me.interests || {};
+  // Cache the whole payload so the NEXT boot can paint the real profile
+  // instantly from localStorage — before the (possibly cold-starting) /me
+  // request returns — instead of flashing defaults that read as "logged out".
+  try { ST.meCache = me; } catch (e) {}
+  persist();
 }
 
 async function loadProfileFromAPI() {
@@ -8911,6 +8920,16 @@ async function loadProfileFromAPI() {
 // token if needed) and restore the user. If it's truly invalid, drop to sign-in.
 async function bootstrapSession() {
   if (!ST.token && !ST.refresh) return;   // anonymous — leave onboarding visible
+  // Paint the last-known profile IMMEDIATELY from cache so a returning user is
+  // recognised on the first frame — no blank/default flash while /me is in
+  // flight on a cold free-tier backend. Reconciled with the live payload below.
+  if (ST.meCache) {
+    try {
+      applyMe(ST.meCache);
+      document.getElementById('ob-screen')?.classList.add('gone');
+      updateSidebarAuth();
+    } catch (e) {}
+  }
   try {
     const me = await api('/me');          // api() auto-refreshes on a 401
     applyMe(me);
@@ -9025,7 +9044,7 @@ function attachPullToRefresh(scrollEl, onRefresh) {
     dist = 0;
   }, { passive: true });
 }
-attachPullToRefresh(document.getElementById('v-home'), () => loadFeed(true));
+attachPullToRefresh(document.getElementById('v-home'), () => loadFeed(true, true));
 
 // ── SIDEBAR LOGOUT ──
 document.querySelector('.sb-logout').addEventListener('click', signOut);
