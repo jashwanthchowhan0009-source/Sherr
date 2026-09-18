@@ -43,7 +43,13 @@ log = logging.getLogger("sherbyte.ai")
 # what these replaced.
 MODEL_DEFAULT = {
     "gemini": "gemini-3.1-flash-lite",
-    "groq":   "llama-3.1-8b-instant",
+    # 70B, not 8B: the 8B model is fast but too weak to REFRAME a story — it
+    # dry-restates the source, so the headline comes back near-identical and the
+    # body reads like the wire copy. The 70B versatile model actually follows the
+    # "original headline + psychological hook" instruction. Slower on the free
+    # tier (lower daily tokens), but the quality is the whole point. Override with
+    # GROQ_MODEL if Groq retires this id or you want the faster 8B for the backlog.
+    "groq":   "llama-3.3-70b-versatile",
     "openai": "gpt-4o-mini",
     "grok":   "grok-4.3",
 }
@@ -138,11 +144,15 @@ STRICT RULES:
    source's wording is rejected automatically and the article is not published.
 
 1. refined_title — Maximum 12 words. Active voice. Concrete and specific.
-   It must be YOUR headline, not the publisher's. Use a different word order and a
-   different angle from the source title. It must NOT be a substring of the source
+   It must be YOUR headline, not the publisher's. Find the HOOK ANGLE — the stake,
+   the tension, or the "why this matters" the publisher's own headline buries —
+   and lead with THAT, not with the announcement's framing. Different word order
+   is not enough: change the ANGLE. It must NOT be a substring of the source
    title, and must NOT share any run of 5 consecutive words with it.
+   BAD  (restates the announcement): "Halle Berry, Regina King and Meg Ryan Named Jurors for Tribeca-Chanel Program"
+   GOOD (leads with the stake):       "Three Oscar winners will pick Hollywood's next women directors"
    BAD: "Breaking: Big News About Tech Company"
-   GOOD: "Nvidia posts record Q4 earnings, stock climbs 8%"
+   GOOD: "Nvidia's record quarter just reset the AI-chip race"
    Never use prefixes like "Breaking:", "Exclusive:", "Headline:", "Watch:", "Just In:".
 
 2. summary — EXACTLY 2 factual sentences totaling 40-55 words.
