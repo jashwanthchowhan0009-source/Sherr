@@ -24,6 +24,15 @@ log = logging.getLogger("sherbyte.worker.detectors")
 # All runnable jobs: discovery detectors + the decision-engine chain evaluator.
 _CHAIN = "cross_domain_chain"
 _REASONED = "reasoned"
+# The analog engine (SHAE). Phase 1 builds the event library, Phase 3 measures
+# each instrument's forward reaction. Nothing else runs these, so without this
+# step hist_events / analog_reactions — and the /api/sherr-i/analogs surface —
+# stay permanently empty.
+_ANALOG = "analog"
+
+# Last analog build/compute funnels, for --diagnostics. Same LAST_RUN pattern the
+# discovery detectors use, so _funnels() can surface them without re-running.
+_LAST_ANALOG: dict = {}
 
 
 async def run(only: str | None = None, *, diagnostics: bool = False) -> dict:
@@ -56,7 +65,8 @@ async def run(only: str | None = None, *, diagnostics: bool = False) -> dict:
             except Exception as e:
                 log.error("decision rules failed: %s", e, exc_info=True)
                 results[_CHAIN] = -1
-        # Reasoning Engine — runs LAST so it can reason over everything above.
+        # Reasoning Engine — runs LAST of the insight detectors so it can reason
+        # over everything above.
         if not only or only == _REASONED:
             try:
                 from app.spie.reasoning import engine as reasoning_engine
@@ -64,6 +74,24 @@ async def run(only: str | None = None, *, diagnostics: bool = False) -> dict:
             except Exception as e:
                 log.error("reasoning engine failed: %s", e, exc_info=True)
                 results[_REASONED] = -1
+
+        # Analog engine: build the event library from the corpus (Phase 1), then
+        # measure the stored reactions (Phase 3). Both are idempotent — an upsert
+        # and an ON CONFLICT — so a nightly re-run only refreshes. They read the
+        # SAME conn and depend on nothing but stdlib + the pool. Run after the
+        # detectors so cooccurrence NPMI is current for the matcher.
+        if not only or only == _ANALOG:
+            try:
+                from app.spie.analog import event_library, reaction
+                lib = await event_library.build(conn)
+                rx = await reaction.compute(conn)
+                results["analog_library"] = lib.get("written", 0)
+                results["analog_reactions"] = rx["funnel"].get("groups_written", 0)
+                _LAST_ANALOG.clear()
+                _LAST_ANALOG.update({"library": lib, "reactions": rx["funnel"]})
+            except Exception as e:
+                log.error("analog engine failed: %s", e, exc_info=True)
+                results[_ANALOG] = -1
 
     if diagnostics:
         results["_funnels"] = _funnels()
@@ -91,12 +119,14 @@ def _funnels() -> dict:
             out["emergence"] = em
     except Exception:
         pass
+    if _LAST_ANALOG:
+        out["analog"] = _LAST_ANALOG
     return out
 
 
 async def _main() -> None:
     parser = argparse.ArgumentParser(description="Run Intelligence Engine detectors.")
-    parser.add_argument("--only", choices=sorted(list(REGISTRY) + [_CHAIN, _REASONED]), default=None,
+    parser.add_argument("--only", choices=sorted(list(REGISTRY) + [_CHAIN, _REASONED, _ANALOG]), default=None,
                         help="run a single detector instead of all")
     parser.add_argument("--diagnostics", action="store_true",
                         help="also print the news<->market funnels behind each count")

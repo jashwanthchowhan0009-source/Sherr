@@ -5228,10 +5228,14 @@ async def _run_detectors(only: str) -> None:
 
         out: dict = {}
         async with pool.acquire() as conn:
-            try:
-                await cooccurrence.compute_npmi(conn)
-            except Exception as e:
-                log.warning("[DETECT] npmi refresh failed: %s", e)
+            # only="analog" is a targeted populate of the analog tables — it does
+            # not need the NPMI refresh or the discovery detectors, so it skips
+            # straight to Phase 1/3 and comes back fast for an on-demand verify.
+            if only != "analog":
+                try:
+                    await cooccurrence.compute_npmi(conn)
+                except Exception as e:
+                    log.warning("[DETECT] npmi refresh failed: %s", e)
             for name, fn in REGISTRY.items():
                 if only and name != only:
                     continue
@@ -5253,6 +5257,25 @@ async def _run_detectors(only: str) -> None:
                 except Exception as e:
                     log.error("[DETECT] reasoning failed: %s", e)
                     out["reasoned"] = -1
+            # Analog engine (SHAE). Phase 1 builds the event library from the
+            # corpus; Phase 3 measures each instrument's forward reaction. These
+            # populate hist_events / analog_reactions, which /api/sherr-i/analogs
+            # reads — nothing else runs them, so the analog surface is empty
+            # until this does. Idempotent, so the nightly pass just refreshes.
+            if not only or only == "analog":
+                try:
+                    from app.spie.analog import event_library, reaction
+                    out["analog_library"] = await event_library.build(conn)
+                    out["analog_reactions"] = (
+                        await reaction.compute(conn)).get("funnel", {})
+                    out["hist_events_total"] = int(
+                        await conn.fetchval("SELECT COUNT(*) FROM hist_events") or 0)
+                    out["analog_reactions_total"] = int(
+                        await conn.fetchval(
+                            "SELECT COUNT(*) FROM analog_reactions") or 0)
+                except Exception as e:
+                    log.error("[DETECT] analog engine failed: %s", e, exc_info=True)
+                    out["analog"] = -1
             out["insights_total"] = int(
                 await conn.fetchval("SELECT COUNT(*) FROM insights") or 0)
         _detect_result = {"ok": True, **out}
@@ -5290,7 +5313,12 @@ async def admin_run_detectors(
         GET /admin/run-detectors?token=...                    -> started
         GET /admin/run-detectors?token=...                    -> progress/result
         GET /admin/run-detectors?token=...&only=market_reaction
+        GET /admin/run-detectors?token=...&only=analog     -> just Phase 1/3
         GET /admin/run-detectors?token=...&restart=1
+
+    `only=analog` skips the detector pass and NPMI refresh and only (re)builds
+    the analog event library + reactions — the fast path for lighting up
+    /api/sherr-i/analogs and verifying it.
 
     Also runs nightly at 02:10 UTC from this app's scheduler.
     """
