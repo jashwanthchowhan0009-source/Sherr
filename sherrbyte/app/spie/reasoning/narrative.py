@@ -175,10 +175,17 @@ def build_narrative(r: dict, *, concise: bool = False) -> str:
     else:
         parts.append("No comparable prior coverage on record yet.")
 
-    # 6. EVIDENCE + CONFIDENCE
+    # 6. EVIDENCE + SIGNAL STRENGTH
+    # SEBI posture: the score is `signal_strength`, an integer 0-100, and it is
+    # NEVER the word "confidence" and NEVER rendered as a percentage. It used to
+    # print `Confidence: moderate (5%)`, which broke both rules at once — a "5%"
+    # on the card reads as a probability, which is the one thing this engine may
+    # not imply. The qualitative word stays (it is neither banned nor a number);
+    # the number is stated out of 100, with no percent sign.
     ev = r.get("evidence") or {}
     conf = float(r.get("confidence") or 0.0)
-    parts.append(f"Confidence: {confidence_word(conf)} ({round(conf * 100)}%) — "
+    strength = max(0, min(100, round(conf * 100)))
+    parts.append(f"Signal strength {strength} of 100 ({confidence_word(conf)}) — "
                  f"{int(ev.get('articles') or 0)} articles, "
                  f"{int(ev.get('sources') or 0)} sources.")
 
