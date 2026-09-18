@@ -845,6 +845,34 @@ CREATE TABLE IF NOT EXISTS demo_insights (
     created_at TEXT DEFAULT (datetime('now'))
 );
 
+-- Persistent per-user notification inbox. Written on real events (a reply in a
+-- story you commented on, a new story in a topic you follow); read/unread is
+-- tracked so the bell can carry a real unread badge. article_id is nullable —
+-- a notification may point at a story or stand alone.
+CREATE TABLE IF NOT EXISTS notifications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    kind TEXT NOT NULL DEFAULT 'general',
+    title TEXT NOT NULL,
+    body TEXT DEFAULT '',
+    article_id INTEGER,
+    color TEXT DEFAULT '',
+    image_url TEXT DEFAULT '',
+    read_at TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+
+-- FCM device tokens, one row per (user, token). A device push is best-effort and
+-- env-gated (FCM_SERVICE_ACCOUNT_JSON); the in-app inbox above works without it.
+CREATE TABLE IF NOT EXISTS push_tokens (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    token TEXT NOT NULL UNIQUE,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_push_tokens_user ON push_tokens(user_id);
 CREATE INDEX IF NOT EXISTS idx_demo_insights_type ON demo_insights(type, score DESC);
 CREATE INDEX IF NOT EXISTS idx_articles_pillar ON articles(pillar_id);
 CREATE INDEX IF NOT EXISTS idx_articles_published ON articles(published_at DESC);
@@ -2318,6 +2346,14 @@ class RefreshReq(BaseModel):
     refresh_token: str
 
 
+class RegisterPushReq(BaseModel):
+    fcm_token: str
+
+
+class MarkReadReq(BaseModel):
+    ids: list[int] = []          # empty = mark every unread notification read
+
+
 class UpdateProfileReq(BaseModel):
     name: Optional[str] = None
     bio: Optional[str] = None
@@ -3660,9 +3696,29 @@ async def signal_post_comment(req: CommentReq, authorization: str = Header("")):
         ).fetchone()["n"]
         conn.commit()
         u = conn.execute("SELECT name, email FROM users WHERE id=?", (uid,)).fetchone()
+        author = ((u["name"] if u else "") or "").strip() or \
+            ((u["email"] if u else "") or "").split("@")[0] or "You"
+        # Notify everyone ELSE who commented on this story — a reply they'd want
+        # to see. Distinct users, capped, and never the commenter themselves.
+        try:
+            head = conn.execute(
+                "SELECT headline, image_url FROM articles WHERE id=?",
+                (req.info_object_id,)).fetchone()
+            others = conn.execute(
+                "SELECT DISTINCT user_id FROM article_comments "
+                "WHERE article_id=? AND user_id<>? LIMIT 50",
+                (req.info_object_id, uid)).fetchall()
+            for o in others:
+                _notify(conn, o["user_id"], kind="reply",
+                        title=f"{author} commented on a story you're following",
+                        body=(head["headline"] if head else "")[:120],
+                        article_id=req.info_object_id,
+                        image_url=(head["image_url"] if head else "") or "")
+            conn.commit()
+        except Exception as e:                                 # noqa: BLE001
+            log.warning("[NOTIF] reply fanout failed: %s", e)
     finally:
         conn.close()
-    author = ((u["name"] if u else "") or "").strip() or ((u["email"] if u else "") or "").split("@")[0] or "You"
     return {"ok": True, "count": n, "comment": {"author": author, "body": body, "created_at": None}}
 
 
@@ -3701,30 +3757,217 @@ async def signal_like(article_id: int, authorization: str = Header("")):
     return {"liked": liked, "likes": n}
 
 
-@app.get("/notifications")
-async def get_notifications(authorization: str = Header("")):
-    uid = get_current_user(authorization)
+# ─── NOTIFICATIONS ────────────────────────────────────────────────────────────
+# Two layers. The INBOX (`notifications` table) is persistent, per-user, and
+# read/unread-tracked — written on real events so the bell carries a real badge.
+# SUGGESTIONS are the old on-the-fly "new in a topic you follow" rows: useful,
+# but never counted as unread, because nothing happened TO the user.
+#
+# Device push (FCM HTTP v1) is best-effort and env-gated: the inbox works with no
+# push configured at all. A push never blocks or fails the action that caused it.
+FCM_SA_JSON = os.getenv("FCM_SERVICE_ACCOUNT_JSON", "").strip()
+_fcm_ctx: dict = {}   # lazily-built {creds, project}
+
+
+def _fcm_send(tokens: list, title: str, body: str, url: str = "") -> int:
+    """Best-effort FCM HTTP v1 push. Returns how many tokens were accepted.
+
+    No-op (0) unless FCM_SERVICE_ACCOUNT_JSON is set AND google-auth is
+    importable. Every failure is swallowed — the in-app inbox is the source of
+    truth and must never depend on a device push succeeding.
+    """
+    if not tokens or not FCM_SA_JSON:
+        return 0
+    try:
+        import google.auth.transport.requests as _gtr          # noqa: PLC0415
+        from google.oauth2 import service_account              # noqa: PLC0415
+        if not _fcm_ctx:
+            info = json.loads(FCM_SA_JSON)
+            _fcm_ctx["creds"] = service_account.Credentials.from_service_account_info(
+                info, scopes=["https://www.googleapis.com/auth/firebase.messaging"])
+            _fcm_ctx["project"] = info.get("project_id")
+        creds = _fcm_ctx["creds"]
+        creds.refresh(_gtr.Request())
+        endpoint = (f"https://fcm.googleapis.com/v1/projects/"
+                    f"{_fcm_ctx['project']}/messages:send")
+        sent = 0
+        with httpx.Client(timeout=8.0) as client:
+            for tok in tokens:
+                msg = {"message": {"token": tok,
+                                   "notification": {"title": title, "body": body}}}
+                if url:
+                    msg["message"]["webpush"] = {"fcm_options": {"link": url}}
+                try:
+                    r = client.post(endpoint, json=msg, headers={
+                        "Authorization": f"Bearer {creds.token}"})
+                    if r.status_code < 300:
+                        sent += 1
+                except Exception:                              # noqa: BLE001
+                    pass
+        return sent
+    except Exception as e:                                     # noqa: BLE001
+        log.warning("[PUSH] not sent (unconfigured or error): %s", e)
+        return 0
+
+
+def _push_tokens_for(conn, uid: int) -> list:
+    try:
+        return [r["token"] for r in conn.execute(
+            "SELECT token FROM push_tokens WHERE user_id=?", (uid,)).fetchall()]
+    except Exception:                                          # noqa: BLE001
+        return []
+
+
+def _schedule_push(tokens: list, title: str, body: str, url: str = "") -> None:
+    """Fire the device push off the request path. If there is no running loop
+    (tests, sync context) it is simply skipped — the inbox row already exists."""
+    if not tokens or not FCM_SA_JSON:
+        return
+    try:
+        asyncio.get_running_loop().create_task(
+            asyncio.to_thread(_fcm_send, tokens, title, body, url))
+    except RuntimeError:
+        pass
+
+
+def _notify(conn, uid: int, *, kind: str, title: str, body: str = "",
+            article_id=None, color: str = "", image_url: str = "") -> None:
+    """Write one inbox notification and best-effort push it. Never raises into
+    the caller — a notification must not be able to fail the action that made it."""
+    try:
+        conn.execute(
+            "INSERT INTO notifications (user_id, kind, title, body, article_id, "
+            "color, image_url) VALUES(?,?,?,?,?,?,?)",
+            (uid, kind, (title or "")[:200], (body or "")[:500], article_id,
+             color, image_url))
+    except Exception as e:                                     # noqa: BLE001
+        log.warning("[NOTIF] insert failed: %s", e)
+        return
+    _schedule_push(_push_tokens_for(conn, uid), title, body)
+
+
+@app.post("/api/notifications/register")
+async def register_push(req: RegisterPushReq, authorization: str = Header("")):
+    """Store this device's FCM token for the signed-in user. Reassigns the token
+    to the current user if it was registered to another account on this device."""
+    uid = require_user(authorization)
+    tok = (req.fcm_token or "").strip()
+    if not tok:
+        raise HTTPException(400, "Missing fcm_token")
     conn = get_db()
+    try:
+        conn.execute("DELETE FROM push_tokens WHERE token=?", (tok,))
+        conn.execute("INSERT INTO push_tokens (user_id, token) VALUES(?,?)",
+                     (uid, tok))
+        conn.commit()
+    finally:
+        conn.close()
+    return {"ok": True}
+
+
+@app.post("/api/notifications/test")
+async def test_push(authorization: str = Header("")):
+    """Settings → Send Test Notification. 503 if push isn't configured on the
+    server, 404 if this account has registered no device."""
+    uid = require_user(authorization)
+    if not FCM_SA_JSON:
+        raise HTTPException(503, "Push is not configured on the server")
+    conn = get_db()
+    try:
+        tokens = _push_tokens_for(conn, uid)
+    finally:
+        conn.close()
+    if not tokens:
+        raise HTTPException(404, "No registered device — enable push first")
+    sent = await asyncio.to_thread(
+        _fcm_send, tokens, "SherrByte 🐯", "Push notifications are working.")
+    return {"ok": True, "sent": sent}
+
+
+def _suggestions_for(conn, uid: int) -> list:
+    """The old on-the-fly 'new in a topic you follow' rows — surfaced under the
+    real inbox, never counted as unread."""
     prefs = conn.execute(
-        "SELECT topic_name, pillar_id FROM user_preferences WHERE user_id=? ORDER BY weight DESC LIMIT 5",
-        (uid,)
-    ).fetchall()
-    notifs = []
+        "SELECT topic_name, pillar_id FROM user_preferences WHERE user_id=? "
+        "ORDER BY weight DESC LIMIT 5", (uid,)).fetchall()
+    out = []
     for p in prefs:
         rows = conn.execute(
             "SELECT id, headline, pillar_id, image_url FROM articles "
-            "WHERE micro_tags LIKE ? ORDER BY published_at DESC LIMIT 2",
-            (f'%{p["topic_name"]}%',)
-        ).fetchall()
+            "WHERE micro_tags LIKE ? AND status='published' "
+            "ORDER BY published_at DESC LIMIT 2",
+            (f'%{p["topic_name"]}%',)).fetchall()
         for r in rows:
-            pid = r["pillar_id"]
-            notifs.append({
+            out.append({
                 "article_id": r["id"], "headline": r["headline"],
-                "topic": p["topic_name"], "color": PILLARS.get(pid, PILLARS[1])["color"],
-                "image_url": r["image_url"], "message": f"New in @{p['topic_name']}"
-            })
-    conn.close()
-    return {"notifications": notifs[:20]}
+                "topic": p["topic_name"],
+                "color": PILLARS.get(r["pillar_id"], PILLARS[1])["color"],
+                "image_url": r["image_url"], "message": f"New in @{p['topic_name']}",
+                "read": True, "suggestion": True})
+    return out[:20]
+
+
+@app.get("/notifications")
+async def get_notifications(authorization: str = Header("")):
+    """The bell's inbox: real per-user notifications first (with read state),
+    then topic suggestions. `unread` is the badge count."""
+    uid = get_current_user(authorization)
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            "SELECT id, kind, title, body, article_id, color, image_url, "
+            "read_at, created_at FROM notifications WHERE user_id=? "
+            "ORDER BY created_at DESC, id DESC LIMIT 40", (uid,)).fetchall()
+        unread = conn.execute(
+            "SELECT COUNT(*) AS n FROM notifications WHERE user_id=? "
+            "AND read_at IS NULL", (uid,)).fetchone()["n"] or 0
+        stored = [{
+            "id": r["id"], "kind": r["kind"], "headline": r["title"],
+            "message": r["body"], "article_id": r["article_id"],
+            "color": r["color"] or PILLARS[1]["color"],
+            "image_url": r["image_url"], "read": r["read_at"] is not None,
+            "created_at": r["created_at"], "suggestion": False} for r in rows]
+        suggestions = _suggestions_for(conn, uid)
+    finally:
+        conn.close()
+    return {"notifications": stored, "suggestions": suggestions,
+            "unread": unread}
+
+
+@app.get("/notifications/unread-count")
+async def notifications_unread(authorization: str = Header("")):
+    uid = get_current_user(authorization)
+    conn = get_db()
+    try:
+        n = conn.execute(
+            "SELECT COUNT(*) AS n FROM notifications WHERE user_id=? "
+            "AND read_at IS NULL", (uid,)).fetchone()["n"] or 0
+    finally:
+        conn.close()
+    return {"unread": n}
+
+
+@app.post("/notifications/read")
+async def notifications_mark_read(req: MarkReadReq = None,
+                                  authorization: str = Header("")):
+    """Mark notifications read. Empty/absent ids = mark every unread one read."""
+    uid = require_user(authorization)
+    ids = (req.ids if req else None) or []
+    conn = get_db()
+    try:
+        if ids:
+            marks = ",".join("?" for _ in ids)
+            conn.execute(
+                f"UPDATE notifications SET read_at=datetime('now') WHERE user_id=? "
+                f"AND read_at IS NULL AND id IN ({marks})", [uid, *ids])
+        else:
+            conn.execute(
+                "UPDATE notifications SET read_at=datetime('now') WHERE user_id=? "
+                "AND read_at IS NULL", (uid,))
+        conn.commit()
+    finally:
+        conn.close()
+    return {"ok": True}
 
 
 def _check_admin(token: str):
