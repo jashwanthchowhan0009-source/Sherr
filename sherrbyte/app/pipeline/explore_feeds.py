@@ -380,25 +380,52 @@ _RSS_LINK = re.compile(r"<link>(.*?)</link>", re.S)
 _RSS_DATE = re.compile(r"<pubDate>(.*?)</pubDate>", re.S)
 
 
-async def govt_press(client: httpx.AsyncClient) -> dict:
-    """PIB press releases. RSS, so parsed with regex rather than adding a parser
-    dependency — the feed is a fixed, well-formed shape."""
-    r = await client.get("https://www.pib.gov.in/RssMain.aspx?ModId=6&Lang=1&Regid=3",
-                         timeout=15, headers={"User-Agent": "Mozilla/5.0"})
-    r.raise_for_status()
-    items = r.text.split("<item>")[1:11]
+# Several PIB RSS endpoints, merged. ModId=6 is the all-ministry "All Releases"
+# feed; the others are ministry/region views. Each is fetched independently and a
+# failure on one never drops the rest — so the Government section is fed by the
+# widest real set PIB exposes, not a single 10-item slice. All share the same
+# well-formed <item> shape, so the same regex parser covers them.
+_PIB_FEEDS = (
+    "https://www.pib.gov.in/RssMain.aspx?ModId=6&Lang=1&Regid=3",   # All releases (all ministries)
+    "https://www.pib.gov.in/RssMain.aspx?ModId=6&Lang=1&Regid=0",   # National
+    "https://pib.gov.in/PressReleaseRssfeed.aspx?Regid=3&lang=1",   # Press-release RSS variant
+)
+
+
+def _parse_pib(xml: str, limit: int = 40) -> list:
     out = []
-    for it in items:
+    for it in xml.split("<item>")[1:limit + 1]:
         t = _RSS_TITLE.search(it)
+        if not t:
+            continue
         l = _RSS_LINK.search(it)
         d = _RSS_DATE.search(it)
-        if t:
-            out.append({"title": t.group(1).strip(),
-                        "url": (l.group(1).strip() if l else ""),
-                        "published_at": (d.group(1).strip() if d else "")})
+        out.append({"title": t.group(1).strip(),
+                    "url": (l.group(1).strip() if l else ""),
+                    "published_at": (d.group(1).strip() if d else "")})
+    return out
+
+
+async def govt_press(client: httpx.AsyncClient) -> dict:
+    """Government press releases from PIB. RSS, parsed with regex rather than a
+    parser dependency — the feed is a fixed, well-formed shape. Pulls from several
+    PIB endpoints and merges (deduped by title), so the Government tiles have a
+    broad, cross-ministry set to classify instead of one thin slice."""
+    seen, out = set(), []
+    for url in _PIB_FEEDS:
+        try:
+            r = await client.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
+            r.raise_for_status()
+            for item in _parse_pib(r.text):
+                key = item["title"].lower()
+                if key and key not in seen:
+                    seen.add(key)
+                    out.append(item)
+        except Exception:
+            continue                     # one feed down never drops the others
     if not out:
-        raise RuntimeError("no items parsed from PIB feed")
-    return {"releases": out}
+        raise RuntimeError("no items parsed from any PIB feed")
+    return {"releases": out[:80]}
 
 
 # ─── Part B additions ─────────────────────────────────────────────────────────
