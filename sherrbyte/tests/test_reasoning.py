@@ -74,7 +74,11 @@ def test_narrative_contains_every_section_from_real_fields():
     assert "3 markets" in n
     assert "Reliance Industries" in n                                    # connected
     assert "2 of the last 3 times" in n                                  # historical
-    assert "moderate (78%)" in n                                         # confidence
+    # SEBI posture: the score is signal_strength 0-100, NEVER "confidence" and
+    # NEVER a percentage. "moderate" stays as a qualitative word; the number is
+    # stated out of 100 with no percent sign.
+    assert "Signal strength 78 of 100 (moderate)" in n
+    assert "78%" not in n
 
 
 def test_narrative_uses_observation_language_only():
