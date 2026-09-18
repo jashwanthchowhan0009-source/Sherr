@@ -20,3 +20,9 @@ psycopg[binary,pool]==3.2.1
 # it the cache degrades to its per-process layer and nothing else changes — but
 # with more than one worker only the shared layer actually caps database reads.
 redis==5.0.7
+# Device push (FCM HTTP v1). Optional at runtime — _fcm_send imports these lazily
+# and no-ops if FCM_SERVICE_ACCOUNT_JSON is unset, so the in-app notification
+# inbox works without any push configured. google-auth mints the OAuth token;
+# its transport uses requests.
+google-auth==2.32.0
+requests==2.32.3

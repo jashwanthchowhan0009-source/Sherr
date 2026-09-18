@@ -1433,12 +1433,23 @@ header {
   font-family: var(--fd); font-size: 1rem; font-weight: 700; color: var(--t1);
   padding: 14px 16px 8px; letter-spacing: -0.2px;
 }
+/* Unread badge on the header bell. */
+.notif-badge {
+  position: absolute; top: -3px; right: -3px; min-width: 16px; height: 16px;
+  padding: 0 4px; border-radius: 9px; background: #FF3B30; color: #fff;
+  font: 700 0.62rem/16px var(--f); text-align: center; box-sizing: border-box;
+  align-items: center; justify-content: center; border: 2px solid var(--bg);
+}
 .notif {
   display: flex; align-items: flex-start; gap: 10px;
   padding: 12px 16px; border-bottom: 1px solid var(--line2);
   cursor: pointer; position: relative; transition: background 0.12s;
 }
 .notif:active { background: var(--bg2); }
+/* An unread inbox row: a faint accent wash + a visible leading dot. */
+.notif.unread { background: color-mix(in srgb, var(--accent) 7%, transparent); }
+.notif .notif-dot { visibility: hidden; }
+.notif.unread .notif-dot { visibility: visible; }
 .notif-dot {
   width: 8px; height: 8px; border-radius: 50%;
   background: var(--p-blue3); flex-shrink: 0; margin-top: 6px;
@@ -3972,6 +3983,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   </div>
   <div class="h-right">
     <div class="hico tap" id="h-search" style="display:none" onclick="openSearch()"><i class="fa-solid fa-magnifying-glass"></i></div>
+    <div class="hico tap" id="h-notif" onclick="navTo('notifs')" style="position:relative"><i class="fa-regular fa-bell"></i><span class="notif-badge" style="display:none"></span></div>
     <div class="hico tap" id="h-theme" onclick="toggleTheme()"><i class="fa-solid fa-moon"></i></div>
     <div class="h-avatar tap" onclick="navTo('profile')">
       <img referrerpolicy="no-referrer" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%231565e8'/%3E%3Cstop offset='1' stop-color='%238E24AA'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='100' height='100' fill='url(%23g)'/%3E%3Ccircle cx='50' cy='40' r='15' fill='%23fff' opacity='.92'/%3E%3Cpath d='M24 80c0-14 12-22 26-22s26 8 26 22' fill='%23fff' opacity='.92'/%3E%3C/svg%3E" alt="">
@@ -7908,16 +7920,52 @@ async function sendTestPush() {
     else { toast('Could not send test notification'); }
   }
 }
+// Set the header bell's unread badge (all .notif-badge elements) to n.
+function setNotifBadge(n) {
+  n = Number(n) || 0;
+  document.querySelectorAll('.notif-badge').forEach(b => {
+    if (n > 0) { b.textContent = n > 99 ? '99+' : String(n); b.style.display = 'flex'; }
+    else b.style.display = 'none';
+  });
+}
+// Pull the live unread count and paint the badge. Cheap; safe to call on boot,
+// on nav, and after posting a comment.
+async function refreshNotifBadge() {
+  if (!ST.token) { setNotifBadge(0); return; }
+  try { const d = await api('/notifications/unread-count'); setNotifBadge(d.unread || 0); }
+  catch (e) {}
+}
+
+function _notifRow(c, n) {
+  const d = document.createElement('div');
+  d.className = 'notif fadein tap' + (n.read === false ? ' unread' : '');
+  d.innerHTML = `<div class="notif-dot"></div>
+    ${n.image_url ? `<img referrerpolicy="no-referrer" class="notif-img" src="${n.image_url}" loading="lazy" onerror="this.style.display='none';this.style.background='${n.color||'var(--bg3)'}'">`
+                  : `<div class="notif-img" style="background:${n.color||'var(--bg3)'}"></div>`}
+    <div class="notif-body"><div class="notif-title">${bEsc(n.headline||n.message||'')}</div>
+      <div class="notif-time">${n.message && n.headline ? bEsc(n.message) : (n.topic ? 'New in '+bEsc(n.topic) : (n.created_at ? timeAgo(n.created_at) : 'In your feed'))}</div></div>`;
+  const aid = n.article_id;
+  if (aid) d.onclick = () => {
+    const art = (homeArticles || []).map(normalizeArticle).find(x => String(x.id) === String(aid));
+    openArticle(art || { id: aid, title: n.headline || '', preview: '', category: 'tech', source: '' });
+  };
+  c.appendChild(d);
+}
+
 async function renderNotifs() {
   const c = document.getElementById('notifs-feed');
   c.innerHTML = skelCard(3) + skelCard(3);
-  let items = [];
-  try { const data = await api('/notifications'); items = data.notifications || []; } catch (e) {}
-  // Fallback: surface the freshest stories from the loaded feed as "new for you".
-  if (!items.length) {
-    items = (homeArticles || []).slice(0, 10).map(a => {
+  let stored = [], suggestions = [];
+  try {
+    const data = await api('/notifications');
+    stored = data.notifications || [];
+    suggestions = data.suggestions || [];
+  } catch (e) {}
+  // Fallback: the freshest loaded stories as suggestions if the server gave none.
+  if (!stored.length && !suggestions.length) {
+    suggestions = (homeArticles || []).slice(0, 10).map(a => {
       const cc = CATS[a.category] || CATS.tech;
-      return { article_id: a.id, headline: a.title, topic: cc.short, image_url: a.image_url, color: cc.hex };
+      return { article_id: a.id, headline: a.title, topic: cc.short, image_url: a.image_url, color: cc.hex, read: true };
     });
   }
   c.innerHTML = '';
@@ -7928,23 +7976,22 @@ async function renderNotifs() {
     b.querySelector('.notif-enable-btn').onclick = requestPushPermission;
     c.appendChild(b);
   }
-  if (!items.length) {
-    c.insertAdjacentHTML('beforeend', '<div style="text-align:center;color:var(--t3);padding:34px 20px;font-size:0.85rem">No notifications yet.<br><span style="font-size:0.76rem;opacity:0.7">New stories in your topics will show up here.</span></div>');
+  if (!stored.length && !suggestions.length) {
+    c.insertAdjacentHTML('beforeend', '<div style="text-align:center;color:var(--t3);padding:34px 20px;font-size:0.85rem">No notifications yet.<br><span style="font-size:0.76rem;opacity:0.7">Replies and new stories in your topics will show up here.</span></div>');
     return;
   }
-  items.forEach(n => {
-    const d = document.createElement('div'); d.className = 'notif fadein tap';
-    d.innerHTML = `<div class="notif-dot"></div>
-      ${n.image_url ? `<img referrerpolicy="no-referrer" class="notif-img" src="${n.image_url}" loading="lazy" onerror="this.style.display='none';this.style.background='${n.color||'var(--bg3)'}'">`
-                    : `<div class="notif-img" style="background:${n.color||'var(--bg3)'}"></div>`}
-      <div class="notif-body"><div class="notif-title">${bEsc(n.headline||n.message||'')}</div><div class="notif-time">${n.topic ? 'New in '+bEsc(n.topic) : 'In your feed'}</div></div>`;
-    const aid = n.article_id;
-    if (aid) d.onclick = () => {
-      const art = (homeArticles || []).map(normalizeArticle).find(x => String(x.id) === String(aid));
-      openArticle(art || { id: aid, title: n.headline || '', preview: '', category: 'tech', source: '' });
-    };
-    c.appendChild(d);
-  });
+  stored.forEach(n => _notifRow(c, n));
+  if (suggestions.length) {
+    if (stored.length) c.insertAdjacentHTML('beforeend',
+      '<div style="padding:14px 16px 6px;font:700 0.7rem/1 var(--f);letter-spacing:.08em;text-transform:uppercase;color:var(--t3)">Suggested for you</div>');
+    suggestions.forEach(n => _notifRow(c, { ...n, read: true }));
+  }
+  // They've now seen the inbox — mark the unread ones read and clear the badge.
+  const unreadIds = stored.filter(n => n.read === false && n.id).map(n => n.id);
+  if (unreadIds.length) {
+    try { await api('/notifications/read', { method: 'POST', body: JSON.stringify({ ids: unreadIds }) }); } catch (e) {}
+  }
+  setNotifBadge(0);
 }
 
 // ── FEED PREFERENCES (persisted per user via /me/topics, mirrored locally) ──
@@ -8936,6 +8983,7 @@ async function bootstrapSession() {
     document.getElementById('ob-screen')?.classList.add('gone');
     updateSidebarAuth();
     loadUserPrefs(me);                     // restore saved feed cats/topics
+    refreshNotifBadge();                   // paint the bell's unread count
     maybeAutoEnablePush();                 // installed app + signed in → offer push
   } catch (e) {
     // Only sign out on a REAL auth failure (refresh also failed → 401/403).
