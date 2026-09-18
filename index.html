@@ -12253,22 +12253,34 @@ function xpAiTechRedraw() {
 }
 function xpAiPage()   { xpAiTechPage('Papers'); }
 function xpRepoPage() { xpAiTechPage('Repos'); }
+// Govt Jobs / Current Affairs / Policies — all three are REAL PIB releases now,
+// filtered by that card's keywords (jobs → recruitment/exam, policies →
+// policy/act/notification), with Current Affairs the full cross-ministry feed.
+// No more hardcoded SSC/RBI mock rows.
+const XP_ALSO_KEYS = {
+  'Govt Jobs Notifications': ['recruit','exam','vacanc','admit card','result','ssc','upsc',
+                              'notification for the post','appointment','interview','shortlist'],
+  'Policies':                ['policy','act','amendment','notification','rule','tariff','duty',
+                              'guideline','regulation','ordinance','bill','scheme'],
+  // Current Affairs → no filter (the whole feed, newest first).
+};
 function xpAlsoPage(which) {
-  const sets = {
-    'Govt Jobs Notifications': [
-      {title:'SSC CGL 2026 tier-2 admit cards', sub:'Staff Selection Commission · closes 12 Sep'},
-      {title:'RBI Grade B officer recruitment', sub:'Reserve Bank of India · 94 posts'},
-      {title:'UPSC CSE mains timetable', sub:'Union Public Service Commission'}],
-    'Current Affairs': [
-      {title:'Cabinet clears semiconductor mission phase 2', sub:'Policy · today'},
-      {title:'GST council meets on rate rationalisation', sub:'Economy · yesterday'},
-      {title:'India–EU trade talks resume', sub:'International · 2 days ago'}],
-    'Policies': [
-      {title:'Registration Act amendment notified', sub:'Land & property'},
-      {title:'Customs duty revised on 14 tariff lines', sub:'Trade'},
-      {title:'New data protection rules in force', sub:'Technology'}],
-  };
-  xpListPage(which, null, () => sets[which] || []);
+  const rel = (xpSnap && xpSnap.govt_press && xpSnap.govt_press.data
+               && xpSnap.govt_press.data.releases) || [];
+  const words = XP_ALSO_KEYS[which];
+  const asRow = r => ({ title:r.title, sub:(r.published_at || 'Press Information Bureau'), url:r.url });
+  xpListPage(which, null, () => {
+    if (!rel.length)
+      return [{ title:'Government releases are not loaded yet',
+                sub:'They appear here on the next refresh' }];
+    const list = words
+      ? rel.filter(r => words.some(w => (r.title || '').toLowerCase().includes(w)))
+      : rel;
+    return list.length ? list.map(asRow)
+      : [{ title:'Nothing matched this today', sub:'Showing the full feed instead',
+           onTap:() => { xpListPage('Current Affairs', null,
+             () => rel.map(asRow)); } }];
+  });
 }
 function xpTickerTap(i) {
   const top = (xpSnap && xpSnap.news_top && xpSnap.news_top.data && xpSnap.news_top.data.articles) || [];
