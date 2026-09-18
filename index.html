@@ -1433,6 +1433,36 @@ header {
   font-family: var(--fd); font-size: 1rem; font-weight: 700; color: var(--t1);
   padding: 14px 16px 8px; letter-spacing: -0.2px;
 }
+/* ── Page-level insights band ──────────────────────────────────────────────
+   A single horizontal strip of "stat chips" that summarises the page: story
+   counts, top topic, market movers. Near-monochrome to match the deck; the ONE
+   place a value borrows an up/down colour. Used on Home and Explore. */
+.insband {
+  display: flex; gap: 9px; overflow-x: auto; padding: 12px 16px 4px;
+  margin: 0 0 4px; scrollbar-width: none; -webkit-overflow-scrolling: touch;
+}
+.insband::-webkit-scrollbar { display: none; }
+.insband-chip {
+  flex: 0 0 auto; min-width: 96px; padding: 9px 13px; border-radius: 14px;
+  background: var(--bg2); border: 1px solid var(--line2);
+  display: flex; flex-direction: column; gap: 3px;
+}
+.insband-k { font: 600 0.62rem/1 var(--f); letter-spacing: .04em;
+  text-transform: uppercase; color: var(--t3); white-space: nowrap; }
+.insband-v { font: 800 0.98rem/1.1 var(--fd); color: var(--t1); white-space: nowrap; }
+.insband-v.up { color: #22C55E; }
+.insband-v.down { color: #EF4444; }
+.insband-chip.lead { background: color-mix(in srgb, var(--accent) 10%, var(--bg2)); }
+
+/* Card-level depth: a compact meta row under the description. */
+.nc-insight {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px;
+  margin: 8px 0 2px; font: 600 0.68rem/1.3 var(--f); color: var(--t3);
+}
+.nc-insight .nci { display: inline-flex; align-items: center; gap: 5px; }
+.nc-insight .nci i { font-size: 0.66rem; opacity: .8; }
+.nc-insight .nci-why { color: var(--t2); font-weight: 600; }
+
 /* Unread badge on the header bell. */
 .notif-badge {
   position: absolute; top: -3px; right: -3px; min-width: 16px; height: 16px;
@@ -3773,6 +3803,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   #home-feed > .hero-card,
   #home-feed > .continue-card,
   #home-feed > .sec-tabs,
+  #home-feed > .insband,
   #home-feed > .hl-inline,
   #home-feed > .trending-section-hdr,
   #home-feed > .trending-strip,
@@ -4428,6 +4459,9 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
         <span class="xp-hero-cta">Open myFeed — News · Strings · Dots <i class="fa-solid fa-arrow-right"></i></span>
       </div>
     </div>
+
+    <!-- Page-level insights band: a live read of the day's markets + coverage. -->
+    <div class="insband" id="xp-insband" style="display:none"></div>
 
     <!-- pillars grid — "Top brands"-style labelled tiles -->
     <div class="xp-hd"><h3>Pillars</h3></div>
@@ -6463,6 +6497,98 @@ function feedLike(a, el){
   else { ST.likes.splice(i,1); el.classList.remove('on'); el.querySelector('i').className='fa-regular fa-heart'; span.textContent=Math.max(0,n-1); }
   persist();
 }
+// ── PAGE INSIGHTS BAND ──────────────────────────────────────────────────────
+// A reusable strip of stat chips summarising a page. Data is read from what the
+// page has ALREADY loaded (the feed, the markets poll) — no extra fetch — so it
+// is honest and cheap. A chip with no value is dropped; an empty band hides.
+const PILLAR_LABEL = { society:'Society', economy:'Economy', tech:'Tech',
+  arts:'Arts & Culture', nature:'Nature', selfwell:'Well-being', philo:'Ideas',
+  lifestyle:'Lifestyle', sports:'Sports' };
+
+function renderInsightBand(mount, chips) {
+  if (!mount) return;
+  const real = (chips || []).filter(c => c && c.v != null && c.v !== '');
+  if (!real.length) { mount.style.display = 'none'; mount.innerHTML = ''; return; }
+  mount.innerHTML = real.map(c =>
+    `<div class="insband-chip${c.lead ? ' lead' : ''}">`
+    + `<div class="insband-k">${bEsc(c.k)}</div>`
+    + `<div class="insband-v${c.tone ? (' ' + c.tone) : ''}">${bEsc(String(c.v))}</div></div>`
+  ).join('');
+  mount.style.display = 'flex';
+}
+
+// Best/worst mover across every symbol the markets poll last returned.
+function _topMarketMove() {
+  const mk = window._lastMkt || {};
+  let best = null, worst = null, n = 0;
+  Object.keys(mk).forEach(cat => {
+    const b = mk[cat] || {};
+    Object.keys(b).forEach(sym => {
+      const p = (b[sym] || {}).change_pct;
+      if (typeof p !== 'number') return;
+      n++;
+      if (!best || p > best.p) best = { sym, p };
+      if (!worst || p < worst.p) worst = { sym, p };
+    });
+  });
+  return { best, worst, n };
+}
+
+function homeInsightChips() {
+  const arts = (homeArticles || []);
+  const chips = [];
+  if (arts.length) chips.push({ k: 'In your feed', v: arts.length + ' stories', lead: true });
+  const freq = {};
+  arts.forEach(a => { const c = a.category || 'tech'; freq[c] = (freq[c] || 0) + 1; });
+  const top = Object.keys(freq).sort((x, y) => freq[y] - freq[x])[0];
+  if (top) chips.push({ k: 'Most covered', v: PILLAR_LABEL[top] || top });
+  const trend = arts.filter(a => a.is_trending).length;
+  if (trend) chips.push({ k: 'Trending now', v: trend + (trend === 1 ? ' story' : ' stories') });
+  const nifty = ((window._lastMkt || {}).stocks || {}).NIFTY;
+  if (nifty && typeof nifty.change_pct === 'number') {
+    const up = nifty.change_pct >= 0;
+    chips.push({ k: 'Nifty 50', v: (up ? '▲ ' : '▼ ') + Math.abs(nifty.change_pct).toFixed(2) + '%', tone: up ? 'up' : 'down' });
+  }
+  return chips;
+}
+
+function renderHomeInsights() {
+  const feed = document.getElementById('home-feed');
+  if (!feed) return;
+  let band = document.getElementById('home-insband');
+  if (!band) {
+    band = document.createElement('div');
+    band.className = 'insband'; band.id = 'home-insband';
+    const tabs = feed.querySelector('.sec-tabs');
+    if (tabs) tabs.insertAdjacentElement('afterend', band);
+    else feed.insertBefore(band, feed.firstChild);
+  }
+  renderInsightBand(band, homeInsightChips());
+}
+
+function exploreInsightChips() {
+  const chips = [];
+  const m = _topMarketMove();
+  if (m.n) {
+    chips.push({ k: 'Markets tracked', v: m.n, lead: true });
+    if (m.best && typeof m.best.p === 'number')
+      chips.push({ k: 'Top gainer', v: m.best.sym + ' ▲ ' + Math.abs(m.best.p).toFixed(2) + '%', tone: 'up' });
+    if (m.worst && typeof m.worst.p === 'number' && m.worst.p < 0)
+      chips.push({ k: 'Top faller', v: m.worst.sym + ' ▼ ' + Math.abs(m.worst.p).toFixed(2) + '%', tone: 'down' });
+  }
+  return chips;
+}
+
+function renderExploreInsights() {
+  renderInsightBand(document.getElementById('xp-insband'), exploreInsightChips());
+}
+
+// Rough reading time from whatever body text the card carries.
+function readMins(a) {
+  const words = String((a && (a.body_ai || a.preview)) || '').trim().split(/\s+/).filter(Boolean).length;
+  return Math.max(1, Math.round(words / 200));
+}
+
 function renderStandardCard(rawA, container) {
   const a = normalizeArticle(rawA);
   const cc = CATS[a.category] || CATS.tech;
@@ -6486,6 +6612,11 @@ function renderStandardCard(rawA, container) {
     </div>
     <div class="nc-title">${a.title}</div>
     ${cardSummary(a) ? `<div class="nc-desc">${bEsc(cardSummary(a))}</div>` : ''}
+    <div class="nc-insight">
+      <span class="nci"><i class="fa-regular fa-clock"></i>${readMins(a)} min read</span>
+      ${a.orig_source ? `<span class="nci"><i class="fa-regular fa-newspaper"></i>via ${bEsc(a.orig_source)}</span>` : ''}
+      ${(a.why_info || a.why) ? `<span class="nci nci-why">${bEsc(clipWords(a.why_info || a.why, 14))}</span>` : ''}
+    </div>
     <div class="nc-actbar">
       <button class="nca nca-like${liked?' on':''}" data-act="like" aria-label="Like">
         <i class="fa-${liked?'solid':'regular'} fa-heart"></i><span>${liked?1:0}</span></button>
@@ -6972,6 +7103,9 @@ async function loadFeed(reset = false, hard = false) {
       }
 
       if (continueArticle && homeActiveTab === 'foryou') renderContinueCard(continueArticle, c);
+
+      // Page-level insights band (sits under the section tabs).
+      try { renderHomeInsights(); } catch (e) {}
 
       // Hero = top story (every tab)
       renderHeroCard(articles[0], c);
@@ -8823,6 +8957,7 @@ function navTo(name) {
   }
   if (name==='explore') {
     startMarketsPolling();
+    try { renderExploreInsights(); } catch (e) {}   // show from any cached market data now
     if (!_expCurCat) showExpCat('all');   // load category rows only when Explore opens
   }
   if (name==='feed') { loadFeedPulse(); renderFeedFilterChips(); renderFeedTopics(); renderFeedArticles(); }
@@ -9654,6 +9789,8 @@ async function loadMarkets(_retry) {
     renderGlance(data);                // "At a Glance" launcher tiles
     if (window._openCat) openMktCat(window._openCat);   // live-refresh an open category
     renderTicker(data);
+    // Fresh market data → refresh the insight bands that read from it.
+    try { renderExploreInsights(); renderHomeInsights(); } catch (e) {}
   } catch(e) {
     // Render free tier sleeps; the first hit wakes it — retry once on the warm instance.
     if (!_retry) setTimeout(() => loadMarkets(true), 3500);
