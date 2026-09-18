@@ -2466,6 +2466,8 @@ async def get_feed(
     limit: int = Query(20, le=50),
     scope: str = Query(""),
     pillar: int = Query(0),
+    fresh: int = Query(0, description="1 = an explicit user refresh; skip the "
+                                      "read cache so newly-ingested stories show"),
     authorization: str = Header(""),
 ):
     page_html = _spa_or_none(request)
@@ -2483,9 +2485,13 @@ async def get_feed(
     # different feed per reader; anonymous readers all resolve to uid 1 and
     # therefore share one entry, which is the case that carries the load.
     ck = f"feed:{uid}:{page}:{limit}:{scope}:{pillar}"
-    hit = await cache.get(ck)
-    if hit is not None:
-        return hit
+    # A pull-to-refresh is a deliberate "give me what's new" — skip the read so it
+    # sees stories ingested inside the 30s window. It is user-initiated and rare,
+    # so it does not stampede; the compute still writes the cache for the crowd.
+    if not fresh:
+        hit = await cache.get(ck)
+        if hit is not None:
+            return hit
     offset = (page - 1) * limit
     conn = get_db()
     prefs = conn.execute("SELECT COUNT(*) as c FROM user_preferences WHERE user_id=?", (uid,)).fetchone()
@@ -2563,6 +2569,8 @@ async def explore_feed(
     scope: str = Query(""),
     page: int = Query(1, ge=1),
     limit: int = Query(30, le=100),
+    fresh: int = Query(0, description="1 = an explicit user refresh; skip the "
+                                      "read cache so newly-ingested stories show"),
     authorization: str = Header(""),
 ):
     page_html = _spa_or_none(request)
@@ -2614,6 +2622,18 @@ async def explore_feed(
         await _apply_stock_images(payload.get("articles") or [])
         return payload
 
+    # A pull-to-refresh bypasses the read: produce live so stories ingested
+    # inside the cache window appear, and refresh the cache (and its stale copy)
+    # for everyone else. On any producer error, fall through to the stale-serving
+    # path so a refresh during a DB wobble still returns the last good page.
+    if fresh:
+        try:
+            payload = await _produce_with_images()
+            await cache.set(ck, payload, EXPLORE_CACHE_SECONDS)
+            await cache.set("stale:" + ck, payload, cache.STALE_TTL)
+            return payload
+        except Exception as e:
+            log.warning("[EXPLORE] fresh produce failed, serving stale: %s", e)
     return await cache.get_or_set_stale(
         ck, EXPLORE_CACHE_SECONDS, _produce_with_images)
 
