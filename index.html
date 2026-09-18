@@ -1874,15 +1874,15 @@ nav.compact .nb.on { flex: 0 0 auto; padding-left: 16px; padding-right: 16px; }
 .xp-cats.grid .xp-cat .ic{margin:0 auto;}
 
 /* ── Immersive POP-style hero (full-bleed, edge to edge — no box/frame) ── */
-.xp-hero-pop{position:relative;overflow:hidden;cursor:pointer;margin:0 0 6px;padding:0;
-  min-height:272px;display:flex;align-items:flex-end;
-  /* A bright spotlight at the top over a solid purple body that stays DARK all
-     the way to the bottom — so the white subtitle + CTA are readable regardless
-     of the app theme (it used to fade into var(--bg), which is light in light
-     mode and swallowed the text). */
+.xp-hero-pop{position:relative;overflow:hidden;cursor:pointer;margin:0;padding:0;
+  min-height:312px;display:flex;align-items:flex-end;
+  /* Bright spotlight on top of a purple body that stays DARK where the text sits
+     (top ~82%), then blends into the page background at the very bottom — so it
+     reads as one immersive surface (no hard "box" edge) in BOTH themes, while the
+     kicker/title/subtitle/CTA stay well above the blend and always readable. */
   background:
-    radial-gradient(95% 62% at 50% 0%, rgba(198,132,255,.60) 0%, rgba(198,132,255,0) 56%),
-    linear-gradient(180deg,#7b2fe8 0%,#5a1fd6 38%,#3a148f 68%,#26095f 100%);}
+    radial-gradient(95% 55% at 50% 0%, rgba(198,132,255,.55) 0%, rgba(198,132,255,0) 52%),
+    linear-gradient(180deg,#7b2fe8 0%,#5a1fd6 34%,#3a148f 60%,#26095f 82%,var(--bg) 100%);}
 /* Vertical "curtain" light streaks — now carried lower so they sit behind the text. */
 .xp-hero-curtain{position:absolute;inset:0;pointer-events:none;opacity:.5;mix-blend-mode:screen;
   background:repeating-linear-gradient(90deg,rgba(255,255,255,.12) 0 2px,rgba(255,255,255,0) 2px 17px);
@@ -1896,7 +1896,7 @@ nav.compact .nb.on { flex: 0 0 auto; padding-left: 16px; padding-right: 16px; }
   background:linear-gradient(100deg,rgba(255,255,255,0),rgba(255,255,255,.28),rgba(255,255,255,0));
   transform:skewX(-18deg);animation:xpShine 4.2s ease-in-out infinite;}
 @keyframes xpShine{0%{left:-60%}55%,100%{left:135%}}
-.xp-hero-inner{position:relative;z-index:1;padding:22px 20px 20px;}
+.xp-hero-inner{position:relative;z-index:1;padding:22px 20px 60px;}
 .xp-hero-kicker{display:inline-flex;align-items:center;gap:6px;font:800 .58rem/1 var(--f);
   letter-spacing:.2em;color:#EBD9FF;}
 .xp-hero-title{font:800 2.15rem/1.02 var(--xf);color:#fff;margin:11px 0 8px;letter-spacing:-.02em;
