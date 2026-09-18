@@ -100,7 +100,12 @@ DB_PATH         = os.getenv("DB_PATH", "sherbyte.db")
 
 # Knobs for the AI cycle
 AI_BATCH_SIZE   = int(os.getenv("AI_BATCH_SIZE", "50"))
-AI_CONCURRENCY  = int(os.getenv("AI_CONCURRENCY", "5"))
+# 2, not 5: free tiers (Groq especially) rate-limit on tokens-per-minute, and a
+# 5-wide burst blows past that cap and 429s every request. With the provider's
+# own Retry-After honoured in ai_processor, 2 in flight stays under the cap and
+# the ones that do get bounced simply wait and succeed. Raise via env on a paid
+# tier.
+AI_CONCURRENCY  = int(os.getenv("AI_CONCURRENCY", "2"))
 COLLECT_INTERVAL_MIN = int(os.getenv("COLLECT_INTERVAL_MIN", "25"))
 
 # The feed serves only status='published'. Ingest writes every article as
