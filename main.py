@@ -2938,6 +2938,122 @@ async def admin_originality():
         conn.close()
 
 
+@app.get("/admin/licence-audit")
+async def admin_licence_audit(x_admin_token: str = Header(""),
+                              token: str = Query("")):
+    """Every financial-tier feed with its licence posture (exposure brief A2).
+
+    A paid product must be able to answer 'is this source cleared for commercial
+    use?' per source. `blocked` feeds are listed but never ingested; `unlicensed`
+    must be 0 — a financial feed without an explicit licence is a gap, not a
+    default-OK.
+    """
+    _check_admin(x_admin_token or token)
+    audit = feeds_financial.licence_audit()
+    audit["diagnosis"] = (
+        "all financial feeds carry an explicit licence"
+        if audit["unlicensed"] == 0 else
+        f"{audit['unlicensed']} financial feed(s) have no explicit licence — set "
+        f"commercial_ok / attribution_required / blocked before they ingest")
+    return audit
+
+
+@app.get("/admin/corpus-doctor")
+async def admin_corpus_doctor(x_admin_token: str = Header(""),
+                              token: str = Query("")):
+    """Phase A acceptance gates in one call (exposure brief A5).
+
+    The financial-tier and body-health numbers are exact, from the corpus. The
+    entity/symbol coverage reflects the LAST analog build (hist_events), so it is
+    reported from the engine's Postgres when reachable and marked unavailable
+    otherwise rather than guessed. Every gate carries its measured value and a
+    pass/fail/unknown verdict, so an unmet gate says which stage to fix.
+    """
+    _check_admin(x_admin_token or token)
+
+    conn = get_db()
+    try:
+        fin_total = conn.execute(
+            "SELECT COUNT(*) AS c FROM articles WHERE feed_class='financial'"
+        ).fetchone()["c"] or 0
+        fin_30d = conn.execute(
+            "SELECT COUNT(*) AS c FROM articles WHERE feed_class='financial' "
+            "AND published_at >= datetime('now','-30 days')"
+        ).fetchone()["c"] or 0
+        # Body health on the financial tier, classified by CONTENT (body_state),
+        # not by a flag — the same gate the rewrite pass publishes behind.
+        rows = conn.execute(
+            "SELECT full_body, summary_60, source_summary, status FROM articles "
+            "WHERE feed_class='financial' AND status='published'").fetchall()
+        pub = len(rows)
+        original_body = sum(1 for r in rows
+                            if body_state.classify_row(r) == body_state.ORIGINAL)
+        healthy = sum(1 for r in rows if body_state.row_is_healthy(r))
+    finally:
+        conn.close()
+
+    # Entity/symbol coverage from the analog event library (engine Postgres).
+    engine = {"source": "unavailable"}
+    try:
+        pool = await get_spie_pool()
+        if pool is not None:
+            async with pool.acquire() as ec:
+                he = int(await ec.fetchval(
+                    "SELECT COUNT(DISTINCT article_id) FROM hist_events") or 0)
+                syms = int(await ec.fetchval(
+                    "SELECT COUNT(DISTINCT s) FROM hist_events, "
+                    "unnest(linked_symbols) AS s") or 0)
+            engine = {"source": "engine",
+                      "articles_with_symbol": he,   # event_library needs both
+                      "symbol_universe": syms}
+    except Exception as e:                                        # noqa: BLE001
+        engine = {"source": "unavailable", "detail": f"{type(e).__name__}: {e}"}
+
+    def _rate(n, d):
+        return round(n / d, 4) if d else None
+
+    def _gate(value, floor):
+        if value is None:
+            return {"value": value, "gate": floor, "verdict": "unknown"}
+        return {"value": value, "gate": floor,
+                "verdict": "pass" if value >= floor else "fail"}
+
+    with_symbol_rate = (_rate(engine.get("articles_with_symbol"), pub)
+                        if engine.get("source") == "engine" else None)
+
+    gates = {
+        "financial_articles_total": _gate(fin_total, 3000),
+        "financial_articles_30d": _gate(fin_30d, 500),
+        "original_body_rate": _gate(_rate(original_body, pub), 0.90),
+        "with_symbol_rate": _gate(with_symbol_rate, 0.40),
+        "symbol_universe": _gate(engine.get("symbol_universe"), 25)
+        if engine.get("source") == "engine" else {"value": None, "gate": 25,
+                                                   "verdict": "unknown"},
+    }
+    unmet = [k for k, g in gates.items() if g["verdict"] == "fail"]
+    unknown = [k for k, g in gates.items() if g["verdict"] == "unknown"]
+    if unmet:
+        diagnosis = ("Phase A not green: " + ", ".join(unmet) +
+                     " below gate — do not start Phase B")
+    elif unknown:
+        diagnosis = ("engine unreachable, so symbol coverage is unverified: " +
+                     ", ".join(unknown))
+    else:
+        diagnosis = "all measured Phase A gates are green"
+
+    return {
+        "financial": {"total": fin_total, "last_30d": fin_30d,
+                      "published": pub},
+        "body_health": {"published": pub, "original_body": original_body,
+                        "healthy_both_columns": healthy,
+                        "original_body_rate": _rate(original_body, pub),
+                        "healthy_rate": _rate(healthy, pub)},
+        "engine": engine,
+        "gates": gates,
+        "diagnosis": diagnosis,
+    }
+
+
 @app.get("/patterns")
 async def patterns(
     type: str = Query(""),
