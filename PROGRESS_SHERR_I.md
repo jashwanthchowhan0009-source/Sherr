@@ -110,3 +110,43 @@ Three things this proves:
   unparseable row cannot abort the whole match.
 - The card payload carried the raw ticker, so it read "CL=F rose 8.27%" — a
   symbol no reader has seen. It carries the display name now.
+
+---
+
+## The analog engine (SHAE) was BUILT but never RUN — now wired into both passes
+
+Adopted 2026-09-18. `analog/matcher.py`, `reaction.py`, `cards.py`,
+`event_library.py` and `/api/sherr-i/analogs` were all complete and tested, but
+**nothing ever called Phase 1 (`event_library.build` -> `hist_events`) or
+Phase 3 (`reaction.compute` -> `analog_reactions`)**. The detector pass ran the
+discovery/decision/reasoning chain and stopped; filings only borrowed
+`event_library`'s keyword helpers. So both tables stayed empty and
+`/api/sherr-i/analogs` returned `engine` with nothing in it — a fully built
+surface that was permanently dark.
+
+Both detector runners now build the library and the reactions, after the
+detectors so the matcher's NPMI is current:
+
+- `sherrbyte/app/workers/detectors.py` `run()` — the GitHub Actions
+  `cron-detectors` path (runs under `bootstrap()`, so migrations 022/023 are
+  applied and the tables exist). `--only analog` runs just these two.
+- `main.py` `_run_detectors` — the in-process 02:10 UTC job on Render, and
+  `GET /admin/run-detectors?token=…&only=analog`, which skips the NPMI refresh
+  and the detectors and only (re)builds the analog tables. That is the fast path
+  for lighting up the surface and verifying it: it reports the Phase 1 funnel,
+  the Phase 3 funnel, and the `hist_events` / `analog_reactions` row counts.
+
+Both calls are idempotent (an upsert and an `ON CONFLICT`), so the nightly
+re-run only refreshes. `tests/test_analog_engine_wired.py` asserts both runners
+carry the wiring so it can never silently regress again.
+
+### To light it up in production
+
+1. `GET /admin/backfill-ticks?token=…` — poll to `complete` (Phase 3 needs prices)
+2. `GET /admin/run-detectors?token=…&only=analog` — builds the library + reactions
+3. `GET /api/sherr-i/analogs` — analog cards, observations behind them, or an
+   honest empty list with a funnel saying which gate stopped it.
+
+If step 2 reports `analog_library.written = 0`, its `diagnosis` says why — most
+likely the bodies are still placeholders (run `/admin/reprocess-bodies` first)
+or the corpus reaches none of the ~13 priced instruments.
