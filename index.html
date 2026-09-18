@@ -1825,7 +1825,10 @@ nav.compact .nb.on { flex: 0 0 auto; padding-left: 16px; padding-right: 16px; }
   --xp-violet:#7C3AED;
 }
 [data-theme="light"]{
-  --xp-ink:#0B1220; --xp-mute:rgba(11,18,32,.54); --xp-faint:rgba(11,18,32,.33);
+  /* Light mode: text near-black. The muted/faint tokens drive every section
+     header (PILLARS, MATRIX OF MARKETS, AI labels) and sub-line; at 54%/33% they
+     read as pale grey. Darkened so light-mode text is properly black. */
+  --xp-ink:#0B1220; --xp-mute:rgba(11,18,32,.74); --xp-faint:rgba(11,18,32,.52);
   --xp-up:#0E9F6E;  --xp-dn:#E02D3C;
   --xp-surf:#FFFFFF; --xp-surf2:#F4F6FA; --xp-band:#F2F7FF;
   --xp-line:rgba(11,18,32,.07);
@@ -1905,38 +1908,46 @@ nav.compact .nb.on { flex: 0 0 auto; padding-left: 16px; padding-right: 16px; }
 .xp-hero-pop:active .xp-hero-cta{background:rgba(255,255,255,.26);}
 @media (prefers-reduced-motion: reduce){ .xp-hero-glow,.xp-hero-shine{animation:none;} }
 
-/* ── Immersive "rewards" band — floating gold tokens + italic display text on
-   black, in the POP-app style (the closing moment of Explore). ── */
-.xp-rewards{position:relative;overflow:hidden;cursor:pointer;margin:16px 0 4px;min-height:290px;
+/* utility — force-hide a v8 module (connections, faded closing line) */
+.xp-hide{display:none !important;}
+
+/* ── Immersive FULL-PAGE "rewards" band — floating SherrByte tiger-logo coins +
+   italic display text on black (the closing moment of Explore). It fills the
+   whole screen at the end of the scroll, not a single box. ── */
+.xp-rewards{position:relative;overflow:hidden;cursor:pointer;margin:18px 0 0;
+  min-height:100vh;min-height:100dvh;
   display:flex;align-items:center;justify-content:center;text-align:center;
-  background:radial-gradient(120% 95% at 50% 42%,#171008 0%,#0b0b0d 58%,#050506 100%);}
-.xr-inner{position:relative;z-index:3;padding:20px;}
-.xr-tag{display:inline-flex;align-items:center;gap:6px;font:800 .56rem/1 var(--f);
-  letter-spacing:.26em;color:#F4C77A;}
+  background:radial-gradient(120% 80% at 50% 42%,#140f22 0%,#0a0a0d 56%,#050506 100%);}
+.xr-inner{position:relative;z-index:3;padding:24px;}
+.xr-tag{display:inline-flex;align-items:center;gap:6px;font:800 .58rem/1 var(--f);
+  letter-spacing:.26em;color:#C6A9FF;}
 .xr-title{font-family:Georgia,'Times New Roman',serif;font-style:italic;font-weight:700;
-  font-size:2.2rem;line-height:1.06;color:#fff;margin:12px 0 16px;text-shadow:0 6px 30px rgba(0,0,0,.6);}
-.xr-title em{font-style:italic;color:#FBBB4E;}
-.xr-cta{display:inline-flex;align-items:center;gap:8px;font:700 .76rem/1 var(--f);color:#0c0c0e;
-  background:linear-gradient(180deg,#ffe08a,#f5b73c);border-radius:100px;padding:11px 18px;
-  box-shadow:0 10px 26px -10px rgba(245,183,60,.6);}
+  font-size:2.5rem;line-height:1.06;color:#fff;margin:14px 0 18px;text-shadow:0 6px 30px rgba(0,0,0,.6);}
+.xr-title em{font-style:italic;color:#B48BFF;}
+.xr-cta{display:inline-flex;align-items:center;gap:8px;font:700 .78rem/1 var(--f);color:#fff;
+  background:linear-gradient(180deg,#8b5cff,#6a34e6);border-radius:100px;padding:12px 20px;
+  box-shadow:0 12px 30px -10px rgba(124,58,237,.7);}
 .xp-rewards:active .xr-cta{transform:scale(.97);}
-/* floating coin-like orbs */
+/* floating SherrByte coins — the White Tiger mark struck on a purple coin face */
 .xr-orb{position:absolute;border-radius:50%;z-index:1;
-  background:radial-gradient(circle at 32% 26%,#fff2cc 0%,#f6c451 46%,#c88f1f 82%,#9a6b12 100%);
-  box-shadow:0 10px 22px rgba(210,140,30,.35),inset 0 2px 6px rgba(255,255,255,.6),
-    inset 0 -4px 8px rgba(120,80,10,.5);
+  background:radial-gradient(circle at 34% 28%,#7a54ff 0%,#4a24c4 62%,#2a1170 100%);
+  border:2px solid rgba(255,255,255,.16);
+  box-shadow:0 12px 24px rgba(60,20,140,.45),inset 0 2px 6px rgba(255,255,255,.35),
+    inset 0 -6px 10px rgba(20,6,60,.6);
   animation:xrFloat 6s ease-in-out infinite;}
-.xr-orb::after{content:'';position:absolute;inset:22%;border-radius:50%;
-  border:1px solid rgba(120,80,10,.35);}
-.xr-orb.o1{width:54px;height:54px;left:8%;top:60%;animation-delay:0s;}
-.xr-orb.o2{width:30px;height:30px;left:20%;top:30%;animation-delay:.6s;}
-.xr-orb.o3{width:40px;height:40px;right:12%;top:26%;animation-delay:1.1s;}
-.xr-orb.o4{width:64px;height:64px;right:6%;top:58%;animation-delay:.3s;}
-.xr-orb.o5{width:22px;height:22px;left:38%;top:14%;animation-delay:1.6s;}
-.xr-orb.o6{width:26px;height:26px;right:34%;top:78%;animation-delay:.9s;}
-.xr-orb.o7{width:18px;height:18px;left:12%;top:20%;animation-delay:2.1s;}
-.xr-orb.o8{width:34px;height:34px;left:46%;top:82%;animation-delay:1.4s;}
-@keyframes xrFloat{0%,100%{transform:translateY(0) rotate(-6deg);}50%{transform:translateY(-14px) rotate(6deg);}}
+/* the White Tiger mark struck on the coin face */
+.xr-orb::after{content:'';position:absolute;inset:19%;
+  background:url('/tiger-logo.png') center/contain no-repeat;
+  filter:drop-shadow(0 1px 1px rgba(0,0,0,.45));}
+.xr-orb.o1{width:66px;height:66px;left:7%;top:58%;animation-delay:0s;}
+.xr-orb.o2{width:36px;height:36px;left:20%;top:26%;animation-delay:.6s;}
+.xr-orb.o3{width:46px;height:46px;right:12%;top:24%;animation-delay:1.1s;}
+.xr-orb.o4{width:76px;height:76px;right:5%;top:56%;animation-delay:.3s;}
+.xr-orb.o5{width:26px;height:26px;left:38%;top:12%;animation-delay:1.6s;}
+.xr-orb.o6{width:30px;height:30px;right:30%;top:80%;animation-delay:.9s;}
+.xr-orb.o7{width:22px;height:22px;left:12%;top:18%;animation-delay:2.1s;}
+.xr-orb.o8{width:40px;height:40px;left:44%;top:84%;animation-delay:1.4s;}
+@keyframes xrFloat{0%,100%{transform:translateY(0) rotate(-6deg);}50%{transform:translateY(-16px) rotate(6deg);}}
 @media (prefers-reduced-motion: reduce){ .xr-orb{animation:none;} }
 
 /* ── 3. bulletin hero — content IS the card ── */
@@ -4418,8 +4429,36 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
     <div class="xp-tabs" id="xp-tal-tabs"></div>
     <div id="xp-tal"></div>
 
-    <!-- Immersive POP-style "rewards" band — floating gold tokens + italic
-         display text on black; the closing moment of the Explore page. -->
+    <!-- 6. bulletin ticker -->
+    <div class="xp-btick" id="xp-btick"></div>
+
+    <!-- 7. government -->
+    <div class="xp-hd"><h3>Government</h3></div>
+    <div class="xp-gov" id="xp-gov"></div>
+
+    <!-- 8. also -->
+    <div class="xp-also" id="xp-also"></div>
+
+    <!-- 9. space -->
+    <div id="xp-space"></div>
+
+    <!-- editorial break: one non-data moment between the data modules -->
+    <div class="xp-break" id="xp-break"></div>
+
+    <!-- 10. ai & tech -->
+    <div class="xp-hd"><h3>AI &amp; Tech</h3></div>
+    <div class="xp-ai" id="xp-ai"></div>
+
+    <!-- 11. connections + the faded closing line stay HIDDEN (the Brent→Saudi
+         card and the duplicate title were removed earlier). -->
+    <div class="xp-hd xp-hide" id="xp-conn-hd" style="display:none">
+      <h3>Connections</h3><span class="all" onclick="xpConnAll()">All</span></div>
+    <div class="xp-conn xp-hide" id="xp-conn"></div>
+    <div class="xp-close xp-hide">Exploring<br>the World</div>
+
+    <!-- Immersive FULL-PAGE "rewards" band — the closing moment, AFTER AI & Tech.
+         Floating SherrByte tiger-logo coins + italic display text on black; it
+         fills the whole screen at the end of the scroll. -->
     <div class="xp-rewards" onclick="navTo('profile')">
       <span class="xr-orb o1"></span><span class="xr-orb o2"></span><span class="xr-orb o3"></span>
       <span class="xr-orb o4"></span><span class="xr-orb o5"></span><span class="xr-orb o6"></span>
@@ -4429,24 +4468,6 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
         <h2 class="xr-title">Your curiosity,<br><em>Rewarded</em></h2>
         <span class="xr-cta">See your reading streak <i class="fa-solid fa-arrow-right"></i></span>
       </div>
-    </div>
-
-    <!-- The v8 data modules below (bulletin, government, space, AI, connections,
-         the faded closing line) are superseded and kept HIDDEN — their renderers
-         still populate the nodes, but the rewards band is the closing moment. -->
-    <div class="xp-legacy-lower" style="display:none">
-      <div class="xp-btick" id="xp-btick"></div>
-      <div class="xp-hd"><h3>Government</h3></div>
-      <div class="xp-gov" id="xp-gov"></div>
-      <div class="xp-also" id="xp-also"></div>
-      <div id="xp-space"></div>
-      <div class="xp-break" id="xp-break"></div>
-      <div class="xp-hd"><h3>AI &amp; Tech</h3></div>
-      <div class="xp-ai" id="xp-ai"></div>
-      <div class="xp-hd" id="xp-conn-hd" style="display:none">
-        <h3>Connections</h3><span class="all" onclick="xpConnAll()">All</span></div>
-      <div class="xp-conn" id="xp-conn"></div>
-      <div class="xp-close">Exploring<br>the World</div>
     </div>
   </div>
 
