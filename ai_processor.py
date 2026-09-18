@@ -277,10 +277,38 @@ def last_provider_errors(n: int = 5) -> list:
     return PROVIDER_ERRORS[:n]
 
 
+def _retry_after_seconds(resp) -> Optional[float]:
+    """Seconds to wait before retrying a 429, from the provider's own headers.
+
+    Groq (and the OpenAI shape generally) return `retry-after` and/or
+    `x-ratelimit-reset-*` when a request is rate limited — usually the free-tier
+    tokens-per-minute cap. Honouring it turns a 429 from a lost rewrite into a
+    slightly slower one."""
+    try:
+        for h in ("retry-after", "x-ratelimit-reset-tokens", "x-ratelimit-reset-requests"):
+            v = resp.headers.get(h)
+            if not v:
+                continue
+            v = v.strip().lower().rstrip("s")
+            try:
+                return float(v)
+            except ValueError:
+                # e.g. "1m30" style — fall through to the default backoff
+                pass
+    except Exception:
+        pass
+    return None
+
+
 async def _openai_chat_once(key: str, title: str, body: str, client, *,
                             url: str, model: str, label: str) -> tuple:
     """Groq, OpenAI and Grok all speak the OpenAI chat-completions shape, so they
-    share one caller and differ only by endpoint, model and key."""
+    share one caller and differ only by endpoint, model and key.
+
+    A 429 is RETRIED here (honouring Retry-After), not surfaced immediately: on a
+    free tier — Groq especially — the tokens-per-minute cap bounces bursts, and
+    without this each bounce fell straight back to the placeholder stub (the feed
+    then never got an original body). Up to 4 attempts, capped waits."""
     prompt = SYSTEM_INSTRUCTION + f"""
 
 ARTICLE TITLE: {title}
@@ -288,29 +316,36 @@ ARTICLE TITLE: {title}
 ARTICLE BODY: {body[:2000]}
 
 Return ONLY a single JSON object matching the schema. No markdown, no code fences."""
-    try:
-        r = await client.post(
-            url,
-            headers={"Authorization": f"Bearer {key}",
-                     "Content-Type": "application/json"},
-            json={"model": model,
-                  "messages": [{"role": "user", "content": prompt}],
-                  "temperature": 0.35,
-                  "max_tokens": 900,
-                  "response_format": {"type": "json_object"}},
-            timeout=25,
-        )
-        if r.status_code != 200:
-            log.warning("%s HTTP %d: %s", label, r.status_code, r.text[:200])
-            _record_error(label, r.status_code, r.text)
-            return None, r.status_code
-        text = (r.json()["choices"][0]["message"]["content"] or "").strip()
-        text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text).strip()
-        return json.loads(text), 200
-    except Exception as e:
-        log.warning("%s call failed: %s", label, e)
-        _record_error(label, 0, f"{type(e).__name__}: {e}")
-        return None, 0
+    payload = {"model": model,
+               "messages": [{"role": "user", "content": prompt}],
+               "temperature": 0.35,
+               "max_tokens": 900,
+               "response_format": {"type": "json_object"}}
+    headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+    for attempt in range(4):
+        try:
+            r = await client.post(url, headers=headers, json=payload, timeout=30)
+            if r.status_code == 429:
+                _record_error(label, 429, r.text)
+                if attempt < 3:
+                    wait = _retry_after_seconds(r)
+                    if wait is None:
+                        wait = 4 * (2 ** attempt)          # 4, 8, 16s
+                    await asyncio.sleep(min(wait, 65))
+                    continue
+                return None, 429
+            if r.status_code != 200:
+                log.warning("%s HTTP %d: %s", label, r.status_code, r.text[:200])
+                _record_error(label, r.status_code, r.text)
+                return None, r.status_code
+            text = (r.json()["choices"][0]["message"]["content"] or "").strip()
+            text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text).strip()
+            return json.loads(text), 200
+        except Exception as e:
+            log.warning("%s call failed: %s", label, e)
+            _record_error(label, 0, f"{type(e).__name__}: {e}")
+            return None, 0
+    return None, 429
 
 
 # provider -> a coroutine (key, title, body, client) -> (result, status)
