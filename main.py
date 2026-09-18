@@ -3529,6 +3529,153 @@ async def get_me(authorization: str = Header("")):
     }
 
 
+def _fmt_secs(s: int) -> str:
+    s = int(s or 0)
+    if s < 60:
+        return f"{s}s"
+    m = s // 60
+    if m < 60:
+        return f"{m}m"
+    return f"{m // 60}h {m % 60}m" if m % 60 else f"{m // 60}h"
+
+
+def _streak_runs(day_set: set):
+    """(current_streak, longest_streak) over a set of 'YYYY-MM-DD' read-days.
+    The current streak ends today or yesterday; the longest is over all history."""
+    from datetime import date, timedelta
+    if not day_set:
+        return 0, 0
+    today = date.today()
+    # current
+    cur = 0
+    anchor = today if today.isoformat() in day_set else (
+        today - timedelta(days=1) if (today - timedelta(days=1)).isoformat() in day_set else None)
+    if anchor is not None:
+        d = anchor
+        while d.isoformat() in day_set:
+            cur += 1
+            d -= timedelta(days=1)
+    # longest
+    longest = 0
+    for ds in day_set:
+        y, m, dd = (int(x) for x in ds.split("-"))
+        cd = date(y, m, dd)
+        if (cd - timedelta(days=1)).isoformat() in day_set:
+            continue                       # not a run start
+        run, d = 0, cd
+        while d.isoformat() in day_set:
+            run += 1
+            d += timedelta(days=1)
+        longest = max(longest, run)
+    return cur, longest
+
+
+@app.get("/me/analytics")
+async def me_analytics(authorization: str = Header("")):
+    """Real reading insights for the Profile surface — the endpoint the frontend
+    already called but that never existed, which is why Profile showed
+    "No data yet" for every reader.
+
+    Everything is derived from user_interactions (action='read') joined to
+    articles: reading time (estimated from each read article's own length, ~5
+    chars/word at 200 wpm), the per-pillar reading mix, daily bars, and the day
+    streak. The payload shape matches exactly what loadProfileAnalytics renders.
+    """
+    from datetime import date, timedelta
+    uid = get_current_user(authorization)
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            "SELECT date(ui.timestamp) AS d, a.pillar_id AS pid, ui.article_id AS aid, "
+            "LENGTH(COALESCE(a.full_body,'')) AS ch FROM user_interactions ui "
+            "JOIN articles a ON a.id=ui.article_id "
+            "WHERE ui.user_id=? AND ui.action='read'", (uid,)).fetchall()
+    finally:
+        conn.close()
+
+    def _secs(ch):
+        # chars/5 words / 200 wpm * 60s; a floor so a read always counts.
+        return max(20, int((int(ch or 0) / 5.0) / 200.0 * 60.0))
+
+    per_day_secs: dict = {}
+    per_day_arts: dict = {}
+    pillar_ct: dict = {}
+    day_set = set()
+    for r in rows:
+        d = r["d"]
+        day_set.add(d)
+        per_day_secs[d] = per_day_secs.get(d, 0) + _secs(r["ch"])
+        per_day_arts.setdefault(d, set()).add(r["aid"])
+        if r["pid"]:
+            pillar_ct[r["pid"]] = pillar_ct.get(r["pid"], 0) + 1
+
+    today = date.today()
+    tstr = today.isoformat()
+    week = [(today - timedelta(days=i)).isoformat() for i in range(6, -1, -1)]
+    daily_sec = [{"date": d, "seconds": per_day_secs.get(d, 0)} for d in week]
+    articles_today = len(per_day_arts.get(tstr, set()))
+    articles_week = len({a for d in week for a in per_day_arts.get(d, set())})
+    time_today = per_day_secs.get(tstr, 0)
+    time_week = sum(per_day_secs.get(d, 0) for d in week)
+    cur, longest = _streak_runs(day_set)
+
+    # streak_history: the last 14 days, each with the running streak ending there.
+    hist = []
+    for i in range(13, -1, -1):
+        dd = today - timedelta(days=i)
+        active = dd.isoformat() in day_set
+        run, d2 = 0, dd
+        while d2.isoformat() in day_set:
+            run += 1
+            d2 -= timedelta(days=1)
+        hist.append({"date": dd.isoformat(), "active": active, "streak": run})
+
+    tot = sum(pillar_ct.values()) or 0
+    categories = sorted(
+        [{"pillar_id": pid, "name": PILLARS.get(pid, PILLARS[1])["name"],
+          "color": PILLARS.get(pid, PILLARS[1])["color"],
+          "count": c, "pct": round(100 * c / tot) if tot else 0}
+         for pid, c in pillar_ct.items()],
+        key=lambda x: -x["count"])
+    fastest = ({"pillar_id": categories[0]["pillar_id"],
+                "name": categories[0]["name"]} if categories else None)
+
+    return {
+        "articles_today": articles_today, "articles_week": articles_week,
+        "articles_read": len({r["aid"] for r in rows}),
+        "time_today_sec": time_today, "time_today_formatted": _fmt_secs(time_today),
+        "time_week_sec": time_week, "time_week_formatted": _fmt_secs(time_week),
+        "current_streak": cur, "longest_streak": longest,
+        "daily_sec": daily_sec, "streak_history": hist,
+        "categories": categories, "fastest_growth": fastest,
+    }
+
+
+@app.get("/me/activity")
+async def me_activity(limit: int = Query(8, ge=1, le=50),
+                      authorization: str = Header("")):
+    """Recent reading activity for the Profile list, shaped as the frontend's
+    activity rows expect (id / headline / image_url / category / updated_at)."""
+    uid = get_current_user(authorization)
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            "SELECT ui.action AS action, ui.timestamp AS ts, a.id AS aid, "
+            "a.headline AS headline, a.image_url AS image_url, a.pillar_id AS pid, "
+            "a.source_name AS src FROM user_interactions ui "
+            "JOIN articles a ON a.id=ui.article_id WHERE ui.user_id=? "
+            "ORDER BY ui.timestamp DESC LIMIT ?", (uid, int(limit))).fetchall()
+    finally:
+        conn.close()
+    return {"activity": [{
+        "id": r["aid"], "article_id": r["aid"], "headline": r["headline"],
+        "image_url": r["image_url"] or "",
+        "category": PILLARS.get(r["pid"], PILLARS[1])["slug"],
+        "source_name": r["src"] or "", "updated_at": r["ts"],
+        "action": r["action"], "completed": r["action"] == "read",
+        "scroll_pct": 100 if r["action"] == "read" else 0} for r in rows]}
+
+
 @app.put("/me")
 async def update_profile(req: UpdateProfileReq, authorization: str = Header("")):
     # require_user, NOT get_current_user: the lenient path returns anonymous

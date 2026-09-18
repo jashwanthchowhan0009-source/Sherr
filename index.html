@@ -5329,6 +5329,12 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 .mfd-panes{position:relative;flex:1 0 auto;}
 .mfd-pane{display:none;}
 .mfd-pane.on{display:block;animation:mfPaneIn .26s var(--ease);}
+/* Compact depth chips under the News lead: reading time, original publisher. */
+.mfd-meta{display:flex;flex-wrap:wrap;gap:7px 10px;margin:2px 0 10px;}
+.mfd-mchip{display:inline-flex;align-items:center;gap:5px;font:600 .68rem/1 var(--f);
+  color:var(--t3);padding:5px 9px;border-radius:9px;background:var(--bg2);
+  border:1px solid var(--line2);}
+.mfd-mchip i{font-size:.64rem;opacity:.85;}
 @keyframes mfPaneIn{from{opacity:0;transform:translateX(var(--mf-in,10px));}to{opacity:1;transform:none;}}
 .mfd-scroll{padding:12px 16px 8px;display:flex;flex-direction:column;gap:12px;}
 /* News pane — id chip + status, then badge-led blocks (the "colour box" leads each) */
@@ -6583,9 +6589,10 @@ function renderExploreInsights() {
   renderInsightBand(document.getElementById('xp-insband'), exploreInsightChips());
 }
 
-// Rough reading time from whatever body text the card carries.
+// Rough reading time from whatever body text the card carries (normalized or raw).
 function readMins(a) {
-  const words = String((a && (a.body_ai || a.preview)) || '').trim().split(/\s+/).filter(Boolean).length;
+  const t = (a && (a.body_ai || a.full_body || a.preview || a.summary || a.summary_60)) || '';
+  const words = String(t).trim().split(/\s+/).filter(Boolean).length;
   return Math.max(1, Math.round(words / 200));
 }
 
@@ -10543,6 +10550,10 @@ function buildMyfeedCard(a){
         <section class="mfd-pane news on" data-pane="news">
           <div class="mfd-scroll">
             <div class="mfd-block mfd-tldr">${leadBadge}<p class="mfd-lead">${tldr || 'Sherr AI is preparing an original summary of this story.'}</p></div>
+            <div class="mfd-meta">
+              <span class="mfd-mchip"><i class="fa-regular fa-clock"></i> ${readMins(a)} min read</span>
+              ${(a.source_name || a.orig_source) ? `<span class="mfd-mchip"><i class="fa-regular fa-newspaper"></i> via ${bEsc(a.source_name || a.orig_source)}</span>` : ''}
+            </div>
             <div class="mfd-block mfd-what" hidden><p></p></div>
             <div class="mfd-block mfd-whowhere" hidden></div>
             <div class="mfd-keypoints" hidden></div>
