@@ -105,6 +105,19 @@ VALID_CATEGORIES = [
     "selfwell", "philo", "lifestyle", "sports"
 ]
 
+# One cross-domain "dot" (lowercase types for the single-article Gemini schema).
+_DOT_SCHEMA_LC = {
+    "type": "object",
+    "properties": {
+        "summary":     {"type": "string"},
+        "impact":      {"type": "string", "enum": ["up", "down", "mixed", "neutral"]},
+        "instruments": {"type": "array", "items": {
+            "type": "object",
+            "properties": {"name": {"type": "string"}, "ticker": {"type": "string"}},
+        }},
+    },
+}
+
 # Gemini structured output schema — guarantees valid JSON shape
 _GEMINI_SCHEMA = {
     "type": "object",
@@ -118,6 +131,30 @@ _GEMINI_SCHEMA = {
         "sentiment":     {"type": "string", "enum": ["positive", "neutral", "negative"]},
         "when_info":     {"type": "string"},
         "where_info":    {"type": "string"},
+        # The myFeed dossier panes — a causal timeline and the cross-domain read,
+        # grounded in this one source. Both optional; empty is a valid answer and
+        # renders as 'pending' rather than an error.
+        "strings": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "stage":  {"type": "string"},
+                    "title":  {"type": "string"},
+                    "detail": {"type": "string"},
+                },
+            },
+        },
+        "dots": {
+            "type": "object",
+            "properties": {
+                "market_debt":       _DOT_SCHEMA_LC,
+                "policy_governance": _DOT_SCHEMA_LC,
+                "tech_culture":      _DOT_SCHEMA_LC,
+                "asymmetric_catch":  {"type": "object",
+                                      "properties": {"summary": {"type": "string"}}},
+            },
+        },
     },
     "required": ["refined_title", "summary", "full_body", "category"]
 }
@@ -208,6 +245,31 @@ STRICT RULES:
 8. when_info — "April 16, 2026" or "Thursday morning" if article states it, else "".
 
 9. where_info — "City, Country" or "State, Country" if present, else "Not specified".
+
+10. strings — a SHORT causal timeline of THIS story, as an array of 2-4 steps,
+    each {stage, title, detail}. Same originality + no-invention rules as the
+    body: build it ONLY from facts the source states.
+    - stage: one of "Origin", "Background", "Escalation", "The Spark", "Present",
+      "What's next" — pick what fits each step.
+    - title: 2-5 words naming the step.
+    - detail: ONE past-tense (or, for the last step, present/future) sentence of
+      what happened, in your own words.
+    - Order oldest → newest; the final step is the present event.
+    - If the source gives no prior context, return FEWER steps (even just one
+      "Present" step). NEVER invent history, causes, or a future the source does
+      not state. An empty array [] is a valid answer.
+
+11. dots — the cross-domain read of THIS story, an object with these OPTIONAL keys:
+    "market_debt", "policy_governance", "tech_culture" — each {summary (one
+    sentence), impact ("up"|"down"|"mixed"|"neutral"), instruments (array of
+    {name, ticker}, only if a real, named instrument is involved)} — and
+    "asymmetric_catch" {summary} — the angle mainstream coverage tends to miss.
+    - Include a sector ONLY if the story genuinely touches it AND the source
+      supports the claim. Most stories touch one or two; OMIT the rest.
+    - NEVER fabricate a market/instrument impact for a story with no market angle
+      (an arts or sports story usually has none — leave market_debt out).
+    - Factual, compliant, no speculation about prices or direction beyond what the
+      source states. An empty object {} is a valid answer.
 
 Output the JSON object only. No markdown. No commentary."""
 

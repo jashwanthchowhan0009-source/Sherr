@@ -1651,6 +1651,41 @@ def _apply_aggregator_posture(result: dict, row) -> None:
     result["full_body"] = f"{_SAFE_BODY_TEXT}\n\n{credit}\n{url}".strip()
 
 
+def _write_single_strings_dots(conn, article_id: int, result: dict) -> None:
+    """Store the Strings/Dots the single-article rewrite produced for one row.
+
+    Most rows are single-source and never reach synthesis, so their dossier panes
+    sat 'pending' forever. The rewrite now also emits `strings` (a causal
+    timeline) and `dots` (the cross-domain read); this validates them through the
+    SAME compliance blocklist the synthesis pass uses (never a second copy —
+    synthesis._parse_strings/_parse_dots + ai_processor._hook_check) and writes
+    them into the TEXT/JSON columns. Each column is written ONLY when the model
+    produced content, so a later, richer synthesis pass is never clobbered by an
+    empty single-source answer; empty stays '[]' / '{}' and renders as pending.
+    """
+    try:
+        hook_check = ai_processor._hook_check()
+    except Exception:
+        hook_check = None
+    try:
+        strings = synthesis._parse_strings(result.get("strings"), hook_check, [])
+    except Exception:
+        strings = []
+    try:
+        dots = synthesis._parse_dots(result.get("dots"), hook_check, [])
+    except Exception:
+        dots = {}
+    try:
+        if strings:
+            conn.execute("UPDATE articles SET strings=? WHERE id=?",
+                         (json.dumps(strings), article_id))
+        if dots:
+            conn.execute("UPDATE articles SET dots=? WHERE id=?",
+                         (json.dumps(dots), article_id))
+    except Exception as e:
+        log.warning("[AI] strings/dots write failed for id %s: %s", article_id, e)
+
+
 async def run_ai_batch(conn):
     """Pull unprocessed articles and refine them with Gemini in parallel."""
     rows = conn.execute(
@@ -1759,6 +1794,10 @@ async def run_ai_batch(conn):
                 datetime.now(timezone.utc).isoformat(),
                 row["id"],
             ))
+            # Fill the dossier's Strings/Dots panes from this same rewrite (only
+            # for a published row; a parked one shows no dossier).
+            if status == "published":
+                _write_single_strings_dots(conn, row["id"], result)
             success += 1
         except Exception as e:
             log.warning("[AI] Update failed for id %d: %s", row["id"], e)
@@ -4636,6 +4675,8 @@ def _reprocess_bodies_sync(limit: int, batch: int,
                         headline, result["summary"], result["full_body"],
                         json.dumps(audit), body_m["overlap"], body_m["longest_run"],
                         datetime.now(timezone.utc).isoformat(), row["id"]))
+                    # Fill the Strings/Dots panes from the same rewrite.
+                    _write_single_strings_dots(conn, row["id"], result)
                     done += 1
                     _body_last["written"] += 1
                 except Exception as e:
