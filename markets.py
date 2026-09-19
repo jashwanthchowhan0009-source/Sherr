@@ -236,6 +236,116 @@ async def _yahoo_history(client: httpx.AsyncClient, symbol: str, points: int = 2
         return []
 
 
+# ─── full price series for the market-detail chart ──────────────────────────
+# The chart wants {series:[{t,p}]} — t in ms so `new Date(t)` works — across a
+# range the reader picks. Yahoo's v8 chart endpoint answers anonymously for every
+# instrument the tiles already show, so one source drives both the quote and the
+# chart. market_ticks (the engine's stored closes) covers only ~13 symbols and no
+# intraday, so it cannot back a "1D / 1W" chart; this can.
+_RANGE_MAP = {
+    "1D": ("1d", "5m"),  "1W": ("5d", "30m"), "1M": ("1mo", "1d"),
+    "3M": ("3mo", "1d"), "6M": ("6mo", "1d"), "1Y": ("1y", "1d"),
+    "5Y": ("5y", "1wk"), "MAX": ("max", "1mo"),
+}
+
+# label ("NIFTY") -> Yahoo symbol ("^NSEI"), so the detail page can pass either a
+# display label or a raw ticker and still resolve to something Yahoo answers.
+_LABEL_TO_YAHOO: dict = {}
+for _cat in ("stocks", "metals", "forex", "commodities", "rates", "energy_stocks"):
+    for _sym, _lbl in SYMBOLS.get(_cat, {}).items():
+        _LABEL_TO_YAHOO.setdefault(_lbl, _sym)
+
+
+def _resolve_yahoo(category: str, symbol: str) -> str:
+    """Best Yahoo ticker for (category, symbol/label)."""
+    s = (symbol or "").strip()
+    if not s:
+        return ""
+    if category == "crypto":
+        return f"{s.upper()}-USD"        # Yahoo lists crypto as BTC-USD etc.
+    return _LABEL_TO_YAHOO.get(s, s)     # a known label, else assume it IS a ticker
+
+
+async def _yahoo_chart(client: httpx.AsyncClient, symbol: str,
+                       range_key: str) -> list:
+    """[{t(ms), p}] for one instrument over a range, oldest first, or []."""
+    rng, interval = _RANGE_MAP.get((range_key or "1M").upper(), ("1mo", "1d"))
+    try:
+        r = None
+        for host in _YAHOO_HOSTS:
+            r = await client.get(
+                f"https://{host}/v8/finance/chart/{symbol}",
+                params={"range": rng, "interval": interval},
+                headers={"User-Agent": "Mozilla/5.0"}, timeout=12)
+            if r.status_code == 200:
+                break
+        if r is None or r.status_code != 200:
+            return []
+        res = (r.json().get("chart", {}).get("result") or [None])[0]
+        if not res:
+            return []
+        ts = res.get("timestamp") or []
+        closes = (res.get("indicators", {}).get("quote", [{}])[0].get("close") or [])
+        out = []
+        for t, c in zip(ts, closes):
+            if c is None:
+                continue
+            out.append({"t": int(t) * 1000, "p": round(float(c), 2)})
+        return out
+    except Exception as e:
+        log.warning("Yahoo chart failed for %s: %s", symbol, e)
+        return []
+
+
+# Index -> its major constituents, as {Yahoo symbol: display name}. Liquid names
+# only; the endpoint fetches their live quotes. Indian indices use NSE (.NS),
+# which Yahoo answers for both NIFTY and SENSEX large-caps.
+_CONSTITUENTS: dict = {
+    "NIFTY": {
+        "RELIANCE.NS": "Reliance", "HDFCBANK.NS": "HDFC Bank",
+        "ICICIBANK.NS": "ICICI Bank", "INFY.NS": "Infosys", "TCS.NS": "TCS",
+        "ITC.NS": "ITC", "LT.NS": "Larsen & Toubro", "AXISBANK.NS": "Axis Bank",
+        "SBIN.NS": "State Bank of India", "BHARTIARTL.NS": "Bharti Airtel",
+        "KOTAKBANK.NS": "Kotak Mahindra", "HINDUNILVR.NS": "Hindustan Unilever",
+    },
+    "SENSEX": {
+        "RELIANCE.NS": "Reliance", "HDFCBANK.NS": "HDFC Bank",
+        "ICICIBANK.NS": "ICICI Bank", "INFY.NS": "Infosys", "TCS.NS": "TCS",
+        "ITC.NS": "ITC", "LT.NS": "Larsen & Toubro", "SBIN.NS": "State Bank of India",
+        "BHARTIARTL.NS": "Bharti Airtel", "KOTAKBANK.NS": "Kotak Mahindra",
+        "AXISBANK.NS": "Axis Bank", "MARUTI.NS": "Maruti Suzuki",
+    },
+    "NASDAQ": {
+        "AAPL": "Apple", "MSFT": "Microsoft", "NVDA": "Nvidia",
+        "AMZN": "Amazon", "GOOGL": "Alphabet", "META": "Meta",
+        "TSLA": "Tesla", "AVGO": "Broadcom", "PEP": "PepsiCo",
+        "COST": "Costco", "ADBE": "Adobe", "NFLX": "Netflix",
+    },
+    "SP500": {
+        "AAPL": "Apple", "MSFT": "Microsoft", "NVDA": "Nvidia",
+        "AMZN": "Amazon", "GOOGL": "Alphabet", "META": "Meta",
+        "BRK-B": "Berkshire Hathaway", "JPM": "JPMorgan", "LLY": "Eli Lilly",
+        "V": "Visa", "XOM": "ExxonMobil", "UNH": "UnitedHealth",
+    },
+    "DOW": {
+        "AAPL": "Apple", "MSFT": "Microsoft", "JPM": "JPMorgan",
+        "V": "Visa", "UNH": "UnitedHealth", "HD": "Home Depot",
+        "PG": "Procter & Gamble", "JNJ": "Johnson & Johnson",
+        "CAT": "Caterpillar", "GS": "Goldman Sachs", "AMGN": "Amgen", "BA": "Boeing",
+    },
+    "FTSE": {
+        "SHEL.L": "Shell", "AZN.L": "AstraZeneca", "HSBA.L": "HSBC",
+        "ULVR.L": "Unilever", "BP.L": "BP", "RIO.L": "Rio Tinto",
+        "GSK.L": "GSK", "DGE.L": "Diageo", "BATS.L": "BAT", "GLEN.L": "Glencore",
+    },
+    "NIKKEI": {
+        "7203.T": "Toyota", "6758.T": "Sony", "9984.T": "SoftBank",
+        "6861.T": "Keyence", "8306.T": "MUFG", "9433.T": "KDDI",
+        "6098.T": "Recruit", "8035.T": "Tokyo Electron",
+    },
+}
+
+
 # ─── Provider: CoinGecko (free, no key) ──────────────────────────────────
 async def _coingecko(client: httpx.AsyncClient, ids: list[str]) -> dict:
     try:
@@ -581,27 +691,49 @@ async def _ticks_query(sql: str, *args):
 
 
 @router.get("/markets/history")
-async def markets_history(symbol: str, days: int = 180):
-    """Daily closes for one instrument, oldest first.
+async def markets_history(symbol: str, days: int = 180,
+                          category: str = "", range: str = ""):
+    """Price history for one instrument.
 
-    `source` is the three-tier honesty the rest of the app uses: `ticks` means
-    these are real stored closes, `unavailable` means the store could not be
-    read. There is no seed tier and there will not be one — a fabricated price
-    history is a claim about the past that nobody can check.
+    TWO shapes, one endpoint, two consumers:
+      • `series` [{t(ms), p}] — the market-detail CHART. Populated from Yahoo when
+        a `range` is given (1D…MAX), so any tile the app shows has a live chart.
+      • `points` [{d, price}] — the connections sparkline, from the engine's
+        stored `market_ticks` closes.
+
+    `source` stays the three-tier honesty for `points`: `ticks` = real stored
+    closes, `unavailable` = the store could not be read. There is no seed tier —
+    a fabricated price history is a claim about the past nobody can check.
     """
     sym = (symbol or "").strip().upper()[:32]
     days = max(7, min(int(days or 180), 800))
     if not sym:
-        return {"symbol": "", "points": [], "source": "unavailable",
+        return {"symbol": "", "points": [], "series": [], "source": "unavailable",
                 "detail": "no symbol given"}
+
+    # The chart series (Yahoo), when the caller picked a range.
+    series = []
+    if range:
+        ck = f"mkt:series:{category}:{sym}:{range}".lower()
+        cached = await _cache_get(ck)
+        if cached is not None:
+            series = cached
+        else:
+            ysym = _resolve_yahoo(category, symbol)   # keep original case for .NS/.L/.T
+            async with httpx.AsyncClient(follow_redirects=True) as client:
+                series = await _yahoo_chart(client, ysym, range)
+            # 1D refreshes fast; longer ranges are stable — cache accordingly.
+            await _cache_set(ck, series, 120 if range.upper() == "1D" else 900)
+
     key = f"mkt:hist:{sym}:{days}"
     hit = await _cache_get(key)
     if hit is not None:
-        return hit
+        return {**hit, "series": series} if range else hit
 
     rows = await _ticks_query(_HISTORY_SQL, sym, days)
     if rows is None:
-        return {"symbol": sym, "points": [], "source": "unavailable",
+        return {"symbol": sym, "points": [], "series": series,
+                "source": "unavailable",
                 "detail": "market_ticks is not reachable (DATABASE_URL unset "
                           "or the store is empty)"}
     points = [{"d": str(r["d"]),
@@ -615,7 +747,44 @@ async def markets_history(symbol: str, days: int = 180):
         # The store is reachable and has nothing for this symbol. That is a
         # different answer from "unreachable" and the page says so differently.
         payload["detail"] = f"no stored closes for {sym} in the last {days} days"
-    await _cache_set(key, payload, 900)
+    await _cache_set(key, payload, 900)     # cached without series (cached apart)
+    return {**payload, "series": series} if range else payload
+
+
+@router.get("/markets/constituents")
+async def markets_constituents(index: str):
+    """The major constituents of an index, with live quotes — the "Companies in
+    NIFTY" list on the market-detail page. The frontend called this all along;
+    it never existed, so the list sat on "Loading companies…". Quotes come from
+    the same Yahoo path as every other tile.
+    """
+    idx = (index or "").strip().upper()
+    members = _CONSTITUENTS.get(idx)
+    if not members:
+        return {"index": idx, "constituents": [],
+                "detail": f"no constituent list for {idx}"}
+    ck = f"mkt:cons:{idx}"
+    hit = await _cache_get(ck)
+    if hit is not None:
+        return hit
+    syms = list(members.keys())
+    async with httpx.AsyncClient(follow_redirects=True) as client:
+        quotes = await _yahoo(client, syms)
+    out = []
+    for sym in syms:
+        q = quotes.get(sym)
+        if not q or not q.get("price"):
+            continue
+        out.append({
+            "symbol": sym, "name": members[sym],
+            "price": q["price"], "change": q.get("change", 0),
+            "change_pct": q.get("change_pct", 0),
+            "currency": q.get("currency", ""),
+        })
+    out.sort(key=lambda c: -abs(c.get("change_pct") or 0))   # movers first
+    payload = {"index": idx, "count": len(out), "constituents": out}
+    if out:                              # only a real answer is cached
+        await _cache_set(ck, payload, 90)
     return payload
 
 
