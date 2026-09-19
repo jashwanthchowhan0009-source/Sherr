@@ -6328,6 +6328,12 @@ function selectChip(el, cat) {
   loadFeed(true);
 }
 
+// Jump back to the "All" feed (used by the empty-pillar state's button).
+function goAllFeed() {
+  const a = document.querySelector('#chip-row .chip[onclick*="\'all\'"]');
+  if (a) selectChip(a, 'all'); else { curChip = 'all'; homeActiveTab = 'foryou'; loadFeed(true); }
+}
+
 // ── Home category swipe ──────────────────────────────────────────────────────
 // A sideways swipe on the feed steps between the chip categories (All → Arts →
 // …), exactly like the News → Strings → Dots swipe on a dossier card. A vertical
@@ -6354,12 +6360,20 @@ function homeGoRel(dir) {
   selectChip(chips[ni], m ? m[1] : 'all');
 }
 function bindHomeSwipe() {
-  const zone = document.getElementById('home-feed');
+  // Bind to the WHOLE Home view, not just #home-feed. An empty or thin pillar
+  // makes #home-feed collapse to a few pixels tall, so there was nothing left to
+  // swipe on — which is exactly why "after Arts & Culture it won't slide". The
+  // view is always full height, so the gesture is available whatever the pillar
+  // holds. Horizontal scrollers inside it (the chip rail, the trending strip,
+  // market rails) keep their own scroll via the guard below.
+  const zone = document.getElementById('v-home');
   if (!zone || zone._swipeBound) return;
   zone._swipeBound = true;
   let x0 = 0, y0 = 0, axis = null, active = false;
+  const NO_SWIPE = '#chip-row, .trending-strip, .hl-inline, .mkt-rail, .xp-hero-track, .xp-cats, input, textarea, [data-noswipe]';
   zone.addEventListener('touchstart', e => {
-    if (e.touches.length !== 1) { active = false; return; }
+    // Only a plain one-finger gesture that did NOT start on a horizontal scroller.
+    if (e.touches.length !== 1 || (e.target.closest && e.target.closest(NO_SWIPE))) { active = false; return; }
     x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; axis = null; active = true;
   }, { passive: true });
   zone.addEventListener('touchmove', e => {
@@ -6967,11 +6981,19 @@ function feedCard(a, container) {
 // cold-starts — instead of a skeleton or "Waking the server". Refreshed in the
 // background; if the refresh fails (cold start), the cached feed simply stays.
 const _FEED_CACHE_KEY = 'sb-feedcache-v1';
+// The cached snapshot is a FIRST-PAINT accelerator, never the served feed. Past
+// this age it is discarded so a reopened app shows a skeleton and fetches fresh
+// stories instead of silently re-showing a stale set — that "the feed never
+// refreshes" was a cache with no expiry.
+const _FEED_CACHE_MAX_AGE = 10 * 60 * 1000;   // 10 minutes
 function _isDefaultFeedView() { return curChip === 'all' && homeActiveTab === 'foryou'; }
 function _readFeedCache() {
   try {
     const c = JSON.parse(localStorage.getItem(_FEED_CACHE_KEY) || 'null');
-    if (c && Array.isArray(c.arts) && c.arts.length) return c.arts;
+    if (c && Array.isArray(c.arts) && c.arts.length) {
+      if (typeof c.t === 'number' && Date.now() - c.t > _FEED_CACHE_MAX_AGE) return null;
+      return c.arts;
+    }
   } catch (e) {}
   return null;
 }
@@ -6980,6 +7002,8 @@ function _writeFeedCache(arts) {
 }
 
 let _feedWatchdog = 0;
+let _lastFeedLoadAt = 0;   // when the default feed last fetched successfully
+const _FEED_STALE_MS = 90 * 1000;   // returning to Home older than this → refresh
 
 async function loadFeed(reset = false, hard = false) {
   if (feedLoading) return;
@@ -7062,6 +7086,7 @@ async function loadFeed(reset = false, hard = false) {
       } catch (e) { /* keep the empty /feed answer and let the empty state show */ }
     }
     feedRetried = false; feedRetryCount = 0;   // server reached — reset cold-start retry budget
+    if (_isDefaultFeedView()) _lastFeedLoadAt = Date.now();
     let articles = (data.articles || []).map(normalizeArticle);
     // Cross-page dedup: never render a story that's already on screen. The backend
     // can return overlapping pages, which is what made articles "come again".
@@ -7098,6 +7123,22 @@ async function loadFeed(reset = false, hard = false) {
         // If we already had a cached page rendered, keep it: an empty refresh is
         // not a reason to take away what the reader was reading.
         if (cachedShown) { feedExhausted = true; return; }
+        feedExhausted = true;   // an empty page has no next page to fetch
+        if (curChip !== 'all') {
+          // A SPECIFIC PILLAR is empty — that is not an outage. Say so honestly
+          // (the server has plenty, just nothing in this topic yet) and keep the
+          // reader moving: swipe sideways or jump back to All.
+          const cc = (typeof CATS !== 'undefined' && CATS[curChip]) || null;
+          const nm = (cc && (cc.label || cc.short)) || 'this topic';
+          c.insertAdjacentHTML('beforeend',
+            `<div class="empty-state">
+              <div class="empty-state-ico">${cc && cc.icon ? cc.icon : '🗂️'}</div>
+              <div class="empty-state-msg">No ${bEsc(nm)} stories right now</div>
+              <div class="empty-state-sub">Swipe sideways for another topic, or browse everything.</div>
+              <button class="es-retry" onclick="goAllFeed()">Browse all stories</button>
+            </div>`);
+          return;
+        }
         c.insertAdjacentHTML('beforeend',
           `<div class="empty-state">
             <div class="empty-state-ico">📰</div>
@@ -8951,6 +8992,10 @@ function navTo(name) {
       // Full-bar re-tap while on the All feed → scroll to top + pull fresh articles.
       document.getElementById('v-home')?.scrollTo({ top: 0, behavior: 'smooth' });
       loadFeed(true, true);
+    } else if (_isDefaultFeedView() && Date.now() - _lastFeedLoadAt > _FEED_STALE_MS) {
+      // Returning to a Home feed that has gone stale → pull fresh stories rather
+      // than leaving the reader looking at the set they saw last time.
+      loadFeed(true, true);
     } else {
       document.getElementById('v-home')?.scrollTo({ top: 0, behavior: 'smooth' });
     }
@@ -9235,6 +9280,16 @@ function attachPullToRefresh(scrollEl, onRefresh) {
   }, { passive: true });
 }
 attachPullToRefresh(document.getElementById('v-home'), () => loadFeed(true, true));
+
+// Coming back to the app (tab re-focused / phone unlocked) on a stale Home feed
+// pulls fresh stories, so returning readers don't sit on yesterday's set.
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) return;
+  if (document.body.dataset.view !== 'home') return;
+  if (_isDefaultFeedView() && Date.now() - _lastFeedLoadAt > _FEED_STALE_MS && !feedLoading) {
+    loadFeed(true, true);
+  }
+});
 
 // ── SIDEBAR LOGOUT ──
 document.querySelector('.sb-logout').addEventListener('click', signOut);
