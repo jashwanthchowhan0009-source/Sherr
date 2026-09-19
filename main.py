@@ -65,6 +65,7 @@ IMAGE_MODE = (os.getenv("IMAGE_MODE") or "stock").strip().lower()
 # never reach what runs — the trap CLAUDE.md records for process_batch.
 import ai_processor
 import text_utils
+import writer_gate
 from ai_processor import process_batch, available_providers
 
 load_dotenv()
@@ -4594,6 +4595,59 @@ def _synth_reason(reason: str) -> None:
     _synth_run["reasons"][reason] = _synth_run["reasons"].get(reason, 0) + 1
 
 
+# THE GATE IS ALWAYS MEASURED, BUT ENFORCEMENT HAS A SWITCH.
+#
+# check_news runs on every synthesised News card and its verdict is always recorded
+# on the writer-doctor — that is how the spec's "does News pass at >=90% on the live
+# corpus" question gets a number. Whether a failing card is WITHHELD is separate:
+# with WRITER_GATE_ENABLED=1 (the default, and the spec's posture — the gate runs
+# before publish and a fail does not publish) a failing card keeps its safe
+# placeholder for the next tick; with =0 the card is written anyway, so the pass rate
+# can be measured on live traffic before enforcement is switched on. It never blanks
+# a card: a withheld card is left exactly as it was, never emptied.
+WRITER_GATE_ENABLED = os.getenv("WRITER_GATE_ENABLED", "1") not in ("0", "false", "no")
+
+
+# ── writer-doctor ──────────────────────────────────────────────────────────────
+# The quality gate's failure ledger, bucketed by WRITER and by RULE exactly as the
+# writing spec's section-4 table prescribes. After a week of live traffic this says
+# which rule the model actually fights — the thing to tune, rather than the whole
+# prompt. It also carries attempts/passes so the pass RATE is a number: the spec
+# gates building Strings and Dots on News passing at >=90% on the live corpus, and
+# this is where that 90% is read. In-memory like ai_processor.PROVIDER_ERRORS — it
+# resets on restart, which is correct, because the question it answers is "what is
+# the model doing lately", not "since the beginning of time".
+_WRITER_DOCTOR_SAMPLES = 25
+_writer_doctor: dict = {}
+
+
+def _writer_bucket(writer: str) -> dict:
+    return _writer_doctor.setdefault(writer, {
+        "attempts": 0, "passes": 0, "failures": 0, "by_rule": {}, "recent": []})
+
+
+def _record_writer_result(writer: str, passed: bool, failures=None) -> None:
+    """One gate decision, folded into the writer's bucket.
+
+    A card that fails several rules counts once as an attempt and once per rule in
+    by_rule, so the histogram is "how often each rule fires", not "how many cards
+    failed". The recent list keeps a bounded sample WITH the detail, because the one
+    question a histogram cannot answer is what the offending text actually was.
+    """
+    b = _writer_bucket(writer)
+    b["attempts"] += 1
+    if passed:
+        b["passes"] += 1
+        return
+    b["failures"] += 1
+    for f in (failures or []):
+        rule = f.get("rule", "unknown")
+        b["by_rule"][rule] = b["by_rule"].get(rule, 0) + 1
+        b["recent"].insert(0, {"rule": rule, "detail": (f.get("detail") or "")[:200],
+                               "at": datetime.now(timezone.utc).isoformat()})
+    del b["recent"][_WRITER_DOCTOR_SAMPLES:]
+
+
 def _synth_primary(group: list):
     """Which row of the cluster carries the synthesised article.
 
@@ -4727,8 +4781,14 @@ def _synthesise_clusters(conn, work: list, budget: int = None) -> list:
         body_ok, body_m = originality_check(result["content"], source_ref)
         if not body_ok:
             # A synthesis that reproduces its widest source is a paraphrase of
-            # that source, whatever else went into it. Never written.
+            # that source, whatever else went into it. Never written. Recorded on
+            # the writer-doctor under the same ngram_overlap rule the gate uses, so
+            # the doctor is a single dashboard over every reason a News card is held.
             _synth_reason("rejected_body_overlap")
+            _record_writer_result("news", False, [
+                {"rule": "ngram_overlap",
+                 "detail": "; ".join(body_m.get("reasons") or [])
+                           or "7-gram overlap with the source exceeds the threshold"}])
             _synth_run["failed"] += 1
             continue
 
@@ -4737,6 +4797,28 @@ def _synthesise_clusters(conn, work: list, budget: int = None) -> list:
         headline = (result["headline"].strip() if head_ok else "") \
             or (primary["headline"] or "").strip() \
             or (primary["source_headline"] or "").strip()
+
+        # ── the writing spec's quality gate ──────────────────────────────────────
+        # The body cleared originality above; now it must clear the rest of the
+        # spec's section-4 checklist — banned tone (SEBI + throat-clearing +
+        # intensifiers + nominalisation), verified numbers, an informative opening,
+        # the News 60-80 word band, no open loop, at least one resolved entity.
+        # A card that fails is NOT written: the row keeps its safe placeholder and
+        # the next tick retries it, which is the spec's "regenerate once, then fall
+        # back to the current safe summary". Every decision — pass or fail — is
+        # logged to the writer-doctor so the failing RULE is visible without log
+        # access, and so the News pass RATE the spec gates Strings/Dots on is a
+        # number rather than a guess. overlap_passed=True: the ngram check already
+        # ran just above and owns the row's stored originality metrics, so the gate
+        # folds in its result instead of recomputing it.
+        gate_ok, gate_failures = writer_gate.check_news(
+            result, overlap_passed=True,
+            sebi_check=writer_gate.default_sebi_check())
+        _record_writer_result("news", gate_ok, gate_failures)
+        if not gate_ok and WRITER_GATE_ENABLED:
+            _synth_reason("rejected_quality_gate")
+            _synth_run["failed"] += 1
+            continue
 
         # SORTED, not in the order the cluster happened to be ranked in. This
         # is an audit trail; a stable order is what makes two runs comparable.
@@ -5535,6 +5617,64 @@ async def admin_body_audit(x_admin_token: str = Header(""), token: str = Query("
     elif out["needs_rewrite"]:
         out["next"] = ("GET /admin/reprocess-bodies?token=...&limit=%d"
                        % min(out["needs_rewrite"], 3000))
+    return out
+
+
+@app.get("/admin/writer-doctor")
+async def admin_writer_doctor(x_admin_token: str = Header(""), token: str = Query("")):
+    """Which quality-gate rule the writers actually fight.
+
+    The writing spec runs a fixed checklist before any card is published and logs
+    every failure bucketed by writer and rule. This is that log. Read it to answer
+    two questions the body counts cannot:
+
+      * Is News good enough to build Strings and Dots on? `pass_rate` is the number
+        the spec gates that decision on (>=90% on the live corpus). Until News is
+        there, a low pass_rate with one rule dominating `by_rule` says exactly which
+        clause of the prompt to tune — not the whole prompt.
+      * When a synthesised card silently stays a placeholder, which rule withheld it?
+        `recent` carries a sample of the offending text, because the one question a
+        histogram cannot answer is what the model actually wrote.
+
+    Read-only. In-memory, so it reflects activity since the last restart.
+    """
+    _check_admin(x_admin_token or token)
+    writers = {}
+    for name, b in _writer_doctor.items():
+        attempts = b.get("attempts", 0)
+        passes = b.get("passes", 0)
+        writers[name] = {
+            "attempts": attempts,
+            "passes": passes,
+            "failures": b.get("failures", 0),
+            # None until at least one card was gated — a 0/0 "pass rate" is a lie.
+            "pass_rate": round(passes / attempts, 3) if attempts else None,
+            # Most-fought rule first: that is the one to tune.
+            "by_rule": dict(sorted(b.get("by_rule", {}).items(),
+                                   key=lambda kv: -kv[1])),
+            "recent": list(b.get("recent", [])),
+        }
+    news = writers.get("news", {})
+    out = {
+        "writers": writers,
+        "enforced": WRITER_GATE_ENABLED,
+        "gate_rules": ["banned_terms", "ngram_overlap", "numbers_verified",
+                       "first_six_words", "length", "causal_language",
+                       "open_loop", "entity_presence"],
+        "length_bands": writer_gate.LENGTH_BANDS,
+        "phase_gate": {
+            "rule": "Build Strings and Dots only once News passes at >=90%.",
+            "news_pass_rate": news.get("pass_rate"),
+            "news_attempts": news.get("attempts", 0),
+            "met": bool(news.get("pass_rate") is not None
+                        and news["pass_rate"] >= 0.90
+                        and news.get("attempts", 0) >= 20),
+        },
+    }
+    if not WRITER_GATE_ENABLED:
+        out["note"] = ("WRITER_GATE_ENABLED=0 — the gate is measured but NOT "
+                       "enforced, so failing cards are still published. Set it to 1 "
+                       "to withhold them once the pass rate is acceptable.")
     return out
 
 
