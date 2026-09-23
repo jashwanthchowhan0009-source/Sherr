@@ -83,3 +83,44 @@ def test_the_phone_home_feed_is_not_a_grid(html):
     block = html[html.index("@media (min-width: 1024px)"):html.index("/* Wider still")]
     base = html.replace(block, "")
     assert "grid-template-columns: repeat(2, minmax(0, 1fr))" not in base
+
+
+# ── 5. Sideways swipe steps categories even on an EMPTY pillar ───────────────
+def test_category_swipe_is_bound_to_the_whole_home_view(html):
+    """A thin/empty pillar collapses #home-feed to a few pixels, so a swipe bound
+    to it had nothing to grab — "after Arts & Culture it won't slide". The swipe
+    binds to the full-height #v-home instead, so the gesture is always available."""
+    fn = html[html.index("function bindHomeSwipe()"):]
+    fn = fn[:fn.index("\n}")]
+    assert "getElementById('v-home')" in fn
+    # …but horizontal scrollers inside it keep their own scroll.
+    assert "#chip-row" in fn and ".trending-strip" in fn and "closest(NO_SWIPE)" in fn
+
+
+# ── 6. An empty pillar reads as "no stories here", not "server has nothing" ──
+def test_empty_pillar_shows_a_topic_specific_state_not_an_outage(html):
+    """A selected pillar with no rows is not an outage — the server has plenty,
+    just nothing in this topic. The message says so and offers a way out."""
+    lf = html[html.index("async function loadFeed"):html.index("async function loadFeedPulse")]
+    assert "stories right now" in lf              # "No <Pillar> stories right now"
+    assert "Browse all stories" in lf
+    assert "function goAllFeed()" in html
+
+
+# ── 7. The client feed cache is a first-paint only, not a staleness trap ─────
+def test_client_feed_cache_expires(html):
+    """_readFeedCache returned a stored snapshot forever, so a reopened app could
+    keep showing an old set — "articles don't refresh". It now honours an age."""
+    assert "_FEED_CACHE_MAX_AGE" in html
+    rf = html[html.index("function _readFeedCache()"):]
+    rf = rf[:rf.index("\n}")]
+    assert "Date.now() - c.t > _FEED_CACHE_MAX_AGE" in rf
+
+
+def test_returning_to_a_stale_home_pulls_fresh_stories(html):
+    """Coming back to Home (nav re-entry or tab re-focus) after the feed has aged
+    triggers a fresh fetch, so returning readers don't sit on yesterday's set."""
+    assert "_FEED_STALE_MS" in html
+    assert "Date.now() - _lastFeedLoadAt > _FEED_STALE_MS" in html
+    # Wired to both re-entry paths: the Home nav and the visibility change.
+    assert "document.body.dataset.view !== 'home'" in html
