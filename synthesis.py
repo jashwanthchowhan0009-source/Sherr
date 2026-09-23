@@ -441,6 +441,7 @@ OPERATIONAL RULES:
    * Do NOT produce a line-by-line paraphrase.
    * Do NOT include editorial commentary, personal opinions, or adjectives not supported directly by the facts.
    * Do NOT hallucinate names, dates, or numbers. If the sources conflict, mention the discrepancy explicitly.
+   * List EVERY number that appears in your content in "numbers_used", each with the source that stated it. A number you cannot attribute to a source must not appear in the content at all — this is a verification hook, not display data.
 
 4. THE DOSSIER FIELDS (strings, dots):
    * These describe what HAS ALREADY HAPPENED. Write in the past tense or the conditional only. State observed facts and stated positions — never a prediction, a forecast, or advice.
@@ -448,7 +449,7 @@ OPERATIONAL RULES:
    * Every field is emptyable. If the sources do not support a stage or a sector, return an empty string / empty array for it rather than inventing one. A short honest dossier is correct; a padded one is not.
 
 OUTPUT FORMAT:
-Output ONLY valid JSON with this exact structure: { "headline": "Punchy, factual headline under 12 words", "content": "The generated original summary text.", "extracted_entities": ["Key Person", "Organization", "Location"], "primary_source_attribution": "Name of the primary publication reporting this", "why_info": "The stated cause or trigger, in the sources' facts only. Empty string if the sources do not state one.", "who_subject": "The actor that took the action", "who_affected": ["Entities the action was done to"], "hook": "One line, under 18 words, that states the tension a reader would miss from the headline alone. Facts only. No speculation about motive.", "strings": [ { "stage": "Origin | Escalation | The Spark", "title": "A few words naming this step", "detail": "One past-tense sentence of what happened at this step." } ], "dots": { "market_debt": { "summary": "One sentence on the effect on public markets and debt, past tense.", "impact": "up | down | mixed | neutral", "instruments": [ { "name": "Instrument name", "ticker": "SYMBOL" } ] }, "policy_governance": { "summary": "One sentence on the policy / governance angle.", "impact": "up | down | mixed | neutral", "instruments": [] }, "tech_culture": { "summary": "One sentence on the tech or culture vector.", "impact": "up | down | mixed | neutral", "instruments": [] }, "asymmetric_catch": { "summary": "One sentence on what mainstream coverage is missing." } } }"""
+Output ONLY valid JSON with this exact structure: { "headline": "Punchy, factual headline under 12 words", "content": "The generated original summary text.", "numbers_used": [ { "value": "each number exactly as it appears in the content", "source": "the source that stated this number" } ], "fact_conflicts": ["Any fact the sources disagree on, stated explicitly. Empty array if they agree."], "extracted_entities": ["Key Person", "Organization", "Location"], "primary_source_attribution": "Name of the primary publication reporting this", "why_info": "The stated cause or trigger, in the sources' facts only. Empty string if the sources do not state one.", "who_subject": "The actor that took the action", "who_affected": ["Entities the action was done to"], "hook": "One line, under 18 words, that states the tension a reader would miss from the headline alone. Facts only. No speculation about motive.", "strings": [ { "stage": "Origin | Escalation | The Spark", "title": "A few words naming this step", "detail": "One past-tense sentence of what happened at this step." } ], "dots": { "market_debt": { "summary": "One sentence on the effect on public markets and debt, past tense.", "impact": "up | down | mixed | neutral", "instruments": [ { "name": "Instrument name", "ticker": "SYMBOL" } ] }, "policy_governance": { "summary": "One sentence on the policy / governance angle.", "impact": "up | down | mixed | neutral", "instruments": [] }, "tech_culture": { "summary": "One sentence on the tech or culture vector.", "impact": "up | down | mixed | neutral", "instruments": [] }, "asymmetric_catch": { "summary": "One sentence on what mainstream coverage is missing." } } }"""
 
 # One contagion sector of The Dots: a one-line effect, a red/green/neutral
 # impact marker, and any named instruments a live ticker can be hung off.
@@ -479,6 +480,24 @@ SYNTHESIS_SCHEMA = {
     "properties": {
         "headline": {"type": "STRING"},
         "content": {"type": "STRING"},
+        # The verification hook: every figure in `content`, each with the source
+        # that stated it. The gate checks the body's numbers against this — a number
+        # in neither this nor the source text is a hallucination and fails the card.
+        # Emptyable: a body with no figures returns [].
+        "numbers_used": {
+            "type": "ARRAY",
+            "items": {
+                "type": "OBJECT",
+                "properties": {
+                    "value": {"type": "STRING"},
+                    "source": {"type": "STRING"},
+                },
+                "required": ["value", "source"],
+            },
+        },
+        # Facts the sources disagree on, stated explicitly rather than silently
+        # resolved. Emptyable — an [] means the sources agreed.
+        "fact_conflicts": {"type": "ARRAY", "items": {"type": "STRING"}},
         "extracted_entities": {"type": "ARRAY", "items": {"type": "STRING"}},
         "primary_source_attribution": {"type": "STRING"},
         # The News node's why/who/hook. Emitted every time so the provider
@@ -519,9 +538,9 @@ SYNTHESIS_SCHEMA = {
                          "tech_culture", "asymmetric_catch"],
         },
     },
-    "required": ["headline", "content", "extracted_entities",
-                 "primary_source_attribution", "why_info", "who_subject",
-                 "who_affected", "hook", "strings", "dots"],
+    "required": ["headline", "content", "numbers_used", "fact_conflicts",
+                 "extracted_entities", "primary_source_attribution", "why_info",
+                 "who_subject", "who_affected", "hook", "strings", "dots"],
 }
 
 # Per-source text budget. Five sources at 700 characters is well inside a free
@@ -613,6 +632,17 @@ def parse_synthesis(raw, *, n_sources: int = 0, hook_check=None) -> dict:
         ents = [ents]
     entities = [str(e).strip() for e in ents if str(e).strip()][:10]
 
+    # ── the verification hook and the conflicts note ────────────────────────────
+    # Both are emptyable and NEITHER gates the call: a body with no figures returns
+    # numbers_used == [], and sources that agree return fact_conflicts == []. The
+    # quality gate reads numbers_used to catch an unbacked figure; storing it is what
+    # makes that check auditable after the fact.
+    numbers_used = _parse_numbers_used(raw.get("numbers_used"))
+    conflicts = raw.get("fact_conflicts") or []
+    if isinstance(conflicts, str):
+        conflicts = [conflicts]
+    fact_conflicts = [str(c).strip() for c in conflicts if str(c).strip()][:8]
+
     # ── the News node: why / who / hook ────────────────────────────────────────
     why_info = str(raw.get("why_info") or "").strip()
     who_subject = str(raw.get("who_subject") or "").strip()
@@ -644,6 +674,8 @@ def parse_synthesis(raw, *, n_sources: int = 0, hook_check=None) -> dict:
     return {
         "headline": headline,
         "content": content,
+        "numbers_used": numbers_used,
+        "fact_conflicts": fact_conflicts,
         "extracted_entities": entities,
         "primary_source_attribution": str(
             raw.get("primary_source_attribution") or "").strip(),
@@ -664,6 +696,33 @@ MAX_STRINGS = 6
 _DOT_SECTIONS = ("market_debt", "policy_governance",
                  "tech_culture", "asymmetric_catch")
 _IMPACTS = ("up", "down", "mixed", "neutral")
+
+
+MAX_NUMBERS_USED = 20
+
+
+def _parse_numbers_used(raw_numbers) -> list:
+    """The verification hook: a bounded list of {value, source}.
+
+    Defensive — anything that is not a list is dropped to []. A bare list of strings
+    (a model that answered ["4%", "87%"] instead of the object shape) is accepted and
+    normalised, because the value is what the number check actually reads.
+    """
+    if not isinstance(raw_numbers, list):
+        return []
+    out = []
+    for item in raw_numbers:
+        if isinstance(item, dict):
+            value = str(item.get("value") or "").strip()[:60]
+            source = str(item.get("source") or "").strip()[:120]
+        else:
+            value, source = str(item or "").strip()[:60], ""
+        if not value:
+            continue
+        out.append({"value": value, "source": source})
+        if len(out) >= MAX_NUMBERS_USED:
+            break
+    return out
 
 
 def _tripped(text, hook_check, names) -> bool:

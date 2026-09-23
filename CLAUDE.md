@@ -457,6 +457,49 @@ is still honoured by construction. `/admin/body-audit` reports it under
 `synthesis`, and `articles_per_request` is the number that says whether
 clustering is earning its place — 1.0 means every "cluster" was a singleton.
 
+### The News writer's quality gate (writing spec, Phase 1)
+
+`writer_gate.py` is the checklist the writing spec runs before a News card is
+published: banned tone, verified numbers, an informative opening, the length band,
+no open loop, at least one entity. It is **pure** — no DB, no model, no network —
+so it is cheap to run on every card and cannot fail open.
+
+Decisions worth not re-deriving:
+
+- **One compliance blocklist, still.** The SEBI / forward-looking words are the
+  engine's `narrative.violates_language_rules`, INJECTED as `sebi_check`, never
+  re-listed. What `writer_gate` adds are the spec's three NEW tone categories the
+  engine list does not cover — throat-clearing, empty intensifiers (banned only
+  when there is no number in the same clause), and the `there was … by …` passive
+  nominalisation.
+- **Numbers are verified against `numbers_used` OR the source.** The spec's hook is
+  the model self-reporting each figure (now emitted by synthesis, alongside
+  `fact_conflicts`). A figure that also appears in the source text is accepted even
+  if the model forgot to list it — otherwise a model under-populating a brand-new
+  field would stall every numeric story on the rate-limited drain, which is worse
+  than the hallucination the rule guards against.
+- **Overlap has one owner.** `_synthesise_clusters` already runs
+  `originality_check` to produce the metrics stored on the row, so the gate does
+  NOT recompute the 7-gram overlap — it is passed `overlap_passed=True` and the
+  existing rejection records the same `ngram_overlap` rule to the writer-doctor.
+- **The gate is always MEASURED; enforcement has a switch.** `check_news` runs on
+  every synthesised card and its verdict is always recorded, so the News **pass
+  rate** is a number. `WRITER_GATE_ENABLED` (default 1, the spec's posture) decides
+  whether a failing card is WITHHELD — it keeps its safe placeholder for the next
+  tick, never blanked. Set it to 0 to measure the pass rate on live traffic before
+  switching enforcement on. A withheld card is the spec's "regenerate once, then
+  fall back to the safe summary": the next drain tick is the regeneration.
+- **`/admin/writer-doctor`** buckets every failure by writer and rule, most-fought
+  first, with a sample of the offending text. Its `phase_gate` reads the spec's
+  rule: **do not build Strings or Dots until News passes at ≥90%** on the live
+  corpus. That is the one number that decision turns on — read it there, do not
+  guess it.
+
+The News length band is a **hard 60–80 words** (Strings 120–180, Dots 130–200). A
+synthesis that lands outside it is withheld under enforcement rather than trimmed —
+the writer-doctor's `length` bucket is where you see the prompt needs tuning, not
+the gate.
+
 ---
 
 ## myFeed is the old Bytes tab, renamed and rebuilt into a dossier surface

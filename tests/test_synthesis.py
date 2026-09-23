@@ -57,9 +57,17 @@ B = ("Crude prices rose on Monday as OPEC+ delegates said the group was "
      "weighing deeper output cuts when ministers next meet in Vienna.")
 FLOOD = ("Floods across three districts of Kerala displaced thousands of "
          "residents on Sunday, the state disaster authority said.")
-SYNTH = (" ".join(["Benchmark crude settled higher on Monday."] * 4) +
-         " Officials described the discussion as preliminary and said no "
-         "decision had been taken ahead of the ministerial meeting.")
+# A spec-compliant News body: original phrasing, no verbatim source run, no
+# figures (so numbers_verified passes with an empty numbers_used), and inside the
+# 60-80 word band the writer gate enforces. The write-path tests assert this text
+# lands on the row verbatim, so its exact wording is incidental — only that it
+# clears the gate the way a real synthesis must.
+SYNTH = ("Benchmark crude settled higher after delegates signalled that producers "
+         "might tighten supply at their coming session, according to officials "
+         "familiar with the talks. The group framed the discussion as preliminary "
+         "and stressed that no formal decision had been reached. Traders weighed the "
+         "remarks against a backdrop of steady demand, while ministers prepared to "
+         "gather and review production policy over the following weeks.")
 
 
 def _row(rid, headline, pillar=2, when="2026-09-01T10:00:00+00:00",
