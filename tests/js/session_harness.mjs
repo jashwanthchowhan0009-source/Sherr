@@ -40,9 +40,11 @@ let ROUTER = async () => { throw new Error('no route installed'); };
 const route = (fn) => { ROUTER = fn; };
 const countCalls = (needle) => calls.filter((c) => c === needle).length;
 const res = (status, body) => ({ status, ok: status >= 200 && status < 300, json: async () => body });
+const revokes = [];                      // Authorization headers seen by /auth/logout
 function fetch(url, init) {
   const path = String(url).slice(API_URL.length);
   calls.push(path);
+  if (path === '/auth/logout') revokes.push(((init || {}).headers || {}).Authorization || null);
   return ROUTER(path, init);
 }
 function defer() {
@@ -176,8 +178,37 @@ const SCENARIOS = {
     // The logged-out screen is asked for explicitly, and the sidebar closes.
     assert.equal(ui.rendered.at(-1).showSignIn, true);
     assert.equal(ui.sidebarClosed, 1);
-    assert.ok(ui.toasts.includes('👋 Signed out'));
+    assert.ok(ui.toasts.includes('👋 Signed out everywhere'));
+    // The server was asked to revoke, with the token that was about to be
+    // scrubbed — a logout that only cleared the device would leave the access
+    // and refresh tokens valid on every other one.
+    assert.deepEqual(revokes, ['Bearer access-7-1']);
     saveStore();
+  },
+
+  // ── The revoke is best-effort: logout completes without the server ───────
+  async logout_completes_when_the_revoke_fails() {
+    await signIn(7);
+    route(async (p) => {
+      if (p === '/auth/logout') throw new TypeError('Failed to fetch');   // offline
+      return res(200, {});
+    });
+    signOut();
+    await settle();
+    assert.deepEqual(revokes, ['Bearer access-7-1'], 'it still tried');
+    assert.equal(isSignedIn(), false, 'and the device is cleared regardless');
+    assertNoStoredCredentials('after a failed revoke');
+  },
+
+  // ── A session the server already rejected is not worth a revoke ──────────
+  async rejected_refresh_does_not_spend_a_revoke() {
+    await signIn(7);
+    route(async (p) => (p === '/auth/refresh' ? res(401, { detail: 'Session expired' })
+                                              : res(401, { detail: 'expired' })));
+    await assert.rejects(() => api('/me'));
+    await settle();
+    assert.equal(isSignedIn(), false);
+    assert.deepEqual(revokes, [], 'the token is already dead server-side');
   },
 
   // ── Reload after logout (step 2 runs in a second process) ────────────────

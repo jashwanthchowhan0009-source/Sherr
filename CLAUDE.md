@@ -713,14 +713,45 @@ stayed painted behind the logged-out screen. `showSignIn:true` is what reveals
 the onboarding screen; a routine repaint must NOT, or it ambushes guests who
 chose "browse without an account".
 
-**There is no server-side revocation, and the client must not pretend there is.**
-`make_token`/`make_refresh_token` are stateless HMACs with no store behind them
-and there is no `/auth/logout` route. Logout ends the session on THIS device and
-scrubs it from every partition on disk; a token already issued stays valid until
-it expires (30d access, 180d refresh). The Security Center row says "Log Out On
-This Device" for that reason — do not restore the "all devices" wording without
-building revocation (a `token_version` column on `users`, bumped on logout and
-checked in `verify_token`, is the smallest honest version).
+### Revocation is `users.token_version`, and the check fails OPEN
+
+Built 2026-09-25, the follow-up the entry above asked for. `make_token`/
+`make_refresh_token` are stateless HMACs, so before this, logout could only
+delete the client's copy: the access token stayed valid 30 days and the refresh
+token 180, on every device. Now every token carries `"v"`, the version it was
+minted under, `POST /auth/logout` bumps the column, and `verify_token` rejects
+anything minted under an older one — so one logout ends the session everywhere.
+The wording is "Log Out All Devices" again because it is finally true.
+
+Three properties, each with a test in `tests/test_token_revocation.py`:
+
+- **A missing `"v"` reads as 0, which is the column default.** Tokens minted
+  before the column existed keep working, so the deploy that adds revocation
+  does not sign the entire userbase out. Do not "tighten" this into requiring
+  the claim.
+- **An unreadable database FAILS OPEN.** `_token_version` returns None when the
+  read raises and `verify_token` then accepts. Failing closed would log every
+  reader out the moment Supabase refused a connection — a far worse outage than
+  an unrevoked token living out its expiry, and the same trap `bootstrapSession`
+  already avoids on the client.
+- **The version is cached per account for `TOKEN_VERSION_TTL_S` (60s).**
+  `verify_token` runs on every authenticated request and the pooler caps
+  connections in the low tens (see the read-cache note), so an uncached read per
+  request is the connection-exhaustion failure mode, not a safety improvement.
+  The logout bump writes the new value straight into that cache, so revocation
+  is immediate on the instance that served it. **With more than one instance and
+  no shared cache, another instance can still accept a revoked token for up to
+  the TTL** — that is the known bound; move the cache into `cache.py`'s Redis
+  layer before scaling out, not after.
+
+`auth_pair` reads the version **fresh** — minting under a cached, pre-logout
+value hands back a pair the next request rejects.
+
+The client fires `revokeSessionOnServer(ST.token)` as the FIRST step of
+`signOut()`, because it is the only step that needs the token. It is never
+awaited and its failure changes nothing: an offline logout still clears the
+device, it just cannot revoke. A logout caused by a *rejected* refresh skips it
+— that token is already dead server-side.
 
 `tests/test_auth_session.py` slices the `SESSION CORE` / `SESSION ENTRY` blocks
 out of index.html and runs them under node against a fake localStorage and

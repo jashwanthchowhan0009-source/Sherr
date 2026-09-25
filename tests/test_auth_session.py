@@ -93,6 +93,8 @@ SCENARIOS = [
     "failed_login_no_partial_session",
     "tokenless_response_is_rejected",
     "logout_clears_everything",
+    "logout_completes_when_the_revoke_fails",
+    "rejected_refresh_does_not_spend_a_revoke",
     "repeated_logout_is_safe",
     "expired_token_refreshes_and_retries_once",
     "concurrent_401s_share_one_refresh",
@@ -178,10 +180,15 @@ def test_auth_ui_has_a_single_renderer():
     assert "resetProfileUI()" in body
 
 
-def test_no_backend_logout_route_is_invented():
-    """The backend issues stateless HMAC tokens and exposes no revocation route.
-    The client must not call one that does not exist."""
+def test_the_logout_route_the_client_calls_exists():
+    """The client may only call a route that is really there.
+
+    This started life asserting the opposite: the tokens were stateless HMACs
+    with no revocation, so a client-side /auth/logout would have been a lie.
+    `users.token_version` made it real (tests/test_token_revocation.py), so the
+    assertion is inverted rather than deleted — the pairing is the point."""
     main = _read(os.path.join(_ROOT, "main.py"))
-    assert '"/auth/logout"' not in main and '"/logout"' not in main
+    assert '@app.post("/auth/logout")' in main
+    assert "token_version" in main
     html = _read(INDEX)
-    assert "/auth/logout" not in html and "api('/logout'" not in html
+    assert "'/auth/logout'" in html
