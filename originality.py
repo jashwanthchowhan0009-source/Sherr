@@ -31,9 +31,14 @@ MAX_HEADLINE_RUN = _mod.MAX_HEADLINE_RUN
 quoted_spans = _mod.quoted_spans
 tokenize = _mod.tokenize
 normalize = _mod.normalize
+# longest_common_run backs the writer gate's G6_HEADLINE_ECHO — the same
+# contiguous-run measure the headline check already uses, exported so the gate
+# reads one implementation rather than re-deriving it.
+longest_common_run = _mod.longest_common_run
 MAX_NGRAM_OVERLAP = _mod.MAX_NGRAM_OVERLAP
 MAX_CONTIGUOUS_RUN = _mod.MAX_CONTIGUOUS_RUN
 MAX_QUOTE_TOKENS = _mod.MAX_QUOTE_TOKENS
 
 __all__ = ["originality_check", "headline_is_original", "MAX_HEADLINE_RUN", "quoted_spans", "tokenize", "normalize",
+           "longest_common_run",
            "MAX_NGRAM_OVERLAP", "MAX_CONTIGUOUS_RUN", "MAX_QUOTE_TOKENS"]

@@ -7,6 +7,7 @@ import os
 import json
 import asyncio
 import logging
+import random
 import re
 from typing import Optional
 from datetime import datetime, timezone
@@ -859,3 +860,284 @@ async def synthesize(prompt: str, *, n_sources: int = 0) -> Optional[dict]:
                     continue
                 break
     return None
+
+
+# ─── SECTION 1: THE NEWS WRITER (SHERR_WRITING_SPEC.md) ───────────────────────
+# A separate writer from process_article. That one is the general rewrite that
+# produces the whole card (title, summary, category, tags, strings, dots). This
+# one implements Section 1 of SHERR_WRITING_SPEC.md exactly: it returns the
+# structured NEWS contract (headline / body / why_it_matters / numbers_used /
+# entities / primary_source_attribution) that the Section 4 quality gate scores
+# before publish. Its why_it_matters is what the card's why-it-matters line
+# renders from.
+#
+# The prompt below is the spec's Section 1.3 text, VERBATIM — the spec is
+# binding and says "Use it as-is." Do not paraphrase it; adjust the wording in
+# the spec, never here.
+
+# writer_id = model name plus prompt version (spec 1.4). Bumping the prompt bumps
+# this, so /admin/writer-doctor can tell one prompt generation's failures from
+# another's.
+NEWS_PROMPT_VERSION = "news-v1"
+
+NEWS_PROMPT = """You are the SherrByte NEWS writer. You receive raw source text about a
+real-world event. You produce an original, factual restatement of that event
+in SherrByte's own words.
+
+ABSOLUTE RULES
+
+1. Never reproduce a sentence, clause or distinctive phrase from the source.
+   Read for facts, then write from scratch. Matching wording is a failure
+   even when the meaning is correct.
+2. Never state a fact the source does not contain. No background you know
+   from elsewhere, no inferred figures, no rounded-up numbers, no names the
+   source does not name.
+3. Never predict, forecast, advise or evaluate. Describe what happened and
+   what is verifiably in effect. Do not say what will happen next, and do not
+   characterise anything as good, bad, strong or weak.
+4. Never use editorial adjectives. Write as a wire service writes: flat,
+   specific, unhurried.
+5. If the source contains conflicting figures or accounts, state the conflict
+   in the body rather than choosing one.
+
+WHAT TO WRITE
+
+headline: 6-14 words stating the event. No questions, no teases, no colons.
+Do not reuse more than four consecutive words from the source headline.
+
+body: 60-80 words, at least three sentences.
+  Sentence 1 - what happened, who, when, where.
+  Sentence 2 - the mechanism: how it happened, or how it takes effect.
+  Sentence 3 - context or scale: the figure, comparison or timeframe that
+  tells a reader how large this is. This sentence must contain something
+  concrete, not a generality.
+
+why_it_matters: one sentence, 12-28 words, restating sentence 3 of the body
+as significance. Introduce nothing new. Do not speculate about consequences.
+
+numbers_used: for every number appearing in your headline, body or
+why_it_matters, give an object with the value, its unit, and source_span -
+an exact substring copied from the source text where that number appears.
+This is the only place you may copy source text, and it is never published.
+If you used no numbers, return an empty array.
+
+entities: the subject (primary actor) and affected (other named parties).
+Named entities only.
+
+primary_source_attribution: the publication these facts came from.
+
+OUTPUT
+
+Return one JSON object and nothing else. No markdown fences, no explanation.
+
+{
+  "headline": "",
+  "body": "",
+  "why_it_matters": "",
+  "numbers_used": [],
+  "entities": {"subject": "", "affected": []},
+  "primary_source_attribution": ""
+}
+
+SOURCE TEXT:
+"""
+
+# Structured-output schema for Gemini — guarantees the shape parses. The gate's
+# G7_SHAPE still runs (a provider without structured output, or an empty field,
+# is still a failure), so this is an aid, not the check.
+_NEWS_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "headline":       {"type": "string"},
+        "body":           {"type": "string"},
+        "why_it_matters": {"type": "string"},
+        "numbers_used": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "value":       {"type": "string"},
+                    "unit":        {"type": "string"},
+                    "source_span": {"type": "string"},
+                },
+            },
+        },
+        "entities": {
+            "type": "object",
+            "properties": {
+                "subject":  {"type": "string"},
+                "affected": {"type": "array", "items": {"type": "string"}},
+            },
+        },
+        "primary_source_attribution": {"type": "string"},
+    },
+    "required": ["headline", "body", "why_it_matters", "entities",
+                 "primary_source_attribution"],
+}
+
+
+def news_writer_id(provider: str) -> str:
+    """model name plus prompt version, e.g. gemini-3.1-flash-lite/news-v1."""
+    return f"{model_for(provider)}/{NEWS_PROMPT_VERSION}"
+
+
+def _news_corrective_block(failures: list) -> str:
+    """The corrective context appended on a regeneration (spec 4.3).
+
+    Additive — it does not alter the verbatim prompt above. It hands the writer
+    the failed rule IDs and their reasons so the second attempt can fix exactly
+    what tripped, rather than rolling the dice again.
+    """
+    if not failures:
+        return ""
+    lines = "\n".join(
+        f"- {f.get('rule')}: {f.get('reason')}" for f in failures if f.get("rule"))
+    return ("\n\nYOUR PREVIOUS ATTEMPT FAILED THESE CHECKS. Return corrected JSON "
+            "that fixes every one of them, keeping all the rules above:\n" + lines
+            + "\n")
+
+
+async def _news_backoff(resp, attempt: int) -> None:
+    """Exponential backoff with jitter on a 429, honouring Retry-After (spec 4.4)."""
+    wait = _retry_after_seconds(resp)
+    if wait is None:
+        wait = 2.0 * (2 ** attempt)                    # 2, 4, 8, 16s
+    wait = min(wait, 60.0)
+    wait += random.uniform(0.0, wait * 0.25)           # jitter, so retries desync
+    await asyncio.sleep(wait)
+
+
+async def _news_gemini_once(key: str, prompt: str, client) -> tuple:
+    url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
+           f"{model_for('gemini')}:generateContent?key={key}")
+    payload = {
+        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+        "generationConfig": {
+            # Low temperature: this is a factual restatement, and temperature is
+            # where invented figures come from.
+            "temperature": 0.2,
+            "maxOutputTokens": 1024,
+            "responseMimeType": "application/json",
+            "responseSchema": _NEWS_SCHEMA,
+        },
+    }
+    for attempt in range(4):
+        try:
+            r = await client.post(url, json=payload, timeout=40)
+            if r.status_code == 429:
+                _record_error("gemini", 429, r.text)
+                if attempt < 3:
+                    await _news_backoff(r, attempt)
+                    continue
+                return None, 429
+            if r.status_code != 200:
+                _record_error("gemini", r.status_code, r.text)
+                return None, r.status_code
+            candidates = (r.json() or {}).get("candidates", [])
+            if not candidates:
+                _record_error("gemini", 200, f"no candidates: {r.text[:300]}")
+                return None, 200
+            parts = candidates[0].get("content", {}).get("parts", [])
+            if not parts:
+                return None, 200
+            return json.loads(parts[0].get("text", "").strip()), 200
+        except json.JSONDecodeError as e:
+            _record_error("gemini", 200, f"JSONDecodeError: {e}")
+            return None, 200
+        except Exception as e:                                     # noqa: BLE001
+            _record_error("gemini", 0, f"{type(e).__name__}: {e}")
+            return None, 0
+    return None, 429
+
+
+async def _news_openai_once(key: str, prompt: str, client, *,
+                            url: str, model: str, label: str) -> tuple:
+    payload = {"model": model,
+               "messages": [{"role": "user", "content": prompt}],
+               "temperature": 0.2,
+               "max_tokens": 1024,
+               "response_format": {"type": "json_object"}}
+    headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+    for attempt in range(4):
+        try:
+            r = await client.post(url, headers=headers, json=payload, timeout=40)
+            if r.status_code == 429:
+                _record_error(label, 429, r.text)
+                if attempt < 3:
+                    await _news_backoff(r, attempt)
+                    continue
+                return None, 429
+            if r.status_code != 200:
+                _record_error(label, r.status_code, r.text)
+                return None, r.status_code
+            text = (r.json()["choices"][0]["message"]["content"] or "").strip()
+            text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text).strip()
+            return json.loads(text), 200
+        except Exception as e:                                     # noqa: BLE001
+            _record_error(label, 0, f"{type(e).__name__}: {e}")
+            return None, 0
+    return None, 429
+
+
+_NEWS_CALLS = {
+    "gemini": _news_gemini_once,
+    "groq":   lambda k, p, c: _news_openai_once(
+        k, p, c, url="https://api.groq.com/openai/v1/chat/completions",
+        model=model_for("groq"), label="Groq"),
+    "openai": lambda k, p, c: _news_openai_once(
+        k, p, c, url="https://api.openai.com/v1/chat/completions",
+        model=model_for("openai"), label="OpenAI"),
+    "grok":   lambda k, p, c: _news_openai_once(
+        k, p, c, url="https://api.x.ai/v1/chat/completions",
+        model=model_for("grok"), label="Grok"),
+}
+
+
+async def news_writer(source_text: str, *, corrective: Optional[list] = None,
+                      client=None) -> tuple:
+    """Run the Section 1 NEWS writer over one source text.
+
+    Returns (result, writer_id): `result` is the parsed contract dict, or None on
+    total failure (every provider/key exhausted). `writer_id` is model+prompt
+    version (spec 1.4), returned even on failure so the gate can record which
+    writer produced nothing.
+
+    Shares the key pools and 401/403/429 rotation with the rest of ai_processor —
+    one quota, one rotation policy. It does NOT fall back to a rule-based body: a
+    failed NEWS write returns None and the caller handles the fallback (spec 4.3),
+    because a placeholder returned here would be scored as if the model wrote it.
+    """
+    prompt = NEWS_PROMPT + (source_text or "")
+    if corrective:
+        prompt += _news_corrective_block(corrective)
+
+    configured = KEYS.configured()
+    primary = configured[0] if configured else "gemini"
+
+    async def _run(cl):
+        for provider in configured:
+            fn = _NEWS_CALLS.get(provider)
+            if fn is None:
+                continue
+            pool = KEYS.get(provider)
+            if not pool.size:
+                continue
+            pool.reset()
+            for _ in range(pool.size):
+                key = pool.current()
+                if not key:
+                    break
+                result, status = await fn(key, prompt, cl)
+                if result is not None:
+                    return result, news_writer_id(provider)
+                if status in key_pool.ROTATE_STATUSES:
+                    if not pool.rotate(f"HTTP {status}"):
+                        break
+                    continue
+                break
+        return None, news_writer_id(primary)
+
+    if client is not None:
+        return await _run(client)
+    async with httpx.AsyncClient() as cl:
+        return await _run(cl)

@@ -955,6 +955,15 @@ _MIGRATIONS = [
     #                   asymmetric_catch} — cross-asset contagion
     "ALTER TABLE articles ADD COLUMN strings TEXT DEFAULT '[]'",
     "ALTER TABLE articles ADD COLUMN dots TEXT DEFAULT '{}'",
+    # ── the writing spec's NEWS writer (SHERR_WRITING_SPEC.md §1 / §4) ─────────
+    # why_it_matters: the NEWS writer's one-line significance — sentence 3 of the
+    # body (its context/scale marker) restated — populated ONLY when the card
+    # clears the G1-G7 quality gate. It is what the card's why-it-matters line
+    # renders from; empty (a gate fallback, or a row the pass never reached) keeps
+    # that line hidden. writer_id: model + prompt version (spec 1.4), so a card is
+    # traceable to the writer generation that produced it. Both emptyable.
+    "ALTER TABLE articles ADD COLUMN why_it_matters TEXT DEFAULT ''",
+    "ALTER TABLE articles ADD COLUMN writer_id TEXT DEFAULT ''",
     # ── account handle ────────────────────────────────────────────────────────
     # The @username was client-only (localStorage), so it never crossed devices
     # and the profile's name/bio looked empty on a fresh sign-in. It lives on the
@@ -1715,6 +1724,48 @@ def _write_single_strings_dots(conn, article_id: int, result: dict) -> None:
         log.warning("[AI] strings/dots write failed for id %s: %s", article_id, e)
 
 
+# The Section-1 NEWS writer runs on every freshly published card to supply its
+# why-it-matters line. It is an EXTRA provider call per card (first pass, plus at
+# most one gated regeneration), so it is bounded by writer_gate's shared rate
+# limiter and can be switched off without a deploy — same posture as the drain.
+NEWS_WRITER_ENABLED = os.getenv("NEWS_WRITER_ENABLED", "1") not in ("0", "false", "no")
+
+
+async def _news_why_pass(conn, article_id, source_text, source_headline) -> None:
+    """Run the Section-1 NEWS writer + G1-G7 gate for one published row.
+
+    Stores its why_it_matters + writer_id when the card clears the gate. This is
+    ADDITIVE to the existing rewrite: the card's headline and body still come from
+    run_ai_batch's rewrite, and this supplies ONLY the why-it-matters line
+    (SHERR_WRITING_SPEC.md §1/§4). A gate fallback leaves why_it_matters empty — the
+    failed content is never published — so the card's why-line stays hidden rather
+    than showing anything unvetted. Every attempt is recorded for
+    /admin/writer-doctor. Best-effort: a NEWS-writer failure never disturbs the
+    rewrite that already succeeded, and the caller owns the commit.
+    """
+    if not (source_text or "").strip():
+        return
+    try:
+        res = await writer_gate.process_source(
+            article_id=article_id, source_text=source_text,
+            source_headlines=[source_headline or ""])
+    except Exception as e:                                        # noqa: BLE001
+        log.warning("[NEWS] writer pass failed for id %s: %s", article_id, e)
+        return
+    try:
+        if res.ok and res.why_it_matters:
+            conn.execute(
+                "UPDATE articles SET why_it_matters=?, writer_id=? WHERE id=?",
+                (res.why_it_matters, res.writer_id, article_id))
+        else:
+            # Record the writer generation even on a fallback, so the row is
+            # traceable; leave why_it_matters empty (the card hides the line).
+            conn.execute("UPDATE articles SET writer_id=? WHERE id=?",
+                         (res.writer_id, article_id))
+    except Exception as e:                                        # noqa: BLE001
+        log.warning("[NEWS] why_it_matters write failed for id %s: %s", article_id, e)
+
+
 async def run_ai_batch(conn):
     """Pull unprocessed articles and refine them with Gemini in parallel."""
     rows = conn.execute(
@@ -1760,6 +1811,7 @@ async def run_ai_batch(conn):
         return 0
 
     success = 0
+    news_targets: list = []          # (id, source_text, source_headline) per published row
     for row, result in zip(rows, processed):
         try:
             new_pid = SLUG_TO_PILLAR.get(result["category"], row["pillar_id"])
@@ -1827,12 +1879,32 @@ async def run_ai_batch(conn):
             # for a published row; a parked one shows no dossier).
             if status == "published":
                 _write_single_strings_dots(conn, row["id"], result)
+                # Queue the NEWS writer's why-it-matters pass for after the main
+                # commit — it is rate-limited and slower, so the rewrite lands
+                # first and the why-lines fill in behind it.
+                news_targets.append((
+                    row["id"],
+                    body_state.source_material(
+                        row["headline"], row["summary_60"],
+                        row["source_summary"], row["full_body"]),
+                    src_head))
             success += 1
         except Exception as e:
             log.warning("[AI] Update failed for id %d: %s", row["id"], e)
 
     conn.commit()
     log.info("[AI] %d/%d articles refined", success, len(rows))
+
+    # ── the NEWS writer's why-it-matters line (SHERR_WRITING_SPEC.md §1/§4) ──
+    # Runs AFTER the rewrite is committed, so the feed is never held on the
+    # rate-limited writer, and a why-line simply appears on the next read once it
+    # clears the gate. Bounded by writer_gate's shared limiter; NEWS_WRITER_ENABLED
+    # turns it off.
+    if NEWS_WRITER_ENABLED and news_targets:
+        for aid, source_text, source_headline in news_targets:
+            await _news_why_pass(conn, aid, source_text, source_headline)
+        conn.commit()
+
     return success
 
 
@@ -5768,7 +5840,8 @@ async def admin_body_audit(x_admin_token: str = Header(""), token: str = Query("
 
 
 @app.get("/admin/writer-doctor")
-async def admin_writer_doctor(x_admin_token: str = Header(""), token: str = Query("")):
+async def admin_writer_doctor(x_admin_token: str = Header(""), token: str = Query(""),
+                              window_hours: int = Query(24)):
     """Which quality-gate rule the writers actually fight.
 
     The writing spec runs a fixed checklist before any card is published and logs
@@ -5783,7 +5856,16 @@ async def admin_writer_doctor(x_admin_token: str = Header(""), token: str = Quer
         `recent` carries a sample of the offending text, because the one question a
         histogram cannot answer is what the model actually wrote.
 
-    Read-only. In-memory, so it reflects activity since the last restart.
+    TWO GATES, ONE ENDPOINT. The `writers` / `gate_rules` / `phase_gate` block is
+    the synthesis-card checklist (throat-clearing, first-six-words, length,
+    open-loop, …). The top-level Section-5 fields — `attempted`, `passed`,
+    `pass_rate`, `regenerated`, `fell_back_to_safe`, `by_rule` (G1-G7), `by_writer`,
+    `recent_failures`, over a `window_hours` window — are the single-source NEWS
+    writer's G1-G7 gate (SHERR_WRITING_SPEC.md §5). Both coexist by design; this
+    endpoint stayed back-compatible when the G1-G7 gate was added.
+
+    Read-only. Triggers no generation and writes nothing to the database (§5).
+    In-memory, so it reflects activity since the last restart.
     """
     _check_admin(x_admin_token or token)
     writers = {}
@@ -5822,6 +5904,17 @@ async def admin_writer_doctor(x_admin_token: str = Header(""), token: str = Quer
         out["note"] = ("WRITER_GATE_ENABLED=0 — the gate is measured but NOT "
                        "enforced, so failing cards are still published. Set it to 1 "
                        "to withhold them once the pass rate is acceptable.")
+    # Fold in the Section-5 payload for the single-source NEWS writer's G1-G7 gate
+    # (window_hours, attempted, passed, pass_rate, regenerated, fell_back_to_safe,
+    # by_rule, by_writer, recent_failures). Distinct keys from the synthesis block
+    # above, so nothing downstream that reads `writers`/`phase_gate` breaks.
+    try:
+        wh = int(window_hours)
+    except (TypeError, ValueError):
+        # A direct call (not through FastAPI) leaves window_hours as the Query
+        # default object rather than an int; fall back to the 24h default.
+        wh = 24
+    out.update(writer_gate.writer_doctor_report(wh))
     return out
 
 
