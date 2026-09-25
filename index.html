@@ -6636,7 +6636,7 @@ function renderStandardCard(rawA, container) {
     <div class="nc-insight">
       <span class="nci"><i class="fa-regular fa-clock"></i>${readMins(a)} min read</span>
       ${a.orig_source ? `<span class="nci"><i class="fa-regular fa-newspaper"></i>via ${bEsc(a.orig_source)}</span>` : ''}
-      ${(a.why_info || a.why) ? `<span class="nci nci-why">${bEsc(clipWords(a.why_info || a.why, 14))}</span>` : ''}
+      ${(a.why_it_matters || a.why_info || a.why) ? `<span class="nci nci-why">${bEsc(clipWords(a.why_it_matters || a.why_info || a.why, 14))}</span>` : ''}
     </div>
     <div class="nc-actbar">
       <button class="nca nca-like${liked?' on':''}" data-act="like" aria-label="Like">
