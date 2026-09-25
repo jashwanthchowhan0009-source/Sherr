@@ -675,6 +675,62 @@ with attribution via `imagePlan()`; no client change was needed.
 
 ---
 
+## The client session: one generation counter, one way out
+
+Adopted 2026-09-25, after "log out doesn't log me out". Three confirmed bugs,
+all in the same place, all invisible to a string-matching test:
+
+- **`signOut()` wrote the credentials back on its way out.** It called
+  `switchUser('anon')`, and `switchUser`'s first act was `persist()` — which
+  serialised the still-populated `ST` into the partition being LEFT. A 180-day
+  refresh token therefore survived every logout under `sb21:u:<uid>`.
+  `switchUser` no longer flushes at all: **the caller persists what should
+  survive, before switching.** That is the whole fix and it must stay that way.
+- **A refresh already in flight landed after the logout.** `tryRefresh` wrote
+  into whatever `ST` was current, and `switchUser` REASSIGNS `ST`, so the answer
+  went into the anonymous state: signed out, then silently signed back in.
+- **A rejected refresh token was never cleared.** `!res.ok` returned false and
+  left `ST.refresh` in place, so the client re-offered a token the server would
+  never accept, forever, and never dropped to sign-in.
+
+`_authGen` is the fix for the whole class. Every transition — a sign-in attempt,
+a logout — bumps it; anything async carries the value it started under and
+discards itself if that value has moved. `api()` pairs it with a token snapshot
+so a response whose credentials are no longer active is thrown to the caller as
+`e.sessionChanged` rather than handed over to be written into the new state. A
+plain failed login therefore does not poison in-flight reads (gen moved, token
+did not), which is why the check is `gen changed AND token changed`, not either.
+
+**A network error and a 401 are not the same answer.** Only a 401/403 FROM
+`/auth/refresh` clears the session; a timeout, a 5xx or a cold Render instance
+leaves it alone. Getting this backwards logs everyone out every cold start.
+
+`renderAuthState()` is the only thing that decides what the sidebar, the auth
+modal and the onboarding screen show. It used to be set ad hoc — `updateSidebarAuth`
+had only a signed-OUT branch, so the sidebar header kept opening the sign-in
+modal after a successful login, and the previous reader's name/avatar/bio/stats
+stayed painted behind the logged-out screen. `showSignIn:true` is what reveals
+the onboarding screen; a routine repaint must NOT, or it ambushes guests who
+chose "browse without an account".
+
+**There is no server-side revocation, and the client must not pretend there is.**
+`make_token`/`make_refresh_token` are stateless HMACs with no store behind them
+and there is no `/auth/logout` route. Logout ends the session on THIS device and
+scrubs it from every partition on disk; a token already issued stays valid until
+it expires (30d access, 180d refresh). The Security Center row says "Log Out On
+This Device" for that reason — do not restore the "all devices" wording without
+building revocation (a `token_version` column on `users`, bumped on logout and
+checked in `verify_token`, is the smallest honest version).
+
+`tests/test_auth_session.py` slices the `SESSION CORE` / `SESSION ENTRY` blocks
+out of index.html and runs them under node against a fake localStorage and
+fetch — the real code, not a copy — so the races above are actually executed
+(logout during a refresh, logout during a request, a superseded login response,
+two 401s sharing one refresh, reload after logout as a second process sharing
+one on-disk store). If you move code out of those markers, it stops being
+tested. `scripts/verify_auth_browser.py` is the manual other half: the same
+lifecycle in Chromium against a stubbed backend, for the DOM wiring.
+
 ## Real URLs, and the one route that must stay last
 
 The app had a single URL: every screen lived behind a JS view switch, so a

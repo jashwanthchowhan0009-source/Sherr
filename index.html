@@ -5105,7 +5105,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
     </div>
     <div class="sg-note" style="font-size:0.72rem;color:var(--t3);padding:8px 4px 0">Your password is stored salted &amp; hashed (argon2id/PBKDF2) — never in plain text.</div></div>
     <div class="sg"><div class="sg-lbl">Danger Zone</div>
-      <div class="danger-row tap" onclick="confirmLogoutAll()"><div class="danger-ico"><i class="fa-solid fa-right-from-bracket"></i></div><span class="danger-lbl">Log Out All Devices</span></div>
+      <div class="danger-row tap" onclick="confirmLogoutAll()"><div class="danger-ico"><i class="fa-solid fa-right-from-bracket"></i></div><span class="danger-lbl">Log Out On This Device</span></div>
       <div class="danger-row tap" onclick="confirmDeleteAccount()"><div class="danger-ico"><i class="fa-solid fa-trash"></i></div><span class="danger-lbl">Delete Account</span></div>
     </div>
   </div>
@@ -5666,13 +5666,26 @@ function catPlaceholderHtml(category, style) {
   return `<div style="width:100%;height:100%;${style};background:${gradient};display:flex;align-items:center;justify-content:center;font-size:1.8rem;opacity:0.7">${icon}</div>`;
 }
 
+/* ══ SESSION CORE (start) ══════════════════════════════════════════════════
+   Everything between these markers is the whole client session: where it is
+   stored, how it is entered, how it is left, and what is allowed to write it.
+   tests/test_auth_session.py extracts this block verbatim and runs it under
+   node against a fake localStorage/fetch, so the logout and refresh races below
+   are asserted against the real code rather than a copy of it. Keep it
+   self-contained: the only things it calls outside the block are UI helpers
+   (renderAuthState, toast, sbClose, loadFeed, maybeAutoEnablePush), each of
+   which is optional at runtime.
+   ════════════════════════════════════════════════════════════════════════ */
 // ── STATE ──
 const ST_DEFAULTS = { likes:[], saves:[], reposts:[], savedCache:{}, token:null, refresh:null, userId:null, username:'', interests:{}, scope:'global', seen:[], settings:{}, privacy:'friends', feedCats:null, feedTopics:null };
 let ST = { ...ST_DEFAULTS };
+
+
 // Per-user persistence: each account (and the logged-out "anon" state) keeps its
 // OWN bookmarks/likes/cache/prefs, so nothing bleeds between users on a shared
 // device. The active partition is tracked by 'sb21:cur'.
 const _userKey = (uid) => 'sb21:u:' + (uid || 'anon');
+const _USER_KEY_RE = /^sb21:u:/;
 let _curUid = 'anon';
 try {
   // One-time migration from the old single-blob ('sb21') format.
@@ -5689,12 +5702,56 @@ try {
 } catch(e){}
 const persist = () => { try { localStorage.setItem(_userKey(_curUid), JSON.stringify(ST)); } catch(e){} };
 
-// Switch the active persistence partition (on login / logout). Flushes the
-// current partition, then loads the target user's own stored state.
+// Every authenticated-state transition bumps this counter. Anything started
+// under an older generation — a login response, a token refresh, an
+// authenticated GET — is stale by definition and must not write session state.
+// That is the bug behind "logout doesn't log me out": a /auth/refresh already in
+// flight when the user signed out used to land afterwards and write a live
+// access token straight back into the now-anonymous state.
+let _authGen = 0;
+const authIsLive   = (gen) => gen === _authGen;
+const newAuthAttempt = () => ++_authGen;   // supersedes every attempt before it
+const isSignedIn   = () => !!(ST.token || ST.refresh);
+function sessionEndedError() {
+  const e = new Error('Session ended'); e.sessionChanged = true; return e;
+}
+
+// The fields cleared below ARE the session. Everything else in a partition
+// (bookmarks, likes, feed categories, settings) is the reader's own
+// non-sensitive data and deliberately survives a logout.
+function clearAuthFields(st) {
+  if (!st) return st;
+  st.token = null; st.refresh = null; st.userId = null; st.username = '';
+  st.interests = {};
+  delete st.meCache;              // the cached /me payload is identity, not a pref
+  return st;
+}
+// The same, for partitions already written to localStorage. Clearing only the
+// in-memory copy leaves a live 180-day refresh token sitting on disk under the
+// old account's key, recoverable by anything that reads it back.
+function scrubStoredCredentials(uid) {
+  try {
+    const keys = (uid === undefined)
+      ? Object.keys(localStorage).filter(k => _USER_KEY_RE.test(k))
+      : [_userKey(uid)];
+    keys.forEach(k => {
+      const raw = localStorage.getItem(k);
+      if (!raw) return;
+      let saved;
+      try { saved = JSON.parse(raw); } catch (e) { localStorage.removeItem(k); return; }
+      localStorage.setItem(k, JSON.stringify(clearAuthFields(saved)));
+    });
+  } catch (e) {}
+}
+
+// Switch the active persistence partition (on login / logout): load the target
+// user's own stored state. The CALLER persists whatever should survive in the
+// partition being left, before calling this — the flush that used to live here
+// is exactly what wrote the still-populated token/refresh back into the account
+// a logout was in the middle of leaving.
 function switchUser(uid) {
   uid = String(uid || 'anon');
   if (uid === _curUid) return;
-  persist();
   _curUid = uid;
   try { localStorage.setItem('sb21:cur', uid); } catch(e){}
   let saved = {};
@@ -5704,60 +5761,143 @@ function switchUser(uid) {
 
 // Store the token pair returned by /login or /signup (compat shape). Centralized
 // so every auth path persists the refresh token + username identically.
-function applyAuth(data) {
-  if (!data) return;
-  const uid = data.user_id || ST.userId;
-  if (uid) switchUser(uid);              // move into this account's own partition first
-  ST.token    = data.token || data.access_token || ST.token;
+// `gen` is what newAuthAttempt() returned when the request was SENT — a response
+// from an attempt that has since been superseded (a second sign-in, or a logout)
+// is dropped rather than allowed to resurrect a dead session. Returns true when
+// the session was applied; throws when the response is not one, so no caller can
+// end up showing a signed-in UI over a session that does not exist.
+function applyAuth(data, gen) {
+  if (gen !== undefined && !authIsLive(gen)) return false;
+  const token = data && (data.token || data.access_token);
+  if (!token) throw new Error('Sign-in failed — no session was returned');
+  const uid = (data.user_id != null) ? data.user_id : (data.userId != null ? data.userId : null);
+  // Move into this account's own partition first. When the server does not say
+  // who the session belongs to we must NOT keep writing into whoever was signed
+  // in before — that is how one account's tokens end up filed under another's
+  // key — so an unattributed session lands in the shared anonymous partition.
+  const target = (uid != null) ? String(uid) : 'anon';
+  if (target !== _curUid) {
+    // Somebody else is signing in on this device. The account being left keeps
+    // its own bookmarks and prefs, but not a live session on disk.
+    clearAuthFields(ST); persist();
+    switchUser(target);
+  }
+  ST.token    = token;
   ST.refresh  = data.refresh_token || ST.refresh;
-  ST.userId   = uid || ST.userId;
+  ST.userId   = (uid != null) ? uid : ST.userId;
   if (data.username) ST.username = data.username;
   persist();
   try { maybeAutoEnablePush(); } catch (e) {}   // installed app → offer push on sign-in
+  return true;
 }
 
 // Exchange the long-lived refresh token for a fresh access token. Returns true
-// on success. De-duped so concurrent 401s trigger a single refresh.
+// on success. De-duped so concurrent 401s trigger a single refresh, and pinned
+// to the session that started it so a late answer can never write into another.
 let _refreshing = null;
+let _refreshGen = -1;
 function tryRefresh() {
   if (!ST.refresh) return Promise.resolve(false);
-  if (_refreshing) return _refreshing;
+  if (_refreshing && _refreshGen === _authGen) return _refreshing;   // one in flight per session
+  const gen = _authGen, uid = _curUid, sent = ST.refresh;
+  // The credentials that started this refresh are no longer the active ones
+  // (signed out, or another account signed in) → its answer is not ours.
+  const superseded = () => (!authIsLive(gen) && ST.refresh !== sent) || _curUid !== uid;
+  _refreshGen = gen;
   _refreshing = (async () => {
     try {
       const res = await fetch(API_URL + '/auth/refresh', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refresh_token: ST.refresh }),
+        body: JSON.stringify({ refresh_token: sent }),
       });
-      if (!res.ok) return false;
-      const d = await res.json();
-      ST.token = d.access_token || d.token || ST.token;
+      if (superseded()) return false;
+      if (res.status === 401 || res.status === 403) {
+        // A CONFIRMED rejection — missing, expired, invalid or no-longer-known
+        // refresh token. Clear the dead session once and show sign-in. Retrying
+        // it would loop forever against a token the server will never accept.
+        signOut({ silent: true, reason: 'expired', showSignIn: true });
+        return false;
+      }
+      if (!res.ok) return false;                 // 5xx / cold backend — keep the session
+      const d = await res.json().catch(() => null);
+      if (!d || superseded()) return false;
+      const fresh = d.access_token || d.token;
+      if (!fresh) return false;
+      ST.token = fresh;
       if (d.refresh_token) ST.refresh = d.refresh_token;
       if (d.username) ST.username = d.username;
       persist();
       return true;
-    } catch (e) { return false; }
-    finally { _refreshing = null; }
+    } catch (e) { return false; }                // network/DNS/offline — never a logout
+    finally { if (_refreshGen === gen) { _refreshing = null; _refreshGen = -1; } }
   })();
   return _refreshing;
 }
+
+// The ONE way out of a session, and it is atomic: invalidate the generation
+// first so nothing in flight can write afterwards, drop the credentials from
+// memory AND from every stored partition, move to the anonymous partition
+// WITHOUT flushing those credentials back, then re-derive the auth UI from the
+// state. Repeated clicks are a no-op rather than a second run.
+// Note: the access/refresh tokens are stateless HMACs and the backend exposes no
+// revocation route, so this ends the session on THIS device only — see
+// CHANGELOG / the audit notes; it is not a server-side revocation.
+let _signingOut = false;
+function signOut(opts) {
+  opts = opts || {};
+  if (_signingOut) return;
+  _signingOut = true;
+  try {
+    newAuthAttempt();                        // in-flight logins/refreshes/requests are now stale
+    _refreshing = null; _refreshGen = -1;
+    clearAuthFields(ST); persist();          // scrub the partition we are in…
+    scrubStoredCredentials();                // …and every partition already on disk
+    switchUser('anon');                      // …then leave (switchUser never flushes)
+    clearAuthFields(ST); persist();
+    try { _autoPushTried = false; } catch (e) {}
+  } finally { _signingOut = false; }
+  try { sbClose(); } catch (e) {}
+  try { renderAuthState({ showSignIn: opts.showSignIn !== false }); } catch (e) {}
+  try {
+    if (opts.reason === 'expired') toast('Session expired — please sign in again');
+    else if (!opts.silent) toast('👋 Signed out');
+  } catch (e) {}
+  try { loadFeed(true); } catch (e) {}       // repaint as the anonymous reader
+}
+
 // Record an article as seen (persisted, capped) so it survives refresh/reopen.
 function markSeen(id){ if(!id) return; id=String(id); if(!ST.seen.includes(id)){ ST.seen.push(id); if(ST.seen.length>500) ST.seen=ST.seen.slice(-500); persist(); } }
 
 // ── API HELPER ──
+// Endpoints that establish or renew a session themselves: a 401 from one of
+// these is the answer, never a reason to refresh and retry.
+const AUTH_ENDPOINT_RE = /^\/(?:auth\/(?:refresh|login|register)|login|signup|forgot-password|reset-password)\b/;
 async function api(path, opts = {}) {
   const { timeout = 20000, _retried = false, ...rest } = opts;
   const headers = { "Content-Type": "application/json", ...(rest.headers || {}) };
   if (ST.token) headers["Authorization"] = "Bearer " + ST.token;
+  // An authenticated call belongs to the session that authorised it. If that
+  // session is gone by the time the answer arrives (logout, or a different
+  // account signed in), the caller must not get the body — applyMe/loadUserPrefs
+  // would write another user's data into the current state.
+  const authed = !!ST.token;
+  const gen = _authGen, sentToken = ST.token;
+  const superseded = () => authed && !authIsLive(gen) && ST.token !== sentToken;
   // Abort hung requests so a slow/cold backend can never freeze the UI
   // (otherwise fetch() waits forever and loaders like the feed skeleton stick).
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeout);
   try {
     const res = await fetch(API_URL + path, { ...rest, headers, signal: ctrl.signal });
+    if (superseded()) throw sessionEndedError();
     // Access token expired → refresh once with the stored refresh token & retry.
-    if (res.status === 401 && !_retried && ST.refresh && path.indexOf('/auth/refresh') < 0) {
+    // `_retried` caps it at a single retry per call, so a server that answers 401
+    // to both the original and the retry ends as an error, never a loop.
+    if (res.status === 401 && !_retried && ST.refresh && !AUTH_ENDPOINT_RE.test(path)) {
       clearTimeout(timer);
-      if (await tryRefresh()) return api(path, { ...opts, _retried: true });
+      const refreshed = await tryRefresh();
+      if (superseded()) throw sessionEndedError();   // refresh was rejected → already signed out
+      if (refreshed) return api(path, { ...opts, _retried: true });
     }
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -5771,6 +5911,7 @@ async function api(path, opts = {}) {
     clearTimeout(timer);
   }
 }
+/* ══ SESSION CORE (end) ════════════════════════════════════════════════════ */
 
 // ── CATEGORY CONFIG — matches backend pillar slugs ──
 const CATS = {
@@ -5984,9 +6125,9 @@ async function cpReset(){
 
 // ── Danger zone ──
 function confirmLogoutAll(){
-  openAppModal(`<div class="am-title">Log out of all devices?</div>
-    <div class="am-sub">You'll be signed out here and your session ends. Sign in again to continue.</div>
-    <button class="am-btn danger" onclick="closeAppModal();signOut()">Log out everywhere</button>
+  openAppModal(`<div class="am-title">Log out?</div>
+    <div class="am-sub">You'll be signed out on this device. Other devices stay signed in until their session expires.</div>
+    <button class="am-btn danger" onclick="closeAppModal();signOut()">Log out on this device</button>
     <button class="am-btn ghost" onclick="closeAppModal()">Cancel</button>`);
 }
 function confirmDeleteAccount(){
@@ -6004,10 +6145,12 @@ async function doDeleteAccount(){
   try{ if(ST.token) await api('/account/delete',{method:'POST'}); }catch(e){}
   closeAppModal();
   const _du = ST.userId;
-  switchUser('anon');
+  // Leave the session through the one logout path (it also invalidates anything
+  // in flight and scrubs the refresh token, which this used to leave on the
+  // device), then drop the deleted account's partition entirely.
+  signOut({ silent: true, showSignIn: true });
   try{ localStorage.removeItem(_userKey(_du)); }catch(e){}   // wipe the deleted account's local data
-  ST.token=null; ST.userId=null; persist(); toast('Account deleted');
-  document.getElementById('ob-screen')?.classList.remove('gone');
+  toast('Account deleted');
 }
 
 // ── Help ──
@@ -9120,6 +9263,9 @@ document.addEventListener('DOMContentLoaded', () => { try { routeFromPath(); } c
 // Apply a /me payload to the profile UI — real data only, no placeholders.
 function applyMe(me) {
   if (!me) return;
+  // A /me answer that outlived its session would otherwise cache another user's
+  // identity into the anonymous partition and re-paint them on the next boot.
+  if (!isSignedIn()) return;
   const n = me.display_name || me.name;
   if (n) { document.getElementById('prof-name').textContent = n; document.getElementById('sb-name').textContent = n; }
   const uname = me.username || (me.email ? me.email.split('@')[0] : '');
@@ -9176,13 +9322,14 @@ async function bootstrapSession() {
     // Only sign out on a REAL auth failure (refresh also failed → 401/403).
     // A cold/asleep/offline backend (timeout, network, 5xx) must NOT wipe the
     // session — otherwise the user is forced to log in again every cold start.
+    if (e && e.sessionChanged) return;    // signed out / switched account mid-flight
     const msg = String((e && e.message) || '');
     const authDead = /HTTP 40[13]\b|unauthor/i.test(msg);
     if (authDead) {
-      switchUser('anon');
-      ST.token = null; ST.refresh = null; ST.userId = null; persist();
-      document.getElementById('ob-screen')?.classList.remove('gone');
-      updateSidebarAuth();
+      // The stored session is genuinely dead (api() already tried the refresh
+      // token and it was rejected). One path out, so the tokens are scrubbed
+      // from storage too rather than left under the old account's key.
+      signOut({ silent: true, showSignIn: true });
     }
     // else: keep the stored session and stay signed in; it'll work once the
     // backend is reachable again (the next api() call refreshes if needed).
@@ -9292,22 +9439,23 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ── SIDEBAR LOGOUT ──
-document.querySelector('.sb-logout').addEventListener('click', signOut);
-
-function signOut() {
-  switchUser('anon');                    // back to the logged-out partition
-  ST.token = null; ST.refresh = null; ST.userId = null; ST.username = '';
-  persist();
-  sbClose(); toast('👋 Signed out');
-  document.getElementById('ob-screen')?.classList.remove('gone');
-  updateSidebarAuth();
-  loadFeed(true);
-}
+// signOut() itself lives in the SESSION CORE with the rest of the session
+// transitions; this is only the button that calls it. One listener, bound once:
+// the handler is re-entrancy guarded, so a double tap cannot run it twice.
+document.querySelector('.sb-logout').addEventListener('click', () => signOut());
 
 // ── AUTH ──
 function showAuthModal() {
   const existing = document.getElementById('auth-modal');
-  if (existing) { existing.style.display='flex'; return; }
+  if (existing) {
+    // Reopen clean: a stale error from the last attempt reads as a fresh
+    // failure, and the previous reader's password must not sit in the DOM.
+    const e = document.getElementById('auth-error');
+    if (e) { e.textContent = ''; e.style.display = 'none'; }
+    const pw = document.getElementById('auth-pass'); if (pw) pw.value = '';
+    existing.style.display='flex';
+    return;
+  }
   const modal = document.createElement('div');
   modal.id = 'auth-modal';
   modal.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.8);display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(8px);';
@@ -9332,6 +9480,28 @@ function showAuthModal() {
   document.querySelector('.phone').appendChild(modal);
 }
 
+// The ONE place a successful /login or /signup response becomes a session.
+// Every entry point (the auth modal, the onboarding sign-in, onboarding
+// finish/skip) goes through it, so they cannot drift apart: validate the
+// payload, file the tokens under the right account, then derive the UI from the
+// session rather than each caller poking at `.gone` and the sidebar itself.
+// `gen` is what newAuthAttempt() returned before the request was sent — a
+// response that has since been superseded by a newer sign-in or by a logout is
+// dropped here and returns false, so it can never revive a session the reader
+// has already left. applyAuth throws on a response that carries no token, which
+// keeps a failed attempt from leaving a half-signed-in UI behind.
+/* ══ SESSION ENTRY (start) ══ extracted with the core by tests/test_auth_session.py */
+function finishSignIn(data, gen, greeting) {
+  if (!applyAuth(data, gen)) return false;
+  renderAuthState();                 // hides onboarding + the auth sheet, unpins the sidebar prompt
+  updateProfileUI(data);
+  loadUserPrefs();
+  loadFeed(true);
+  if (greeting) toast(greeting);
+  return true;
+}
+/* ══ SESSION ENTRY (end) ══ */
+
 let authMode = 'login';
 function authTab(mode) {
   authMode = mode;
@@ -9351,7 +9521,9 @@ async function doAuth() {
   const errEl = document.getElementById('auth-error');
   const btn   = document.getElementById('auth-btn');
   if (!email || !pass) { errEl.textContent='Enter email and password'; errEl.style.display='block'; return; }
+  errEl.style.display = 'none';
   btn.textContent = '...'; btn.disabled = true;
+  const gen = newAuthAttempt();          // this attempt now owns the session
   try {
     let data;
     if (authMode === 'login') {
@@ -9359,12 +9531,9 @@ async function doAuth() {
     } else {
       data = await api('/signup', { method:'POST', body: JSON.stringify({ email, password: pass, name: name || undefined }) });
     }
-    applyAuth(data); loadUserPrefs();
-    document.getElementById('auth-modal').style.display = 'none';
-    toast('✦ Signed in!');
-    loadFeed(true);
-    updateProfileUI(data);
+    finishSignIn(data, gen, '✦ Signed in!');
   } catch(e) {
+    if (e && e.sessionChanged) return;   // a newer attempt (or a logout) owns the UI now
     errEl.textContent = e.message; errEl.style.display = 'block';
   } finally {
     btn.textContent = authMode === 'login' ? 'Sign In' : 'Create Account'; btn.disabled = false;
@@ -9392,15 +9561,54 @@ function setHandle(uname) {
   });
 }
 
-function updateSidebarAuth() {
-  if (!ST.token) {
-    const sbName   = document.querySelector('.sb-name');
-    const sbHandle = document.querySelector('.sb-handle');
-    const sbHead   = document.querySelector('.sb-head');
+// ── AUTH UI ── one function derives every auth-dependent surface from the
+// session, so "logged out" can never be half-applied. It used to be set ad hoc:
+// the sidebar was only ever updated for the signed-OUT case (so the header kept
+// opening the sign-in modal after a successful login), and the previous
+// reader's name, handle, bio, join date, stats, avatar and bookmark count were
+// left painted on the profile behind the logged-out screen.
+// `showSignIn:true` additionally reveals the onboarding/sign-in screen — logout
+// and a rejected session do that; a routine repaint must not, or it would
+// ambush guests who chose "browse without an account".
+function renderAuthState(opts) {
+  const signedIn = isSignedIn();
+  const sbName   = document.querySelector('.sb-name');
+  const sbHandle = document.querySelector('.sb-handle');
+  const sbHead   = document.querySelector('.sb-head');
+  const ob       = document.getElementById('ob-screen');
+  const modal    = document.getElementById('auth-modal');
+  if (modal) modal.style.display = 'none';          // no auth sheet in either settled state
+  if (signedIn) {
+    if (sbHead) { sbHead.onclick = null; sbHead.style.cursor = ''; }
+    ob?.classList.add('gone');
+  } else {
+    // Defaults first — resetProfileUI() also returns the sidebar identity to the
+    // shipped placeholder, so the sign-in prompt has to be written after it.
+    resetProfileUI();
     if (sbName)   sbName.textContent   = 'Sign In / Register';
     if (sbHandle) sbHandle.textContent = 'Tap to personalise your feed';
     if (sbHead)   { sbHead.onclick = () => { sbClose(); showAuthModal(); }; sbHead.style.cursor = 'pointer'; }
+    if (opts && opts.showSignIn) ob?.classList.remove('gone');
   }
+}
+// Existing call sites say updateSidebarAuth(); keep the name pointing at the
+// single renderer rather than growing a second copy of the rules.
+function updateSidebarAuth() { renderAuthState(); }
+
+// Put the profile + sidebar chrome back to the shipped signed-out defaults.
+const _DEFAULT_AVA = (document.getElementById('sb-ava-img') || {}).src || '';
+function resetProfileUI() {
+  const set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
+  set('prof-name', '—');
+  set('prof-handle', '@—');
+  set('sb-name', 'SherrByte User');
+  set('sb-handle', '@user');
+  set('prof-bio', 'Tap Edit Profile to set your bio');
+  set('prof-join', '');
+  set('prof-stat-read', '0');
+  set('prof-stat-saved', '0');
+  set('saved-ct', String((ST.saves || []).length));   // the count of whoever is active NOW
+  if (_DEFAULT_AVA) { try { setAllAvatars(_DEFAULT_AVA); } catch (e) {} }
 }
 
 // ── ONBOARDING ──────────────────────────────────────────────────────────────
@@ -9501,12 +9709,12 @@ async function obDoLogin() {
   err.textContent = '';
   if (!email || !pass) { err.textContent = 'Fill all fields'; return; }
   btn.disabled = true; btn.textContent = 'Signing in…';
+  const gen = newAuthAttempt();
   try {
     const data = await api('/login', { method:'POST', body: JSON.stringify({ email, password: pass }) });
-    applyAuth(data); loadUserPrefs();
-    document.getElementById('ob-screen').classList.add('gone');
-    updateProfileUI(data); loadFeed(true); toast('✦ Welcome back!');
+    finishSignIn(data, gen, '✦ Welcome back!');
   } catch(e) {
+    if (e && e.sessionChanged) return;
     err.textContent = e.message || 'Login failed';
   } finally {
     btn.disabled = false; btn.textContent = 'Sign In →';
@@ -9601,15 +9809,15 @@ function obToggleT(name, color) {
 async function obFinish() {
   const btn = document.getElementById('ob-finish');
   btn.disabled = true; btn.textContent = 'Building feed…';
+  const gen = newAuthAttempt();
   try {
     const sd   = obSD || {};
     const data = await api('/signup', { method:'POST', body: JSON.stringify({
       email: sd.email, password: sd.password, name: sd.name||'', username: sd.username||'', topics: Array.from(obSelT)
     })});
-    applyAuth(data); loadUserPrefs();
-    document.getElementById('ob-screen').classList.add('gone');
-    updateProfileUI(data); loadFeed(true); toast('✦ Welcome to SherrByte!');
+    finishSignIn(data, gen, '✦ Welcome to SherrByte!');
   } catch(e) {
+    if (e && e.sessionChanged) return;
     toast('Error: ' + (e.message || 'Signup failed'));
     btn.disabled = false; btn.textContent = 'Build My Feed →';
   }
@@ -9620,14 +9828,14 @@ async function obSkip() {
   if (!sd) { toast('Please fill in your details first'); return; }
   const btn = document.getElementById('ob-skip');
   if (btn) { btn.disabled = true; btn.textContent = 'Skipping…'; }
+  const gen = newAuthAttempt();
   try {
     const data = await api('/signup', { method:'POST', body: JSON.stringify({
       email: sd.email, password: sd.password, name: sd.name||'', username: sd.username||'', topics: []
     })});
-    applyAuth(data); loadUserPrefs();
-    document.getElementById('ob-screen').classList.add('gone');
-    updateProfileUI(data); loadFeed(true); toast('✦ Welcome! Add topics anytime.');
+    finishSignIn(data, gen, '✦ Welcome! Add topics anytime.');
   } catch(e) {
+    if (e && e.sessionChanged) return;
     toast('Error: ' + (e.message || 'Signup failed'));
     if (btn) { btn.disabled = false; btn.textContent = 'Skip for now'; }
   }
