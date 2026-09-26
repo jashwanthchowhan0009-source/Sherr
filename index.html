@@ -5105,7 +5105,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
     </div>
     <div class="sg-note" style="font-size:0.72rem;color:var(--t3);padding:8px 4px 0">Your password is stored salted &amp; hashed (argon2id/PBKDF2) — never in plain text.</div></div>
     <div class="sg"><div class="sg-lbl">Danger Zone</div>
-      <div class="danger-row tap" onclick="confirmLogoutAll()"><div class="danger-ico"><i class="fa-solid fa-right-from-bracket"></i></div><span class="danger-lbl">Log Out On This Device</span></div>
+      <div class="danger-row tap" onclick="confirmLogoutAll()"><div class="danger-ico"><i class="fa-solid fa-right-from-bracket"></i></div><span class="danger-lbl">Log Out All Devices</span></div>
       <div class="danger-row tap" onclick="confirmDeleteAccount()"><div class="danger-ico"><i class="fa-solid fa-trash"></i></div><span class="danger-lbl">Delete Account</span></div>
     </div>
   </div>
@@ -5838,20 +5838,42 @@ function tryRefresh() {
   return _refreshing;
 }
 
+// Ask the server to revoke this session on EVERY device: POST /auth/logout
+// bumps users.token_version, which stops the access and refresh tokens already
+// issued from verifying anywhere. Best-effort by design — fired before the local
+// teardown (it needs the token that is about to be cleared), never awaited, and
+// a failure changes nothing here: the device is cleared either way. Deliberately
+// NOT through api(), which would attach whatever token is current by the time it
+// runs and could spend a refresh on the 401.
+function revokeSessionOnServer(token) {
+  if (!token) return;
+  try {
+    fetch(API_URL + '/auth/logout', {
+      method: 'POST',
+      keepalive: true,                      // still goes out if the tab is closing
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+    }).catch(() => {});
+  } catch (e) {}
+}
+
 // The ONE way out of a session, and it is atomic: invalidate the generation
 // first so nothing in flight can write afterwards, drop the credentials from
 // memory AND from every stored partition, move to the anonymous partition
 // WITHOUT flushing those credentials back, then re-derive the auth UI from the
 // state. Repeated clicks are a no-op rather than a second run.
-// Note: the access/refresh tokens are stateless HMACs and the backend exposes no
-// revocation route, so this ends the session on THIS device only — see
-// CHANGELOG / the audit notes; it is not a server-side revocation.
+// The revocation above is what makes this a real logout rather than a local
+// erase: every device is signed out, not just this one. The local teardown still
+// runs unconditionally, so a logout works offline too — it just cannot revoke.
 let _signingOut = false;
 function signOut(opts) {
   opts = opts || {};
   if (_signingOut) return;
   _signingOut = true;
   try {
+    // Revoke server-side first — this is the only step that needs the token.
+    // Skipped when the session is already dead server-side (a rejected refresh),
+    // where the request could only ever come back 401.
+    if (opts.reason !== 'expired') revokeSessionOnServer(ST.token);
     newAuthAttempt();                        // in-flight logins/refreshes/requests are now stale
     _refreshing = null; _refreshGen = -1;
     clearAuthFields(ST); persist();          // scrub the partition we are in…
@@ -5864,7 +5886,7 @@ function signOut(opts) {
   try { renderAuthState({ showSignIn: opts.showSignIn !== false }); } catch (e) {}
   try {
     if (opts.reason === 'expired') toast('Session expired — please sign in again');
-    else if (!opts.silent) toast('👋 Signed out');
+    else if (!opts.silent) toast('👋 Signed out everywhere');
   } catch (e) {}
   try { loadFeed(true); } catch (e) {}       // repaint as the anonymous reader
 }
@@ -6133,9 +6155,9 @@ async function cpReset(){
 
 // ── Danger zone ──
 function confirmLogoutAll(){
-  openAppModal(`<div class="am-title">Log out?</div>
-    <div class="am-sub">You'll be signed out on this device. Other devices stay signed in until their session expires.</div>
-    <button class="am-btn danger" onclick="closeAppModal();signOut()">Log out on this device</button>
+  openAppModal(`<div class="am-title">Log out of all devices?</div>
+    <div class="am-sub">This ends your session everywhere — any other browser or phone you're signed in on will need to sign in again.</div>
+    <button class="am-btn danger" onclick="closeAppModal();signOut()">Log out everywhere</button>
     <button class="am-btn ghost" onclick="closeAppModal()">Cancel</button>`);
 }
 function confirmDeleteAccount(){

@@ -714,7 +714,8 @@ CREATE TABLE IF NOT EXISTS users (
     avatar_url TEXT DEFAULT '',
     language TEXT DEFAULT 'en',
     created_at TEXT DEFAULT (datetime('now')),
-    last_login TEXT
+    last_login TEXT,
+    token_version INTEGER DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS topics (
@@ -980,6 +981,12 @@ _MIGRATIONS = [
     # user row now, set through PUT /me and returned by GET /me, so the identity
     # is server-side and follows the account to any device.
     "ALTER TABLE users ADD COLUMN username TEXT DEFAULT ''",
+    # Token revocation counter — see make_token/verify_token. Every token carries
+    # the version it was minted under; bumping this invalidates all of an
+    # account's tokens at once. DEFAULT 0 matches the "no v claim" reading of a
+    # token issued before this column existed, so the deploy that adds it does
+    # not sign everybody out.
+    "ALTER TABLE users ADD COLUMN token_version INTEGER DEFAULT 0",
 ]
 
 # Publisher image URLs are never persisted again (P0.1). Existing rows are scrubbed
@@ -1362,10 +1369,59 @@ def needs_rehash(hashed: str) -> bool:
         return True
 
 
-def make_token(user_id: int, days: int = 30, typ: str = "access") -> str:
+# ─── Token revocation ────────────────────────────────────────────────────────
+# These tokens are stateless HMACs, so deleting the client's copy was the only
+# "logout" available: an access token stayed valid for 30 days and a refresh
+# token for 180, on every device, whatever the reader did. `users.token_version`
+# is the smallest thing that makes a logout real — every token carries the
+# version it was minted under, and bumping the column invalidates every token
+# issued before it, on every device, at once.
+#
+# The check has to be cheap: verify_token runs on every authenticated request,
+# and Supabase's pooler plus Render's free tier cap connections in the low tens
+# (see CLAUDE.md on the read cache). So the version is cached per account for
+# TOKEN_VERSION_TTL_S and the bump writes the new value straight into that cache,
+# which makes a logout instant on the instance that served it.
+TOKEN_VERSION_TTL_S = int(os.getenv("TOKEN_VERSION_TTL_S", "60") or 60)
+_TOKEN_VERSIONS: dict = {}          # uid -> (version, expires_at)
+
+
+def _token_version(uid: int, fresh: bool = False):
+    """The account's current token version, cached. None means "cannot check".
+
+    A database failure returns None and callers FAIL OPEN. Failing closed would
+    sign every reader out the moment Postgres refused a connection — the exact
+    behaviour bootstrapSession and the refresh path were written to avoid, and a
+    far worse outage than an unrevoked token living out its expiry.
+    """
+    now = time.time()
+    if not fresh:
+        hit = _TOKEN_VERSIONS.get(uid)
+        if hit and hit[1] > now:
+            return hit[0]
+    try:
+        conn = get_db()
+        try:
+            row = conn.execute("SELECT token_version FROM users WHERE id=?", (uid,)).fetchone()
+        finally:
+            conn.close()
+    except Exception as e:                       # unreachable DB, missing column
+        log.warning("[AUTH] token_version read failed for %s: %s", uid, e)
+        return None
+    try:
+        version = int(row["token_version"] or 0) if row is not None else 0
+    except Exception:
+        version = 0
+    _TOKEN_VERSIONS[uid] = (version, now + TOKEN_VERSION_TTL_S)
+    return version
+
+
+def make_token(user_id: int, days: int = 30, typ: str = "access",
+               version: int = 0) -> str:
     payload = json.dumps({
         "id": user_id,
         "typ": typ,
+        "v": int(version or 0),
         "exp": (datetime.now(timezone.utc) + timedelta(days=days)).isoformat()
     })
     raw = base64.urlsafe_b64encode(payload.encode()).decode()
@@ -1373,17 +1429,23 @@ def make_token(user_id: int, days: int = 30, typ: str = "access") -> str:
     return f"{raw}.{sig}"
 
 
-def make_refresh_token(user_id: int) -> str:
+def make_refresh_token(user_id: int, version: int = 0) -> str:
     # Long-lived (180d) so a session survives well past the access token; the
     # client swaps it for a fresh access token via /auth/refresh. Without this
     # the whole client refresh path was dead and any 401 was a hard logout.
-    return make_token(user_id, days=180, typ="refresh")
+    return make_token(user_id, days=180, typ="refresh", version=version)
 
 
 def auth_pair(user_id: int) -> dict:
-    """The token pair every auth path returns, shaped for the client's applyAuth."""
-    return {"token": make_token(user_id), "access_token": make_token(user_id),
-            "refresh_token": make_refresh_token(user_id)}
+    """The token pair every auth path returns, shaped for the client's applyAuth.
+
+    The version is read FRESH: minting under a cached, pre-logout value would
+    hand back a pair the next request rejects.
+    """
+    version = _token_version(user_id, fresh=True) or 0
+    return {"token": make_token(user_id, version=version),
+            "access_token": make_token(user_id, version=version),
+            "refresh_token": make_refresh_token(user_id, version=version)}
 
 
 def verify_token(token: str) -> Optional[int]:
@@ -1395,7 +1457,15 @@ def verify_token(token: str) -> Optional[int]:
         payload = json.loads(base64.urlsafe_b64decode(raw + "=="))
         if datetime.fromisoformat(payload["exp"]) < datetime.now(timezone.utc):
             return None
-        return payload["id"]
+        uid = payload["id"]
+        # Revoked? A token minted before users.token_version existed carries no
+        # "v" and reads as 0, which is the column default — so the deploy that
+        # adds the column does not invalidate anybody's session. None means the
+        # database could not be asked, and that fails open (see _token_version).
+        current = _token_version(uid)
+        if current is not None and int(payload.get("v", 0) or 0) != current:
+            return None
+        return uid
     except Exception:
         return None
 
@@ -2669,8 +2739,35 @@ async def auth_refresh(req: RefreshReq):
         conn.close()
     if not exists:
         raise HTTPException(401, "Session expired — sign in again")
-    return {"access_token": make_token(uid), "token": make_token(uid),
-            "refresh_token": make_refresh_token(uid)}
+    return auth_pair(uid)
+
+
+@app.post("/auth/logout")
+@app.post("/logout")
+async def auth_logout(authorization: str = Header("")):
+    """Revoke every token this account holds, on every device.
+
+    Bumping `users.token_version` is the only way a stateless HMAC can be
+    revoked: the access and refresh tokens already issued stop verifying at
+    once, here and on every other device. Idempotent — a reader who taps logout
+    twice just bumps twice.
+
+    The client calls this BEST-EFFORT and never waits on it: a logout that could
+    not reach the server must still clear the device, which is the half that was
+    always working. A 401 here means the token was already dead, which is the
+    outcome the caller wanted anyway.
+    """
+    uid = require_user(authorization)
+    conn = get_db()
+    try:
+        conn.execute("UPDATE users SET token_version = COALESCE(token_version, 0) + 1 "
+                     "WHERE id=?", (uid,))
+        conn.commit()
+    finally:
+        conn.close()
+    # Re-read past the cache so this instance stops accepting the old tokens now
+    # rather than when the TTL lapses.
+    return {"ok": True, "token_version": _token_version(uid, fresh=True)}
 
 
 # ─── username availability ───────────────────────────────────────────────────

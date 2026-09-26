@@ -57,6 +57,7 @@ class Run:
 
     def __init__(self, browser, base, refresh_status=200, me_status=200, seed=None):
         self.calls = []
+        self.revokes = []          # Authorization headers seen by /auth/logout
         self.errors = []
         self.ctx = browser.new_context(viewport={"width": 420, "height": 860},
                                        base_url=base)
@@ -78,6 +79,10 @@ class Run:
     def _api(self, route):
         path = route.request.url[len(API):].split("?")[0]
         self.calls.append(path)
+        if path == "/auth/logout":
+            self.revokes.append(route.request.headers.get("authorization"))
+            return route.fulfill(status=200, content_type="application/json",
+                                 body=json.dumps({"ok": True, "token_version": 1}))
         if path == "/auth/refresh":
             body = PAIR2 if self.refresh_status == 200 else {"detail": "Session expired"}
             return route.fulfill(status=self.refresh_status, content_type="application/json",
@@ -126,6 +131,8 @@ def scenario_lifecycle(browser, base):
     r.pg.evaluate("document.querySelector('.sb-logout').click()")
     r.pg.wait_for_timeout(800)
     s = r.state()
+    ok &= check("logout revokes server-side with the old token",
+                r.revokes == ["Bearer acc-7"], str(r.revokes))
     ok &= check("logout clears the access token", s["token"] is None)
     ok &= check("logout clears the refresh token", s["refresh"] is None)
     ok &= check("logout returns to the anon partition", s["cur"] == "anon", str(s["cur"]))
@@ -179,6 +186,8 @@ def scenario_boot_rejected_refresh(browser, base):
     ok &= check("the sign-in screen is shown", s["ob"])
     ok &= check("the refresh is not retried in a loop", r.calls.count("/auth/refresh") == 1,
                 str(r.calls.count("/auth/refresh")))
+    ok &= check("a session the server already rejected spends no revoke",
+                r.revokes == [], str(r.revokes))
     ok &= check("the reader's own data survives",
                 any(v.get("likes") == [5] for _, v in s["parts"]))
     ok &= check("no page errors", not r.errors, "; ".join(r.errors[:3]))

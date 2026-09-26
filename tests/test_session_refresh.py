@@ -32,7 +32,7 @@ def test_login_and_signup_return_a_refresh_token():
     m = _read(MAIN)
     # auth_pair is the single source of the {token, access_token, refresh_token}
     # shape the client's applyAuth consumes.
-    pair = m[m.index("def auth_pair("):m.index("def auth_pair(") + 400]
+    pair = m[m.index("def auth_pair("):m.index("def auth_pair(") + 900]
     for field in ('"token"', '"access_token"', '"refresh_token"'):
         assert field in pair, field
 
