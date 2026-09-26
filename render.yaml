@@ -76,6 +76,21 @@ services:
         sync: false
       - key: SUPABASE_KEY
         sync: false
+      # Token for /cron/collect. Point an external scheduler (cron-job.org or
+      # UptimeRobot, every 15 min) at
+      #   https://sherrbyte-api.onrender.com/cron/collect?token=<CRON_TOKEN>
+      # A free instance sleeps when idle and a sleeping process runs no jobs —
+      # this is what keeps the news cycle running when nobody has the app open.
+      - key: CRON_TOKEN
+        generateValue: true
+      # Password-reset emails. Render's free tier blocks outbound SMTP, so the
+      # HTTPS Resend API is used (free: 3,000/month). Without a key the
+      # "Forgot password?" flow answers 503 rather than pretending to send.
+      # MAIL_FROM must be an address on a domain verified in Resend.
+      - key: RESEND_API_KEY
+        sync: false
+      - key: MAIL_FROM
+        sync: false             # e.g. SherrByte <no-reply@sherrbyte.com>
       - key: GEMINI_API_KEY
         sync: false             # optional — add in dashboard for real AI
       - key: GROQ_API_KEY

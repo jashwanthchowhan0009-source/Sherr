@@ -528,7 +528,7 @@ def test_the_cycle_reports_what_became_servable(caplog):
     import inspect
 
     import main
-    src = inspect.getsource(main.collect_news)
+    src = inspect.getsource(main._collect_news_cycle)
     assert "[CYCLE]" in src and "servable" in src
 
 
