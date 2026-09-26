@@ -3894,14 +3894,14 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
           <button class="ob-tab" id="ob-tab-reg" onclick="obSwitchTab('register')">Create Account</button>
         </div>
         <div id="ob-login-form">
-          <div class="ob-field"><label>Email</label><input type="email" id="ob-le" placeholder="you@example.com" autocomplete="email"></div>
+          <div class="ob-field"><label>Email</label><input type="email" id="ob-le" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="you@example.com" autocomplete="email"></div>
           <div class="ob-field"><label>Password</label><input type="password" id="ob-lp" placeholder="Your password" autocomplete="current-password"></div>
           <div class="ob-err" id="ob-lerr"></div>
           <button class="ob-btn-primary" id="ob-lbtn" onclick="obDoLogin()">Sign In →</button>
           <div class="ob-forgot-link tap" onclick="obShowForgot()">Forgot password?</div>
         </div>
         <div id="ob-forgot-form" style="display:none">
-          <div class="ob-field"><label>Email</label><input type="email" id="ob-fe" placeholder="you@example.com" autocomplete="email"></div>
+          <div class="ob-field"><label>Email</label><input type="email" id="ob-fe" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="you@example.com" autocomplete="email"></div>
           <div id="ob-otp-fields" style="display:none">
             <div class="ob-field"><label>Verification code</label><input type="text" id="ob-fotp" inputmode="numeric" maxlength="6" placeholder="6-digit code"></div>
             <div class="ob-field"><label>New password</label><input type="password" id="ob-fnp" placeholder="Min. 6 characters" autocomplete="new-password"></div>
@@ -3914,7 +3914,7 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
           <div class="ob-field"><label>Name</label><input type="text" id="ob-rn" placeholder="Your name" autocomplete="name"></div>
           <div class="ob-field"><label>Username</label><input type="text" id="ob-ru" placeholder="@username" autocomplete="username" oninput="obCheckUsername()">
             <div id="ob-ru-hint" style="font-size:0.7rem;margin-top:4px;min-height:14px;color:var(--t3)"></div></div>
-          <div class="ob-field"><label>Email</label><input type="email" id="ob-re" placeholder="you@example.com" autocomplete="email"></div>
+          <div class="ob-field"><label>Email</label><input type="email" id="ob-re" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="you@example.com" autocomplete="email"></div>
           <div class="ob-field"><label>Password</label><input type="password" id="ob-rp" placeholder="Min. 6 characters" autocomplete="new-password"></div>
           <div class="ob-err" id="ob-rerr"></div>
           <button class="ob-btn-primary" id="ob-rbtn" onclick="obStep1()">Continue →</button>
@@ -5455,6 +5455,10 @@ const API_URL = (() => {
   if (!h || h === 'localhost' || h === '127.0.0.1') return 'http://localhost:8000';
   return 'https://sherrbyte-api.onrender.com';
 })();
+// Wake the backend the moment the app opens. The free instance sleeps when idle;
+// starting it now means it is warm by the time the reader has typed an email
+// and password, instead of the sign-in request paying the whole cold start.
+try { fetch(API_URL + '/', { cache: 'no-store' }).catch(() => {}); } catch (e) {}
 
 // ══════════════════════════════════════════════════════════════════════
 // v5.1 — ACTIVITY TRACKER (screen time + article reading progress)
@@ -5872,8 +5876,12 @@ function markSeen(id){ if(!id) return; id=String(id); if(!ST.seen.includes(id)){
 // Endpoints that establish or renew a session themselves: a 401 from one of
 // these is the answer, never a reason to refresh and retry.
 const AUTH_ENDPOINT_RE = /^\/(?:auth\/(?:refresh|login|register)|login|signup|forgot-password|reset-password)\b/;
+// Sign-in / sign-up get a long timeout: they are usually the FIRST call after
+// the free backend has slept, and a cold start takes 30-60s. At 20s every
+// first login of the day failed with "Request timed out".
+const AUTH_TIMEOUT_MS = 70000;
 async function api(path, opts = {}) {
-  const { timeout = 20000, _retried = false, ...rest } = opts;
+  const { timeout = (AUTH_ENDPOINT_RE.test(path) ? AUTH_TIMEOUT_MS : 20000), _retried = false, ...rest } = opts;
   const headers = { "Content-Type": "application/json", ...(rest.headers || {}) };
   if (ST.token) headers["Authorization"] = "Bearer " + ST.token;
   // An authenticated call belongs to the session that authorised it. If that
@@ -5905,7 +5913,7 @@ async function api(path, opts = {}) {
     }
     return await res.json();
   } catch (e) {
-    if (e.name === 'AbortError') throw new Error('Request timed out');
+    if (e.name === 'AbortError') throw new Error('The server is waking up — please try again in a few seconds');
     throw e;
   } finally {
     clearTimeout(timer);
@@ -6090,7 +6098,7 @@ function openTextSize(){
 function changePassword(){
   openAppModal(`<div class="am-title">Change password</div>
     <div class="am-sub">We'll email a 6-digit code to verify it's you.</div>
-    <input class="am-input" id="cp-email" type="email" placeholder="Your account email" autocomplete="email">
+    <input class="am-input" id="cp-email" autocapitalize="none" autocorrect="off" spellcheck="false" type="email" placeholder="Your account email" autocomplete="email">
     <div id="cp-otp" style="display:none">
       <input class="am-input" id="cp-code" inputmode="numeric" maxlength="6" placeholder="6-digit code">
       <input class="am-input" id="cp-new" type="password" placeholder="New password (min 6)">
@@ -9472,7 +9480,7 @@ function showAuthModal() {
       </div>
       <div id="auth-error" style="display:none;background:rgba(255,91,91,0.1);border:1px solid rgba(255,91,91,0.3);border-radius:10px;padding:8px 12px;margin-bottom:12px;font-size:0.76rem;color:#FF5B5B"></div>
       <input id="auth-name" type="text" placeholder="Display name" style="display:none;width:100%;padding:10px 14px;margin-bottom:10px;background:var(--bg2);border:1px solid var(--line);border-radius:12px;color:var(--t1);font-size:0.84rem;font-family:var(--f);outline:none">
-      <input id="auth-email" type="email" placeholder="Email address" style="width:100%;padding:10px 14px;margin-bottom:10px;background:var(--bg2);border:1px solid var(--line);border-radius:12px;color:var(--t1);font-size:0.84rem;font-family:var(--f);outline:none">
+      <input id="auth-email" type="email" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Email address" style="width:100%;padding:10px 14px;margin-bottom:10px;background:var(--bg2);border:1px solid var(--line);border-radius:12px;color:var(--t1);font-size:0.84rem;font-family:var(--f);outline:none">
       <input id="auth-pass" type="password" placeholder="Password" style="width:100%;padding:10px 14px;margin-bottom:16px;background:var(--bg2);border:1px solid var(--line);border-radius:12px;color:var(--t1);font-size:0.84rem;font-family:var(--f);outline:none">
       <button onclick="doAuth()" id="auth-btn" style="width:100%;padding:11px;background:var(--accent);color:#fff;border:none;border-radius:12px;font-size:0.88rem;font-weight:700;cursor:pointer;font-family:var(--f)">Sign In</button>
       <div style="text-align:center;margin-top:12px;font-size:0.72rem;color:var(--t3)">Your feed personalises as you read.</div>
@@ -9515,7 +9523,7 @@ function authTab(mode) {
 }
 
 async function doAuth() {
-  const email = document.getElementById('auth-email').value.trim();
+  const email = document.getElementById('auth-email').value.trim().toLowerCase();
   const pass  = document.getElementById('auth-pass').value;
   const name  = document.getElementById('auth-name').value.trim();
   const errEl = document.getElementById('auth-error');
@@ -9672,7 +9680,7 @@ function obShowForgot() {
   const le = document.getElementById('ob-le').value.trim(); if (le) document.getElementById('ob-fe').value = le;
 }
 async function obSendOtp() {
-  const email = document.getElementById('ob-fe').value.trim();
+  const email = document.getElementById('ob-fe').value.trim().toLowerCase();
   const err = document.getElementById('ob-ferr'); err.style.color = ''; err.textContent = '';
   if (!email) { err.textContent = 'Enter your email'; return; }
   const b = document.getElementById('ob-fbtn'); b.disabled = true; b.textContent = 'Sending…';
@@ -9686,7 +9694,7 @@ async function obSendOtp() {
   finally { b.disabled = false; }
 }
 async function obResetPw() {
-  const email = document.getElementById('ob-fe').value.trim();
+  const email = document.getElementById('ob-fe').value.trim().toLowerCase();
   const otp = document.getElementById('ob-fotp').value.trim();
   const np = document.getElementById('ob-fnp').value;
   const err = document.getElementById('ob-ferr'); err.style.color = ''; err.textContent = '';
@@ -9703,7 +9711,7 @@ async function obResetPw() {
 
 async function obDoLogin() {
   const btn   = document.getElementById('ob-lbtn');
-  const email = document.getElementById('ob-le').value.trim();
+  const email = document.getElementById('ob-le').value.trim().toLowerCase();
   const pass  = document.getElementById('ob-lp').value;
   const err   = document.getElementById('ob-lerr');
   err.textContent = '';
@@ -9744,7 +9752,7 @@ function obCheckUsername() {
 }
 
 function obStep1() {
-  const email = document.getElementById('ob-re').value.trim();
+  const email = document.getElementById('ob-re').value.trim().toLowerCase();
   const pass  = document.getElementById('ob-rp').value;
   const name  = document.getElementById('ob-rn').value.trim();
   const uname = obNormUsername(document.getElementById('ob-ru').value);

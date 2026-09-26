@@ -122,7 +122,7 @@ def test_the_write_batch_runs_in_an_executor():
     import inspect
 
     import main
-    src = inspect.getsource(main.collect_news)
+    src = inspect.getsource(main._collect_news_cycle)
     assert "run_in_executor(None, _write_batch)" in src
     assert "run_in_executor(None, link_stories" in src
 

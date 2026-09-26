@@ -15,7 +15,7 @@ Fixes vs v4.1:
 Run: python main.py   or   uvicorn main:app --host 0.0.0.0 --port $PORT
 """
 
-import os, sys, json, math, hashlib, asyncio, logging, random, re, sqlite3, time
+import os, sys, json, math, hashlib, asyncio, logging, random, re, secrets, sqlite3, time
 import hmac as hmac_module
 import base64
 from datetime import datetime, timedelta, timezone
@@ -869,6 +869,16 @@ CREATE TABLE IF NOT EXISTS push_tokens (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
     token TEXT NOT NULL UNIQUE,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS password_resets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    code_hash TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    attempts INTEGER DEFAULT 0,
+    used INTEGER DEFAULT 0,
     created_at TEXT DEFAULT (datetime('now'))
 );
 
@@ -1963,7 +1973,31 @@ def link_stories(conn, window_days: int = STORY_WINDOW_DAYS) -> int:
     return threads
 
 
-async def collect_news():
+# One collection at a time, and a record of the last one. The scheduler and the
+# external-cron trigger (/cron/collect) can both start a cycle; two overlapping
+# cycles would double the AI spend against the same rate-limited quota.
+_collect_lock = asyncio.Lock()
+_collect_state: dict = {"running": False, "last_start": None, "last_end": None,
+                        "last_inserted": None, "last_error": None, "runs": 0,
+                        "last_trigger": None}
+
+
+async def collect_news(trigger: str = "scheduler"):
+    if _collect_lock.locked():
+        log.info("[CRON] collection already running — %s trigger skipped", trigger)
+        return
+    async with _collect_lock:
+        _collect_state.update(running=True, last_trigger=trigger, last_error=None,
+                              last_start=datetime.now(timezone.utc).isoformat())
+        try:
+            await _collect_news_cycle()
+        finally:
+            _collect_state["running"] = False
+            _collect_state["runs"] += 1
+            _collect_state["last_end"] = datetime.now(timezone.utc).isoformat()
+
+
+async def _collect_news_cycle():
     log.info("[CRON] Collection cycle start")
     try:
         rss_articles = await collect_rss()
@@ -2000,6 +2034,7 @@ async def collect_news():
             return n
 
         new_count = await loop.run_in_executor(None, _write_batch)
+        _collect_state["last_inserted"] = new_count
         log.info("[DB] %d new articles inserted", new_count)
 
         # AI refinement pass
@@ -2039,6 +2074,7 @@ async def collect_news():
         conn.close()
         log.info("[CRON] Cycle complete")
     except Exception as e:
+        _collect_state["last_error"] = f"{type(e).__name__}: {e}"
         log.error("[CRON] collect_news crashed: %s", e, exc_info=True)
 
 
@@ -2066,6 +2102,7 @@ def compute_feed_for_user(user_id: int):
         (cutoff,)
     ).fetchall()
 
+    scored: list[tuple] = []
     for art in articles:
         pillar_score = pref_pillars.get(art["pillar_id"], 0)
         tags = json.loads(art["micro_tags"] or "[]")
@@ -2085,11 +2122,26 @@ def compute_feed_for_user(user_id: int):
         serendipity = 0.1 * (abs(hash(str(art["id"]) + str(user_id))) % 100) / 100
         score = (pillar_score * 2 + tag_score * 3) * recency + engagement_boost + trending_boost + serendipity
         if score > 0.05:
-            conn.execute(
-                "INSERT OR REPLACE INTO feeds (user_id, article_id, score, computed_at) "
-                "VALUES(?, ?, ?, datetime('now'))",
-                (user_id, art["id"], score)
-            )
+            scored.append((user_id, art["id"], score))
+
+    # REPLACE THE READER'S FEED, DO NOT ACCUMULATE IT. Rows used to be upserted
+    # and never deleted, so an article scored while it was fresh kept that score
+    # forever — long after it fell out of the 7-day window above and stopped
+    # being re-scored. Signed-in readers therefore saw week-old stories ranked
+    # level with (or above) today's, which reads exactly like "the news doesn't
+    # update". Anonymous readers were unaffected because they never touch this
+    # table.
+    #
+    # One DELETE plus one executemany, not 500 single-row round trips: over the
+    # Supabase pooler the per-row form cost several seconds on EVERY /feed call
+    # from a reader with preferences, enough to trip the client's timeout.
+    conn.execute("DELETE FROM feeds WHERE user_id=?", (user_id,))
+    if scored:
+        conn.executemany(
+            "INSERT OR REPLACE INTO feeds (user_id, article_id, score, computed_at) "
+            "VALUES(?, ?, ?, datetime('now'))",
+            scored,
+        )
     conn.commit()
     conn.close()
 
@@ -2395,7 +2447,20 @@ class SignupReq(BaseModel):
     email: str
     password: str
     name: str = ""
+    # The onboarding form has always sent this; the model silently dropped it,
+    # so a handle chosen at sign-up never reached the account.
+    username: str = ""
     topics: list[str] = []
+
+
+class ForgotPasswordReq(BaseModel):
+    email: str
+
+
+class ResetPasswordReq(BaseModel):
+    email: str
+    otp: str
+    password: str
 
 
 class LoginReq(BaseModel):
@@ -2443,19 +2508,57 @@ class UpdateTopicsReq(BaseModel):
 
 
 # ─── ROUTES ──────────────────────────────────────────────────────────────────
+# ─── identity normalisation ──────────────────────────────────────────────────
+# Emails were stored and looked up EXACTLY as typed. Phone keyboards capitalise
+# the first letter of a field and autofill appends spaces, so an account created
+# as "Ravi@gmail.com" could not be signed into as "ravi@gmail.com" — the single
+# most common "I can't log in" report. Every auth path now normalises, and the
+# lookups compare LOWER(email) so accounts created before this change still work.
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+MIN_PASSWORD_LEN = 6
+_USERNAME_RE = re.compile(r"^[a-z0-9_]{3,20}$")
+
+
+def norm_email(raw: str) -> str:
+    return (raw or "").strip().lower()
+
+
+def norm_username(raw: str) -> str:
+    """Same rule as PUT /me and the client's obNormUsername."""
+    return re.sub(r"[^a-z0-9_]", "", (raw or "").strip().lstrip("@").lower())[:20]
+
+
+def _users_by_email(conn, email: str) -> list:
+    return conn.execute(
+        "SELECT * FROM users WHERE LOWER(email)=? ORDER BY id", (norm_email(email),)
+    ).fetchall()
+
+
 @app.post("/signup")
 async def signup(req: SignupReq):
+    email = norm_email(req.email)
+    if not _EMAIL_RE.match(email):
+        raise HTTPException(400, "Enter a valid email address")
+    if len(req.password or "") < MIN_PASSWORD_LEN:
+        raise HTTPException(400, f"Password must be at least {MIN_PASSWORD_LEN} characters")
+    uname = norm_username(req.username)
+    if req.username and not _USERNAME_RE.match(uname):
+        raise HTTPException(400, "Username: 3–20 letters, numbers or underscore")
     conn = get_db()
-    if conn.execute("SELECT id FROM users WHERE email=?", (req.email,)).fetchone():
+    if _users_by_email(conn, email):
         conn.close()
-        raise HTTPException(400, "Email already registered")
+        raise HTTPException(400, "Email already registered — sign in instead")
+    if uname and conn.execute(
+            "SELECT 1 FROM users WHERE username=? LIMIT 1", (uname,)).fetchone():
+        conn.close()
+        raise HTTPException(409, "That username is taken")
     pw_hash = hash_password(req.password)
     # RETURNING rather than lastrowid: sqlite has supported it since 3.35 and
     # Postgres has no lastrowid at all, so this is the one form both backends
     # answer identically.
     cur = conn.execute(
-        "INSERT INTO users (email, password, name) VALUES(?, ?, ?) RETURNING id",
-        (req.email, pw_hash, req.name or req.email.split("@")[0])
+        "INSERT INTO users (email, password, name, username) VALUES(?, ?, ?, ?) RETURNING id",
+        (email, pw_hash, req.name or email.split("@")[0], uname)
     )
     row = cur.fetchone()
     user_id = row["id"] if row is not None else cur.lastrowid
@@ -2472,7 +2575,8 @@ async def signup(req: SignupReq):
     conn.close()
     asyncio.create_task(asyncio.to_thread(compute_feed_for_user, user_id))
     return {**auth_pair(user_id), "user_id": user_id,
-            "display_name": req.name or req.email.split("@")[0], "message": "Account created"}
+            "display_name": req.name or email.split("@")[0], "username": uname,
+            "email": email, "message": "Account created"}
 
 
 # ─── Auth rate limiting ───────────────────────────────────────────────────────
@@ -2516,12 +2620,17 @@ def auth_rate_limit(*keys: str) -> None:
 @app.post("/auth/login")
 @app.post("/login")
 async def login(req: LoginReq, request: Request):
-    auth_rate_limit(f"ip:{_client_ip(request)}", f"acct:{(req.email or '').lower()}")
+    email = norm_email(req.email)
+    auth_rate_limit(f"ip:{_client_ip(request)}", f"acct:{email}")
     conn = get_db()
-    user = conn.execute("SELECT * FROM users WHERE email=?", (req.email,)).fetchone()
-    if not user or not check_password(req.password, user["password"]):
+    # Case-insensitive, and tolerant of the legacy case where two rows differ only
+    # by letter case (possible before signup normalised): the one whose password
+    # matches is the account being signed into.
+    user = next((u for u in _users_by_email(conn, email)
+                 if check_password(req.password, u["password"])), None)
+    if not user:
         conn.close()
-        raise HTTPException(401, "Invalid credentials")
+        raise HTTPException(401, "Wrong email or password")
     # We have the plaintext exactly once per login — the only moment a legacy hash can
     # be upgraded without forcing a password reset.
     if needs_rehash(user["password"]):
@@ -2535,7 +2644,8 @@ async def login(req: LoginReq, request: Request):
     ).fetchone()["c"]
     conn.close()
     return {**auth_pair(user["id"]), "user_id": user["id"], "name": user["name"],
-            "display_name": user["name"], "email": user["email"], "has_topics": pref_count > 0}
+            "display_name": user["name"], "email": user["email"],
+            "username": (dict(user).get("username") or ""), "has_topics": pref_count > 0}
 
 
 @app.post("/auth/register")
@@ -2561,6 +2671,245 @@ async def auth_refresh(req: RefreshReq):
         raise HTTPException(401, "Session expired — sign in again")
     return {"access_token": make_token(uid), "token": make_token(uid),
             "refresh_token": make_refresh_token(uid)}
+
+
+# ─── username availability ───────────────────────────────────────────────────
+# The onboarding form has always called this while the reader types a handle;
+# the route never existed, so every check 404'd and the hint silently vanished.
+@app.get("/auth/check-username")
+async def check_username(u: str = Query("")):
+    uname = norm_username(u)
+    if not _USERNAME_RE.match(uname):
+        return {"username": uname, "valid": False, "available": False}
+    conn = get_db()
+    try:
+        taken = conn.execute(
+            "SELECT 1 FROM users WHERE username=? LIMIT 1", (uname,)).fetchone()
+    finally:
+        conn.close()
+    return {"username": uname, "valid": True, "available": not taken}
+
+
+# ─── password reset by emailed code ──────────────────────────────────────────
+# The client has shipped a "Forgot password?" flow calling /forgot-password and
+# /reset-password; neither route existed, so a reader who forgot their password
+# had no way back into the account at all.
+#
+# Delivery is over HTTPS (Resend) first because Render's FREE instances cannot
+# open outbound SMTP ports; SMTP is kept for any host that allows it. With no
+# provider configured the endpoint says so plainly (503) instead of pretending a
+# code was sent — except in local dev, where the code is returned as debug_otp
+# (the client already renders that as "Test code: …").
+RESET_CODE_TTL_MIN = int(os.getenv("RESET_CODE_TTL_MIN", "15"))
+RESET_MAX_ATTEMPTS = 5
+
+
+def _is_prod() -> bool:
+    return (os.getenv("ENV") or "dev").lower() in ("prod", "production")
+
+
+def _reset_code_hash(user_id: int, code: str) -> str:
+    return hmac_module.new(JWT_SECRET.encode(), f"reset:{user_id}:{code}".encode(),
+                           hashlib.sha256).hexdigest()
+
+
+def email_provider() -> str:
+    if (os.getenv("RESEND_API_KEY") or "").strip():
+        return "resend"
+    if (os.getenv("SMTP_HOST") or "").strip():
+        return "smtp"
+    return ""
+
+
+async def send_email(to: str, subject: str, text: str) -> None:
+    """Send one plain-text email. Raises on failure so the caller can report it."""
+    sender = (os.getenv("MAIL_FROM") or "SherrByte <onboarding@resend.dev>").strip()
+    provider = email_provider()
+    if provider == "resend":
+        async with httpx.AsyncClient(timeout=15) as client:
+            r = await client.post(
+                "https://api.resend.com/emails",
+                headers={"Authorization": f"Bearer {os.getenv('RESEND_API_KEY', '').strip()}"},
+                json={"from": sender, "to": [to], "subject": subject, "text": text})
+        if r.status_code >= 300:
+            raise RuntimeError(f"resend {r.status_code}: {r.text[:200]}")
+        return
+    if provider == "smtp":
+        import smtplib                                          # noqa: PLC0415
+        from email.message import EmailMessage                  # noqa: PLC0415
+        msg = EmailMessage()
+        msg["From"], msg["To"], msg["Subject"] = sender, to, subject
+        msg.set_content(text)
+
+        def _send():
+            port = int(os.getenv("SMTP_PORT", "587"))
+            with smtplib.SMTP(os.getenv("SMTP_HOST"), port, timeout=15) as s:
+                s.starttls()
+                if os.getenv("SMTP_USER"):
+                    s.login(os.getenv("SMTP_USER"), os.getenv("SMTP_PASS", ""))
+                s.send_message(msg)
+        await asyncio.get_event_loop().run_in_executor(None, _send)
+        return
+    raise RuntimeError("no email provider configured")
+
+
+@app.post("/forgot-password")
+async def forgot_password(req: ForgotPasswordReq, request: Request):
+    email = norm_email(req.email)
+    auth_rate_limit(f"reset-ip:{_client_ip(request)}", f"reset-acct:{email}")
+    generic = {"status": "sent",
+               "message": "If that email is registered, a code has been sent."}
+    if not _EMAIL_RE.match(email):
+        raise HTTPException(400, "Enter a valid email address")
+    if not email_provider() and _is_prod():
+        raise HTTPException(503, "Password reset by email is not available yet. "
+                                 "Please contact support.")
+    conn = get_db()
+    try:
+        users = _users_by_email(conn, email)
+        if not users:
+            return generic                      # never reveal whether it exists
+        uid = users[0]["id"]
+        code = f"{secrets.randbelow(1_000_000):06d}"
+        expires = (datetime.now(timezone.utc)
+                   + timedelta(minutes=RESET_CODE_TTL_MIN)).isoformat()
+        conn.execute("UPDATE password_resets SET used=1 WHERE user_id=? AND used=0", (uid,))
+        conn.execute(
+            "INSERT INTO password_resets (user_id, code_hash, expires_at) VALUES(?, ?, ?)",
+            (uid, _reset_code_hash(uid, code), expires))
+        conn.commit()
+    finally:
+        conn.close()
+    if not email_provider():
+        return {**generic, "debug_otp": code}   # dev only — prod refused above
+    try:
+        await send_email(
+            email, "Your SherrByte password reset code",
+            f"Your SherrByte password reset code is {code}.\n\n"
+            f"It expires in {RESET_CODE_TTL_MIN} minutes. If you did not ask for "
+            f"this, you can ignore this email — your password has not changed.")
+    except Exception as e:                                       # noqa: BLE001
+        log.error("[AUTH] reset email failed for user %s: %s", uid, e)
+        raise HTTPException(502, "Could not send the reset email. Try again shortly.")
+    return generic
+
+
+@app.post("/reset-password")
+async def reset_password(req: ResetPasswordReq, request: Request):
+    email = norm_email(req.email)
+    auth_rate_limit(f"reset-ip:{_client_ip(request)}")
+    if len(req.password or "") < MIN_PASSWORD_LEN:
+        raise HTTPException(400, f"Password must be at least {MIN_PASSWORD_LEN} characters")
+    bad = HTTPException(400, "That code is wrong or has expired — request a new one")
+    code = re.sub(r"\D", "", req.otp or "")
+    conn = get_db()
+    try:
+        users = _users_by_email(conn, email)
+        if not users or len(code) != 6:
+            raise bad
+        uid = users[0]["id"]
+        row = conn.execute(
+            "SELECT id, code_hash, expires_at, attempts FROM password_resets "
+            "WHERE user_id=? AND used=0 ORDER BY id DESC LIMIT 1", (uid,)).fetchone()
+        if not row:
+            raise bad
+        exp = timestamps.parse(row["expires_at"])
+        if (exp is None or exp < datetime.now(timezone.utc)
+                or int(row["attempts"] or 0) >= RESET_MAX_ATTEMPTS):
+            conn.execute("UPDATE password_resets SET used=1 WHERE id=?", (row["id"],))
+            conn.commit()
+            raise bad
+        if not hmac_module.compare_digest(row["code_hash"], _reset_code_hash(uid, code)):
+            conn.execute("UPDATE password_resets SET attempts=attempts+1 WHERE id=?",
+                         (row["id"],))
+            conn.commit()
+            raise bad
+        conn.execute("UPDATE users SET password=? WHERE id=?",
+                     (hash_password(req.password), uid))
+        conn.execute("UPDATE password_resets SET used=1 WHERE user_id=?", (uid,))
+        conn.commit()
+    finally:
+        conn.close()
+    log.info("[AUTH] password reset for user %s", uid)
+    return {"status": "reset", "message": "Password updated — please sign in"}
+
+
+# ─── freshness: an outside clock for the news cycle ──────────────────────────
+# Collection runs on the in-process APScheduler, and a free Render instance
+# SLEEPS after ~15 idle minutes — a sleeping process runs no jobs. GitHub's
+# scheduled keep-alive is throttled on quiet repos and can drift by hours, and
+# the Actions runners cannot reach the database to ingest themselves. So the
+# news simply stopped whenever nobody had the app open.
+#
+# /cron/collect is the fix that needs no new infrastructure: point any reliable
+# external scheduler (cron-job.org, UptimeRobot) at it every 15-20 minutes. The
+# request wakes the instance AND starts a cycle if the last one is older than
+# COLLECT_MIN_GAP_MIN. It returns immediately; the cycle runs in the background.
+COLLECT_MIN_GAP_MIN = int(os.getenv("COLLECT_MIN_GAP_MIN", "10"))
+
+
+def _check_cron(token: str) -> None:
+    allowed = [t for t in ((os.getenv("CRON_TOKEN") or "").strip(), ADMIN_TOKEN) if t]
+    if not token or not any(hmac_module.compare_digest(token, t) for t in allowed):
+        raise HTTPException(403, "Invalid or missing cron token")
+
+
+@app.get("/cron/collect")
+@app.post("/cron/collect")
+async def cron_collect(token: str = Query(""), x_cron_token: str = Header(""),
+                       force: int = Query(0)):
+    _check_cron(token or x_cron_token)
+    if _collect_state["running"]:
+        return {"status": "running", **_collect_state}
+    last = timestamps.parse(_collect_state.get("last_start"))
+    if (not force and last is not None and datetime.now(timezone.utc) - last
+            < timedelta(minutes=COLLECT_MIN_GAP_MIN)):
+        return {"status": "fresh", **_collect_state}
+    asyncio.create_task(collect_news(trigger="cron"))
+    return {"status": "started", **_collect_state}
+
+
+@app.get("/status/freshness")
+async def status_freshness():
+    """Public, read-only: how old is the newest story a reader can see?
+
+    The one number that answers "is the news updating". No secrets, no admin
+    data — counts and timestamps only.
+    """
+    def _q():
+        conn = get_db()
+        try:
+            rows = conn.execute(
+                "SELECT published_at, collected_at FROM articles "
+                "WHERE ai_processed=1 AND status='published' "
+                "ORDER BY published_at DESC, id DESC LIMIT 300").fetchall()
+            pending = conn.execute(
+                "SELECT COUNT(*) AS c FROM articles WHERE ai_processed=0 "
+                "OR status='pending_rewrite'").fetchone()["c"]
+        finally:
+            conn.close()
+        return rows, pending
+
+    try:
+        rows, pending = await asyncio.get_event_loop().run_in_executor(None, _q)
+    except Exception as e:                                       # noqa: BLE001
+        return {"status": "db_unavailable", "error": type(e).__name__,
+                "collector": _collect_state}
+    now = datetime.now(timezone.utc)
+    pubs = [p for p in (timestamps.parse(r["published_at"]) for r in rows) if p]
+    newest = max(pubs) if pubs else None
+    age_h = round((now - newest).total_seconds() / 3600, 2) if newest else None
+    last_24h = sum(1 for p in pubs if now - p <= timedelta(hours=24))
+    return {
+        "status": ("ok" if age_h is not None and age_h <= 6 else "stale"),
+        "newest_published_at": newest.isoformat() if newest else None,
+        "newest_age_hours": age_h,
+        "published_last_24h": last_24h,
+        "waiting_for_ai": pending,
+        "collector": _collect_state,
+        "scheduler_running": bool(getattr(scheduler, "running", False)),
+        "collect_interval_min": COLLECT_INTERVAL_MIN,
+    }
 
 
 @app.get("/topics")

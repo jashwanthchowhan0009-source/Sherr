@@ -797,3 +797,32 @@ don't.
 right for it. The sidebar is the SAME `<nav>` element re-laid out, not a second
 nav; two navs would mean two active-tab states that disagree the first time
 either changes.
+
+## Auth identity is normalised, and every auth route the client calls exists
+
+Adopted 2026-09-27. Emails are stored `strip().lower()` and looked up with
+`LOWER(email)=?`, so accounts created before normalisation still sign in (and if
+two legacy rows differ only by case, the one whose password matches wins). Phone
+keyboards capitalise the first letter of a field — exact-match lookup was the
+most common "can't log in" cause.
+
+`/auth/check-username`, `/forgot-password` and `/reset-password` were called by
+index.html but never existed. Reset codes are 6 digits, stored only as an HMAC,
+expire after `RESET_CODE_TTL_MIN` (15) and die after 5 wrong guesses. Email goes
+over the Resend HTTPS API because Render's free tier blocks outbound SMTP; with
+no provider, prod answers 503 and dev returns `debug_otp`.
+
+## The personalised feed is replaced, never accumulated
+
+`compute_feed_for_user` DELETEs the reader's `feeds` rows before inserting. On
+Postgres `INSERT OR REPLACE` is translated to `ON CONFLICT DO NOTHING`, so a
+score written once was frozen forever — week-old stories kept the recency they
+had when fresh and outranked today's for every signed-in reader.
+
+## The news cycle needs an outside clock
+
+A free Render instance sleeps and runs no APScheduler jobs while asleep.
+`/cron/collect?token=<CRON_TOKEN>` (or ADMIN_TOKEN) wakes it and starts a cycle
+unless one started within `COLLECT_MIN_GAP_MIN`; `collect_news` holds a lock so
+the scheduler and the trigger never overlap. `/status/freshness` (public) reports
+the newest servable story's age — the number that answers "is news updating".
