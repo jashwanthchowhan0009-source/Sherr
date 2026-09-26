@@ -7586,16 +7586,45 @@ function aoToggleMore(){
 
 // Pull the fuller article body for richer reading context, and stash the
 // who/what/where/when/why so the Summarize panel can show it on demand.
-async function aoLoadFullContext(id) {
+// When the story is still on the placeholder, the server starts reading and
+// rewriting it the moment it is opened (rewrite_pending). Poll a few times and
+// swap the original SherrByte write-up in as soon as it lands.
+const AO_REWRITE_POLL_MS = [8000, 12000, 15000, 20000, 25000];
+async function aoLoadFullContext(id, attempt) {
   if (!id) return;
+  attempt = attempt || 0;
   try {
     const d = await api('/article/' + encodeURIComponent(id) + '/full');
     if (!d || !currentArticle || String(currentArticle.id) !== String(id)) return;
-    if (d.body && d.body.trim().length > 60) {
-      renderArticleBody(d.body.trim());
+    const body = (d.body || '').trim();
+    if (body.length > 60 && !isPlaceholderText(body)) {
+      currentArticle.body_ai = body;
+      renderArticleBody(body);
+      const _rt = document.getElementById('ao-read-time');
+      if (_rt) _rt.textContent = Math.max(1, Math.round(body.split(/\s+/).length / 200)) + ' min read';
+    } else if (d.rewrite_pending && attempt < AO_REWRITE_POLL_MS.length) {
+      const s = document.querySelector('#ao-text .ao-nobody-t');
+      if (s) s.textContent = 'SherrByte is reading and writing this story now…';
+      setTimeout(() => aoLoadFullContext(id, attempt + 1), AO_REWRITE_POLL_MS[attempt]);
     }
     currentArticle._wwww = d.wwww || {};   // shown on demand via aoSummarize()
+    aoRenderWWWH(currentArticle._wwww);
   } catch (e) { /* full endpoint not reachable */ }
+}
+
+// The story's skeleton, as the SherrByte writing spec defines it:
+// What happened · Where & when · Why · How. Shown under the body once the
+// rewrite has filled at least two parts; empty parts are simply left out.
+function aoRenderWWWH(w) {
+  const el = document.getElementById('ao-keypoints');
+  if (!el || !w) return;
+  const whereWhen = [w.where, w.when].filter(Boolean).join(' · ');
+  const rows = [['What happened', w.what], ['Who', w.who], ['Where & when', whereWhen],
+                ['Why', w.why], ['How', w.how]]
+    .filter(([, v]) => v && String(v).trim());
+  if (rows.length < 2) { el.innerHTML = ''; return; }
+  el.innerHTML = '<div class="ao-tldr-h"><i class="fa-solid fa-list-check"></i> The story in brief</div>' +
+    rows.map(([k, v]) => `<div class="ao-kp"><span class="ao-kp-k">${k}</span><span class="ao-kp-v">${bEsc(v)}</span></div>`).join('');
 }
 
 // "The String" — pull the chronological story thread this article belongs to
@@ -7858,7 +7887,7 @@ async function aoSummarize() {
     } catch (e) { if (currentArticle) currentArticle._wwww = {}; }
   }
   const w = currentArticle._wwww || {};
-  const rows = [['Who', w.who], ['What', w.what], ['Where', w.where], ['When', w.when], ['Why', w.why]]
+  const rows = [['What', w.what], ['Who', w.who], ['Where', w.where], ['When', w.when], ['Why', w.why], ['How', w.how]]
     .filter(([, v]) => v && String(v).trim() && String(v).trim() !== '—');
   const kpHtml = rows.length
     ? '<div class="ao-tldr-h"><i class="fa-solid fa-list-check"></i> Key points</div>' +

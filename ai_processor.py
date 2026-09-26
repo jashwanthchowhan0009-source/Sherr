@@ -132,6 +132,12 @@ _GEMINI_SCHEMA = {
         "sentiment":     {"type": "string", "enum": ["positive", "neutral", "negative"]},
         "when_info":     {"type": "string"},
         "where_info":    {"type": "string"},
+        # The WWWH skeleton (full-article mode fills these; blurb mode may not).
+        "what_info":     {"type": "string"},
+        "why_info":      {"type": "string"},
+        "how_info":      {"type": "string"},
+        "who_subject":   {"type": "string"},
+        "who_affected":  {"type": "array", "items": {"type": "string"}},
         # The myFeed dossier panes — a causal timeline and the cross-domain read,
         # grounded in this one source. Both optional; empty is a valid answer and
         # renders as 'pending' rather than an error.
@@ -275,6 +281,84 @@ STRICT RULES:
 Output the JSON object only. No markdown. No commentary."""
 
 
+# ─── FULL-ARTICLE mode: read the report, rebuild it as WWWH, write it fresh ──
+# When article_reader managed to read the publisher's whole article, the model is
+# no longer squeezing a 40-word blurb — it has the facts. The owner's spec
+# (sbb.pdf) for how a SherrByte article is written:
+#
+#   What happened      [subject -> object]
+#   Where & when       [location & time]
+#   Why it happened    [reason / cause]
+#   How it happened    [process / sequence]
+#
+# That skeleton is extracted first, then the body is written FROM the skeleton,
+# descriptively, with a human hook — "the way people like to read" — and never
+# with the publisher's sentences.
+FULL_TEXT_MIN_WORDS = 120
+
+_FULL_BODY_RULE = """3. full_body — 110-170 words, 2 or 3 short paragraphs separated by a blank line.
+
+   YOU ARE WORKING FROM THE PUBLISHER'S FULL ARTICLE. Read all of it first.
+   Then build the WWWH skeleton (rules 12-16) and write the body FROM THAT
+   SKELETON, not from the article's sentences.
+
+   - Paragraph 1 — THE HOOK + WHAT HAPPENED: open with the single most
+     human, consequential or surprising true fact (a person, a number, a
+     stake), then say plainly who did what to whom, where and when.
+   - Paragraph 2 — WHY and HOW: the cause or reason the article gives, and
+     the sequence of how it unfolded. If the article gives no reason, say
+     what is known and do not guess.
+   - Optional paragraph 3 — what it means now or what comes next, ONLY if
+     the article states it.
+   - Plain, warm, specific English for an Indian reader. Short sentences.
+     Explain any jargon in a few words. No hype words ("shocking",
+     "massive"), no teasing, no rhetorical questions, no markdown.
+   - ABSTRACTIVE, never extractive: new sentences, new order, your words.
+     Do not keep the article's sentence structure with swapped synonyms.
+   - NEVER INVENT. Every name, number, date and place must be in the article."""
+
+_WWWH_RULES = """
+
+12. what_info — WHAT HAPPENED, as ONE sentence in the form subject -> action ->
+    object, in your own words. Example: "A jury led by Ira Sachs gave Mike
+    Leigh's film three top awards."
+13. who_subject — the main actor (person/organisation) who did it. "" if none.
+14. who_affected — array of the people/organisations/places it was done to or
+    that it affects, as named in the article. [] if none.
+15. why_info — WHY IT HAPPENED: the reason or cause the article states, one
+    sentence. "" if the article does not state one — never guess a motive.
+16. how_info — HOW IT HAPPENED: the process or sequence of events, one or two
+    sentences, oldest step first. "" if the article does not describe one.
+
+when_info and where_info (rules 8-9) are the WHERE & WHEN of the skeleton — fill
+them from the article whenever it states them."""
+
+
+def _build_full_instruction(base: str) -> str:
+    start = base.index("3. full_body")
+    end = base.index("4. category")
+    head = base[:start] + _FULL_BODY_RULE + "\n\n" + base[end:]
+    closing = "Output the JSON object only."
+    i = head.rindex(closing)
+    return head[:i].rstrip() + _WWWH_RULES + "\n\n" + head[i:]
+
+
+SYSTEM_INSTRUCTION_FULL = _build_full_instruction(SYSTEM_INSTRUCTION)
+
+
+def is_full_text(body: str) -> bool:
+    return len((body or "").split()) >= FULL_TEXT_MIN_WORDS
+
+
+def instruction_for(body: str) -> str:
+    """The full-article (WWWH) prompt when we hold the article, else the blurb one."""
+    return SYSTEM_INSTRUCTION_FULL if is_full_text(body) else SYSTEM_INSTRUCTION
+
+
+def body_limit(body: str) -> int:
+    return 7000 if is_full_text(body) else 2500
+
+
 # ─── provider calls ───────────────────────────────────────────────────────────
 # Each takes an explicit key and returns (result, status):
 #   result — the parsed dict, or None
@@ -288,14 +372,14 @@ async def _gemini_once(key: str, title: str, body: str, client) -> tuple:
     url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
            f"{model_for('gemini')}:generateContent?key={key}")
     payload = {
-        "systemInstruction": {"parts": [{"text": SYSTEM_INSTRUCTION}]},
+        "systemInstruction": {"parts": [{"text": instruction_for(body)}]},
         "contents": [{
             "role": "user",
-            "parts": [{"text": f"ARTICLE TITLE: {title}\n\nARTICLE BODY: {body[:2500]}"}]
+            "parts": [{"text": f"ARTICLE TITLE: {title}\n\nARTICLE BODY: {body[:body_limit(body)]}"}]
         }],
         "generationConfig": {
             "temperature": 0.35,
-            "maxOutputTokens": 1024,
+            "maxOutputTokens": 2048 if is_full_text(body) else 1024,
             "responseMimeType": "application/json",
             "responseSchema": _GEMINI_SCHEMA,
         }
@@ -382,17 +466,17 @@ async def _openai_chat_once(key: str, title: str, body: str, client, *,
     free tier — Groq especially — the tokens-per-minute cap bounces bursts, and
     without this each bounce fell straight back to the placeholder stub (the feed
     then never got an original body). Up to 4 attempts, capped waits."""
-    prompt = SYSTEM_INSTRUCTION + f"""
+    prompt = instruction_for(body) + f"""
 
 ARTICLE TITLE: {title}
 
-ARTICLE BODY: {body[:2000]}
+ARTICLE BODY: {body[:body_limit(body) if is_full_text(body) else 2000]}
 
 Return ONLY a single JSON object matching the schema. No markdown, no code fences."""
     payload = {"model": model,
                "messages": [{"role": "user", "content": prompt}],
                "temperature": 0.35,
-               "max_tokens": 900,
+               "max_tokens": 1600 if is_full_text(body) else 900,
                "response_format": {"type": "json_object"}}
     headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
     for attempt in range(4):
@@ -570,6 +654,14 @@ def _validate_and_fix(result: dict, title: str, body: str, fallback_category: st
     result.setdefault("sentiment",     "neutral")
     result.setdefault("when_info",     "")
     result.setdefault("where_info",    "Not specified")
+    for k in ("what_info", "why_info", "how_info", "who_subject"):
+        v = result.get(k)
+        result[k] = v.strip() if isinstance(v, str) else ""
+    wa = result.get("who_affected")
+    if isinstance(wa, str):
+        wa = [wa] if wa.strip() else []
+    result["who_affected"] = [str(x).strip() for x in (wa or [])
+                              if isinstance(x, (str, int, float)) and str(x).strip()][:8]
 
     # Enforce valid category
     if result["category"] not in VALID_CATEGORIES:

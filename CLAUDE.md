@@ -857,3 +857,29 @@ A free Render instance sleeps and runs no APScheduler jobs while asleep.
 unless one started within `COLLECT_MIN_GAP_MIN`; `collect_news` holds a lock so
 the scheduler and the trigger never overlap. `/status/freshness` (public) reports
 the newest servable story's age — the number that answers "is news updating".
+
+## The rewrite READS the article first (article_reader), then writes WWWH
+
+Adopted 2026-09-27. The blurb-only rewrite could never produce an original body
+(see "The rewrite's unit of work is an EVENT"), so readers kept seeing the
+placeholder. Both AI paths (`run_ai_batch` and the drain) now fetch the
+publisher's page at `url` and extract the article prose (`article_reader.py`:
+JSON-LD `articleBody` first, else `<article>` paragraphs, boilerplate dropped).
+
+- **Input only, never stored.** The fetched text is not written to any column
+  and never served — copyright line and Supabase-quota line in one.
+- **It is the originality reference.** The gate compares our body against the
+  full article, so a sentence lifted from paragraph six is still rejected.
+- **Full text ⇒ the WWWH prompt** (`ai_processor.SYSTEM_INSTRUCTION_FULL`, from
+  the owner's sbb.pdf): extract what happened (subject→object), where & when,
+  why, how, then write a 110-170 word body from that skeleton with a factual
+  human hook. Fewer than `FULL_TEXT_MIN_WORDS` (120) ⇒ the old blurb prompt.
+  what/why/how/who are written with `COALESCE(NULLIF(?,''), col)` so an empty
+  answer never blanks what ingest had.
+- **Read rows skip synthesis.** Only blurb-only rows are clustered; they get the
+  budget left after the read rows, so a tick still cannot exceed its rate.
+- **Rewrite-on-open.** `/article/<id>` and `/article/<id>/full` queue a placeholder
+  story for an immediate read-and-rewrite (`ONDEMAND_REWRITES_PER_MIN`, default
+  4, one in flight per id) and return `rewrite_pending`; the client polls `/full`
+  and swaps the body in. `/full` never returns the placeholder as a body.
+- `ARTICLE_READER_ENABLED=0` turns reading off (back to blurb-only).

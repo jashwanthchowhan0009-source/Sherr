@@ -1846,6 +1846,63 @@ async def _news_why_pass(conn, article_id, source_text, source_headline) -> None
         log.warning("[NEWS] why_it_matters write failed for id %s: %s", article_id, e)
 
 
+# ─── read the publisher's article before rewriting it ────────────────────────
+# The RSS blurb (≈40 words) cannot become an original article: the model either
+# invents or paraphrases, the originality gate rejects it, and the reader sees
+# the placeholder. So the rewrite now READS the full article at its URL first
+# (article_reader), extracts the WWWH skeleton from it and writes fresh prose.
+# The fetched text is input only — never stored, never served — and it is also
+# the originality reference, so a sentence copied from any paragraph is caught.
+import article_reader                                        # noqa: E402
+
+ARTICLE_READER_ENABLED = (os.getenv("ARTICLE_READER_ENABLED", "1") or "1") \
+    .strip().lower() not in ("0", "false", "no")
+
+
+def _row_get(row, key, default=""):
+    try:
+        v = row[key]
+    except (KeyError, IndexError):
+        return default
+    return default if v is None else v
+
+
+async def _read_full_articles(rows) -> dict:
+    """{article id: full publisher text} for every row whose page could be read."""
+    if not ARTICLE_READER_ENABLED or not rows:
+        return {}
+    urls = {r["id"]: _row_get(r, "url") for r in rows if _row_get(r, "url")}
+    try:
+        return await article_reader.fetch_many(urls)
+    except Exception as e:                                       # noqa: BLE001
+        log.warning("[READER] batch read failed: %s", e)
+        return {}
+
+
+def _read_full_articles_sync(rows) -> dict:
+    """The same, for the synchronous drain (runs in an executor thread)."""
+    if not ARTICLE_READER_ENABLED or not rows:
+        return {}
+    try:
+        return asyncio.run(_read_full_articles(rows))
+    except Exception as e:                                       # noqa: BLE001
+        log.warning("[READER] sync read failed: %s", e)
+        return {}
+
+
+def _wwwh_params(result: dict) -> tuple:
+    """(what, why, how, who_subject, who_affected-json-or-None) for an UPDATE.
+
+    Empty strings / None mean "the model did not say" and are written through
+    COALESCE(NULLIF(?, ''), col) so they never blank what ingest already had."""
+    wa = result.get("who_affected") or []
+    return ((result.get("what_info") or "").strip(),
+            (result.get("why_info") or "").strip(),
+            (result.get("how_info") or "").strip(),
+            (result.get("who_subject") or "").strip(),
+            json.dumps(wa) if wa else None)
+
+
 async def run_ai_batch(conn):
     """Pull unprocessed articles and refine them with Gemini in parallel."""
     rows = conn.execute(
@@ -1867,6 +1924,10 @@ async def run_ai_batch(conn):
         log.info("[AI] No API keys configured — skipping refinement pass")
         return 0
 
+    # Read each publisher's full article first — the rewrite works from the
+    # facts of the whole report, not the 40-word blurb.
+    full = await _read_full_articles(rows)
+
     batch_input = []
     for row in rows:
         fallback_slug = PILLARS.get(row["pillar_id"], PILLARS[3])["slug"]
@@ -1875,7 +1936,7 @@ async def run_ai_batch(conn):
             # NOT row["full_body"]: on a row the startup drain already released,
             # that is our own stub, and summarizing a stub yields another stub.
             # source_material() prefers the longest surviving publisher text.
-            "body": body_state.source_material(
+            "body": full.get(row["id"]) or body_state.source_material(
                 row["headline"], row["summary_60"], row["source_summary"],
                 row["full_body"]),
             "fallback_category": fallback_slug,
@@ -1901,9 +1962,12 @@ async def run_ai_batch(conn):
 
             # ── 0.2 + 0.4: both gates run before anything can be published ──
             src_head = row["source_headline"] or row["headline"] or ""
+            # The originality reference is the FULL article when we read it:
+            # a sentence lifted from paragraph six must fail too.
             status, audit = _gate_article(
                 result["refined_title"], result["full_body"], src_head,
-                row["full_body"] or "", ai_result=result)
+                full.get(row["id"]) or row["full_body"] or "", ai_result=result)
+            audit["read_full_article"] = row["id"] in full
             if audit.get("posture") == "aggregator":
                 _apply_aggregator_posture(result, row)
 
@@ -1929,7 +1993,12 @@ async def run_ai_batch(conn):
                     when_info=?, where_info=?, pillar_id=?, micro_tags=?,
                     is_trending=?, sentiment=?, ai_processed=1, reprocessed=1,
                     status=?, originality_json=?, originality_overlap=?,
-                    originality_run=?, originality_checked_at=?
+                    originality_run=?, originality_checked_at=?,
+                    what_info=COALESCE(NULLIF(?, ''), what_info),
+                    why_info=COALESCE(NULLIF(?, ''), why_info),
+                    how_info=COALESCE(NULLIF(?, ''), how_info),
+                    who_subject=COALESCE(NULLIF(?, ''), who_subject),
+                    who_affected=COALESCE(?, who_affected)
                 WHERE id=?
             """, (
                 # A headline is the ONE field a card cannot render without.
@@ -1953,6 +2022,7 @@ async def run_ai_batch(conn):
                 audit["body"]["overlap"],
                 audit["body"]["longest_run"],
                 datetime.now(timezone.utc).isoformat(),
+                *_wwwh_params(result),
                 row["id"],
             ))
             # Fill the dossier's Strings/Dots panes from this same rewrite (only
@@ -3721,6 +3791,55 @@ async def patterns_by_type(ptype: str, limit: int = Query(30, le=100),
                           max_age_hours=max_age_hours)
 
 
+# ─── rewrite-on-open ─────────────────────────────────────────────────────────
+# A reader who opens a story still on the placeholder should not wait for the
+# drain to reach it (it works newest-first at the free tier's pace). Opening it
+# queues THAT article for an immediate read-and-rewrite; the client re-fetches
+# /article/<id>/full a few seconds later and the original body replaces the note.
+# Bounded: ONDEMAND_PER_MIN rewrites a minute across all readers, one in flight
+# per article, so a busy morning cannot blow the provider quota.
+ONDEMAND_PER_MIN = int(os.getenv("ONDEMAND_REWRITES_PER_MIN", "4"))
+_ondemand_inflight: set = set()
+_ondemand_hits: list = []
+
+
+def _needs_rewrite_body(d: dict) -> bool:
+    body = (d.get("full_body") or "").strip()
+    return (not body) or body_state.is_stub(body) \
+        or body_state.is_stub(d.get("summary_60") or "")
+
+
+def _ondemand_job(article_id: int) -> None:
+    try:
+        res = _reprocess_bodies_sync(1, 1, 1, only_ids=[article_id])
+        log.info("[ONDEMAND] article %s: %s", article_id,
+                 {k: res.get(k) for k in ("rewritten", "failed")})
+    except Exception as e:                                       # noqa: BLE001
+        log.warning("[ONDEMAND] article %s failed: %s", article_id, e)
+    finally:
+        _ondemand_inflight.discard(article_id)
+
+
+def _maybe_rewrite_now(d: dict) -> bool:
+    """Queue an immediate rewrite of this article if it is still a placeholder.
+    Returns True when a rewrite is pending (queued now or already running)."""
+    aid = d.get("id")
+    if not aid or not ARTICLE_READER_ENABLED or not _needs_rewrite_body(d):
+        return False
+    if aid in _ondemand_inflight:
+        return True
+    now = time.time()
+    _ondemand_hits[:] = [t for t in _ondemand_hits if now - t < 60]
+    if len(_ondemand_hits) >= ONDEMAND_PER_MIN:
+        return False
+    if available_providers().get("primary") == "rule-based":
+        return False
+    _ondemand_hits.append(now)
+    _ondemand_inflight.add(aid)
+    asyncio.get_event_loop().run_in_executor(None, _ondemand_job, aid)
+    return True
+
+
 @app.get("/article/{article_id}")
 async def get_article(article_id: int, authorization: str = Header("")):
     uid = get_current_user(authorization)
@@ -3737,6 +3856,7 @@ async def get_article(article_id: int, authorization: str = Header("")):
     conn.commit()
     conn.close()
     d = article_row_to_dict(row)
+    d["rewrite_pending"] = _maybe_rewrite_now(dict(row))
     await _apply_stock_images([d])
     return d
 
@@ -3756,14 +3876,25 @@ async def get_article_full(article_id: int, authorization: str = Header("")):
     if not row:
         raise HTTPException(404, "Article not found")
     d = article_row_to_dict(row)
+    raw = dict(row)
+    # The WWWH skeleton (sbb.pdf): what · where & when · why · how, plus who.
+    # "why" used to read how_info — the mechanism shown under the wrong label.
     wwww = {
-        "what":  (d.get("what_info")  or "").strip(),
-        "where": (d.get("where_info") or "").strip(),
-        "when":  (d.get("when_info")  or "").strip(),
-        "why":   (d.get("how_info")   or "").strip(),
+        "who":   (raw.get("who_subject") or "").strip(),
+        "what":  (raw.get("what_info")  or "").strip(),
+        "where": (raw.get("where_info") or "").strip(),
+        "when":  (raw.get("when_info")  or "").strip(),
+        "why":   (raw.get("why_info")   or "").strip(),
+        "how":   (raw.get("how_info")   or "").strip(),
     }
+    if wwww["where"].lower() == "not specified":
+        wwww["where"] = ""
+    body = raw.get("full_body") or raw.get("summary_60") or ""
+    pending = _maybe_rewrite_now(raw)
     return {"id": d["id"],
-            "body": d.get("full_body") or d.get("summary_60") or "",
+            # Never hand the placeholder back as if it were a body.
+            "body": "" if body_state.is_stub(body) else body,
+            "rewrite_pending": pending,
             "wwww": {k: v for k, v in wwww.items() if v}}
 
 
@@ -5589,8 +5720,14 @@ def _synthesise_clusters(conn, work: list, budget: int = None) -> list:
     return leftover
 
 
+_SELECT_REWRITE_BY_IDS = (
+    "SELECT id, headline, source_headline, full_body, summary_60, "
+    "source_summary, pillar_id, micro_tags, source_name, url, "
+    "published_at FROM articles WHERE status='published' AND id IN ({marks})")
+
+
 def _reprocess_bodies_sync(limit: int, batch: int,
-                           concurrency: int = None) -> dict:
+                           concurrency: int = None, only_ids=None) -> dict:
     """Rewrite published rows whose body is a stub, the publisher's text, or empty.
 
     Runs the SAME AI pass the pipeline uses, over the surviving source text — not
@@ -5637,9 +5774,18 @@ def _reprocess_bodies_sync(limit: int, batch: int,
         while len(attempted) < limit:
             take = min(batch, limit - len(attempted))
             try:
-                fetched = conn.execute(
-                    body_state.SELECT_NEEDING_REWRITE, (take + len(attempted),)
-                ).fetchall()
+                if only_ids:
+                    # On-demand: exactly these rows (a reader just opened one),
+                    # whatever their age. Same columns as the drain's selector.
+                    ids = [int(i) for i in only_ids][:50]
+                    fetched = conn.execute(
+                        _SELECT_REWRITE_BY_IDS.format(
+                            marks=",".join("?" for _ in ids)), tuple(ids)
+                    ).fetchall()
+                else:
+                    fetched = conn.execute(
+                        body_state.SELECT_NEEDING_REWRITE, (take + len(attempted),)
+                    ).fetchall()
             except Exception as e:
                 _body_err("select", e)
                 break
@@ -5684,8 +5830,14 @@ def _reprocess_bodies_sync(limit: int, batch: int,
             # invented. Skip it and say so, rather than spending a provider call
             # to receive a fabrication or a placeholder. Left unflagged, so it
             # comes back the moment the ingest gives it real text.
+            # READ THE ARTICLE. Every unhealthy row's publisher page is fetched
+            # and its full text extracted; a row we could read is rewritten from
+            # the whole report (WWWH), not from the blurb, and is never starved.
+            full = _read_full_articles_sync(unhealthy)
+            _body_last["read_full"] = _body_last.get("read_full", 0) + len(full)
             starved = [r for r in unhealthy
-                       if not body_state.has_usable_source(
+                       if r["id"] not in full
+                       and not body_state.has_usable_source(
                            r["summary_60"], r["source_summary"], r["full_body"])]
             for r in starved:
                 _body_reason("no_source_material", r["id"])
@@ -5707,7 +5859,15 @@ def _reprocess_bodies_sync(limit: int, batch: int,
             # This SPENDS FEWER REQUESTS, not more: a cluster of five is one
             # provider call where the single-article path was five. The tick's
             # rate ceiling is therefore still honoured by construction.
-            work = _synthesise_clusters(conn, work, budget=take)
+            # Rows we READ go straight to the full-article rewrite: they carry
+            # the facts themselves. Only blurb-only rows need clustering to
+            # gather enough material, and they get what is left of the budget.
+            full_rows = [r for r in work if r["id"] in full]
+            blurb_rows = [r for r in work if r["id"] not in full]
+            if blurb_rows:
+                blurb_rows = _synthesise_clusters(
+                    conn, blurb_rows, budget=max(take - len(full_rows), 0))
+            work = full_rows + blurb_rows
             if not work:
                 conn.commit()
                 _body_progress.update({"done": done, "failed": failed,
@@ -5717,7 +5877,7 @@ def _reprocess_bodies_sync(limit: int, batch: int,
 
             batch_input = [{
                 "title": r["headline"],
-                "body": body_state.source_material(
+                "body": full.get(r["id"]) or body_state.source_material(
                     r["headline"], r["summary_60"], r["source_summary"], r["full_body"]),
                 "fallback_category": PILLARS.get(r["pillar_id"], PILLARS[3])["slug"],
             } for r in work]
@@ -5758,7 +5918,7 @@ def _reprocess_bodies_sync(limit: int, batch: int,
                         failed += 1
                         continue
                     src_head = row["source_headline"] or row["headline"] or ""
-                    source = body_state.source_material(
+                    source = full.get(row["id"]) or body_state.source_material(
                         row["headline"], row["summary_60"], row["source_summary"], "")
 
                     # THE BODY AND THE HEADLINE ARE GATED SEPARATELY HERE.
@@ -5778,6 +5938,7 @@ def _reprocess_bodies_sync(limit: int, batch: int,
                     head_ok, head_m = headline_is_original(
                         result["refined_title"], src_head)
                     audit = {"pass": "body_reprocess", "body": body_m,
+                             "read_full_article": row["id"] in full,
                              "headline": head_m, "headline_replaced": bool(head_ok),
                              "at": datetime.now(timezone.utc).isoformat()}
                     if not body_ok:
@@ -5796,11 +5957,21 @@ def _reprocess_bodies_sync(limit: int, batch: int,
                         UPDATE articles SET headline=?, summary_60=?, full_body=?,
                             ai_processed=1, reprocessed=1, status='published',
                             originality_json=?, originality_overlap=?,
-                            originality_run=?, originality_checked_at=?
+                            originality_run=?, originality_checked_at=?,
+                            when_info=COALESCE(NULLIF(?, ''), when_info),
+                            where_info=COALESCE(NULLIF(NULLIF(?, 'Not specified'), ''), where_info),
+                            what_info=COALESCE(NULLIF(?, ''), what_info),
+                            why_info=COALESCE(NULLIF(?, ''), why_info),
+                            how_info=COALESCE(NULLIF(?, ''), how_info),
+                            who_subject=COALESCE(NULLIF(?, ''), who_subject),
+                            who_affected=COALESCE(?, who_affected)
                         WHERE id=?""", (
                         headline, result["summary"], result["full_body"],
                         json.dumps(audit), body_m["overlap"], body_m["longest_run"],
-                        datetime.now(timezone.utc).isoformat(), row["id"]))
+                        datetime.now(timezone.utc).isoformat(),
+                        (result.get("when_info") or "").strip(),
+                        (result.get("where_info") or "").strip(),
+                        *_wwwh_params(result), row["id"]))
                     # Fill the Strings/Dots panes from the same rewrite.
                     _write_single_strings_dots(conn, row["id"], result)
                     done += 1

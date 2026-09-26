@@ -87,7 +87,8 @@ def test_the_statement_can_actually_execute(func):
         " where_info TEXT, pillar_id INT, micro_tags TEXT, is_trending INT,"
         " sentiment TEXT, ai_processed INT, reprocessed INT, status TEXT,"
         " originality_json TEXT, originality_overlap REAL, originality_run INT,"
-        " originality_checked_at TEXT)")
+        " originality_checked_at TEXT, what_info TEXT, why_info TEXT,"
+        " how_info TEXT, who_subject TEXT, who_affected TEXT)")
     conn.execute("INSERT INTO articles (id) VALUES (1)")
     # n-1 real values plus the id; any mismatch raises here.
     conn.execute(sql, tuple(["x"] * (n - 1) + [1]))
