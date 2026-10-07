@@ -3235,8 +3235,10 @@ async def get_feed(
 # Explore is untouched: everything published still lives there.
 def _myfeed_quality_sql(alias: str = "", strict: bool = True) -> str:
     c = (alias + ".") if alias else ""
+    summary_expr = "COALESCE(" + c + "summary_60,'')"
+    stub = body_state._stub_like_clause(summary_expr)
     sql = (f" AND COALESCE({c}headline,'') <> COALESCE({c}source_headline,'')"
-           f" AND NOT ({body_state._stub_like_clause(f"COALESCE({c}summary_60,'')")})")
+           f" AND NOT ({stub})")
     if strict:
         sql += f" AND COALESCE({c}significance,-1) >= {significance.feed_min()}"
     return sql
