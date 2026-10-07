@@ -362,7 +362,11 @@ def _stub_like_clause(column: str) -> str:
                        for m in _STUB_MARKERS)
 
 
-def _needing_rewrite_sql() -> str:
+def _needing_rewrite_sql(sig_min: int | None = None) -> str:
+    if sig_min is None:
+        import significance                                    # noqa: PLC0415
+        sig_min = significance.rewrite_min()
+    sig_min = int(sig_min)
     body = _stub_like_clause("full_body")
     summ = _stub_like_clause("summary_60")
     return (
@@ -379,7 +383,16 @@ def _needing_rewrite_sql() -> str:
         f" OR {summ}"
         "  OR COALESCE(TRIM(full_body),'')=''"
         "  OR COALESCE(TRIM(summary_60),'')=''"
-        ") ORDER BY published_at DESC LIMIT ?"
+        ")"
+        # SIGNIFICANCE (significance.py): the writer budget is a few hundred
+        # stories a day on the free tier and ingest brings ~1,700, so the drain
+        # must spend it on what matters. A row scored below the bar never takes
+        # budget (it stays in Explore under the aggregator posture); a row not
+        # yet scored (-1, the column default) stays eligible but queues after
+        # every scored, significant one; the significant ones go newest-first.
+        f" AND (COALESCE(significance,-1) < 0 OR significance >= {sig_min})"
+        " ORDER BY CASE WHEN COALESCE(significance,-1) >= 0 THEN 0 ELSE 1 END,"
+        " published_at DESC LIMIT ?"
     )
 
 

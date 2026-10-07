@@ -10839,13 +10839,30 @@ function mfLogoMarkup(src){
     : SHERR_LOGO_SVG;
 }
 
+// A pane must never repeat the headline back at the reader. Ingest seeds the
+// summary and what-line with the publisher's headline, and before this every
+// pane of an unwritten card printed it again (lead, Key Points, TL;DR, the
+// Strings "Present" node). These two checks are what each pane asks first.
+function mfNorm(t){ return String(t || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(); }
+function mfSameText(x, y){ const a = mfNorm(x), b = mfNorm(y); return !!a && a === b; }
+function mfIsPlaceholder(t){
+  const n = mfNorm(t);
+  return !n || n.startsWith('sherr ai is preparing') || n.startsWith('sherrbyte has not yet published');
+}
+// The usable summary for a card, or '' when all we have is the headline again
+// or a placeholder.
+function mfSummaryOf(a){
+  const t = (a.preview || a.summary || a.cached_summary || '').trim();
+  return (mfIsPlaceholder(t) || mfSameText(t, a.title)) ? '' : t;
+}
+
 function buildMyfeedCard(a){
   const saved = ST.saves.includes(a.id);
   const liked = ST.likes.includes(a.id);
   const el = document.createElement('div'); el.className = 'mf-item'; el.dataset.aid = a.id;
   el._mfa = a;                                   // stashed for lazy hydration
   const src = a.source || 'SherrByte';
-  const tldr = bEsc(a.preview || a.summary || a.cached_summary || '');
+  const tldr = bEsc(mfSummaryOf(a));
   const cat = (a.category || a.pillar_slug || '').trim();
   const leadBadge = sectorBadge(cat || src);     // the "colour box" that leads the lead block
   el.innerHTML = `
@@ -10968,8 +10985,8 @@ function mfBindCard(el, a){
     const open = kp.hidden;
     if (open && !kp.dataset.ready) {
       kp.innerHTML = mfdKeyPointsHTML({
-        what: a.title || '', where: '', when: '',
-        tldr: (el.querySelector('.mfd-lead') ? el.querySelector('.mfd-lead').textContent : (a.preview || a.summary || '')),
+        what: '', where: '', when: '', title: a.title || '',
+        tldr: mfSummaryOf(a),
       });
     }
     kp.hidden = !open;
@@ -11004,11 +11021,15 @@ function mfdKeyPointsHTML(k){
   const row = (label, val) => val ? `<div class="mfd-kp-row"><span class="mfd-kp-k">${label}</span><span class="mfd-kp-v">${bEsc(val)}</span></div>` : '';
   const fmtWhen = (w) => { if(!w) return ''; const d=new Date(w);
     return isNaN(d) ? String(w) : d.toLocaleString(undefined,{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}); };
-  return `<div class="mfd-kp-hd"><i class="fa-solid fa-list-check"></i> KEY POINTS</div>
-    ${row('What', k.what)}
-    ${row('Where', k.where || 'Not specified')}
-    ${row('When', fmtWhen(k.when))}
-    ${k.tldr ? `<div class="mfd-kp-tldr"><span class="mfd-kp-k">TL;DR</span><p>${bEsc(k.tldr)}</p></div>` : ''}`;
+  // Each row is shown only when it ADDS something: never the headline again,
+  // never "Not specified", never a TL;DR identical to the What line.
+  const what = (k.what && !mfSameText(k.what, k.title)) ? k.what : '';
+  const where = /^(not specified|unspecified|unknown|n\/a)$/i.test(String(k.where || '').trim()) ? '' : k.where;
+  const tldr = (k.tldr && !mfIsPlaceholder(k.tldr) && !mfSameText(k.tldr, k.title) && !mfSameText(k.tldr, what)) ? k.tldr : '';
+  const body = row('What', what) + row('Where', where) + row('When', fmtWhen(k.when))
+    + (tldr ? `<div class="mfd-kp-tldr"><span class="mfd-kp-k">TL;DR</span><p>${bEsc(tldr)}</p></div>` : '');
+  return `<div class="mfd-kp-hd"><i class="fa-solid fa-list-check"></i> KEY POINTS</div>`
+    + (body || `<div class="mfd-kp-row"><span class="mfd-kp-v">Key points appear once SherrByte has written this story.</span></div>`);
 }
 
 async function hydrateDossier(el, id){
@@ -11022,9 +11043,15 @@ async function hydrateDossier(el, id){
   const hook = (d.hook || '').trim();
   const what = (node.what || '').trim();
   const lead = el.querySelector('.mfd-lead');
-  if (lead && (hook || what)) lead.textContent = hook || what;
+  const title = (el._mfa && el._mfa.title) || d.headline || '';
+  const leadNow = lead ? lead.textContent : '';
+  // The hook is the written lead and wins. The what-line only fills a lead that
+  // is still the placeholder — it is a one-line fact, not a replacement for the
+  // written summary — and never when it is the headline again.
+  if (lead && hook && !mfSameText(hook, title)) lead.textContent = hook;
+  else if (lead && what && mfIsPlaceholder(leadNow) && !mfSameText(what, title)) lead.textContent = what;
   // Only show a separate "What happened" block when it adds to the lead.
-  if (what && !(hook && what === hook)) {
+  if (what && !mfSameText(what, title) && !mfSameText(what, lead ? lead.textContent : '')) {
     const wSec = el.querySelector('.mfd-what');
     if (wSec) { wSec.querySelector('p').textContent = what; wSec.hidden = false; }
   }
@@ -11046,10 +11073,9 @@ async function hydrateDossier(el, id){
   // reader taps the TL;DR button.
   const kp = el.querySelector('.mfd-keypoints');
   if (kp) {
-    const tldrLine = hook || what || (el.querySelector('.mfd-lead') ? el.querySelector('.mfd-lead').textContent : '');
+    const tldrLine = hook || (lead ? lead.textContent : '') || what;
     kp.innerHTML = mfdKeyPointsHTML({
-      what: what || (el._mfa && el._mfa.title) || '',
-      where, when, tldr: tldrLine,
+      what, where, when, title, tldr: tldrLine,
     });
     kp.dataset.ready = '1';
   }
@@ -11139,12 +11165,12 @@ function mfdEmpty(title, msg){
 function renderStringsPane(strings, status, a){
   const items = (strings && strings.length) ? strings.slice() : [];
   const seeded = !items.length;
-  if (seeded && a && a.title){
-    // The headline already sits directly above the timeline, so the seeded node
-    // omits the title and just carries the one-line state of the story now.
-    items.push({ stage: 'Present',
-      detail: (a.preview || a.summary || a.cached_summary || 'This is the latest report in this thread.').trim(),
-      now: true });
+  // The seeded "Present" node carries the story's written summary — and only
+  // that. When all the card has is the headline again (or a placeholder) the
+  // pane shows the honest empty state instead of echoing it.
+  const presentLine = a ? mfSummaryOf(a) : '';
+  if (seeded && presentLine){
+    items.push({ stage: 'Present', detail: presentLine, now: true });
   }
   if (!items.length){
     return mfdEmpty('The Strings', status === 'pending'

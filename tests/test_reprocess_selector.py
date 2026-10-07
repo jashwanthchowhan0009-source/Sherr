@@ -33,7 +33,8 @@ def conn():
         source_headline TEXT, full_body TEXT, summary_60 TEXT,
         source_summary TEXT, status TEXT, ai_processed INTEGER DEFAULT 0,
         reprocessed INTEGER DEFAULT 0, pillar_id INTEGER DEFAULT 3,
-        micro_tags TEXT, source_name TEXT, published_at TEXT)""")
+        micro_tags TEXT, source_name TEXT, published_at TEXT,
+        significance INTEGER DEFAULT -1)""")
     yield c
     c.close()
 

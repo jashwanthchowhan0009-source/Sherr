@@ -883,3 +883,43 @@ JSON-LD `articleBody` first, else `<article>` paragraphs, boilerplate dropped).
   4, one in flight per id) and return `rewrite_pending`; the client polls `/full`
   and swaps the body in. `/full` never returns the placeholder as a body.
 - `ARTICLE_READER_ENABLED=0` turns reading off (back to blurb-only).
+
+## Significance decides what gets written and what reaches myFeed
+
+Adopted 2026-10-08. Ingest brings ~1,700 articles a day; the free-tier writer
+covers a few hundred. The drain took them newest-first, so the budget went to
+city crime, match reports, celebrity casting and gaming guides, and in one 48h
+window **3,093 of 3,429 published cards were publish_pending aggregator rows** —
+publisher headline kept, placeholder body, no Strings/Dots, the headline echoed
+in every pane. 1,973 of those still carried the publisher's prose in
+`summary_60`, which is what the card renders.
+
+`significance.py` scores each row 0–100 at ingest (`articles.significance`,
+-1 = unscored): source tier + topic (geopolitics, macro, markets,
+energy/commodities, AI/tech, space/science, climate policy) + big entities −
+junk (crime/accidents/local civic, celebrity, sport results, stock-tip spam,
+gaming, product launches). SEBI/exchange micro-filings are capped at 20 — they
+belong to the filings pipeline, not myFeed. Pure, no DB/model, and explained:
+`/admin/significance` shows the distribution, per-source pass counts and
+samples with reasons. Calibrated on 450 real rows; the cases are pinned in
+`tests/test_significance.py`.
+
+- **Writer budget:** `SELECT_NEEDING_REWRITE` skips rows scored below
+  `SIG_REWRITE_MIN` (defaults to `SIG_FEED_MIN`, 42); unscored rows queue after
+  every significant one. Low scorers stay in Explore under the aggregator posture.
+- **myFeed (`/feed`) serves WRITTEN + SIGNIFICANT only**: our headline differs
+  from the publisher's, the summary is not a placeholder, score ≥ `SIG_FEED_MIN`.
+  `_myfeed_rows` relaxes (written-only, then everything) only when a page would
+  come back with fewer than 5 rows, so a writer outage degrades the deck rather
+  than blanking it. Explore is untouched.
+- **publish_pending now replaces `summary_60` too** in aggregator mode;
+  `source_summary` keeps the reference copy, `--mode force` leaves it alone.
+- **The dossier never echoes the headline:** `node.what` is blanked when it is
+  the headline, `node.where` when it is "Not specified"; the client's
+  `mfSummaryOf` / `mfSameText` drop the same echoes from the lead, Key Points and
+  the Strings "Present" node, which shows the empty state instead.
+- `significance_backfill_job` scores old rows `SIG_BACKFILL_BATCH` (800) every
+  `SIG_BACKFILL_INTERVAL_S` (180s), newest first, no cursor.
+
+Tune the weights in `significance.py`, not in SQL, and re-run the test file:
+the pinned headlines are the contract for what "important" means here.
