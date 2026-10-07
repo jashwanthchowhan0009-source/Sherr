@@ -242,5 +242,7 @@ def test_the_feed_query_refuses_a_titleless_row():
     a blank through."""
     import inspect
     import main
-    src = inspect.getsource(main.get_feed)
-    assert "COALESCE(TRIM(headline),'') <> ''" in src
+    # The unpersonalised query moved into _myfeed_rows (with the significance
+    # bar); the personalised one stays in get_feed under the `a.` alias.
+    assert "COALESCE(TRIM(headline),'') <> ''" in inspect.getsource(main._myfeed_rows)
+    assert "COALESCE(TRIM(a.headline),'') <> ''" in inspect.getsource(main.get_feed)

@@ -262,6 +262,8 @@ def drain_articles(conn, *, mode: str = "aggregator", dry_run: bool = False,
     any real backlog.
     """
     have_img = _has_columns(conn, "articles", ("image_url", "source_image_url"))
+    have_sum = _has_columns(conn, "articles", ("summary_60",))
+    sum_set = "summary_60=COALESCE(?, summary_60), " if have_sum else ""
     img_cols = ", image_url, source_image_url" if have_img else ""
     q = (f"SELECT id, headline, full_body AS body, source_name, url{img_cols} "
          "FROM articles WHERE status = 'pending_rewrite' ORDER BY published_at DESC")
@@ -279,21 +281,31 @@ def drain_articles(conn, *, mode: str = "aggregator", dry_run: bool = False,
         n += 1
         if dry_run:
             continue
+        # The aggregator posture replaces the publisher's prose with our stub —
+        # in BOTH fields the feed renders. Ingest seeds summary_60 with up to 400
+        # characters of the publisher's text, and that is what the card shows, so
+        # replacing only full_body left the copy on screen (1,973 of 3,093 rows
+        # released in one 48h window). source_summary keeps the reference copy.
+        # --mode force is the deliberate exception and leaves it alone.
+        summary = u["body"] if mode == "aggregator" else None
         if have_img:
             img = (r["image_url"] or "") or (r["source_image_url"] or "")
             conn.execute(
                 "UPDATE articles SET pillar_id=?, full_body=?, status='published', "
+                + sum_set +
                 "ai_processed=1, image_url=?, image_source=?, image_credit=?, "
                 "originality_json=? WHERE id=?",
-                (u["pillar_id"], u["body"], img,
+                (u["pillar_id"], u["body"], *((summary,) if have_sum else ()), img,
                  "thumbnail" if img else "",
                  (f"Image: {r['source_name'] or 'source'}" if img else ""),
                  json.dumps(u["audit"]), r["id"]))
         else:
             conn.execute(
                 "UPDATE articles SET pillar_id=?, full_body=?, status='published', "
+                + sum_set +
                 "ai_processed=1, originality_json=? WHERE id=?",
-                (u["pillar_id"], u["body"], json.dumps(u["audit"]), r["id"]))
+                (u["pillar_id"], u["body"], *((summary,) if have_sum else ()),
+                 json.dumps(u["audit"]), r["id"]))
     if not dry_run:
         conn.commit()
     log.info("[DRAIN] published %d of %d matched", 0 if dry_run else n, len(rows))

@@ -49,6 +49,7 @@ import synthesis
 # analog engine and market_reaction filter on a stored column AND a whitelist that
 # can never disagree, rather than a filter each caller has to remember.
 import feeds_financial
+import significance
 # One canonical shape for articles.published_at. Four formats used to reach that
 # column; see timestamps.py for the two bugs that produced.
 import timestamps
@@ -975,6 +976,10 @@ _MIGRATIONS = [
     # traceable to the writer generation that produced it. Both emptyable.
     "ALTER TABLE articles ADD COLUMN why_it_matters TEXT DEFAULT ''",
     "ALTER TABLE articles ADD COLUMN writer_id TEXT DEFAULT ''",
+    # significance: 0-100 from significance.py, scored at ingest from source
+    # tier + topic + big entities − junk. It decides which stories spend the
+    # free-tier writer budget and which reach myFeed. -1 = not scored yet.
+    "ALTER TABLE articles ADD COLUMN significance INTEGER DEFAULT -1",
     # ── account handle ────────────────────────────────────────────────────────
     # The @username was client-only (localStorage), so it never crossed devices
     # and the profile's name/bio looked empty on a fresh sign-in. It lives on the
@@ -1678,17 +1683,26 @@ def _insert_with_dedup(conn, article: dict) -> bool:
     # financial explicitly, which only the financial feeds are.
     article.setdefault("feed_class",
                        feeds_financial.feed_class(article.get("source_name", "")))
+    # Scored once, here, from what ingest already has — see significance.py.
+    if article.get("significance") is None:
+        try:
+            article["significance"] = significance.score(
+                article.get("source_headline") or article.get("headline", ""),
+                article.get("source_summary") or article.get("summary_60", ""),
+                article.get("source_name", ""), article.get("feed_class", "general"))
+        except Exception:                                         # noqa: BLE001
+            article["significance"] = significance.UNSCORED
     try:
         cur = conn.execute("""
             INSERT OR IGNORE INTO articles
             (url, title_hash, headline, source_headline, status, summary_60, full_body,
              source_summary, when_info, where_info, what_info, how_info, image_url,
              source_image_url, source_name, pillar_id, micro_tags, scope, published_at,
-             feed_class)
+             feed_class, significance)
             VALUES(:url, :title_hash, :headline, :source_headline, :status, :summary_60,
                    :full_body, :source_summary, :when_info, :where_info, :what_info,
                    :how_info, :image_url, :source_image_url, :source_name, :pillar_id,
-                   :micro_tags, :scope, :published_at, :feed_class)
+                   :micro_tags, :scope, :published_at, :feed_class, :significance)
         """, article)
         # cur.rowcount, NOT conn.total_changes. total_changes is CUMULATIVE for
         # the connection, so once a single row had ever landed it stayed > 0 and
@@ -2296,6 +2310,56 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 scheduler = AsyncIOScheduler()
 
 
+# ─── significance backfill ───────────────────────────────────────────────────
+SIG_BACKFILL_BATCH = int(os.getenv("SIG_BACKFILL_BATCH", "800"))
+SIG_BACKFILL_INTERVAL_S = int(os.getenv("SIG_BACKFILL_INTERVAL_S", "180"))
+
+
+def _significance_backfill_sync(limit: int = SIG_BACKFILL_BATCH) -> dict:
+    """Score up to `limit` unscored rows, newest first. Returns counts.
+
+    No cursor: the selector asks for rows still at -1, so whatever is left IS
+    the state and a restart resumes with nothing to reset.
+    """
+    conn = get_db()
+    scored = 0
+    try:
+        rows = conn.execute(
+            "SELECT id, headline, source_headline, summary_60, source_summary, "
+            "source_name, feed_class FROM articles "
+            "WHERE COALESCE(significance,-1) < 0 "
+            "ORDER BY published_at DESC, id DESC LIMIT ?", (int(limit),)).fetchall()
+        for r in rows:
+            try:
+                sc = significance.score(
+                    r["source_headline"] or r["headline"] or "",
+                    r["source_summary"] or r["summary_60"] or "",
+                    r["source_name"] or "", r["feed_class"] or "general")
+            except Exception:                                     # noqa: BLE001
+                sc = 0
+            conn.execute("UPDATE articles SET significance=? WHERE id=?", (sc, r["id"]))
+            scored += 1
+            if scored % 200 == 0:
+                conn.commit()
+        conn.commit()
+        left = conn.execute(
+            "SELECT COUNT(*) AS c FROM articles WHERE COALESCE(significance,-1) < 0"
+        ).fetchone()["c"]
+    finally:
+        conn.close()
+    return {"scored": scored, "unscored_left": int(left or 0)}
+
+
+async def significance_backfill_job() -> None:
+    try:
+        res = await asyncio.get_event_loop().run_in_executor(
+            None, _significance_backfill_sync, SIG_BACKFILL_BATCH)
+        if res.get("scored"):
+            log.info("[SIG] backfill scored=%s left=%s", res["scored"], res["unscored_left"])
+    except Exception as e:                                        # noqa: BLE001
+        log.warning("[SIG] backfill failed: %s", e)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
@@ -2347,6 +2411,13 @@ async def lifespan(app: FastAPI):
             log.info("[REWRITE] continuous drain on: %d articles / %ds "
                      "(~%d per hour)", BODY_DRAIN_RPM, BODY_DRAIN_INTERVAL_S,
                      BODY_DRAIN_RPM * 3600 // max(BODY_DRAIN_INTERVAL_S, 1))
+
+        # Score rows that predate significance.py (column default -1), newest
+        # first, a bounded batch per tick so a 30k-row corpus never blocks a
+        # request thread. Pure Python, no provider calls.
+        scheduler.add_job(significance_backfill_job, "interval",
+                          seconds=SIG_BACKFILL_INTERVAL_S, id="significance_backfill",
+                          max_instances=1, coalesce=True, replace_existing=True)
 
         scheduler.add_job(body_reprocess_job, "cron", hour=3, minute=20,
                           id="body_reprocess", replace_existing=True,
@@ -3122,6 +3193,7 @@ async def get_feed(
     prefs = conn.execute("SELECT COUNT(*) as c FROM user_preferences WHERE user_id=?", (uid,)).fetchone()
     has_p = prefs["c"] > 0
 
+    rows = []
     if has_p:
         await asyncio.get_event_loop().run_in_executor(None, compute_feed_for_user, uid)
         q = "SELECT a.*, f.score FROM articles a JOIN feeds f ON a.id=f.article_id WHERE f.user_id=? AND a.ai_processed=1 AND a.status='published'"
@@ -3130,21 +3202,13 @@ async def get_feed(
         q += sc_sql; p += sc_params
         if pillar:
             q += " AND a.pillar_id=?"; p.append(pillar)
+        q += " AND COALESCE(TRIM(a.headline),'') <> ''"
+        q += _myfeed_quality_sql("a", strict=True)
         q += " ORDER BY f.score DESC, a.published_at DESC, a.id DESC LIMIT ? OFFSET ?"
         p += [limit + 1, offset]
         rows = conn.execute(q, p).fetchall()
-        if len(rows) < 5:
-            rows = conn.execute(
-                "SELECT *, 1.0 as score FROM articles WHERE ai_processed=1 AND status='published' "
-        "AND COALESCE(TRIM(headline),'') <> '' ORDER BY published_at DESC, id DESC LIMIT ? OFFSET ?",
-                (limit + 1, offset)
-            ).fetchall()
-    else:
-        rows = conn.execute(
-            "SELECT *, 1.0 as score FROM articles WHERE ai_processed=1 AND status='published' "
-        "AND COALESCE(TRIM(headline),'') <> '' ORDER BY published_at DESC, id DESC LIMIT ? OFFSET ?",
-            (limit + 1, offset)
-        ).fetchall()
+    if len(rows) < min(5, limit):
+        rows = _myfeed_rows(conn, limit, offset)
 
     conn.close()
     has_more = len(rows) > limit
@@ -3153,6 +3217,51 @@ async def get_feed(
     await _apply_stock_images(payload["articles"])
     await cache.set(ck, payload, FEED_CACHE_SECONDS)
     return payload
+
+
+# ─── myFeed shows written, significant stories only ──────────────────────────
+# myFeed is the dossier surface — News · Strings · Dots — so a card is only
+# worth showing when SherrByte actually wrote it. Before this, ~90% of the deck
+# was publish_pending's aggregator rows: the publisher's headline kept, our body
+# a placeholder, no Strings or Dots — so every pane repeated the headline, and
+# most of them were city crime, match reports and filings anyway.
+#
+# Three bars, applied together (strict) and relaxed in steps only when a page
+# would otherwise come back near-empty, so the surface degrades instead of
+# blanking during an outage of the writer:
+#   1. WRITTEN     — our headline differs from the publisher's (a rewrite or a
+#                    synthesis ran) and the summary is not a placeholder.
+#   2. SIGNIFICANT — significance >= SIG_FEED_MIN (significance.py).
+# Explore is untouched: everything published still lives there.
+def _myfeed_quality_sql(alias: str = "", strict: bool = True) -> str:
+    c = (alias + ".") if alias else ""
+    sql = (f" AND COALESCE({c}headline,'') <> COALESCE({c}source_headline,'')"
+           f" AND NOT ({body_state._stub_like_clause(f"COALESCE({c}summary_60,'')")})")
+    if strict:
+        sql += f" AND COALESCE({c}significance,-1) >= {significance.feed_min()}"
+    return sql
+
+
+def _myfeed_rows(conn, limit: int, offset: int):
+    base = ("SELECT *, 1.0 as score FROM articles WHERE ai_processed=1 "
+            "AND status='published' AND COALESCE(TRIM(headline),'') <> ''")
+    order = " ORDER BY published_at DESC, id DESC LIMIT ? OFFSET ?"
+    floor = min(5, limit)
+    rows = []
+    for extra in (_myfeed_quality_sql(strict=True),
+                  _myfeed_quality_sql(strict=False),
+                  ""):
+        try:
+            rows = conn.execute(base + extra + order, (limit + 1, offset)).fetchall()
+        except Exception as e:                                    # noqa: BLE001
+            # A schema without the significance column (an old local DB) must
+            # not take myFeed down — fall through to the next, looser bar.
+            log.warning("[MYFEED] quality query failed, relaxing: %s", e)
+            continue
+        if len(rows) >= floor or offset > 0:
+            return rows
+    return rows
+
 
 
 # ─── One path, two audiences ─────────────────────────────────────────────────
@@ -3913,13 +4022,29 @@ def _dossier_payload(row) -> dict:
     def _clean(v):
         return (str(v or "")).strip()
 
+    # Ingest seeds what_info with the PUBLISHER'S headline and where_info with
+    # "Not specified". Served as-is, the card repeated the raw headline in the
+    # lead, Key Points and the Strings "Present" node, and printed a field that
+    # says nothing. Neither is information, so neither is sent: a rewrite or
+    # synthesis that wrote a real what/where replaces them and is served.
+    try:
+        src_head = _clean(row["source_headline"])
+    except Exception:                                             # noqa: BLE001
+        src_head = ""
+    what = _clean(d.get("what_info"))
+    if what and (_same_text(what, src_head) or _same_text(what, d.get("headline"))):
+        what = ""
+    where = _clean(d.get("where_info"))
+    if where.lower() in ("not specified", "unspecified", "unknown", "n/a", "none"):
+        where = ""
+
     node = {
-        "what":          _clean(d.get("what_info")),
+        "what":          what,
         "who_subject":   _clean(d.get("who_subject")),
         "who_affected":  [str(a).strip() for a in _load_json_list(
                               d.get("who_affected")) if str(a).strip()],
         "when":          _clean(d.get("when_info")),
-        "where":         _clean(d.get("where_info")),
+        "where":         where,
         "mechanism":     _clean(d.get("how_info")),
         "why":           _clean(d.get("why_info")),
     }
@@ -3956,6 +4081,14 @@ def _dossier_payload(row) -> dict:
         "strings_status": "ready" if strings else "pending",
         "dots_status": "ready" if (isinstance(dots, dict) and dots) else "pending",
     }
+
+
+def _same_text(a, b) -> bool:
+    """True when two strings are the same text once case, punctuation and
+    spacing are ignored — how a seeded what_info is recognised as the headline."""
+    norm = lambda x: " ".join(re.findall(r"[a-z0-9]+", str(x or "").lower()))  # noqa: E731
+    na, nb = norm(a), norm(b)
+    return bool(na) and na == nb
 
 
 def _load_json_list(v):
@@ -6310,6 +6443,92 @@ def _synthesis_diagnosis(synth: dict) -> str:
     return (f"{pairs['pairs_examined']} pairs examined, {by_shared} stopped "
             f"below {synthesis.EVENT_MIN_SHARED} shared terms — the candidates "
             f"share vocabulary but not enough of it to be one event.")
+
+
+@app.get("/admin/significance")
+async def admin_significance(x_admin_token: str = Header(""), token: str = Query(""),
+                             hours: int = Query(48, ge=1, le=720),
+                             backfill: int = Query(0, ge=0, le=20000)):
+    """How the corpus scores, and what myFeed and the writer will spend on.
+
+    distribution  — 10-point buckets over the window, plus unscored (-1)
+    passing       — rows at or above SIG_FEED_MIN, and how many are written
+    by_source     — per source: rows, mean score, how many pass
+    top / near_miss / rejected — samples WITH reasons, so a surprising score
+                    is debuggable without re-deriving it
+    ?backfill=N   — score N unscored rows first (same as the scheduled job)
+    Read-only apart from the optional backfill, which only writes the score.
+    """
+    _check_admin(x_admin_token or token)
+    out = {"feed_min": significance.feed_min(),
+           "rewrite_min": significance.rewrite_min()}
+    if backfill:
+        out["backfill"] = await asyncio.get_event_loop().run_in_executor(
+            None, _significance_backfill_sync, backfill)
+    # Newest rows by id (ids are monotonic with ingest), sized to the window at
+    # ~80 rows/hour. Avoids a published_at comparison that differs between the
+    # TEXT and timestamptz shapes of that column (see CLAUDE.md).
+    n = min(8000, hours * 80)
+
+    def _q():
+        conn = get_db()
+        try:
+            return conn.execute(
+                "SELECT id, headline, source_headline, source_summary, summary_60, "
+                "source_name, feed_class, status, significance FROM articles "
+                "WHERE status IN ('published','merged','pending_rewrite') "
+                "ORDER BY id DESC LIMIT ?", (n,)).fetchall()
+        finally:
+            conn.close()
+
+    rows = await asyncio.get_event_loop().run_in_executor(None, _q)
+    fmin = significance.feed_min()
+    buckets: dict = {}
+    by_src: dict = {}
+    passing = written = unscored = 0
+    samples = []
+    for r in rows:
+        sig = r["significance"]
+        sig = -1 if sig is None else int(sig)
+        if sig < 0:
+            unscored += 1
+            buckets["unscored"] = buckets.get("unscored", 0) + 1
+            continue
+        b = f"{min(sig // 10 * 10, 90)}-{min(sig // 10 * 10, 90) + 9}"
+        buckets[b] = buckets.get(b, 0) + 1
+        is_written = (r["headline"] or "") != (r["source_headline"] or "")
+        if sig >= fmin:
+            passing += 1
+            written += 1 if is_written else 0
+        src = r["source_name"] or "?"
+        e = by_src.setdefault(src, {"rows": 0, "sum": 0, "pass": 0})
+        e["rows"] += 1; e["sum"] += sig; e["pass"] += 1 if sig >= fmin else 0
+        samples.append((sig, r))
+
+    def _explain(sig, r):
+        _, why = significance.score_article(
+            r["source_headline"] or r["headline"] or "",
+            r["source_summary"] or r["summary_60"] or "",
+            r["source_name"] or "", r["feed_class"] or "general")
+        return {"id": r["id"], "score": sig, "source": r["source_name"],
+                "headline": (r["source_headline"] or r["headline"] or "")[:140],
+                "status": r["status"], "why": why}
+
+    samples.sort(key=lambda x: -x[0])
+    near = [x for x in samples if fmin - 6 <= x[0] < fmin]
+    out.update({
+        "window_hours": hours, "rows": len(rows), "unscored": unscored,
+        "passing": passing, "passing_written": written,
+        "distribution": dict(sorted(buckets.items())),
+        "by_source": sorted(
+            ({"source": k, "rows": v["rows"], "mean": round(v["sum"] / v["rows"], 1),
+              "pass": v["pass"]} for k, v in by_src.items()),
+            key=lambda x: -x["rows"])[:40],
+        "top": [_explain(*x) for x in samples[:15]],
+        "near_miss": [_explain(*x) for x in near[:15]],
+        "rejected_sample": [_explain(*x) for x in samples[-15:]],
+    })
+    return out
 
 
 @app.get("/admin/body-audit")
