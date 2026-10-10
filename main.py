@@ -1389,6 +1389,10 @@ def needs_rehash(hashed: str) -> bool:
 # which makes a logout instant on the instance that served it.
 TOKEN_VERSION_TTL_S = int(os.getenv("TOKEN_VERSION_TTL_S", "60") or 60)
 _TOKEN_VERSIONS: dict = {}          # uid -> (version, expires_at)
+# The version reported for an account whose row is gone. Negative so it can
+# never equal a real `"v"` claim, which is a non-negative counter — every token
+# a deleted account holds therefore fails verification.
+_TOKEN_VERSION_DELETED = -1
 
 
 def _token_version(uid: int, fresh: bool = False):
@@ -1398,6 +1402,13 @@ def _token_version(uid: int, fresh: bool = False):
     sign every reader out the moment Postgres refused a connection — the exact
     behaviour bootstrapSession and the refresh path were written to avoid, and a
     far worse outage than an unrevoked token living out its expiry.
+
+    A row that is ABSENT is a different answer from a read that failed, and it
+    returns `_TOKEN_VERSION_DELETED` rather than 0. Reading a deleted account as
+    version 0 matched the `"v": 0` that most tokens were minted under, so every
+    token a deleted account still held kept verifying — /account/delete removed
+    the row and left the session alive. A read that raises still returns None,
+    so the fail-open property above is unchanged.
     """
     now = time.time()
     if not fresh:
@@ -1413,8 +1424,13 @@ def _token_version(uid: int, fresh: bool = False):
     except Exception as e:                       # unreachable DB, missing column
         log.warning("[AUTH] token_version read failed for %s: %s", uid, e)
         return None
+    if row is None:
+        # Deleted (or never existed). Cache it like any other answer — this is a
+        # definite "no", not a transient failure.
+        _TOKEN_VERSIONS[uid] = (_TOKEN_VERSION_DELETED, now + TOKEN_VERSION_TTL_S)
+        return _TOKEN_VERSION_DELETED
     try:
-        version = int(row["token_version"] or 0) if row is not None else 0
+        version = int(row["token_version"] or 0)
     except Exception:
         version = 0
     _TOKEN_VERSIONS[uid] = (version, now + TOKEN_VERSION_TTL_S)
@@ -3148,6 +3164,61 @@ async def status_freshness():
         "scheduler_running": bool(getattr(scheduler, "running", False)),
         "collect_interval_min": COLLECT_INTERVAL_MIN,
     }
+# Every table that holds rows belonging to one reader, deleted in this order so
+# a child row never outlives the account it belongs to. `users` is last because
+# the others identify their owner by its id.
+_USER_OWNED_TABLES = ("user_preferences", "user_interactions", "bookmarks",
+                      "article_comments", "notifications", "push_tokens", "feeds",
+                      # Outstanding reset codes die with the account — otherwise a
+                      # live token keeps pointing at a uid that no longer exists.
+                      "password_resets")
+
+
+@app.post("/account/delete")
+@app.delete("/account")
+async def account_delete(authorization: str = Header("")):
+    """Delete the account and every row belonging to it. Irreversible.
+
+    The client has offered this since launch and the endpoint did not exist, so
+    the fetch 404'd into a bare `catch` and the reader was told "Account
+    deleted" while their email, password hash, bookmarks and comments stayed in
+    the table. That is the claim Play's User Data policy requires an app to
+    honour, and it was the one thing the flow did not do.
+
+    `users` is deleted LAST: the other tables identify their owner by its id, so
+    removing it first would leave rows that can no longer be matched to anyone —
+    undeletable by this endpoint or any other.
+
+    The id is never reused (AUTOINCREMENT), so a token minted before the delete
+    cannot land on a new account. It stops verifying anyway, because
+    `verify_token` reads the version from a row that no longer exists.
+    """
+    uid = require_user(authorization)
+    removed = {}
+    conn = get_db()
+    try:
+        for table in _USER_OWNED_TABLES:
+            try:
+                cur = conn.execute(f"DELETE FROM {table} WHERE user_id=?", (uid,))
+                removed[table] = getattr(cur, "rowcount", -1)
+            except Exception as e:
+                # A table absent on this backend must not strand the account in a
+                # half-deleted state — the user row still goes.
+                log.warning("account delete: %s skipped (%s)", table, e)
+                removed[table] = None
+        cur = conn.execute("DELETE FROM users WHERE id=?", (uid,))
+        removed["users"] = getattr(cur, "rowcount", -1)
+        conn.commit()
+    finally:
+        conn.close()
+    # Drop the cached token_version so this instance stops accepting the deleted
+    # account's tokens immediately instead of after the TTL.
+    try:
+        _TOKEN_VERSIONS.pop(uid, None)
+    except Exception:
+        pass
+    log.info("account %s deleted: %s", uid, removed)
+    return {"ok": True, "deleted": True, "rows": removed}
 
 
 @app.get("/topics")
@@ -3529,8 +3600,15 @@ async def explore_snapshot():
 
 
 @app.post("/admin/explore/refresh")
-async def explore_refresh(name: str = Query("")):
-    """Force a refresh: all sections, or one by name."""
+async def explore_refresh(name: str = Query(""), x_admin_token: str = Header(""),
+                          token: str = Query("")):
+    """Force a refresh: all sections, or one by name.
+
+    Guarded like every other /admin route. Unauthenticated, this was a free
+    cache-buster against the upstream feeds: each call re-fetches every section,
+    so anyone could spend the third-party rate limits at will.
+    """
+    _check_admin(x_admin_token or token)
     import explore_feeds
     if name:
         if name not in explore_feeds.FETCHERS:
@@ -3635,13 +3713,17 @@ def insight_row_to_dict(row) -> dict:
 
 # ─── P0.5 — originality audit ─────────────────────────────────────────────────
 @app.get("/admin/originality")
-async def admin_originality():
+async def admin_originality(x_admin_token: str = Header(""), token: str = Query("")):
     """Counts by publish status plus the gate's own metrics.
 
     This is the launch checklist in one call: `blocked_originality` and
     `pending_rewrite` must both be zero on the served feed, and `unchecked` tells us
     how much of the corpus predates the gate and still needs the backfill.
+
+    Guarded: corpus size, how much of it the originality gate rejected and the
+    live hotlinked-image count are internal posture, not public numbers.
     """
+    _check_admin(x_admin_token or token)
     conn = get_db()
     try:
         by_status = {r["status"] or "published": r["c"] for r in conn.execute(
@@ -7616,6 +7698,13 @@ _STATIC_FILES = {
     "logo.jpg": "image/jpeg",
     "tiger-logo.png": "image/png",
     "app-icon.png": "image/png",
+    # Real files at the sizes manifest.json declares. The manifest used to point
+    # all four entries at the single 512px app-icon.png while claiming two of
+    # them were 192px; an installer that trusts the declared size and gets a
+    # different one is the kind of mismatch Play's pre-launch report flags.
+    "app-icon-192.png": "image/png",
+    "app-icon-144.png": "image/png",
+    "app-icon-96.png": "image/png",
 }
 # The paths the SPA owns. A request for one of these gets index.html and the
 # client router takes it from there.
@@ -7857,6 +7946,59 @@ async def spa_root():
         # broken app.
         return {"service": "sherr-api", "docs": "/docs", "health": "/health"}
     return HTMLResponse(html)
+
+
+@app.get("/privacy", include_in_schema=False)
+async def privacy_page():
+    """Play will not approve a listing without this URL, and it must load with
+    no sign-in and no app installed (see legal.py)."""
+    import legal
+    return HTMLResponse(legal.privacy_html())
+
+
+@app.get("/terms", include_in_schema=False)
+async def terms_page():
+    import legal
+    return HTMLResponse(legal.terms_html())
+
+
+@app.get("/delete-account", include_in_schema=False)
+@app.get("/account/delete-instructions", include_in_schema=False)
+async def delete_account_page():
+    """The WEB half of account deletion that Play requires separately from the
+    in-app button: reachable by someone who has already uninstalled."""
+    import legal
+    return HTMLResponse(legal.delete_account_html())
+
+
+@app.get("/.well-known/assetlinks.json", include_in_schema=False)
+async def assetlinks():
+    """Digital Asset Links — the file that makes the Android app a TWA.
+
+    Chrome fetches this from the ORIGIN the app opens and checks that one of the
+    listed fingerprints matches the certificate the installed app was signed
+    with. If it does not match, or the file 404s, the Trusted Web Activity still
+    opens but renders a browser address bar across the top — which is precisely
+    the "website in a shell" that Play's minimum-functionality policy rejects.
+
+    It was only ever a file on disk plus a header rule in vercel.json. On the
+    Render deployment the path fell through to the SPA catch-all, where
+    `.well-known` is neither a static file nor an SPA route, so it answered 404
+    and verification could not succeed. Served explicitly, above the catch-all,
+    with the exact `application/json` type the verifier expects.
+
+    The fingerprint inside must be the key Play signs RELEASES with (Play App
+    Signing → App signing key certificate), not the upload key — Play re-signs
+    every upload, so the two differ and only the former is what ships.
+    """
+    path = os.path.join(os.path.dirname(_INDEX_PATH), ".well-known", "assetlinks.json")
+    try:
+        with open(path, "rb") as fh:
+            body = fh.read()
+    except OSError:
+        raise HTTPException(status_code=404, detail="Not Found")
+    return Response(content=body, media_type="application/json",
+                    headers={"Cache-Control": "public, max-age=3600"})
 
 
 # ── THE CATCH-ALL. NOTHING MAY BE REGISTERED BELOW THIS. ─────────────────────
