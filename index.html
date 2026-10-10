@@ -5153,6 +5153,8 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
       <div class="sg-row tap" onclick="openFAQ()"><div class="sg-ico" style="background:#4F6BD4"><i class="fa-solid fa-question"></i></div><span class="sg-lbl2">FAQ</span><i class="fa-solid fa-chevron-right sg-arr"></i></div>
       <div class="sg-row tap" onclick="contactSupport()"><div class="sg-ico" style="background:#52C17A"><i class="fa-solid fa-headset"></i></div><span class="sg-lbl2">Contact Support</span><i class="fa-solid fa-chevron-right sg-arr"></i></div>
       <div class="sg-row tap" onclick="contactSupport()"><div class="sg-ico" style="background:#A855F7"><i class="fa-solid fa-envelope"></i></div><span class="sg-lbl2">Email Support</span><i class="fa-solid fa-chevron-right sg-arr"></i></div>
+      <div class="sg-row tap" onclick="openLegal('/privacy')"><div class="sg-ico" style="background:#6B7280"><i class="fa-solid fa-shield-halved"></i></div><span class="sg-lbl2">Privacy Policy</span><i class="fa-solid fa-chevron-right sg-arr"></i></div>
+      <div class="sg-row tap" onclick="openLegal('/terms')"><div class="sg-ico" style="background:#6B7280"><i class="fa-solid fa-file-lines"></i></div><span class="sg-lbl2">Terms of Use</span><i class="fa-solid fa-chevron-right sg-arr"></i></div>
     </div></div>
     <div style="text-align:center;padding:24px 0;font-size:0.72rem;color:var(--t3)">SherrByte v22 · Mobile<br>Build 2026.04.06</div>
   </div>
@@ -6172,7 +6174,21 @@ async function doDeleteAccount(){
   const v=(document.getElementById('da-confirm').value||'').trim();
   const err=document.getElementById('da-err');
   if(v!=='DELETE'){ err.textContent='Type DELETE to confirm'; return; }
-  try{ if(ST.token) await api('/account/delete',{method:'POST'}); }catch(e){}
+  // The server is the only thing that can actually delete the account, so a
+  // failure here must NOT report success. This used to swallow every error in a
+  // bare catch and toast "Account deleted" regardless — which is how a missing
+  // /account/delete route went unnoticed: the row survived and the reader was
+  // told it had not. Only clearing the device on a confirmed delete keeps the
+  // session, so they can see the real error and try again.
+  if(!ST.token){ err.textContent='Sign in again to delete your account'; return; }
+  try{
+    await api('/account/delete',{method:'POST'});
+  }catch(e){
+    if(e && e.sessionChanged) return;          // superseded by a logout — not our error
+    err.textContent = (e && e.message) ? e.message
+      : 'Could not delete your account — check your connection and try again.';
+    return;
+  }
   closeAppModal();
   const _du = ST.userId;
   // Leave the session through the one logout path (it also invalidates anything
@@ -6185,6 +6201,11 @@ async function doDeleteAccount(){
 
 // ── Help ──
 function contactSupport(){ try{ location.href='mailto:support@thewhitetiger.in?subject=SherrByte%20Support'; }catch(e){} }
+// Privacy and Terms are server-rendered pages, not SPA views: Play's reviewer
+// has to reach the same URLs from a browser with no app installed, so there is
+// one copy and the app links to it rather than duplicating the text.
+// A new tab, because the TWA keeps these inside the app shell.
+function openLegal(path){ try{ window.open(path,'_blank','noopener'); }catch(e){ location.href=path; } }
 function openFAQ(){
   const faqs=[
     ['How does SherrByte pick my news?','Stories are pulled from 50+ trusted sources every ~15 minutes, de-duplicated, and ranked by importance — and personalised as you read, like, and save.'],

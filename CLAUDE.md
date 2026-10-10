@@ -923,3 +923,81 @@ samples with reasons. Calibrated on 450 real rows; the cases are pinned in
 
 Tune the weights in `significance.py`, not in SQL, and re-run the test file:
 the pinned headlines are the contract for what "important" means here.
+---
+
+## Account deletion was a button that deleted nothing
+
+Adopted 2026-10-10, found while auditing for a Play Store submission.
+
+`index.html` has shipped a Delete Account row, a type-DELETE-to-confirm modal and
+an "Account deleted" toast since launch. It called `POST /account/delete`. **That
+route did not exist.** The 404 landed in `catch(e){}`, the toast fired anyway,
+and the email, password hash, bookmarks, comments and push tokens all stayed in
+the database. The reader was told their data was gone while it was not.
+
+Three things were wrong and all three are fixed:
+
+- **The endpoint now exists** and deletes every user-owned table —
+  `_USER_OWNED_TABLES` — before `users`. That order matters: the child tables
+  identify their owner by `users.id`, so removing the parent first would strand
+  rows that can no longer be matched to anyone, undeletable by this endpoint or
+  any other.
+- **The client no longer reports success it did not get.** A failed delete keeps
+  the session and shows the real error; only a confirmed delete clears the
+  device. The bare `catch` is exactly why a missing route went unnoticed for
+  this long.
+- **`_token_version` had to learn the difference between "row missing" and
+  "cannot read".** It returned 0 for an absent row, which is the value most
+  tokens are minted under, so every token a deleted account still held kept
+  verifying — the account was gone and the session was not. A missing row now
+  returns `_TOKEN_VERSION_DELETED` (-1, which no real `"v"` can equal). A read
+  that *raises* still returns None and still FAILS OPEN; that property is
+  unchanged and `tests/test_account_deletion.py` asserts both halves in one test
+  so they cannot be collapsed into each other.
+
+There is no `uid == 1` guard. An early version had one, on the theory that uid 1
+is the anonymous system account — it is not. `get_current_user` returns a bare
+`1` for anonymous readers but nothing ever seeds a `users` row with that id, so
+uid 1 is simply whoever signed up first, and the guard would have stranded that
+one real person with no way to delete their account.
+
+## The Play Store surface: three URLs, each failing differently
+
+`PLAY_STORE.md` is the submission runbook. The code half:
+
+- **`/.well-known/assetlinks.json` 404'd on Render.** The file was committed and
+  `vercel.json` set a header for it, but no route served it — `.well-known` is
+  neither a static file nor an SPA route, so the catch-all 404'd it. Without it
+  Digital Asset Links cannot verify and the TWA renders **with a browser address
+  bar**, which is the "website in a shell" Play rejects. Served explicitly now,
+  above the catch-all.
+- **The fingerprint in that file is the UPLOAD key, not the release key.** Play
+  App Signing re-signs every upload, so the installed app presents a different
+  certificate and verification fails silently — build, upload and install all
+  succeed. After the first upload, add the SHA-256 from Play Console → App
+  signing → *App signing key certificate*, keeping the upload fingerprint
+  alongside it so local installs keep verifying.
+- **`/privacy`, `/terms` and `/delete-account` did not exist.** Play's reviewer
+  loads the privacy URL from a browser, signed out, with no app installed, and an
+  app with sign-up needs a deletion route reachable by someone who has already
+  uninstalled. `legal.py` serves all three.
+
+`legal.py` takes the **data** claims from the schema and the call sites, never a
+template — a policy that lists data the app does not collect is as wrong as one
+that omits data it does. The **company** claims (entity, address, jurisdiction)
+are environment variables, because a policy naming the wrong legal entity is
+worse than no policy; unset values print a visible marker rather than a confident
+blank, and `legal_config_gaps()` reports them.
+
+`tests/test_play_store_readiness.py` asserts every one of these URLs answers, that
+each manifest icon is the size it claims to be, that the catch-all is still the
+last route, and that no `/admin` route is unguarded — two were
+(`POST /admin/explore/refresh`, `GET /admin/originality`); the first was a free
+cache-buster against the upstream feeds for anyone who found it.
+
+**The committed `sherrbyte.apk` cannot be shipped and cannot be rebuilt here.**
+Play takes an `.aab`, not an `.apk`, and there is no TWA source project in this
+repo — no `twa-manifest.json`, no Gradle, no keystore — so `versionCode` cannot
+be bumped and the target SDK cannot be raised. Rebuild with Bubblewrap against
+the live `manifest.json`, keeping the package name `app.vercel.sherrbyte.twa`,
+and back the keystore up off-machine: losing it means never updating the listing.
