@@ -164,6 +164,47 @@ async def set(key: str, payload, ttl: int) -> None:                # noqa: A001
         STATS["errors"] += 1
 
 
+async def delete_prefix(prefix: str) -> int:
+    """Drop every cached entry whose key starts with `prefix`. Never raises.
+
+    Used when a write makes a whole family of reads wrong at once — saving feed
+    preferences invalidates `feed:<uid>:*` across pages, filters and scopes, and
+    there is no single key to delete. The local layer is scanned (it is capped
+    at CACHE_LOCAL_MAX, so this is bounded); Redis is swept with SCAN rather
+    than KEYS, which does not block the server.
+
+    Best effort by design. A miss here costs the reader up to one TTL of the
+    previous answer, never a wrong write, so a Redis outage must not turn a
+    successful save into an error.
+    """
+    if not ENABLED:
+        return 0
+    dropped = 0
+    for k in [k for k in list(_local) if k.startswith(prefix)]:
+        _local.pop(k, None)
+        dropped += 1
+    client = await _redis()
+    if client is None:
+        return dropped
+    try:
+        match = _k(prefix) + "*"
+        cursor = 0
+        while True:
+            cursor, keys = await client.scan(cursor=cursor, match=match, count=200)
+            if keys:
+                await client.delete(*keys)
+                dropped += len(keys)
+            if not cursor:
+                break
+    except Exception as e:                                        # noqa: BLE001
+        global _redis_ok
+        if _redis_ok:
+            log.warning("cache: Redis prefix delete failed: %s", e)
+        _redis_ok = False
+        STATS["errors"] += 1
+    return dropped
+
+
 async def get_or_set(key: str, ttl: int, producer):
     """The cached payload, or `producer()`'s answer, stored and returned.
 

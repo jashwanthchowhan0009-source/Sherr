@@ -2808,7 +2808,16 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 .fem-cat-ico { font-size: 1.4rem; margin-bottom: 4px; }
 .fem-cat-name { font-size: 0.76rem; font-weight: 700; color: #fff; }
 .fem-sec-lbl { font-size: 0.62rem; font-weight: 700; color: var(--t3); letter-spacing: 1px; text-transform: uppercase; margin: 12px 0 8px; }
-.fem-topics-grid { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+.fem-topics-grid { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px;
+  max-height: 44vh; overflow-y: auto; }
+.fem-count { color: var(--t3); font-weight: 600; letter-spacing: 0; text-transform: none; margin-left: 6px; }
+.fem-clear { float: right; color: var(--accent); cursor: pointer; letter-spacing: 0; text-transform: none; }
+.fem-search { width: 100%; box-sizing: border-box; margin: 0 0 10px; padding: 10px 13px;
+  border-radius: 11px; border: 1px solid var(--line); background: var(--bg2);
+  color: var(--t1); font: 500 0.86rem/1.2 var(--f); outline: none; }
+.fem-search:focus { border-color: var(--accent); }
+.feed-topic-none { color: var(--t3); font-size: 0.84rem; padding: 8px 2px; }
+.feed-topics-hdr .feed-topic-count { color: var(--t3); cursor: default; margin-left: 6px; font-size: 0.72rem; }
 .fem-topic {
   padding: 5px 12px; border-radius: 100px; border: 1px solid var(--line);
   font-size: 0.7rem; font-weight: 600; cursor: pointer; transition: all 0.15s;
@@ -5087,7 +5096,11 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
     <div style="padding:0 14px 6px;font-family:var(--fd);font-size:0.88rem;font-weight:700;color:var(--t1)">Your Categories</div>
     <div class="feed-cats-grid" id="feed-cats-grid"></div>
     <div class="feed-topics-wrap">
-      <div class="feed-topics-hdr">Topics <span onclick="openFeedEditModal()">Edit</span></div>
+      <div class="feed-topics-hdr">Topics <span class="feed-topic-count"></span>
+        <span onclick="clearFeedTopics()">Clear</span>
+        <span onclick="openFeedEditModal()">Edit</span></div>
+      <input id="feed-topic-search" class="fem-search" type="search" autocomplete="off"
+             placeholder="Search topics…" oninput="filterFeedTopics()">
       <div class="feed-topics" id="feed-topics"></div>
     </div>
     <div style="padding:0 14px 6px;margin-top:8px;font-family:var(--fd);font-size:0.88rem;font-weight:700;color:var(--t1)">Today's Picks</div>
@@ -5179,7 +5192,10 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
     <div class="fem-title">Edit Your FEED <span onclick="closeFeedEditModal()" style="font-size:1.2rem;cursor:pointer;color:var(--t3)">✕</span></div>
     <div class="fem-sub">Choose your 7 interest categories and specific topics</div>
     <div class="fem-cat-grid" id="fem-cat-grid"></div>
-    <div class="fem-sec-lbl">Topics</div>
+    <div class="fem-sec-lbl">Topics <span id="fem-count" class="fem-count"></span>
+      <span class="fem-clear" onclick="clearFemTopics()">Clear all</span></div>
+    <input id="fem-topic-search" class="fem-search" type="search" autocomplete="off"
+           placeholder="Search topics…" oninput="filterFemTopics()">
     <div class="fem-topics-grid" id="fem-topics-grid"></div>
     <button class="fem-save-btn" onclick="saveFeedEdit()">Save Preferences</button>
   </div>
@@ -5347,6 +5363,12 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 .mfd-verify .d{width:7px;height:7px;border-radius:50%;background:var(--t3);}
 .mfd-verify.ok .d{background:#30D158;}
 .mfd-block{display:flex;flex-direction:column;gap:8px;}
+/* A `display` rule on a class BEATS the browser's own [hidden]{display:none},
+   which is an unqualified element rule. Every block the card hides with the
+   hidden attribute — What happened, Who & Where, and the Key Points panel —
+   therefore rendered anyway, which is why the TL;DR panel was already open on
+   a card nobody had tapped. The attribute has to be honoured explicitly. */
+.mfd-block[hidden],.mfd-keypoints[hidden]{display:none;}
 .mfd-block .mf-badge{align-self:flex-start;}
 .mfd-lead{margin:0;font-size:.96rem;line-height:1.55;color:var(--t1);}
 .mfd-sub{margin:0;font-weight:700;font-size:.98rem;line-height:1.32;color:var(--t1);font-family:var(--fd);}
@@ -5354,13 +5376,27 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 .mfd-chips{display:flex;flex-wrap:wrap;gap:6px;}
 .mfd-chips span{font-size:.78rem;background:var(--glass);border:1px solid var(--line);
   padding:4px 10px;border-radius:9px;color:var(--t1);}
-/* News-pane TL;DR button (bottom-right) + the KEY POINTS card it reveals */
-.mfd-tldr-row{display:flex;justify-content:flex-end;margin-top:2px;}
+/* The cue row — sector badge + TL;DR, sitting BETWEEN the headline and the
+   body copy. It used to be a lone button pinned under the whole pane, which
+   is the last thing a reader scrolls to and therefore the last thing a "give
+   me the short version" control should be. */
+.mfd-cue{display:flex;align-items:center;justify-content:space-between;
+  gap:10px;flex-wrap:wrap;margin:0 0 2px;}
+.mfd-cue .mf-badge{flex:0 1 auto;}
 .mfd-tldr-btn{display:inline-flex;align-items:center;gap:6px;border:1px solid rgba(168,85,247,.32);
   background:rgba(168,85,247,.12);color:#C084FC;font:800 .72rem/1 var(--f);letter-spacing:.03em;
-  padding:9px 14px;border-radius:11px;cursor:pointer;transition:all .15s var(--ease);}
+  padding:8px 13px;border-radius:999px;cursor:pointer;transition:all .15s var(--ease);
+  margin-left:auto;flex:0 0 auto;}
 .mfd-tldr-btn.on{background:#A855F7;color:#fff;border-color:#A855F7;}
 .mfd-tldr-btn:active{transform:scale(.95);}
+.mfd-tldr-ico{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.8;
+  stroke-linecap:round;stroke-linejoin:round;}
+.mfd-tldr-btn.busy .mfd-tldr-ico{animation:mfdSpin 1s linear infinite;}
+@keyframes mfdSpin{to{transform:rotate(360deg)}}
+.mfd-kp-list{margin:6px 0 0;padding-left:17px;}
+.mfd-kp-list li{color:var(--t1);font-size:.9rem;line-height:1.5;margin-bottom:6px;}
+.mfd-kp-list li:last-child{margin-bottom:0;}
+.mfd-kp-note{color:var(--t3);font-size:.84rem;line-height:1.45;}
 .mfd-keypoints{background:rgba(10,132,255,.06);border:1px solid rgba(10,132,255,.16);
   border-radius:14px;padding:14px 15px;display:flex;flex-direction:column;gap:9px;}
 .mfd-kp-hd{color:var(--accent);font:800 .72rem/1 var(--f);letter-spacing:.09em;
@@ -6385,7 +6421,15 @@ function _wrapText(ctx, text, maxW, maxLines) {
 }
 
 // Build a shareable "Article Byte" PNG card and return a Blob.
-async function buildMyfeedCard(a) {
+//
+// NAMED buildArticleByteBlob, AND THAT MATTERS. It was buildMyfeedCard, the
+// same name as the myFeed DOM-card builder declared ~4,500 lines below — and
+// the later declaration wins, so every call here resolved to the one returning
+// a <div>. shareArticleCard then wrapped an HTMLElement in a File, which
+// stringifies to "[object HTMLDivElement]": a 25-byte "PNG" the share sheet
+// either refused or handed on as a corrupt image. That is the whole of "share
+// doesn't work".
+async function buildArticleByteBlob(a) {
   const W = 1080, H = 1350, c = document.createElement('canvas');
   c.width = W; c.height = H;
   const ctx = c.getContext('2d');
@@ -6466,32 +6510,88 @@ async function buildMyfeedCard(a) {
   return await new Promise(res => c.toBlob(res, 'image/png', 0.92));
 }
 
-// Share an article as an "Article Byte" image card (falls back to text/url).
+// The canonical, linkable URL for a story — the same path main.py serves and
+// the sitemap writes, so a shared link unfurls with the story's own og: card
+// rather than the generic app one. The id is last and is what resolves the
+// row, so a later rewrite of the headline never breaks a link already sent.
+function articleShareUrl(a) {
+  try { return new URL('/myfeed/' + articleSlug(a), location.origin).href; }
+  catch (e) { return location.origin + '/myfeed/' + (a && a.id ? a.id : ''); }
+}
+
+// What a shared story says: the headline, our summary when we have written one,
+// and the link. Never the placeholder — "Sherr AI is preparing…" is an honest
+// thing to show a reader inside the app and a strange thing to post elsewhere.
+function articleShareText(a) {
+  const raw = (a.summary || a.preview || a.cached_summary || '').toString().trim();
+  const summary = (!raw || isPlaceholderText(raw) || mfSameText(raw, a.title)) ? '' : raw;
+  return { title: a.title || 'SherrByte',
+           text: a.title + (summary ? '\n\n' + summary : '') + '\n\nvia SherrByte',
+           url: articleShareUrl(a) };
+}
+
+// Share an article: the native share sheet wherever it exists, with the image
+// card attached when the platform accepts files, and a clipboard copy as the
+// last resort so the button always does something.
+//
+// THE LINK IS ALWAYS SHARED. The old version passed only `text` alongside the
+// image, so a story shared from a phone arrived as a picture with no way back
+// to the article.
 async function shareArticleCard(a) {
-  if (!a || !a.title) return shareArt((a && a.title) || '');
+  if (!a || !a.title) return;
+  const payload = articleShareText(a);
+  // Image card first — but never let it hold up the share. A canvas failure,
+  // a tainted cross-origin image or a slow draw must not cost the reader the
+  // share sheet, so the text+link share runs if the blob does not arrive.
+  let file = null;
   try {
-    toast('🎨 Creating your Article Byte…');
-    const blob = await buildMyfeedCard(a);
-    if (!blob) throw new Error('no blob');
-    const file = new File([blob], 'sherrbyte-article.png', { type: 'image/png' });
-    const _sum = (a.summary || a.preview || '').toString().trim();
-    const summary = isPlaceholderText(_sum) ? '' : _sum;
-    const text = a.title + (summary ? '\n\n' + summary : '') + '\n\nvia SherrByte';
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      await navigator.share({ files: [file], text });
+    const blob = await buildArticleByteBlob(a);
+    if (blob && blob.size > 1024) file = new File([blob], 'sherrbyte-article.png', { type: 'image/png' });
+  } catch (e) { file = null; }
+  try {
+    if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ ...payload, files: [file] });
       return;
     }
-    // No file-share support → offer a download so the user can post it manually.
+    if (navigator.share) { await navigator.share(payload); return; }
+  } catch (e) {
+    if (e && e.name === 'AbortError') return;   // the reader closed the sheet
+  }
+  // No Web Share API (most desktop browsers): copy the text and the link.
+  const clip = payload.text + '\n' + payload.url;
+  try {
+    await navigator.clipboard.writeText(clip);
+    toast('🔗 Link copied — paste it anywhere');
+    return;
+  } catch (e) { /* clipboard blocked (insecure origin, or denied) */ }
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = clip; ta.setAttribute('readonly', '');
+    ta.style.cssText = 'position:fixed;top:-1000px;opacity:0';
+    document.body.appendChild(ta); ta.select();
+    document.execCommand('copy'); ta.remove();
+    toast('🔗 Link copied — paste it anywhere');
+  } catch (e2) {
+    toast('Couldn\'t open the share sheet.');
+  }
+}
+
+// Download the Article Byte image card — the old share fallback, kept as its
+// own action because "save the picture" and "send the link" are two different
+// things a reader wants.
+async function downloadArticleByte(a) {
+  if (!a || !a.title) return;
+  try {
+    toast('🎨 Creating your Article Byte…');
+    const blob = await buildArticleByteBlob(a);
+    if (!blob) throw new Error('no blob');
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url; link.download = 'sherrbyte-article.png';
     document.body.appendChild(link); link.click(); link.remove();
     setTimeout(() => URL.revokeObjectURL(url), 4000);
-    toast('⬇️ Article Byte saved — share it anywhere');
-  } catch (e) {
-    if (e && e.name === 'AbortError') return; // user cancelled the share sheet
-    shareArt(a.title || '');
-  }
+    toast('⬇️ Article Byte saved');
+  } catch (e) { toast('Couldn\'t build the image card.'); }
 }
 
 // ── LANGUAGE PICKER ──
@@ -7891,7 +7991,7 @@ function aoLike() {
   persist();
 }
 
-// AI TL;DR — 3-line summary via our Gemini/Groq pipeline (/sherr/tldr).
+// TL;DR — key points + bullets derived from the written story (/article/<id>/tldr).
 let _tldrBusy = false;
 async function aoSummarize() {
   if (!currentArticle || _tldrBusy) return;
@@ -7918,14 +8018,17 @@ async function aoSummarize() {
   const H = '<div class="ao-tldr-h"' + (kpHtml ? ' style="margin-top:14px"' : '') +
             '><i class="fa-solid fa-wand-magic-sparkles"></i> TL;DR</div>';
   box.innerHTML = kpHtml + H + '<div class="tldr-msg">Summarizing…</div>';
+  // /article/<id>/tldr, NOT /sherr/tldr. The latter has never existed in
+  // main.py, so this button answered "Summarize failed — try again" on every
+  // tap it has ever received, forever, and retrying could not help.
   try {
-    const text = currentArticle.body_ai || currentArticle.summary || currentArticle.preview || '';
-    const r = await api('/sherr/tldr', { method: 'POST', timeout: 25000,
-      body: JSON.stringify({ title: currentArticle.title || '', text }) });
+    const r = await api('/article/' + encodeURIComponent(currentArticle.id) + '/tldr',
+                        { timeout: 25000 });
     const lines = (r && r.tldr) || [];
     box.innerHTML = kpHtml + H + (lines.length
       ? '<ul>' + lines.map(l => `<li>${bEsc(l)}</li>`).join('') + '</ul>'
-      : '<div class="tldr-msg">Couldn\'t summarize right now.</div>');
+      : `<div class="tldr-msg">${bEsc((r && r.reason)
+          || 'SherrByte has not written this story yet.')}</div>`);
   } catch (e) {
     box.innerHTML = kpHtml + H + '<div class="tldr-msg">Summarize failed — try again.</div>';
   } finally { _tldrBusy = false; }
@@ -8416,24 +8519,26 @@ async function loadUserPrefs(me) {
   if (Array.isArray(ST.feedCats))   activeFeedCats   = new Set(ST.feedCats);
   if (Array.isArray(ST.feedTopics)) activeFeedTopics = new Set(ST.feedTopics);
   // Pull from the backend only to seed a device that has no local choice yet.
+  //
+  // /me/topics returns the selection already split into categories and topics,
+  // which is how it was stored. Reading it off /me instead meant inferring the
+  // split from one flat list — and inference guessed wrong in the common case:
+  // every topic carries a pillar_id, so each one silently switched its whole
+  // category on as well, and a reader who had picked three topics came back to
+  // three categories they had never chosen.
   if (ST.token && !haveLocal) {
     try {
-      if (!me) me = await api('/me');
-      const prefs = me.preferences || [];
-      if (prefs.length) {
-        const cats = new Set(), topics = new Set();
-        prefs.forEach(p => {
-          const key = PILLAR_CAT[p.pillar_id];
-          const topic = p.topic || '';
-          if (CAT_PILLAR[topic] != null) cats.add(topic);       // a stored pillar-slug
-          else { if (key) cats.add(key); topics.add(topic); }   // a real topic name
-        });
-        if (cats.size)   activeFeedCats   = cats;
-        if (topics.size) activeFeedTopics = topics;
+      const r = await api('/me/topics');
+      const cats   = new Set((r && r.categories || []).filter(x => CAT_PILLAR[x] != null));
+      const topics = new Set((r && r.topics || []).filter(Boolean));
+      if (cats.size)   activeFeedCats   = cats;
+      if (topics.size) activeFeedTopics = topics;
+      if (cats.size || topics.size) {
         ST.feedCats = [...activeFeedCats]; ST.feedTopics = [...activeFeedTopics]; persist();
       }
     } catch (e) { /* keep local/default selection */ }
   }
+  loadTopicCatalogue();
   renderFeedFilterChips(); renderFeedCatCards(); renderFeedTopics();
 }
 
@@ -8589,35 +8694,121 @@ function renderFeedCatCards() {
   });
 }
 
-function renderFeedTopics() {
-  const ALL_TOPICS = [
-    'Politics','Global Affairs','Law & Justice','Activism','AI','Software','Hardware','Space','Climate','Finance',
-    'Cricket','Bollywood','Science','Health','Education','Defence','Crypto','Infrastructure','Fashion','Cinema',
-    'Music','Gaming','Fitness','Mental Health','Nutrition','Productivity','Spirituality','Philosophy','Religion',
-    'Ethics','Consciousness','Mythology','Startups','Markets','Macroeconomics','Real Estate','Animals','Environment',
-    'Geography','Biology','Natural Phenomena','Cybersecurity','Future Tech','Mathematics','Engineering','Photography',
-    'Literature','IPL','Geopolitics','Sustainability','Sports','Travel','Food','Lifestyle','Social Media',
-  ];
-  const c      = document.getElementById('feed-topics');
-  c.innerHTML  = '';
-  ALL_TOPICS.forEach(t => ALL_TOPIC_NAMES.add(t));
-  const colors = Object.values(CATS).map(c=>c.hex);
-  ALL_TOPICS.forEach((t,i) => {
-    const on    = activeFeedTopics.has(t);
-    const color = colors[i % colors.length];
+// ── The topic catalogue is FETCHED, not written into this file ─────────────
+// It used to be two literal arrays — 55 entries here, 49 in the edit sheet —
+// that had already drifted apart from each other and from main.py's
+// MICRO_TOPICS, which is the map that decides what a chosen topic ranks. A
+// topic on screen that the server has never heard of is a switch wired to
+// nothing, and roughly twenty of them were exactly that.
+//
+// /topics serves one list, with live counts over the corpus, so the screen
+// shows what is actually being published. FEED_TOPICS_FALLBACK is only for a
+// cold or offline start: the screen must never come up empty, because an empty
+// preferences screen is indistinguishable from a broken one.
+const FEED_TOPICS_FALLBACK = [
+  'Politics','Global Affairs','Law & Justice','Activism','AI','Software','Hardware','Space','Climate','Finance',
+  'Cricket','Bollywood','Science','Health','Education','Defence','Crypto','Infrastructure','Fashion','Cinema',
+  'Music','Gaming','Fitness','Mental Health','Nutrition','Productivity','Spirituality','Philosophy','Religion',
+  'Ethics','Consciousness','Mythology','Startups','Markets','Macroeconomics','Real Estate','Animals','Environment',
+  'Geography','Biology','Natural Phenomena','Cybersecurity','Future Tech','Mathematics','Engineering','Photography',
+  'Literature','IPL','Geopolitics','Sustainability','Sports','Travel','Food','Lifestyle','Social Media',
+].map(name => ({ name, count: 0, color: '' }));
+
+let FEED_TOPIC_CATALOGUE = null;        // null = not fetched yet
+let _topicCataloguePromise = null;
+
+function feedTopicList() { return FEED_TOPIC_CATALOGUE || FEED_TOPICS_FALLBACK; }
+
+// Fetched once per session and shared by both screens. A failure is not an
+// error state — the fallback list is already on screen and stays there.
+function loadTopicCatalogue() {
+  if (_topicCataloguePromise) return _topicCataloguePromise;
+  _topicCataloguePromise = api('/topics/catalogue', { timeout: 15000 }).then(r => {
+    const list = (r && r.topics || []).filter(t => t && t.name);
+    if (list.length) {
+      FEED_TOPIC_CATALOGUE = list;
+      list.forEach(t => ALL_TOPIC_NAMES.add(t.name));
+    }
+    return FEED_TOPIC_CATALOGUE;
+  }).catch(() => null);
+  return _topicCataloguePromise;
+}
+
+// One chip renderer for both the preferences screen and the edit sheet. They
+// differ only in class names, in whether a tap saves straight away, and in the
+// search box that filters them.
+function renderTopicChips(container, opts) {
+  if (!container) return;
+  const cls    = opts.cls || 'feed-topic';
+  const filter = (opts.filter || '').trim().toLowerCase();
+  const colors = Object.values(CATS).map(c => c.hex);
+  const all    = feedTopicList();
+  all.forEach(t => ALL_TOPIC_NAMES.add(t.name));
+  // A selected topic always stays visible, even when the search text excludes
+  // it — otherwise filtering looks like it silently deselected things.
+  const list = all.filter(t => !filter
+    || t.name.toLowerCase().includes(filter)
+    || activeFeedTopics.has(t.name));
+  container.innerHTML = '';
+  if (!list.length) {
+    const d = document.createElement('div');
+    d.className = 'feed-topic-none';
+    d.textContent = 'No topic matches “' + (opts.filter || '') + '”.';
+    container.appendChild(d);
+    return;
+  }
+  list.forEach((t, i) => {
+    const on    = activeFeedTopics.has(t.name);
+    const color = t.color || colors[i % colors.length];
     const d     = document.createElement('div');
-    d.className = `feed-topic${on?' on':''}`;
+    d.className = `${cls}${on ? ' on' : ''}`;
     d.style.color       = on ? '#fff' : color;
     d.style.borderColor = on ? color  : 'var(--line)';
     d.style.background  = on ? color  : 'transparent';
-    d.textContent = t;
+    d.textContent = t.name;
+    if (t.count) d.title = t.count + ' recent stories';
     d.onclick = () => {
-      if (activeFeedTopics.has(t)) activeFeedTopics.delete(t); else activeFeedTopics.add(t);
-      saveFeedPrefs();
-      renderFeedTopics(); toast((on?'✓ Removed':'✓ Added') + ': ' + t);
+      if (activeFeedTopics.has(t.name)) activeFeedTopics.delete(t.name);
+      else activeFeedTopics.add(t.name);
+      opts.onToggle(t.name, !on);
     };
-    c.appendChild(d);
+    container.appendChild(d);
   });
+}
+
+function renderFeedTopics() {
+  const c = document.getElementById('feed-topics');
+  if (!c) return;
+  renderTopicChips(c, {
+    cls: 'feed-topic',
+    filter: (document.getElementById('feed-topic-search') || {}).value || '',
+    onToggle: (name, added) => {
+      saveFeedPrefs();
+      renderFeedTopics();
+      updateTopicCount();
+      toast((added ? '✓ Added' : '✓ Removed') + ': ' + name);
+    },
+  });
+  updateTopicCount();
+  // First paint runs off the fallback; repaint once the real catalogue lands.
+  if (!FEED_TOPIC_CATALOGUE) loadTopicCatalogue().then(got => { if (got) renderFeedTopics(); });
+}
+
+function updateTopicCount() {
+  const n = activeFeedTopics.size;
+  document.querySelectorAll('.feed-topic-count').forEach(e => {
+    e.textContent = n ? n + ' selected' : 'none selected';
+  });
+}
+
+function filterFeedTopics() { renderFeedTopics(); }
+
+function clearFeedTopics() {
+  if (!activeFeedTopics.size) return;
+  activeFeedTopics.clear();
+  saveFeedPrefs();
+  renderFeedTopics();
+  toast('Cleared every topic');
 }
 
 function renderFeedArticles() {
@@ -8652,6 +8843,7 @@ function renderFeedArticles() {
 // ── FEED EDIT MODAL ──
 function openFeedEditModal() {
   document.getElementById('feed-edit-modal').classList.add('open');
+  const q = document.getElementById('fem-topic-search'); if (q) q.value = '';
   renderFemCats(); renderFemTopics();
 }
 function closeFeedEditModal(e) {
@@ -8676,43 +8868,51 @@ function renderFemCats() {
   });
 }
 function renderFemTopics() {
-  const ALL = ['Politics','Global Affairs','Law & Justice','Activism','AI','Software','Hardware','Space','Climate',
-    'Finance','Cricket','Bollywood','Science','Health','Education','Defence','Crypto','Infrastructure','Fashion',
-    'Cinema','Music','Gaming','Fitness','Mental Health','Nutrition','Productivity','Spirituality','Philosophy',
-    'Religion','Ethics','Consciousness','Mythology','Startups','Markets','Macroeconomics','Real Estate','Animals',
-    'Environment','Geography','Biology','Natural Phenomena','Cybersecurity','Future Tech','Mathematics','Engineering',
-    'Photography','Literature','IPL','Geopolitics','Sustainability'];
-  const c  = document.getElementById('fem-topics-grid');
-  c.innerHTML = '';
-  const colors = Object.values(CATS).map(c=>c.hex);
-  ALL.forEach((t,i) => {
-    const on    = activeFeedTopics.has(t);
-    const color = colors[i % colors.length];
-    const d     = document.createElement('div');
-    d.className = `fem-topic${on?' on':''}`;
-    d.style.color       = on ? '#fff' : color;
-    d.style.borderColor = on ? color  : 'var(--line)';
-    d.style.background  = on ? color  : 'transparent';
-    d.textContent = t;
-    d.onclick = () => {
-      if (activeFeedTopics.has(t)) activeFeedTopics.delete(t); else activeFeedTopics.add(t);
-      renderFemTopics();
-    };
-    c.appendChild(d);
+  renderTopicChips(document.getElementById('fem-topics-grid'), {
+    cls: 'fem-topic',
+    filter: (document.getElementById('fem-topic-search') || {}).value || '',
+    // The sheet batches: nothing is written until Save Preferences is tapped.
+    onToggle: () => { renderFemTopics(); updateFemCount(); },
   });
+  updateFemCount();
+  if (!FEED_TOPIC_CATALOGUE) loadTopicCatalogue().then(got => { if (got) renderFemTopics(); });
 }
-function saveFeedEdit() {
+
+function updateFemCount() {
+  const e = document.getElementById('fem-count');
+  if (e) e.textContent = activeFeedTopics.size
+    ? activeFeedTopics.size + ' topic' + (activeFeedTopics.size === 1 ? '' : 's') + ' selected'
+    : 'No topics selected — you will see everything';
+}
+
+function filterFemTopics() { renderFemTopics(); }
+
+function clearFemTopics() { activeFeedTopics.clear(); renderFemTopics(); }
+
+async function saveFeedEdit() {
   // Persist locally FIRST so the selection survives reload even if the network
   // save is slow or fails — this was the "saved but reverts" bug.
   ST.feedCats = [...activeFeedCats]; ST.feedTopics = [...activeFeedTopics]; persist();
   renderFeedFilterChips(); renderFeedCatCards(); renderFeedTopics(); renderFeedArticles();
   document.getElementById('feed-edit-modal').classList.remove('open');
-  toast('✦ Feed preferences saved!');
-  if (ST.token) {
-    api('/me/feed', { method:'PUT', body: JSON.stringify({
+  if (!ST.token) { toast('✦ Saved on this device — sign in to sync it'); return; }
+  toast('✦ Saving your feed…');
+  try {
+    await api('/me/feed', { method:'PUT', timeout: 20000, body: JSON.stringify({
       categories: Array.from(activeFeedCats), topics: Array.from(activeFeedTopics)
-    })}).catch(()=>{});
+    })});
+  } catch (e) {
+    // The local copy still holds, so say what is actually true rather than
+    // claiming a sync that did not happen.
+    toast('Saved on this device — the server copy will retry.');
+    return;
   }
+  toast('✦ Feed preferences saved!');
+  // THE WHOLE POINT OF THE SCREEN. The server recomputes the reader's ranked
+  // rows on save, so myFeed is reloaded from scratch here — without this the
+  // deck keeps showing the pages it had already fetched, and the setting looks
+  // like it did nothing however correctly it saved.
+  try { if (typeof loadMyfeed === 'function') await loadMyfeed(true); } catch (e) {}
 }
 
 // ── EDIT PROFILE ──
@@ -10909,18 +11109,21 @@ function buildMyfeedCard(a){
       <div class="mfd-panes">
         <section class="mfd-pane news on" data-pane="news">
           <div class="mfd-scroll">
-            <div class="mfd-block mfd-tldr">${leadBadge}<p class="mfd-lead">${tldr || 'Sherr AI is preparing an original summary of this story.'}</p></div>
+            <div class="mfd-cue">
+              ${leadBadge}
+              <button class="mfd-tldr-btn" type="button" aria-expanded="false" aria-label="Show the TL;DR and key points">
+                <svg viewBox="0 0 24 24" class="mfd-tldr-ico" aria-hidden="true"><path d="M5 3v4M3 5h4M6 17v4M4 19h4M13 3l2.2 5.8L21 11l-5.8 2.2L13 19l-2.2-5.8L5 11l5.8-2.2L13 3z"/></svg>
+                <span>TL;DR</span>
+              </button>
+            </div>
+            <div class="mfd-keypoints" hidden></div>
+            <div class="mfd-block mfd-tldr"><p class="mfd-lead">${tldr || 'Sherr AI is preparing an original summary of this story.'}</p></div>
             <div class="mfd-meta">
               <span class="mfd-mchip"><i class="fa-regular fa-clock"></i> ${readMins(a)} min read</span>
               ${(a.source_name || a.orig_source) ? `<span class="mfd-mchip"><i class="fa-regular fa-newspaper"></i> via ${bEsc(a.source_name || a.orig_source)}</span>` : ''}
             </div>
             <div class="mfd-block mfd-what" hidden><p></p></div>
             <div class="mfd-block mfd-whowhere" hidden></div>
-            <div class="mfd-keypoints" hidden></div>
-            <div class="mfd-tldr-row">
-              <button class="mfd-tldr-btn" type="button" aria-expanded="false">
-                <i class="fa-solid fa-wand-magic-sparkles"></i> TL;DR</button>
-            </div>
           </div>
         </section>
         <section class="mfd-pane strings" data-pane="strings">
@@ -10997,22 +11200,45 @@ function mfBindCard(el, a){
   // nothing but mark the card seen — the reason comments felt disabled).
   const cbtn = el.querySelector('.mf-comment');
   if (cbtn) cbtn.addEventListener('click', e => { e.stopPropagation(); openComments(a.id, a); });
-  // TL;DR button: reveal the KEY POINTS block (built from The Node during
-  // hydration). If the card has not hydrated yet, show a short holding line.
+  // TL;DR button: NOTHING is produced until it is tapped. The pane used to
+  // build the Key Points block during hydration and merely unhide it, so every
+  // card in the deck paid for a summary no one had asked to see. The tap is
+  // now the trigger: it fetches /article/<id>/tldr, which derives the bullets
+  // and the key points from what the writer actually wrote (no provider call —
+  // the free tier's request budget belongs to the rewrite drain).
   const tbtn = el.querySelector('.mfd-tldr-btn');
-  if (tbtn) tbtn.addEventListener('click', e => {
+  if (tbtn) tbtn.addEventListener('click', async e => {
     e.stopPropagation();
     const kp = el.querySelector('.mfd-keypoints'); if (!kp) return;
-    const open = kp.hidden;
-    if (open && !kp.dataset.ready) {
-      kp.innerHTML = mfdKeyPointsHTML({
-        what: '', where: '', when: '', title: a.title || '',
-        tldr: mfSummaryOf(a),
-      });
+    if (!kp.hidden) {                                   // a second tap closes it
+      kp.hidden = true;
+      tbtn.classList.remove('on');
+      tbtn.setAttribute('aria-expanded', 'false');
+      return;
     }
-    kp.hidden = !open;
-    tbtn.setAttribute('aria-expanded', String(open));
-    tbtn.classList.toggle('on', open);
+    kp.hidden = false;
+    tbtn.classList.add('on');
+    tbtn.setAttribute('aria-expanded', 'true');
+    if (kp.dataset.ready || kp.dataset.busy) return;    // already generated
+    kp.dataset.busy = '1';
+    tbtn.classList.add('busy');
+    kp.innerHTML = `<div class="mfd-kp-hd"><i class="fa-solid fa-list-check"></i> KEY POINTS</div>`
+                 + `<div class="mfd-kp-note">Pulling the short version…</div>`;
+    try {
+      const r = await api('/article/' + a.id + '/tldr', { timeout: 20000 });
+      kp.innerHTML = mfdTldrHTML(r, a);
+      kp.dataset.ready = '1';
+    } catch (err) {
+      // Offline or the server is down: fall back to what this card already
+      // holds rather than showing a failure. Not marked ready, so the next tap
+      // tries the server again.
+      kp.innerHTML = mfdKeyPointsHTML(Object.assign(
+        { what: '', where: '', when: '', title: a.title || '', tldr: mfSummaryOf(a) },
+        el._mfdNode || {}));
+    } finally {
+      delete kp.dataset.busy;
+      tbtn.classList.remove('busy');
+    }
   });
   el.querySelectorAll('.b-open').forEach(o => o.addEventListener('click', e => {
     if (o.classList.contains('mf-comment')) return;   // handled above
@@ -11035,6 +11261,30 @@ const myfeedObserver = new IntersectionObserver((entries) => {
     hydrateDossier(el, id);
   });
 }, { rootMargin: '300px 0px' });
+
+// KEY POINTS + TL;DR from /article/<id>/tldr — the payload the button's tap
+// generates. The server derives both from the written story, so an unwritten
+// one comes back `ready:false` with a reason: the card says so plainly instead
+// of printing the headline back as a "summary".
+function mfdTldrHTML(r, a){
+  r = r || {};
+  const title = (a && a.title) || r.headline || '';
+  const pts = (r.key_points || []).filter(p => p && p.v && !mfSameText(p.v, title));
+  const lines = (r.tldr || []).filter(t => t && !mfSameText(t, title));
+  const head = `<div class="mfd-kp-hd"><i class="fa-solid fa-list-check"></i> KEY POINTS</div>`;
+  if (!pts.length && !lines.length) {
+    return head + `<div class="mfd-kp-note">${bEsc(r.reason
+      || 'Key points appear once SherrByte has written this story.')}</div>`;
+  }
+  const rows = pts.map(p =>
+    `<div class="mfd-kp-row"><span class="mfd-kp-k">${bEsc(p.k)}</span>`
+    + `<span class="mfd-kp-v">${bEsc(p.v)}</span></div>`).join('');
+  const tldr = lines.length
+    ? `<div class="mfd-kp-tldr"><span class="mfd-kp-k">TL;DR</span>`
+      + `<ul class="mfd-kp-list">${lines.map(t => `<li>${bEsc(t)}</li>`).join('')}</ul></div>`
+    : '';
+  return head + rows + tldr;
+}
 
 // KEY POINTS card for the News-pane TL;DR — pure template over The Node data
 // that is already loaded, so it never fires a request that can fail.
@@ -11089,17 +11339,11 @@ async function hydrateDossier(el, id){
     wwSec.innerHTML = parts.join('');
     wwSec.hidden = false;
   }
-  // TL;DR / KEY POINTS — built from The Node we already fetched, so it never
-  // makes a second call that can fail ("Summarize failed"). Hidden until the
-  // reader taps the TL;DR button.
-  const kp = el.querySelector('.mfd-keypoints');
-  if (kp) {
-    const tldrLine = hook || (lead ? lead.textContent : '') || what;
-    kp.innerHTML = mfdKeyPointsHTML({
-      what, where, when, title, tldr: tldrLine,
-    });
-    kp.dataset.ready = '1';
-  }
+  // The Node is STASHED, not rendered. Key Points belong to the TL;DR button
+  // and are built when it is tapped (see mfBindCard); this copy is only the
+  // offline fallback for when that fetch cannot reach the server.
+  el._mfdNode = { what, where, when, title,
+                  tldr: hook || (lead ? lead.textContent : '') || what };
   // Verification badge.
   const v = d.verification || {};
   const vfy = el.querySelector('.mfd-verify');

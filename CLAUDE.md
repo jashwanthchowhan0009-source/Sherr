@@ -1001,3 +1001,84 @@ repo — no `twa-manifest.json`, no Gradle, no keystore — so `versionCode` can
 be bumped and the target SDK cannot be raised. Rebuild with Bubblewrap against
 the live `manifest.json`, keeping the package name `app.vercel.sherrbyte.twa`,
 and back the keystore up off-machine: losing it means never updating the listing.
+
+---
+
+## The myFeed card's TL;DR, and why it is not a model call
+
+Adopted 2026-10-11. The control sat at the BOTTOM of the News pane — the last
+thing a reader reaches, for a button whose whole purpose is "give me the short
+version first". It now sits in a cue row **between the headline and the body**,
+with the sector badge beside it, and a tap is what produces the panel.
+
+**Nothing is generated until it is tapped.** `hydrateDossier` used to build the
+Key Points block for every card in the deck and merely unhide it, so the deck
+paid for summaries nobody asked to see. Hydration now only stashes The Node on
+`el._mfdNode` as the offline fallback.
+
+**The tap calls `/article/<id>/tldr`, which spends no provider quota.** Gemini's
+free tier is 15 requests a minute and `body_drain_job` already budgets 12 of
+them, so a reader-triggered model call would compete with the one pass that is
+actually writing the corpus — one tap could cost a story. The endpoint DERIVES
+bullets and key points from what the writer already produced (hook → summary_60
+→ full_body, never `source_summary`, which is the publisher's text), splits them
+with `_sentences()` (abbreviation-guarded, or "the U.S. said" becomes two
+bullets), and answers `ready:false` with a reason when the story is still a
+placeholder. Silence is a valid output here, as it is on an analog card.
+
+`index.html` had been calling `POST /sherr/tldr` for the article overlay's
+Summarize button. **That route has never existed in main.py**, so the button
+answered "Summarize failed — try again" on every tap it ever received, and
+retrying could not help. It now calls the same derived endpoint.
+
+## Share was wired to a name collision
+
+`shareArticleCard` called `buildMyfeedCard(a)` expecting a PNG Blob. Two
+functions had that name, declared ~4,500 lines apart — the canvas card builder,
+and the myFeed DOM-card builder — and **the later declaration wins**. So share
+wrapped an `HTMLDivElement` in a `File`, which stringifies to
+`"[object HTMLDivElement]"`: a 25-byte "PNG" the share sheet either refused or
+passed on as a corrupt image. The canvas builder is now
+`buildArticleByteBlob`, and `tests/test_myfeed_card_controls.py` asserts the
+name appears once.
+
+The share payload also **always carries the link** (`articleShareUrl`, the same
+`/myfeed/<slug>` main.py serves, so it unfurls with the story's own og: card).
+The old call passed `text` only alongside the image, so a shared story arrived
+as a picture with no way back. Fallbacks in order: share sheet with image →
+share sheet with text+link → clipboard → `execCommand('copy')`.
+
+## Feed preferences were static server-side, whatever the reader tapped
+
+Three defects, all of which made a correct save look ignored:
+
+- **Categories were discarded.** `UpdateTopicsReq` has always carried
+  `categories`; `update_topics` only read `topics`. `compute_feed_for_user`
+  weights `pillar_score` at 2x, so the entire category half of the screen
+  ranked nothing.
+- **An unknown topic became pillar 1.** `MICRO_TOPICS.get(topic, 1)` is a silent
+  default and the screen offered ~20 topics the map had never heard of
+  ("Markets", "Future Tech", "Natural Phenomena", "Productivity"). Picking any
+  of them filed a Society vote, so a reader who chose markets and engineering
+  got a feed tilted at politics. Those topics are now IN `MICRO_TOPICS`, and
+  `resolve_topic_pillar` falls back to `PILLAR_UNSCOPED` (0) — a pillar no
+  article has, so an unplaceable topic still earns `tag_score` and contributes
+  no pillar bias it did not earn. Do not restore the `, 1)` default.
+- **The reader's cached feed outlived the save.** `/feed` is cached per
+  `(reader, page, filter)`; `cache.delete_prefix("feed:<uid>:")` now drops them
+  all on save, and the client reloads myFeed.
+
+**The topic list is served, not hardcoded.** It lived in index.html as two
+literal arrays that had already drifted apart (55 entries vs 49) and matched
+neither each other nor `MICRO_TOPICS`. `GET /topics/catalogue` serves one list
+with live counts over the corpus, stale-served so the screen opens even while
+the database is refusing connections — an empty preferences screen is
+indistinguishable from a broken one. `FEED_TOPICS_FALLBACK` in the client is
+only for a cold start. **It is `/topics/catalogue`, not `/topics`**: that path
+already serves the Explore pillar tree, and a second `@app.get("/topics")` would
+never be reached, silently.
+
+`loadUserPrefs` reads `GET /me/topics`, which returns the selection already
+split the way it was stored. Inferring the split from `/me`'s one flat list
+guessed wrong in the common case: every topic carries a `pillar_id`, so each one
+switched its whole category on too.
