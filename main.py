@@ -409,6 +409,16 @@ MICRO_TOPICS: dict[str, int] = {
     "Zero-Day": 3, "Vulnerability": 3, "DDoS": 3, "APT": 3,
     "Cyber Attack": 3, "Encryption": 3, "Patch Tuesday": 3,
     "Aviation Safety": 3, "Aircraft": 3, "Airline": 3, "SpaceX Launch": 3,
+    # The preferences screen's own topics. index.html offered these for years
+    # and this map had never heard of them, so every one of them resolved to
+    # the silent `, 1)` default and filed a Society vote — the reason picking
+    # "Markets" or "Engineering" tilted a feed at politics.
+    "Global Affairs": 1, "Law & Justice": 1, "Activism": 1, "Defence": 1,
+    "Infrastructure": 1, "Markets": 2, "Macroeconomics": 2, "Startups": 2,
+    "Crypto": 2, "Hardware": 3, "Future Tech": 3, "Mathematics": 3,
+    "Engineering": 3, "Biology": 5, "Natural Phenomena": 5, "Geography": 5,
+    "Sustainability": 5, "Climate": 5, "Science": 3, "Productivity": 6,
+    "Consciousness": 7, "Photography": 4,
     # Military / geopolitics extensions (Pillar 1)
     "Drone Strike": 1, "Nuclear Weapons": 1, "Missile Test": 1,
     "Ukraine War": 1, "Gaza War": 1, "Taiwan Strait": 1,
@@ -4237,6 +4247,139 @@ async def get_dossier(article_id: int, authorization: str = Header("")):
     return payload
 
 
+# ─── TL;DR: derived on tap, never a provider call ────────────────────────────
+# The News pane's TL;DR button generates on demand, and the question is what
+# "generate" may cost. Gemini's free tier is 15 requests a minute and the
+# rewrite drain already budgets 12 of them (see CLAUDE.md, "The rewrite is
+# rate-limited"), so a reader-triggered model call would compete with the one
+# pass that is actually writing the corpus — one tap could cost a story.
+#
+# So the TL;DR is EXTRACTED from what the writer already produced: the hook,
+# the written summary, the body. It is derived at request time rather than
+# stored, cached like the dossier, and it spends no quota. The client used to
+# call /sherr/tldr, which has never existed in this file — every tap on the
+# article overlay's Summarize button 404'd into "Summarize failed". This is the
+# route it should have been calling.
+_TLDR_MAX_BULLETS = 4
+_TLDR_MIN_BULLET_CHARS = 28
+
+
+def _sentences(text: str) -> list:
+    """Split prose into sentences without importing a tokeniser.
+
+    Abbreviations are protected first (`U.S.`, `Rs.`, `No.`), because splitting
+    on every period turns "the U.S. said" into two bullets, which reads as a
+    broken summary rather than a short one.
+    """
+    t = " ".join(str(text or "").split())
+    if not t:
+        return []
+    guard = "\x00"
+    for abbr in ("U.S.", "U.K.", "U.N.", "Mr.", "Mrs.", "Ms.", "Dr.", "Rs.",
+                 "No.", "Inc.", "Ltd.", "St.", "vs.", "etc.", "a.m.", "p.m."):
+        t = t.replace(abbr, abbr.replace(".", guard))
+    parts = re.split(r"(?<=[.!?])\s+", t)
+    return [p.replace(guard, ".").strip() for p in parts if p.strip()]
+
+
+def _tldr_payload(row) -> dict:
+    """Key points + a short bullet TL;DR for one story.
+
+    Pure over the row: no model, no second query, no write. An unwritten story
+    yields `ready: False` and an honest reason rather than a fabricated summary
+    — silence is a valid output here exactly as it is on an analog card.
+    """
+    d = article_row_to_dict(row)
+    doss = _dossier_payload(row)
+    node = doss["node"]
+    headline = doss["headline"]
+
+    def _usable(text: str) -> str:
+        t = " ".join(str(text or "").split())
+        if not t or body_state.is_stub(t) or _same_text(t, headline):
+            return ""
+        return t
+
+    # Best written prose first: the hook is the written lead, then our summary,
+    # then the body. source_summary is deliberately NOT used — it is the
+    # publisher's own text and the one copy of it this schema keeps.
+    source = ""
+    for cand in (doss["hook"], d.get("summary_60"), d.get("full_body")):
+        source = _usable(cand)
+        if source:
+            break
+
+    bullets: list = []
+    for s in _sentences(source):
+        if len(s) < _TLDR_MIN_BULLET_CHARS or _same_text(s, headline):
+            continue
+        if any(_same_text(s, b) for b in bullets):
+            continue
+        bullets.append(s)
+        if len(bullets) >= _TLDR_MAX_BULLETS:
+            break
+    # One long unsplittable sentence is still a TL;DR; a sub-threshold scrap is not.
+    if not bullets and source and len(source) >= _TLDR_MIN_BULLET_CHARS:
+        bullets = [source]
+
+    key_points = [
+        {"k": "What",  "v": node["what"]},
+        {"k": "Who",   "v": ", ".join(
+            [x for x in ([node["who_subject"]] + node["who_affected"]) if x])},
+        {"k": "Where", "v": node["where"]},
+        {"k": "When",  "v": node["when"]},
+        {"k": "Why",   "v": node["why"]},
+    ]
+    key_points = [p for p in key_points
+                  if p["v"] and not _same_text(p["v"], headline)]
+
+    ready = bool(bullets or key_points)
+    return {
+        "id": d["id"],
+        "signal_id": doss["signal_id"],
+        "headline": headline,
+        "tldr": bullets,
+        "key_points": key_points,
+        "ready": ready,
+        # Why a card can be empty, in the reader's terms. The drain rewrites
+        # placeholders continuously, so "not yet" is the truthful answer.
+        "reason": "" if ready else "SherrByte has not written this story yet.",
+        "source": "derived",
+    }
+
+
+@app.get("/article/{article_id}/tldr")
+async def get_tldr(article_id: int, authorization: str = Header("")):
+    """The News pane's TL;DR, built on tap from what the writer already wrote.
+
+    Cached and stale-served exactly like the dossier: the same burst of reads
+    for one id, and the row only changes when a rewrite or synthesis touches it.
+    """
+    get_current_user(authorization)
+    ck = f"tldr:{article_id}"
+    _missing = {"__404__": True}
+
+    def _row():
+        conn = get_db()
+        try:
+            return conn.execute(
+                "SELECT * FROM articles WHERE id=? AND status IN "
+                "('published','merged')", (article_id,)).fetchone()
+        finally:
+            conn.close()
+
+    async def _produce():
+        row = await asyncio.get_event_loop().run_in_executor(None, _row)
+        if not row:
+            return _missing
+        return _tldr_payload(row)
+
+    payload = await cache.get_or_set_stale(ck, DOSSIER_CACHE_SECONDS, _produce)
+    if payload is _missing or (isinstance(payload, dict) and payload.get("__404__")):
+        raise HTTPException(404, "Article not found")
+    return payload
+
+
 @app.get("/quote")
 async def quote(symbols: str = Query(""), authorization: str = Header("")):
     """Live quotes for named instruments, via Twelve Data — the myFeed Dots tab
@@ -4585,19 +4728,108 @@ async def update_topics(req: UpdateTopicsReq, authorization: str = Header("")):
     uid = get_current_user(authorization)
     conn = get_db()
     conn.execute("DELETE FROM user_preferences WHERE user_id=?", (uid,))
-    for topic in req.topics:
-        pid = MICRO_TOPICS.get(topic, 1)
+    saved_cats = 0
+    for slug in req.categories:
+        pid = _PILLAR_BY_SLUG.get(str(slug or "").strip().lower())
+        if not pid:
+            continue
         try:
             conn.execute(
                 "INSERT OR IGNORE INTO user_preferences (user_id, topic_name, pillar_id, weight) VALUES(?,?,?,1.0)",
-                (uid, topic, pid)
+                (uid, PILLARS[pid]["slug"], pid)
             )
-        except Exception:
+            saved_cats += 1
+        except Exception:                                         # noqa: BLE001
+            pass
+    saved_topics = 0
+    for topic in req.topics:
+        name = str(topic or "").strip()
+        if not name:
+            continue
+        try:
+            conn.execute(
+                "INSERT OR IGNORE INTO user_preferences (user_id, topic_name, pillar_id, weight) VALUES(?,?,?,1.0)",
+                (uid, name, resolve_topic_pillar(name))
+            )
+            saved_topics += 1
+        except Exception:                                         # noqa: BLE001
             pass
     conn.commit()
     conn.close()
+    # The reader's /feed rows are stale the instant the selection changes, and
+    # the feed read cache is keyed per reader — drop it so the next load shows
+    # the choice they just made instead of up to FEED_CACHE_SECONDS of the old
+    # one. Without this the screen saves correctly and still looks ignored.
+    await cache.delete_prefix(f"feed:{uid}:")
     asyncio.create_task(asyncio.to_thread(compute_feed_for_user, uid))
-    return {"status": "ok", "topics_saved": len(req.topics)}
+    return {"status": "ok", "topics_saved": saved_topics,
+            "categories_saved": saved_cats}
+
+
+# ─── Feed preferences: what the reader picks is what the feed ranks ──────────
+# Two bugs made the preferences screen static in effect, whatever the reader
+# tapped:
+#
+#   1. CATEGORIES WERE DROPPED ON THE FLOOR. UpdateTopicsReq has carried a
+#      `categories` list since it was written and this handler only ever read
+#      `topics`, so every pillar the reader switched on was discarded at the
+#      door. compute_feed_for_user weights pillar_score at 2x — the whole
+#      category half of the screen ranked nothing.
+#   2. AN UNKNOWN TOPIC BECAME PILLAR 1. `MICRO_TOPICS.get(topic, 1)` is a
+#      silent default, and the screen offers topics MICRO_TOPICS has never
+#      heard of ("Markets", "Future Tech", "Natural Phenomena", "Productivity").
+#      Picking any of them filed a Society vote. A reader who chose nothing but
+#      markets and engineering got a feed tilted at politics, which reads
+#      exactly like the setting doing nothing.
+#
+# A topic we cannot place now resolves by case-insensitive and prefix match
+# before falling back to PILLAR_UNSCOPED (0) — a pillar no article has, so the
+# topic still earns tag_score on a micro_tag hit and contributes no pillar bias
+# it did not earn.
+PILLAR_UNSCOPED = 0
+_PILLAR_BY_SLUG = {v["slug"]: k for k, v in PILLARS.items()}
+_MICRO_TOPICS_LOWER = {t.lower(): pid for t, pid in MICRO_TOPICS.items()}
+
+
+def resolve_topic_pillar(topic: str) -> int:
+    """The pillar a chosen topic belongs to, or PILLAR_UNSCOPED when unknown."""
+    t = str(topic or "").strip()
+    if not t:
+        return PILLAR_UNSCOPED
+    low = t.lower()
+    if low in _MICRO_TOPICS_LOWER:
+        return _MICRO_TOPICS_LOWER[low]
+    # "Global Affairs" → Geopolitics; "Future Tech" → tech. A containment match
+    # either way is enough signal to place it, and is still better than Society.
+    for known, pid in _MICRO_TOPICS_LOWER.items():
+        if low in known or known in low:
+            return pid
+    return PILLAR_UNSCOPED
+
+
+@app.get("/me/topics")
+async def read_topics(authorization: str = Header("")):
+    """The reader's saved selection, split the way the screen renders it.
+
+    The client had no way to ask for this: it read preferences off /me, which
+    returns one flat list with no categories-vs-topics distinction, so a fresh
+    device could not restore the screen faithfully.
+    """
+    uid = get_current_user(authorization)
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            "SELECT topic_name, pillar_id FROM user_preferences WHERE user_id=?",
+            (uid,)).fetchall()
+    finally:
+        conn.close()
+    cats, topics = [], []
+    for r in rows:
+        name = (r["topic_name"] or "").strip()
+        if not name:
+            continue
+        (cats if name in _PILLAR_BY_SLUG else topics).append(name)
+    return {"categories": cats, "topics": topics}
 
 
 @app.get("/bookmarks")
@@ -7646,6 +7878,106 @@ async def admin_stats(x_admin_token: str = Header(""), token: str = Query("")):
 @app.get("/pillars")
 async def get_pillars():
     return _pillars_payload()
+
+
+# ─── The topic catalogue is served, not hardcoded in the client ─────────────
+# index.html carried the topic list twice, as two literal arrays that had
+# already drifted apart (55 entries on the preferences screen, 49 in the edit
+# sheet), and neither agreed with MICRO_TOPICS here — which is the map that
+# decides what a chosen topic actually ranks. A topic on screen that the server
+# has never heard of is a switch wired to nothing.
+#
+# One list, served from the server, with live counts over the corpus so the
+# screen shows what is actually being published rather than what somebody typed
+# into an array in 2026. The client keeps a small bundled fallback for a cold
+# or offline start, so the screen is never blank.
+TOPICS_CACHE_SECONDS = int(os.getenv("TOPICS_CACHE_SECONDS", "600"))
+TOPICS_SAMPLE_ROWS = int(os.getenv("TOPICS_SAMPLE_ROWS", "1500"))
+
+
+def _topic_counts(conn) -> dict:
+    """How often each micro_tag appears across the most recent published rows.
+
+    Bounded by TOPICS_SAMPLE_ROWS and reading ONE small column, so it stays a
+    cheap query on a database that is already over its egress budget.
+    """
+    counts: dict = {}
+    try:
+        rows = conn.execute(
+            "SELECT micro_tags FROM articles WHERE status='published' "
+            "ORDER BY published_at DESC, id DESC LIMIT ?",
+            (TOPICS_SAMPLE_ROWS,)).fetchall()
+    except Exception as e:                                        # noqa: BLE001
+        log.warning("[TOPICS] count query failed: %s", e)
+        return counts
+    for r in rows:
+        for tag in _load_json_list(r["micro_tags"]):
+            t = str(tag or "").strip()
+            if t:
+                counts[t.lower()] = counts.get(t.lower(), 0) + 1
+    return counts
+
+
+# NOT "/topics" — that path is already taken by _topics_payload() above, which
+# serves the pillar tree the Explore screen reads. A second @app.get("/topics")
+# here would simply never be reached: FastAPI matches in registration order and
+# the first one wins, silently.
+@app.get("/topics/catalogue")
+async def list_topics():
+    """Every selectable topic, flat, with how often it appears in the corpus.
+
+    `count` is what makes the screen dynamic: a topic with 0 recent stories is
+    still offered (the corpus moves), but the client can sort and badge by it.
+    """
+    async def _produce():
+        def _gather():
+            # get_db() itself raises when the pooler refuses a connection, so
+            # the guard has to wrap acquiring it and not only the query.
+            counts = {}
+            try:
+                conn = get_db()
+            except Exception as e:                                # noqa: BLE001
+                log.warning("[TOPICS] no database, serving the map alone: %s", e)
+                conn = None
+            if conn is not None:
+                try:
+                    counts = _topic_counts(conn)
+                finally:
+                    conn.close()
+            seen = set()
+            topics = []
+            for name, pid in MICRO_TOPICS.items():
+                low = name.lower()
+                if low in seen:
+                    continue
+                seen.add(low)
+                topics.append({"name": name, "pillar_id": pid,
+                               "pillar": PILLARS[pid]["slug"],
+                               "color": PILLARS[pid]["color"],
+                               "count": counts.get(low, 0)})
+            # Tags the writer is actually producing that the map has never
+            # listed — the corpus teaching the screen, which is the half that
+            # could never happen while the list lived in the client.
+            for low, n in counts.items():
+                if low in seen or n < 3:
+                    continue
+                seen.add(low)
+                pid = resolve_topic_pillar(low) or 0
+                topics.append({"name": low.title(), "pillar_id": pid,
+                               "pillar": PILLARS[pid]["slug"] if pid else "",
+                               "color": PILLARS[pid]["color"] if pid else "#8A8A96",
+                               "count": n})
+            topics.sort(key=lambda t: (-t["count"], t["name"]))
+            return {"topics": topics,
+                    "pillars": [{"id": k, **v} for k, v in PILLARS.items()],
+                    "sampled": TOPICS_SAMPLE_ROWS}
+        return await asyncio.get_event_loop().run_in_executor(None, _gather)
+
+    # Stale-served: the preferences screen must open even while the database is
+    # refusing connections, or the reader sees an empty list and concludes the
+    # setting is broken.
+    return await cache.get_or_set_stale("topics:catalogue",
+                                        TOPICS_CACHE_SECONDS, _produce)
 
 
 @app.get("/topics/search")
