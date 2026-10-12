@@ -176,7 +176,7 @@ which they expire.</p>
 <p>Two routes, both complete and both irreversible:</p>
 <ul>
   <li><strong>In the app</strong> — Profile → Security Center → Delete Account.</li>
-  <li><strong>On the web</strong> — <a href="/delete-account">sherrbyte.com/delete-account</a>, which works even if you have uninstalled the app.</li>
+  <li><strong>On the web</strong> — our <a href="/delete-account">account deletion page</a>, which works even if you have uninstalled the app.</li>
 </ul>
 
 <h2>Your rights</h2>

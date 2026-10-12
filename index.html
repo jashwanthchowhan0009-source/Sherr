@@ -6240,8 +6240,18 @@ function contactSupport(){ try{ location.href='mailto:support@thewhitetiger.in?s
 // Privacy and Terms are server-rendered pages, not SPA views: Play's reviewer
 // has to reach the same URLs from a browser with no app installed, so there is
 // one copy and the app links to it rather than duplicating the text.
-// A new tab, because the TWA keeps these inside the app shell.
-function openLegal(path){ try{ window.open(path,'_blank','noopener'); }catch(e){ location.href=path; } }
+//
+// API_URL, not a relative path. This app is served from TWO origins — the TWA
+// and the browser load the STATIC deploy (sherrbyte.vercel.app), while every
+// endpoint, including these pages, is FastAPI on sherrbyte-api.onrender.com.
+// A relative '/privacy' therefore resolves against the static host, where no
+// such file exists, and every reader who tapped it would get a 404.
+// A new tab, because the TWA would otherwise keep it inside the app shell.
+function legalUrl(path){ return API_URL + path; }
+function openLegal(path){
+  const u = legalUrl(path);
+  try{ window.open(u,'_blank','noopener'); }catch(e){ location.href=u; }
+}
 function openFAQ(){
   const faqs=[
     ['How does SherrByte pick my news?','Stories are pulled from 50+ trusted sources every ~15 minutes, de-duplicated, and ranked by importance — and personalised as you read, like, and save.'],
