@@ -967,10 +967,14 @@ one real person with no way to delete their account.
 
 - **`/.well-known/assetlinks.json` 404'd on Render.** The file was committed and
   `vercel.json` set a header for it, but no route served it — `.well-known` is
-  neither a static file nor an SPA route, so the catch-all 404'd it. Without it
-  Digital Asset Links cannot verify and the TWA renders **with a browser address
-  bar**, which is the "website in a shell" Play rejects. Served explicitly now,
-  above the catch-all.
+  neither a static file nor an SPA route, so the catch-all 404'd it. Served
+  explicitly now, above the catch-all. **But the origin that has to serve it is
+  the Vercel one**: the APK opens `https://sherrbyte.vercel.app` (read out of
+  its `resources.arsc`), where the file is static and `vercel.json` already sets
+  its type. The Render route is correct to have and is not what the TWA
+  verifies against. Without a verifying copy on the APK's own origin, Digital
+  Asset Links fails and the TWA renders **with a browser address bar**, which is
+  the "website in a shell" Play rejects.
 - **The fingerprint in that file is the UPLOAD key, not the release key.** Play
   App Signing re-signs every upload, so the installed app presents a different
   certificate and verification fails silently — build, upload and install all
@@ -981,6 +985,17 @@ one real person with no way to delete their account.
   loads the privacy URL from a browser, signed out, with no app installed, and an
   app with sign-up needs a deletion route reachable by someone who has already
   uninstalled. `legal.py` serves all three.
+
+**The app is served from TWO origins and that decides every URL above.** The
+TWA and the browser load the STATIC deploy (`sherrbyte.vercel.app`); every
+endpoint, these three pages included, is FastAPI on
+`sherrbyte-api.onrender.com`, which `index.html` hardcodes as the fallback for
+any non-localhost host. So the in-app Privacy/Terms rows build their href from
+`API_URL` — a relative `/privacy` resolves against the static host, where no
+such file exists, and the first version of these links 404'd for every reader.
+The Play Console privacy and deletion URLs are the **Render** host for the same
+reason. Putting one custom domain in front of both is the real fix and is worth
+doing before launch.
 
 `legal.py` takes the **data** claims from the schema and the call sites, never a
 template — a policy that lists data the app does not collect is as wrong as one

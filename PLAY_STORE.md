@@ -6,6 +6,37 @@ tested (`tests/test_play_store_readiness.py`, `tests/test_account_deletion.py`).
 
 ---
 
+## First: this app is served from TWO origins
+
+The APK opens **`https://sherrbyte.vercel.app`** (read out of its `resources.arsc`),
+which is the **static** deploy — `index.html` and the files beside it. Every API
+endpoint, including `/privacy`, `/terms` and `/delete-account`, is the FastAPI
+app on **`https://sherrbyte-api.onrender.com`** (`index.html` hardcodes that as
+the fallback for any non-localhost host).
+
+That split decides two things, and getting either backwards wastes a review
+cycle:
+
+- **`assetlinks.json` must be served by the origin the APK opens** — the Vercel
+  host, where it is a static file from the repo root and `vercel.json` already
+  sets its `Content-Type`. The FastAPI route added in `main.py` covers the
+  Render origin as well, which is correct to have but is **not** the one the TWA
+  verifies against.
+- **The Play Console privacy-policy URL must be the Render host**, because that
+  is the only origin where `/privacy` exists. `https://sherrbyte.vercel.app/privacy`
+  is a 404.
+
+Verify both before submitting — this is the single command that settles it:
+
+```bash
+curl -sI https://sherrbyte.vercel.app/.well-known/assetlinks.json | head -1
+curl -sI https://sherrbyte-api.onrender.com/privacy | head -1
+```
+
+Both must be `200`. If you put a custom domain in front of everything, point the
+APK, `assetlinks.json` and the Console URLs at that one host and this whole
+section collapses to a single origin — which is worth doing before launch.
+
 ## The one that silently breaks the app: assetlinks vs Play App Signing
 
 `.well-known/assetlinks.json` currently carries this fingerprint:
@@ -52,15 +83,16 @@ Nothing warns you. The build succeeds, the upload succeeds, the app installs.
 ]
 ```
 
-4. Deploy, then confirm it is live and correct:
+4. Deploy, then confirm it is live **on the origin the APK opens**:
 
 ```bash
-curl -s https://<your-domain>/.well-known/assetlinks.json | jq .
+curl -s https://sherrbyte.vercel.app/.well-known/assetlinks.json | jq .
 ```
 
-It must return `200` with `Content-Type: application/json`. (It used to 404 on
-Render — the file was committed but no route served it. `main.assetlinks()`
-serves it now.)
+It must return `200` with `Content-Type: application/json`. (On the Render
+origin it used to 404 — the file was committed but no route served it;
+`main.assetlinks()` serves it there now. The Vercel host serves it as a static
+file, which is the copy that actually matters for verification.)
 
 5. Verify with Google's own checker:
 
@@ -173,8 +205,11 @@ link and sitemap entry.
 
 ### App content declarations
 
-- **Privacy policy URL** — `https://<your-domain>/privacy`. Must load signed-out,
-  with no app installed. Play re-checks it periodically; a 404 later pulls the app.
+- **Privacy policy URL** — `https://sherrbyte-api.onrender.com/privacy` (the API
+  origin — it does **not** exist on the Vercel host). Must load signed-out, with
+  no app installed. Play re-checks it periodically; a 404 later pulls the app.
+  Render's free tier sleeps, so the first load can take ~30s — a custom domain
+  or a paid instance is the robust answer if the crawler ever times out.
 - **Data safety form.** Declare, based on what the code actually does:
   - Collected and linked to identity: *email address*, *name*, *user-generated
     content* (comments), *app interactions* (reads, likes, saves).
@@ -182,7 +217,8 @@ link and sitemap entry.
   - **Not** shared with third parties for advertising. There is no ad SDK and no
     third-party analytics in the app.
   - Encrypted in transit: **yes**. Users can request deletion: **yes**.
-- **Account deletion URL** — `https://<your-domain>/delete-account`. Required
+- **Account deletion URL** — `https://sherrbyte-api.onrender.com/delete-account`.
+  Required
   because the app has sign-up. The in-app route (Profile → Security Center →
   Delete Account) now genuinely deletes; this URL covers people who uninstalled.
 - **Content rating questionnaire** — answer it as a news app. Expect a higher
@@ -218,10 +254,16 @@ and reviewers do read the images.
 ## Before you hit publish
 
 ```bash
-# every Play-facing route answers
-for p in /privacy /terms /delete-account /.well-known/assetlinks.json /manifest.json; do
-  printf '%-34s %s\n' "$p" "$(curl -s -o /dev/null -w '%{http_code} %{content_type}' https://<your-domain>$p)"
+API=https://sherrbyte-api.onrender.com
+WEB=https://sherrbyte.vercel.app
+
+for p in /privacy /terms /delete-account; do
+  printf '%-22s %s\n' "$p" "$(curl -s -o /dev/null -w '%{http_code}' $API$p)"
 done
+printf '%-22s %s\n' "assetlinks (web)" \
+  "$(curl -s -o /dev/null -w '%{http_code} %{content_type}' $WEB/.well-known/assetlinks.json)"
+printf '%-22s %s\n' "manifest (web)" \
+  "$(curl -s -o /dev/null -w '%{http_code}' $WEB/manifest.json)"
 ```
 
 - [ ] All five return `200`, and `assetlinks.json` is `application/json`

@@ -112,6 +112,23 @@ def test_the_app_links_to_the_legal_pages():
     assert "openLegal('/terms')" in html
 
 
+def test_the_legal_links_resolve_against_the_api_origin_not_the_static_host():
+    """This app is served from two origins. The TWA and the browser load the
+    STATIC deploy (sherrbyte.vercel.app); /privacy and /terms are FastAPI routes
+    on sherrbyte-api.onrender.com. `window.open('/privacy')` resolves against
+    the static host, where no such file exists — every reader who tapped it got
+    a 404. The link must be built from API_URL."""
+    with open(os.path.join(_ROOT, "index.html"), encoding="utf-8") as fh:
+        html = fh.read()
+    i = html.index("function legalUrl(")
+    body = html[i:i + 400]
+    assert "API_URL + path" in body, "legal links must be absolute to the API origin"
+    j = html.index("function openLegal(")
+    opener = html[j:j + 300]
+    assert "legalUrl(path)" in opener
+    assert "window.open(path" not in opener, "still opening the relative path"
+
+
 def test_unconfigured_legal_values_are_visible_not_blank(monkeypatch):
     """A policy that silently prints an empty company name is worse than one
     that says it is unconfigured."""
