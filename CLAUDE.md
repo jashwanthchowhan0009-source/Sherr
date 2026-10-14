@@ -1097,3 +1097,35 @@ never be reached, silently.
 split the way it was stored. Inferring the split from `/me`'s one flat list
 guessed wrong in the common case: every topic carries a `pillar_id`, so each one
 switched its whole category on too.
+
+## The page and the service worker were two different Firebase projects
+
+Adopted 2026-10-14. `index.html` and `firebase-messaging-sw.js` each call
+`firebase.initializeApp({...})`, and **every field matched except `apiKey`** — which
+is why nothing looked wrong.
+
+The page's key belonged to Google Cloud project **719632752358**. Every other field in
+that same object names **485011285385** — `messagingSenderId` IS the Firebase project
+number, and `appId` is `1:<projectNumber>:web:<id>`. It was also restricted to Android
+apps, so a browser was blocked from it twice over: wrong project, wrong platform.
+`getToken(..., { vapidKey })` therefore could not mint a web push token for
+`sherrbyte`, and foreground registration from the page was dead while the service
+worker's background handler (which had the right key) worked fine.
+
+Determined without the Firebase Console, and the method is worth keeping: **an API that
+is disabled on a project names that project in its error**, so
+`GET https://translate.googleapis.com/language/translate/v2?target=es&q=hi&key=<KEY>`
+returns `projects/<number>` for any Google API key. A control matters too — a bogus key
+answers `INVALID_ARGUMENT` / "API key not valid", whereas the correct key answers
+`CONFIGURATION_NOT_FOUND` (valid key, project has no Identity Platform config, which is
+expected here: this app runs its own HMAC auth and uses Firebase only for FCM) and
+`API_KEY_SERVICE_BLOCKED` (correctly scoped to the services it needs). Do not read
+either of those as "the key is broken".
+
+Both are Web API keys, which Google publishes as public identifiers — a wrong value,
+not a leaked secret. Nothing was rotated.
+
+`tests/test_notifications.py` compares the two configs **field for field** rather than
+matching the key string, so the next field to drift is caught too, and separately
+asserts `messagingSenderId` equals the project number inside `appId` — the invariant
+that catches a credential pasted in from another project.

@@ -8359,8 +8359,15 @@ let _fcmMessaging = null;
 (function initFCM() {
   try {
     if (!window.firebase || !firebase.messaging) return;
+    // MUST stay identical to the config in firebase-messaging-sw.js — the page
+    // registers the token and the service worker receives on it, so a field that
+    // differs splits one app in two. This block carried an apiKey from a DIFFERENT
+    // Google Cloud project (719632752358, not the 485011285385 that every other
+    // field here names) and additionally restricted to Android apps, so getToken()
+    // below could never mint a web token for `sherrbyte`.
+    // tests/test_notifications.py asserts the two configs match, field for field.
     firebase.initializeApp({
-      apiKey: "AIzaSyAM-Sh1RCVW17Z3N_6510ReBQbj6zUj9Hs",
+      apiKey: "AIzaSyCqebJQbNp7AeiZQnScWDc8cstFYPH5wik",
       authDomain: "sherrbyte.firebaseapp.com",
       projectId: "sherrbyte",
       storageBucket: "sherrbyte.firebasestorage.app",

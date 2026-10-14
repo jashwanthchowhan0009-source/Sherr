@@ -130,3 +130,54 @@ def test_frontend_badge_and_bell():
     assert "data.suggestions" in r
     assert "/notifications/read" in r
     assert "setNotifBadge(0)" in r
+
+
+# ── the two Firebase configs are one app, so they must say the same thing ────
+
+SW = os.path.join(_ROOT, "firebase-messaging-sw.js")
+
+
+def _firebase_config(text, where):
+    """Parse the object literal passed to firebase.initializeApp()."""
+    m = re.search(r"firebase\.initializeApp\(\s*\{(.*?)\}\s*\)", text, re.S)
+    assert m, f"no firebase.initializeApp({{...}}) found in {where}"
+    cfg = dict(re.findall(r'(\w+)\s*:\s*"([^"]*)"', m.group(1)))
+    assert cfg, f"initializeApp in {where} parsed to an empty config"
+    return cfg
+
+
+def test_the_page_and_the_service_worker_use_the_same_firebase_app():
+    """They are two halves of one app — the page registers the push token and the
+    service worker receives on it — so any field that differs splits them apart.
+
+    `apiKey` did. index.html carried a key belonging to Google Cloud project
+    719632752358 while every other field in the very same object named 485011285385,
+    and that key was restricted to Android apps on top of it, so getToken() could
+    never mint a web token for `sherrbyte`. The other six fields matched exactly,
+    which is why nothing looked wrong: one pasted value from the wrong project.
+
+    Compared field-for-field rather than by matching the key string, so the next
+    field to drift is caught too.
+    """
+    page = _firebase_config(_read(INDEX), "index.html")
+    worker = _firebase_config(_read(SW), "firebase-messaging-sw.js")
+
+    differing = sorted(k for k in set(page) | set(worker)
+                       if page.get(k) != worker.get(k))
+    assert not differing, "index.html and firebase-messaging-sw.js disagree on: " + \
+        "; ".join(f"{k}: index.html={page.get(k)!r} sw={worker.get(k)!r}"
+                  for k in differing)
+
+
+def test_the_firebase_key_belongs_to_the_project_the_config_names():
+    """`appId` is `1:<projectNumber>:web:<id>` and `messagingSenderId` IS that
+    project number, so the two must agree. This is the invariant that catches a
+    credential pasted in from another project — the actual defect above."""
+    for where, path in (("index.html", INDEX), ("firebase-messaging-sw.js", SW)):
+        cfg = _firebase_config(_read(path), where)
+        assert cfg.get("apiKey"), f"{where} has no apiKey"
+        assert cfg["apiKey"].startswith("AIza"), f"{where}: not a Google API key"
+        project = cfg["appId"].split(":")[1]
+        assert project == cfg["messagingSenderId"], (
+            f"{where}: appId names project {project} but messagingSenderId is "
+            f"{cfg['messagingSenderId']} — the config mixes two Firebase projects")
