@@ -1248,5 +1248,68 @@ card.
   `_history_patterns` is a function with a test: it once turned BRENT into
   `rent`.
 
-Still open, deliberately: Telugu (one language at a time, and the writer gate's
-tone rules are English-only).
+## Telugu is a TRANSLATION in the same request, and the gate is honest about it
+
+Adopted 2026-10-15, the item Sherr Research left open. English stays the
+default; Telugu rides along.
+
+**It is one more FIELD, never one more request.** Gemini's free tier is 15
+requests a minute and `body_drain_job` already spends 12, so a second call per
+article to translate would halve the throughput of the one pass actually writing
+the corpus. `ai_processor._TELUGU_RULE` asks for a `telugu`
+object — {refined_title, summary, full_body} — inside the request that already
+writes the story, and `_out_tokens` raises the output ceiling with the field,
+because a response cut off mid-JSON loses the **English** card too.
+
+`with_telugu()` appends the rule to whichever base instruction was chosen
+(blurb / full-article / Research) instead of being numbered into any of them:
+the WWWH rules are inserted at a different point in each, so a numbered rule
+would collide in one of the three. It reads `TELUGU_ENABLED` at **call** time —
+module-level configuration is what forces `importlib.reload`, which this repo
+has already been burnt by.
+
+**The compliance gate can only read English, and the design says so out loud.**
+`writer_gate`'s tone rules and the engine blocklist are English. So Telugu is
+only ever published as a translation of a body that has ALREADY passed the
+originality check and, for a Research card, the writer gate — it carries no
+claim the English card did not make and clear. `telugu.check` then verifies what
+IS checkable in any language:
+
+- **Telugu script**, by letter ratio (digits and Latin tickers excluded, or
+  every numeric card would read as untranslated). A model that cannot translate
+  answers in English rather than refusing, and that string in the column would
+  render as a duplicate card with no error anywhere.
+- **No invented figure.** A translation may drop a number; it may never add one.
+  The tolerance is by VALUE, not digit count — `2026` is a date and `7500` is a
+  claim, and both are four digits.
+- **One blocklist, still.** The Latin half is the engine's
+  `violates_language_rules`, unchanged, so a leaked "buy" or "$90" is caught
+  exactly as in English. `telugu.FORBIDDEN_TE` adds only the Telugu-script
+  equivalents, and **every entry carries the English word it mirrors**, with a
+  test asserting that word is really in the engine's list — otherwise the two
+  lists drift and nobody finds out from either side.
+- **Proportionate length**, 0.40–1.25 of the English word count: Telugu is
+  agglutinative, so the same content lands shorter, and anything outside that is
+  a truncation or an addition.
+
+**What it deliberately does NOT check is forward-looking tense.** Telugu marks
+the future with an inflectional suffix, not a separate word, so there is no
+"will" to find and a suffix match would also hit the ordinary present. Do not
+add one believing it closes that gap: it would reject correct prose and still
+miss the construction. The ordering above is the control.
+
+The word list is deliberately strict — `అంచనా` (forecast *and* plain estimate)
+is on it — because **a failing translation costs nothing**: the column stays
+empty, the card renders in English, and the verdict is recorded so the Telugu
+pass rate is a number under `telugu` in `/admin/writer-doctor`. A false positive
+drops a translation; a false negative publishes an advice word.
+
+`articles.telugu` is JSON-in-TEXT like `strings`/`dots`/`who_affected`. The
+surface shows one pill in the card's cue row (`mfBindLang`), only when the row
+actually has a translation — an empty language toggle reads as broken, a missing
+one reads as English — and it swaps the **headline and lead only**, because
+Strings, Dots and the TL;DR panel are still English. The choice is remembered in
+`localStorage` behind try/catch, so the whole deck follows the reader.
+
+Still open, deliberately: Strings/Dots/TL;DR in Telugu (each would need its own
+field and its own output budget).

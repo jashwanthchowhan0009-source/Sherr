@@ -355,8 +355,9 @@ def test_the_catch_section_survives_verification():
 # ── 8. the prompt ──────────────────────────────────────────────────────────
 def test_the_research_instruction_is_built_from_the_full_one():
     r = ai_processor.SYSTEM_INSTRUCTION_RESEARCH
-    assert ai_processor.instruction_for("x", "research") is r
-    assert ai_processor.instruction_for("x") is ai_processor.SYSTEM_INSTRUCTION
+    assert ai_processor.instruction_for("x", "research") == ai_processor.with_telugu(r)
+    assert (ai_processor.instruction_for("x")
+            == ai_processor.with_telugu(ai_processor.SYSTEM_INSTRUCTION))
     # Rule 0 and the shared rules have exactly one definition and survive.
     for shared in ("ORIGINALITY", "4. category", "10. strings", "11. dots",
                    "12. what_info", "refined_title"):

@@ -83,8 +83,13 @@ def test_a_teaser_page_yields_nothing():
 
 # ── prompt selection ────────────────────────────────────────────────────────
 def test_full_text_gets_the_wwwh_prompt_and_a_blurb_does_not():
-    assert ai_processor.instruction_for(FULL_TEXT) is ai_processor.SYSTEM_INSTRUCTION_FULL
-    assert ai_processor.instruction_for("A short blurb.") is ai_processor.SYSTEM_INSTRUCTION
+    # Compared through with_telugu, which appends the translation rule to
+    # whichever base was chosen: the SELECTION is what this asserts, and it
+    # stays exact rather than becoming a substring check.
+    assert (ai_processor.instruction_for(FULL_TEXT)
+            == ai_processor.with_telugu(ai_processor.SYSTEM_INSTRUCTION_FULL))
+    assert (ai_processor.instruction_for("A short blurb.")
+            == ai_processor.with_telugu(ai_processor.SYSTEM_INSTRUCTION))
     full = ai_processor.SYSTEM_INSTRUCTION_FULL
     for rule in ("what_info", "why_info", "how_info", "who_subject", "who_affected",
                  "THE HOOK + WHAT HAPPENED", "WHY and HOW", "PUBLISHER'S FULL ARTICLE"):

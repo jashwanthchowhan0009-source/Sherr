@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 import httpx
 
 import key_pool
+import telugu
 
 from text_utils import (
     MIN_ORIGINAL_WORDS,
@@ -160,6 +161,18 @@ _GEMINI_SCHEMA = {
                 "tech_culture":      _DOT_SCHEMA_LC,
                 "asymmetric_catch":  {"type": "object",
                                       "properties": {"summary": {"type": "string"}}},
+            },
+        },
+        # The Telugu card — a TRANSLATION of the three fields above, asked for in
+        # the same request so it costs no extra provider call (telugu.py). Always
+        # optional: a model that cannot translate omits it and the row simply has
+        # no Telugu copy.
+        "telugu": {
+            "type": "object",
+            "properties": {
+                "refined_title": {"type": "string"},
+                "summary":       {"type": "string"},
+                "full_body":     {"type": "string"},
             },
         },
     },
@@ -433,6 +446,57 @@ def _build_research_instruction(base: str) -> str:
 SYSTEM_INSTRUCTION_RESEARCH = _build_research_instruction(SYSTEM_INSTRUCTION_FULL)
 
 
+# ─── TELUGU: one more field, never one more request ──────────────────────────
+# Adopted 2026-10-15. The product owner asked for English by default and Telugu
+# "if possible". The only affordable shape is a translation in the SAME request
+# that writes the story — a second call would halve the drain's throughput
+# against a 15-request-a-minute ceiling (see telugu.py for the full reasoning,
+# including why the compliance gate can only be applied to the English half).
+#
+# Appended to the finished instruction rather than numbered into it, so the
+# blurb, full-article and Research prompts all carry it without renumbering the
+# WWWH rules that are inserted at different points in each.
+_TELUGU_RULE = """
+
+TELUGU — one extra field, and it is a TRANSLATION, not a second article.
+
+18. telugu — an object {refined_title, summary, full_body} carrying rules 1, 2
+    and 3 above IN TELUGU. Omit the field entirely if you cannot do this well;
+    an omitted field is a correct answer and costs the card nothing.
+    - TRANSLATE WHAT YOU WROTE. Do not write a different story, do not add a
+      fact, a figure, a name or a sentence that is not in your English answer,
+      and do not drop a paragraph. Same meaning, same order, same tense.
+    - EVERY FIGURE MUST ALREADY BE IN YOUR ENGLISH ANSWER. A number that appears
+      only in the Telugu is treated as invented and the translation is dropped.
+    - Write in TELUGU SCRIPT. Keep proper nouns and tickers in their usual form
+      (Brent, Nifty 50, OPEC+, USDINR) rather than transliterating them.
+    - Natural newspaper Telugu for an ordinary reader in the Telugu states, not
+      a word-for-word rendering of the English and not Sanskritised prose. Where
+      an English financial term has no everyday Telugu word, keep the English
+      word in Latin script and explain it in two or three Telugu words.
+    - The SAME compliance rules apply, in both languages: no advice, no buy or
+      sell, no recommendation, no target, no forecast or prediction, and no
+      figure next to a currency symbol or code. Keep the past tense and the
+      conditional of the English; never translate a measured past move into
+      something that reads as what will happen next."""
+
+
+def with_telugu(instruction: str) -> str:
+    """The instruction with the Telugu rule inserted before its closing line.
+
+    Read at CALL time, never captured at import: TELUGU_ENABLED has to be able
+    to turn the field off without a reload, and this repo has already been
+    bitten by module-level configuration that other modules hold references to.
+    """
+    if not telugu.enabled():
+        return instruction
+    closing = "Output the JSON object only."
+    i = instruction.rfind(closing)
+    if i < 0:
+        return instruction + _TELUGU_RULE
+    return instruction[:i].rstrip() + _TELUGU_RULE + "\n\n" + instruction[i:]
+
+
 def is_full_text(body: str) -> bool:
     return len((body or "").split()) >= FULL_TEXT_MIN_WORDS
 
@@ -443,8 +507,16 @@ RESEARCH_MODE = "research"
 def instruction_for(body: str, mode: str = None) -> str:
     """The full-article (WWWH) prompt when we hold the article, else the blurb one."""
     if mode == RESEARCH_MODE:
-        return SYSTEM_INSTRUCTION_RESEARCH
-    return SYSTEM_INSTRUCTION_FULL if is_full_text(body) else SYSTEM_INSTRUCTION
+        return with_telugu(SYSTEM_INSTRUCTION_RESEARCH)
+    return with_telugu(SYSTEM_INSTRUCTION_FULL if is_full_text(body)
+                       else SYSTEM_INSTRUCTION)
+
+
+def _out_tokens(body: str, mode: str = None, *, gemini: bool = False) -> int:
+    """The output ceiling, raised when the request also asks for Telugu."""
+    long_form = is_full_text(body) or mode == RESEARCH_MODE
+    base = (2048 if gemini else 1600) if long_form else (1024 if gemini else 900)
+    return int(base * 1.8) if telugu.enabled() else base
 
 
 def body_limit(body: str) -> int:
@@ -472,8 +544,10 @@ async def _gemini_once(key: str, title: str, body: str, client, *,
         }],
         "generationConfig": {
             "temperature": 0.35,
-            "maxOutputTokens": (2048 if (is_full_text(body)
-                                        or mode == RESEARCH_MODE) else 1024),
+            # A translated card is close to twice the output, and a response
+            # cut off mid-JSON loses the ENGLISH card too — so the ceiling moves
+            # with the field rather than hoping the answer fits.
+            "maxOutputTokens": _out_tokens(body, mode, gemini=True),
             "responseMimeType": "application/json",
             "responseSchema": _GEMINI_SCHEMA,
         }
@@ -571,8 +645,7 @@ Return ONLY a single JSON object matching the schema. No markdown, no code fence
     payload = {"model": model,
                "messages": [{"role": "user", "content": prompt}],
                "temperature": 0.35,
-               "max_tokens": (1600 if (is_full_text(body)
-                                      or mode == RESEARCH_MODE) else 900),
+               "max_tokens": _out_tokens(body, mode),
                "response_format": {"type": "json_object"}}
     headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
     for attempt in range(4):

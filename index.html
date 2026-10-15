@@ -5383,6 +5383,10 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 .mfd-cue{display:flex;align-items:center;justify-content:space-between;
   gap:10px;flex-wrap:wrap;margin:0 0 2px;}
 .mfd-cue .mf-badge{flex:0 1 auto;}
+.mfd-lang{margin-left:auto;flex:0 0 auto;background:none;border:1px solid var(--bd2,#e9e9ee);
+  border-radius:999px;padding:4px 10px;font:inherit;font-size:.74rem;font-weight:600;
+  color:var(--t2,#5a5a66);cursor:pointer;line-height:1.2}
+.mfd-lang.on{border-color:var(--t1,#17171c);color:var(--t1,#17171c)}
 .mfd-tldr-btn{display:inline-flex;align-items:center;gap:6px;border:1px solid rgba(168,85,247,.32);
   background:rgba(168,85,247,.12);color:#C084FC;font:800 .72rem/1 var(--f);letter-spacing:.03em;
   padding:8px 13px;border-radius:999px;cursor:pointer;transition:all .15s var(--ease);
@@ -11387,6 +11391,10 @@ async function hydrateDossier(el, id){
     vfy.classList.toggle('ok', v.state === 'corroborated');
     vfy.querySelector('.mfd-verify-lbl').textContent = v.label;
   }
+  // TELUGU — the same card in Telugu, when the writer produced one that passed
+  // its checks. Most rows have none, and then there is no pill at all: an empty
+  // language toggle reads as a broken feature, a missing one reads as English.
+  mfBindLang(el, d.telugu);
   // Strings + Dots panes (the inner scroller is replaced, the pane shell stays).
   const a = el._mfa || {};
   el.querySelector('.mfd-pane.strings .mfd-scroll').innerHTML = renderStringsPane(d.strings || [], d.strings_status, a);
@@ -11395,6 +11403,65 @@ async function hydrateDossier(el, id){
   _mfdMarkPending(el, 'dots', d.dots_status !== 'ready');
   hydrateMyfeedTickers(el);
 }
+// The reader's language choice, remembered per device. localStorage can throw
+// (private windows, blocked site data), so every touch is guarded and the
+// default is English — never a blank card.
+const MF_LANG_KEY = 'sb21:lang';
+function mfLangPref(){
+  try { return localStorage.getItem(MF_LANG_KEY) === 'te' ? 'te' : 'en'; }
+  catch (e) { return 'en'; }
+}
+function mfSetLangPref(v){
+  try { localStorage.setItem(MF_LANG_KEY, v === 'te' ? 'te' : 'en'); } catch (e) {}
+}
+
+// The pill swaps the HEADLINE and the LEAD only. Strings and Dots stay in
+// English because the writer translates the article's three fields and nothing
+// else — showing a half-translated card would be worse than an honest one.
+function mfBindLang(el, te){
+  const body = ((te || {}).full_body || '').trim();
+  const head = ((te || {}).refined_title || '').trim();
+  if (!body || !head) return;
+  const cue = el.querySelector('.mfd-cue');
+  const lead = el.querySelector('.mfd-lead');
+  const h2 = el.querySelector('.mf-headline');
+  if (!cue || !lead || !h2) return;
+  el._mfdLang = {
+    te: { head, lead: ((te || {}).summary || '').trim() || body },
+    en: { head: h2.textContent, lead: lead.textContent },
+  };
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'mfd-lang';
+  cue.appendChild(btn);
+  btn.addEventListener('click', ev => {
+    ev.stopPropagation();
+    const next = (el._mfdLangOn === 'te') ? 'en' : 'te';
+    mfSetLangPref(next);
+    mfApplyLang(el, next);
+  });
+  mfApplyLang(el, mfLangPref());
+}
+
+function mfApplyLang(el, lang){
+  const pair = el._mfdLang;
+  if (!pair) return;
+  const on = (lang === 'te') ? 'te' : 'en';
+  el._mfdLangOn = on;
+  const h2 = el.querySelector('.mf-headline');
+  const lead = el.querySelector('.mfd-lead');
+  if (h2) h2.textContent = pair[on].head;
+  if (lead && pair[on].lead) lead.textContent = pair[on].lead;
+  const btn = el.querySelector('.mfd-lang');
+  if (btn){
+    // The pill names the language the tap WOULD switch to, which is how every
+    // bilingual reader expects one to read.
+    btn.textContent = (on === 'te') ? 'English' : '\u0C24\u0C46\u0C32\u0C41\u0C17\u0C41';
+    btn.setAttribute('aria-label', (on === 'te') ? 'Read in English' : 'Read in Telugu');
+    btn.classList.toggle('on', on === 'te');
+  }
+}
+
 function _mfdMarkPending(el, name, pending){
   const t = el.querySelector(`.mfd-tab[data-tab="${name}"]`);
   if (t) t.classList.toggle('pending', !!pending);
