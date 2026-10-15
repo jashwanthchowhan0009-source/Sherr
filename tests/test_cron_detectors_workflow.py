@@ -93,16 +93,30 @@ def test_the_detector_job_still_runs_when_market_signals_is_skipped(wf):
     assert "needs.market-signals.result == 'success'" in guard
 
 
+def _step_running(wf, job, module):
+    """The step of `job` that invokes `module`.
+
+    Found by what it runs, never by its index. These tests used steps[-1], and
+    appending the proof/filings steps after the detector pass broke them while
+    the thing they assert — that the detector pass asks for its funnels — was
+    still true. A positional lookup turns "somebody added a step" into a
+    failure that reads like "the detector pass is gone".
+    """
+    steps = [s for s in wf["jobs"][job]["steps"] if module in (s.get("run") or "")]
+    assert steps, f"no step in {job} runs {module}"
+    assert len(steps) == 1, f"{len(steps)} steps in {job} run {module}"
+    return steps[0]
+
+
 def test_the_detector_pass_asks_for_its_funnels(wf):
     """A run that writes 0 insights is usually correct; --diagnostics is what
     makes the job log say WHY, instead of needing a second investigation."""
-    step = wf["jobs"]["detectors"]["steps"][-1]
-    assert "app.workers.detectors" in step["run"]
+    step = _step_running(wf, "detectors", "app.workers.detectors")
     assert "--diagnostics" in step["run"]
 
 
 def test_the_signals_job_runs_the_worker_that_writes_market_rows(wf):
-    assert "app.workers.market_signals" in wf["jobs"]["market-signals"]["steps"][-1]["run"]
+    _step_running(wf, "market-signals", "app.workers.market_signals")
 
 
 def test_both_jobs_mirror_the_ingest_cron_that_is_known_to_work(wf):

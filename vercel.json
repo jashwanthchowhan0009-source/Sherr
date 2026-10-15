@@ -1,4 +1,9 @@
 {
+  "git": {
+    "deploymentEnabled": {
+      "claude/*": false
+    }
+  },
   "headers": [
     {
       "source": "/sherrbyte.apk",

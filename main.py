@@ -2476,6 +2476,15 @@ async def lifespan(app: FastAPI):
                  BODY_REPROCESS_NIGHTLY)
     except Exception as e:
         log.error("body reprocess job not started: %s", e)
+    # AsyncIOScheduler caches the event loop it is started on, and `scheduler` is
+    # a module-level object. In production lifespan runs once, so that is the same
+    # loop forever and this is a no-op. Under the test suite the module outlives
+    # the loop: the second TestClient to enter a lifespan finds the scheduler
+    # holding the FIRST test's closed loop and start() raises "Event loop is
+    # closed", which reads as the app failing to boot rather than as two tests
+    # sharing one object. Starting on the loop we are actually running on makes
+    # both cases the same.
+    scheduler.configure(event_loop=asyncio.get_running_loop())
     scheduler.start()
     log.info("Scheduler: collect every %d min", COLLECT_INTERVAL_MIN)
     # Inline, because the point is that the feed is servable by the time the first

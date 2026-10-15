@@ -27,12 +27,31 @@ def test_insight_band_css_and_helpers_exist():
         assert fn in H, f"missing {fn}"
 
 
+def _body_of(decl):
+    """The source of the function declared by `decl`, brace-matched.
+
+    Not a fixed character window. This test sliced the first 7200 characters
+    after `async function loadFeed(` and broke when loadFeed grew past it — the
+    call it asserts had not moved out of the function, only past an arbitrary
+    offset. A window measures the function's length; this measures what is in it.
+    """
+    i = H.index(decl)
+    j = H.index("{", i)
+    depth = 0
+    for k in range(j, len(H)):
+        if H[k] == "{":
+            depth += 1
+        elif H[k] == "}":
+            depth -= 1
+            if depth == 0:
+                return H[i:k + 1]
+    raise AssertionError(f"unbalanced braces after {decl!r}")
+
+
 def test_home_band_is_mounted_and_rendered():
     # Home band is inserted after the section tabs and rendered on feed load.
     assert "id: 'home-insband'" in H or "band.id = 'home-insband'" in H
-    loadfeed = H[H.index("async function loadFeed("):
-                 H.index("async function loadFeed(") + 7200]
-    assert "renderHomeInsights()" in loadfeed
+    assert "renderHomeInsights()" in _body_of("async function loadFeed(")
     # It reads the loaded feed, not a new request.
     hchips = H[H.index("function homeInsightChips()"):
                H.index("function homeInsightChips()") + 900]

@@ -44,13 +44,17 @@ log = logging.getLogger("sherbyte.ai")
 # what these replaced.
 MODEL_DEFAULT = {
     "gemini": "gemini-3.1-flash-lite",
-    # 70B, not 8B: the 8B model is fast but too weak to REFRAME a story — it
-    # dry-restates the source, so the headline comes back near-identical and the
-    # body reads like the wire copy. The 70B versatile model actually follows the
-    # "original headline + psychological hook" instruction. Slower on the free
-    # tier (lower daily tokens), but the quality is the whole point. Override with
-    # GROQ_MODEL if Groq retires this id or you want the faster 8B for the backlog.
-    "groq":   "llama-3.3-70b-versatile",
+    # The BIG model, not the small one: a small model is fast but too weak to
+    # REFRAME a story — it dry-restates the source, so the headline comes back
+    # near-identical and the body reads like the wire copy. Slower on the free
+    # tier (lower daily tokens), but the quality is the whole point.
+    #
+    # llama-3.3-70b-versatile was this value and Groq SHUT IT DOWN for the free
+    # and developer tiers on 2026-08-16 (console.groq.com/docs/deprecations),
+    # which named openai/gpt-oss-120b as its replacement. A retired id does not
+    # fail loudly: the call 404s, the cascade drops to the next provider, and the
+    # only symptom is a backlog that stops clearing. Override with GROQ_MODEL.
+    "groq":   "openai/gpt-oss-120b",
     "openai": "gpt-4o-mini",
     "grok":   "grok-4.3",
 }

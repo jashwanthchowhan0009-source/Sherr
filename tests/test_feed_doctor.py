@@ -300,11 +300,44 @@ def test_lifespan_completes_and_drains(tmp_path, monkeypatch):
     c.close()
 
 
+# Ids Groq has shut down for the free and developer tiers, with the date, from
+# console.groq.com/docs/deprecations. A retired id does not fail loudly: the call
+# 404s, the cascade drops to the next provider, and the only symptom is a backlog
+# that stops clearing — so the list is the test, and it grows rather than being
+# rewritten into a new single pin that rots the same way.
+GROQ_RETIRED = {
+    "llama3-8b-8192": "retired before 2026",
+    "llama-3.1-70b-versatile": "retired before 2026",
+    "llama-3.1-8b-instant": "shut down 2026-08-16, replaced by openai/gpt-oss-20b",
+    "llama-3.3-70b-versatile": "shut down 2026-08-16, replaced by openai/gpt-oss-120b",
+}
+
+
 def test_groq_model_is_a_currently_served_id():
-    """llama-3.3-70b-versatile is decommissioned; a 404 from Groq means the rewrite
-    pass silently stops promoting articles and the feed drains to empty."""
+    """A decommissioned id means the rewrite pass silently stops promoting
+    articles and the feed drains to empty.
+
+    Both halves matter. The pin says which model this repo chose and why (the
+    big one: a small model restates the source instead of reframing it). The
+    retired set is what catches the NEXT shutdown, and it is also why this test
+    failed for months asserting llama-3.1-8b-instant — an id that was itself
+    retired on the same day as the one it was meant to replace.
+    """
     import ai_processor
-    assert ai_processor.GROQ_MODEL == "llama-3.1-8b-instant"
+    model = ai_processor.GROQ_MODEL
+    assert model not in GROQ_RETIRED, f"{model}: {GROQ_RETIRED.get(model)}"
+    assert model == "openai/gpt-oss-120b"
+
+
+def test_the_engines_groq_defaults_are_served_too():
+    """sherrbyte/app/config.py carries its own copy of these ids, and it named
+    llama-3.1-8b-instant for both the model and its failover."""
+    from sherrbyte.app.config import Settings
+    s = Settings()
+    assert s.groq_model not in GROQ_RETIRED, s.groq_model
+    assert s.groq_fallback_model not in GROQ_RETIRED, s.groq_fallback_model
+    assert not s.gemini_model.startswith("gemini-2.5"), (
+        f"{s.gemini_model} retires 2026-10-20")
 
 
 # ─── the drain runs inline at boot, and on demand ─────────────────────────────
