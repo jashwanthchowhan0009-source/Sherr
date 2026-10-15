@@ -1017,6 +1017,27 @@ be bumped and the target SDK cannot be raised. Rebuild with Bubblewrap against
 the live `manifest.json`, keeping the package name `app.vercel.sherrbyte.twa`,
 and back the keystore up off-machine: losing it means never updating the listing.
 
+### `claude/*` branches do not get a Vercel preview
+
+`vercel.json`'s `git.deploymentEnabled` turns automatic deployments off for
+`claude/*` and nothing else, so `main` still deploys to production — which is
+the origin the TWA and every browser load, and the one `assetlinks.json` has to
+be served from.
+
+The preview was gating PRs on a deploy that could not tell anyone anything. It
+builds the STATIC tree only: `vercel.json` carries headers and no backend, so
+a preview serves `index.html` against no API and the deck renders as skeletons.
+Judge a change on the Render deploy or on a phone, never on a preview.
+
+It was also failing for a reason no diff could reach — `BUILD_FAILED /
+"Resource provisioning failed"` under a second, with no build container
+allocated, so not one file in the tree was read. That is account-side and
+intermittent: on 2026-10-15 `main` deployed READY and a branch cut from it
+failed twice, including as an explicit redeploy of the same commit. Do not
+debug a red Vercel check by changing code.
+
+Deleting the `git` block brings the previews back in one line.
+
 ---
 
 ## The myFeed card's TL;DR, and why it is not a model call
