@@ -51,6 +51,7 @@ import synthesis
 import feeds_financial
 import significance
 import research
+import telugu
 # One canonical shape for articles.published_at. Four formats used to reach that
 # column; see timestamps.py for the two bugs that produced.
 import timestamps
@@ -991,6 +992,14 @@ _MIGRATIONS = [
     # tier + topic + big entities − junk. It decides which stories spend the
     # free-tier writer budget and which reach myFeed. -1 = not scored yet.
     "ALTER TABLE articles ADD COLUMN significance INTEGER DEFAULT -1",
+    # ── the Telugu card ───────────────────────────────────────────────────────
+    # {refined_title, summary, full_body} in Telugu, as JSON-in-TEXT like
+    # strings/dots/who_affected above. Written only when the model's translation
+    # of the SAME request passes telugu.check, so '' is the honest value for
+    # most rows and the surface simply shows no language pill. Never a second
+    # provider call, and never written when the English body was not: the
+    # translation cannot carry a claim the English card did not already clear.
+    "ALTER TABLE articles ADD COLUMN telugu TEXT DEFAULT ''",
     # ── account handle ────────────────────────────────────────────────────────
     # The @username was client-only (localStorage), so it never crossed devices
     # and the profile's name/bio looked empty on a fresh sign-in. It lives on the
@@ -1868,6 +1877,44 @@ def _write_single_strings_dots(conn, article_id: int, result: dict, *,
         log.warning("[AI] strings/dots write failed for id %s: %s", article_id, e)
 
 
+def _write_telugu(conn, article_id: int, result: dict) -> None:
+    """Store the Telugu translation this same rewrite produced, if it checks out.
+
+    THE ENGLISH CARD IS ALREADY WRITTEN when this runs, and nothing here can
+    disturb it: a translation that fails its checks leaves the column empty, the
+    card renders in English, and the verdict is recorded so the Telugu pass rate
+    is a number in /admin/writer-doctor rather than a guess.
+
+    That ordering is also the compliance argument. `telugu.check` cannot read
+    forward-looking TENSE in Telugu (the future is a suffix, not a word), so the
+    Telugu is only ever published as a translation of a body that has already
+    passed the originality check and, for a Research card, the writer gate. It
+    carries no claim the English card did not make and clear.
+    """
+    if not telugu.enabled():
+        return
+    te = telugu.parse(result.get("telugu"))
+    if not te:
+        return
+    telugu.note("offered")
+    ok, failures = telugu.check(te, result)
+    telugu.note("written" if ok else "failed", failures)
+    # The doctor's buckets take {rule, detail} — telugu.check returns short
+    # "rule:detail" strings, so they are split here rather than reshaped there:
+    # the module stays free of the reporting format, and the histogram buckets by
+    # RULE ("advice_te", "invented_number") with the offending word as the detail.
+    _record_writer_result("telugu", ok, [
+        {"rule": str(f).split(":")[0], "detail": str(f)} for f in failures])
+    if not ok:
+        log.info("[TELUGU] id %s dropped: %s", article_id, ",".join(failures[:4]))
+        return
+    try:
+        conn.execute("UPDATE articles SET telugu=? WHERE id=?",
+                     (telugu.payload(te), article_id))
+    except Exception as e:                                        # noqa: BLE001
+        log.warning("[TELUGU] write failed for id %s: %s", article_id, e)
+
+
 # The Section-1 NEWS writer runs on every freshly published card to supply its
 # why-it-matters line. It is an EXTRA provider call per card (first pass, plus at
 # most one gated regeneration), so it is bounded by writer_gate's shared rate
@@ -2093,6 +2140,7 @@ async def run_ai_batch(conn):
             # for a published row; a parked one shows no dossier).
             if status == "published":
                 _write_single_strings_dots(conn, row["id"], result)
+                _write_telugu(conn, row["id"], result)
                 # Queue the NEWS writer's why-it-matters pass for after the main
                 # commit — it is rate-limited and slower, so the rewrite lands
                 # first and the why-lines fill in behind it.
@@ -4205,6 +4253,9 @@ def _dossier_payload(row) -> dict:
         "dots": dots if isinstance(dots, dict) else {},
         # The surface reads these to decide pending vs ready without re-checking
         # the shapes itself. Emptiness — not a flag — is the source of truth.
+        # The Telugu card, when the row has one. {} for most rows, and the
+        # surface shows no language pill rather than an empty tab.
+        "telugu": telugu.for_card(d.get("telugu")),
         "strings_status": "ready" if strings else "pending",
         "dots_status": "ready" if (isinstance(dots, dict) and dots) else "pending",
     }
@@ -6609,6 +6660,7 @@ def _reprocess_bodies_sync(limit: int, batch: int,
                     _view = briefs[row["id"]][1] if is_research else None
                     _write_single_strings_dots(conn, row["id"], result,
                                                row=_view, brief=_brief)
+                    _write_telugu(conn, row["id"], result)
                     done += 1
                     _body_last["written"] += 1
                 except Exception as e:
@@ -7296,6 +7348,11 @@ async def admin_writer_doctor(x_admin_token: str = Header(""), token: str = Quer
                         and news.get("attempts", 0) >= 20),
         },
     }
+    # The Telugu copy answers to its own checks (script, invented figures, the
+    # Telugu half of the one blocklist) rather than the English tone rules, so
+    # its pass rate is reported separately — the `telugu` writer bucket above
+    # counts the same attempts, and this names which rule is costing them.
+    out["telugu"] = telugu.stats()
     if not WRITER_GATE_ENABLED:
         out["note"] = ("WRITER_GATE_ENABLED=0 — the gate is measured but NOT "
                        "enforced, so failing cards are still published. Set it to 1 "
