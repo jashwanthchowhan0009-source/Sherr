@@ -1220,5 +1220,33 @@ briefed / no_evidence / written), the legs histogram, a one-line DIAGNOSIS, and
 `?article_id=N` builds that row's brief and returns the exact text appended to
 the prompt — read-only and model-free, so it is safe against production.
 
+### Dot to dot is a COUNT over our own stories, and the links never wait
+
+The cross-story leg (`instrument_history`) answers the one question a single
+card cannot: has this happened before. It is built the compliant way CLAUDE.md
+already names — **frequency of past occurrence**, never a probability, never a
+forecast: a count over stories we actually published, each one openable on the
+card.
+
+- **The sample floor is AnalogCard's, not a new one.** `HISTORY_MIN_EVENTS` (5)
+  gates the SENTENCE only. Below it the earlier stories still render as tappable
+  rows and **no number is stated** — "3 of 4" dresses an anecdote as a base rate.
+  The links never wait for the floor; only the count does.
+- **"Beyond normal" is the same bar as everywhere else** (`Z_NOTABLE` against the
+  instrument's own MAD), so a count cannot be inflated by calling an ordinary day
+  a move. A publishable frequency therefore makes a dot `evidence: "measured"`
+  **with no live move at all** — it is a measurement, taken against the same bar.
+- **The measured session is the one AFTER the story.** A story published at 20:00
+  IST lands after the Indian close and before the US one, so "the day it was
+  published" is a different day per exchange. The next bar is unambiguous
+  everywhere, and it is also the honest question.
+- **The tag match is `LOWER(micro_tags) LIKE`.** Patterns come from the resolver's
+  own `_ALIASES` (lowercased, regex-only aliases skipped) so the two cannot
+  disagree about what "Brent" means. `LIKE` is case-sensitive on Postgres, and
+  `'%"brent"%'` against a stored `"Brent"` matches nothing — a silent miss that
+  reads as "this instrument has no history". `.strip("\b")` is also why
+  `_history_patterns` is a function with a test: it once turned BRENT into
+  `rent`.
+
 Still open, deliberately: Telugu (one language at a time, and the writer gate's
-tone rules are English-only), and dot-to-dot linking between stories.
+tone rules are English-only).

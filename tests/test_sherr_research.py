@@ -22,8 +22,10 @@ the properties that make that safe to leave running:
 import json
 import math
 import os
+import pathlib
 import sqlite3
 import sys
+from datetime import datetime, timedelta
 
 import pytest
 
@@ -689,3 +691,200 @@ def test_the_compliant_body_passes_the_same_gate():
         overlap_passed=True, writer="research",
         sebi_check=writer_gate.default_sebi_check())
     assert ok, failures
+
+
+# ── 10. dot to dot: what followed the last times we covered this instrument ──
+def _history_db(story_dates, *, closes=None):
+    """One sqlite connection carrying BOTH tables the history leg joins: our own
+    `articles` and the daily price store. The real ones live in the same schema
+    (`sherrbyte_app`), which is why one sync connection can do this at all."""
+    c = sqlite3.connect(":memory:")
+    c.row_factory = sqlite3.Row
+    c.execute("CREATE TABLE articles (id INTEGER, headline TEXT, published_at TEXT, "
+              "source_name TEXT, micro_tags TEXT, story_id INTEGER DEFAULT 0, "
+              "status TEXT DEFAULT 'published', ai_processed INTEGER DEFAULT 1)")
+    c.executemany(
+        "INSERT INTO articles (id, headline, published_at, micro_tags) "
+        "VALUES (?,?,?,?)",
+        [(100 + i, f"Earlier Brent story {i}", f"{d}T09:00:00+00:00",
+          '["OPEC", "Brent"]') for i, d in enumerate(story_dates)])
+    c.execute("CREATE TABLE market_ticks (symbol TEXT, price REAL, ts TEXT)")
+    # A quiet series with a jump on the session after each story date, so the
+    # count has something to count. 90 sessions ending today-ish.
+    base = datetime(2026, 7, 1).date()
+    px, rows = 80.0, []
+    for i in range(100):
+        day = base + timedelta(days=i)
+        px = px * (1.0 + (0.001 if i % 2 else -0.001))
+        if closes and day.isoformat() in closes:
+            px = closes[day.isoformat()]
+        rows.append(("BRENT", round(px, 4), day.isoformat()))
+    c.executemany("INSERT INTO market_ticks (symbol, price, ts) VALUES (?,?,?)",
+                  rows)
+    c.commit()
+    return c
+
+
+@pytest.fixture
+def hist_ticks(monkeypatch):
+    monkeypatch.setattr(research, "TICKS_TABLE", "market_ticks")
+
+
+def test_the_instrument_patterns_are_lowercased_and_never_mangled():
+    # `.strip("\\b")` once turned BRENT into "rent" — a tag pattern that matched
+    # nothing and read as "this instrument has no history".
+    assert research._history_patterns("BRENT") == ["brent", "brent crude"]
+    assert "rupee" in research._history_patterns("USDINR")
+    assert all(p == p.lower() for p in research._history_patterns("NIFTY"))
+    assert all("\\" not in p for p in research._history_patterns("BP"))
+
+
+def test_the_tag_match_is_case_insensitive_in_sql():
+    # The stored tag is `"Brent"`; the pattern is lowercase. Only LOWER() on the
+    # column makes those meet, and on Postgres LIKE is case-sensitive.
+    assert "LOWER(micro_tags) LIKE" in research._HISTORY_BY_TAG
+
+
+def test_the_measured_session_is_the_one_AFTER_the_story():
+    series = [(datetime(2026, 7, 1).date(), 100.0),
+              (datetime(2026, 7, 2).date(), 100.0),
+              (datetime(2026, 7, 3).date(), 110.0)]
+    # A story on 7/1 is followed by the 7/2 session, which here was flat...
+    flat = research._move_after(series, datetime(2026, 7, 1).date(), 1.0)
+    assert flat["at"] == "2026-07-02" and flat["return_pct"] == 0.0
+    # ...and a story on 7/2 is followed by the 7/3 session, which was not.
+    m = research._move_after(series, datetime(2026, 7, 2).date(), 1.0)
+    assert m["at"] == "2026-07-03"
+    assert m["return_pct"] == 10.0
+    assert m["beyond_normal"] is True
+
+
+def test_a_history_counts_our_own_earlier_stories_and_links_each_one(hist_ticks):
+    dates = [f"2026-07-{d:02d}" for d in (3, 7, 11, 15, 19, 23)]
+    conn = _history_db(dates)
+    h = research.instrument_history(conn, "BRENT", article_id=999)
+    assert h["n"] == len(dates)
+    assert h["frequency_publishable"] is True          # six clears the floor
+    assert [e["at"] for e in h["events"]] == sorted(e["at"] for e in h["events"])
+    assert all(e["article_id"] >= 100 and e["headline"] for e in h["events"])
+    assert 0 <= h["n_beyond"] <= h["n"]
+
+
+def test_a_thin_history_publishes_no_count_but_still_links_the_stories(hist_ticks):
+    conn = _history_db(["2026-07-03", "2026-07-09"])
+    h = research.instrument_history(conn, "BRENT")
+    assert h["n"] == 2
+    assert h["frequency_publishable"] is False        # below AnalogCard's floor
+    assert len(h["events"]) == 2                      # the links survive anyway
+
+
+def test_the_story_itself_is_never_its_own_history(hist_ticks):
+    conn = _history_db(["2026-07-03", "2026-07-09", "2026-07-13"])
+    h = research.instrument_history(conn, "BRENT", article_id=101)
+    assert 101 not in [e["article_id"] for e in h["events"]]
+
+
+def test_a_failing_history_read_is_absent_not_fatal(hist_ticks):
+    class Dead:
+        def execute(self, *a):
+            raise RuntimeError("relation does not exist")
+    assert research.instrument_history(Dead(), "BRENT") is None
+    assert research.instrument_histories(Dead(), [{"ticker": "BRENT"}]) == {}
+
+
+def _hist(n=6, beyond=4, publishable=True):
+    events = [{"article_id": 100 + i, "headline": f"Earlier story {i}",
+               "at": f"2026-07-{3 + i:02d}",
+               "move": {"return_pct": 2.5 if i < beyond else 0.2, "z": 3.1,
+                        "beyond_normal": i < beyond, "direction": "higher",
+                        "at": f"2026-07-{4 + i:02d}"}}
+              for i in range(n)]
+    return {"BRENT": {"ticker": "BRENT", "events": events, "n": n,
+                      "n_beyond": beyond, "normal_day_pct": 0.8,
+                      "frequency_publishable": publishable}}
+
+
+def test_the_frequency_block_is_a_count_in_the_past_tense(hist_ticks):
+    brief = _brief(instruments=[{"ticker": "BRENT", "name": "Brent crude"}])
+    brief["histories"] = _hist()
+    brief["legs"].append("instrument_history")
+    text = research.render_brief(brief)
+    assert "COUNT OF PAST OCCURRENCES" in text
+    assert "in 6 earlier stories we published that named Brent crude" in text
+    assert "moved beyond its normal daily range in the next session in 4" in text
+    # The compliant shape is a count, never a rate. The only time the word
+    # "probability" appears is the instruction forbidding one.
+    assert "never a probability and never a forecast" in text
+    assert "chance" not in text.lower()
+    counted = text.split("WHAT FOLLOWED")[1].split("of them")[0]
+    assert "%" not in counted and "probability" not in counted.split("shape")[1]
+
+
+def test_a_thin_history_tells_the_model_to_state_no_number():
+    brief = _brief(instruments=[{"ticker": "BRENT", "name": "Brent crude"}])
+    brief["histories"] = _hist(n=3, beyond=2, publishable=False)
+    text = research.render_brief(brief)
+    assert "TOO FEW" in text
+    assert "in 3 earlier stories we published" not in text
+
+
+def test_a_publishable_frequency_is_measured_evidence_on_its_own(hist_ticks):
+    # No live move at all — the history IS the measurement, counted against the
+    # same bar, so the dot is evidence rather than context.
+    brief = {"moves": {}, "histories": _hist()}
+    dots = {"markets": {"summary": "Crude is the channel.",
+                        "instruments": [{"name": "Brent crude", "ticker": "BRENT"}]}}
+    out = research.verify_dots(dots, brief)
+    inst = out["markets"]["instruments"][0]
+    assert out["markets"]["evidence"] == "measured"
+    assert inst["history"]["n"] == 6 and inst["history"]["publishable"] is True
+    assert len(inst["history"]["related"]) == 4            # the newest four
+    assert all(r["article_id"] and r["headline"] and r["at"]
+               for r in inst["history"]["related"])
+
+
+def test_a_thin_history_links_the_stories_but_leaves_the_dot_as_context():
+    brief = {"moves": {}, "histories": _hist(n=2, beyond=1, publishable=False)}
+    dots = {"markets": {"summary": "Crude is the channel.",
+                        "instruments": [{"name": "Brent crude", "ticker": "BRENT"}]}}
+    out = research.verify_dots(dots, brief)
+    inst = out["markets"]["instruments"][0]
+    assert out["markets"]["evidence"] == "context"          # anecdote, not a rate
+    assert len(inst["history"]["related"]) == 2             # still openable
+
+
+def test_the_history_leg_is_named_in_the_brief(hist_ticks, monkeypatch):
+    conn = _history_db([f"2026-07-{d:02d}" for d in (3, 7, 11, 15, 19, 23)])
+    row = {"id": 999, "headline": "Brent climbs as OPEC+ weighs deeper cuts",
+           "summary_60": "Crude rose after the group met.", "micro_tags": '["Brent"]',
+           "story_id": 0}
+    brief = research.build_brief(conn, row)
+    assert "instrument_history" in brief["legs"]
+    assert brief["histories"]["BRENT"]["n"] == 6
+
+
+# ── 11. the surface renders the count and makes every earlier story tappable ──
+def test_myfeed_renders_the_frequency_and_opens_the_earlier_stories():
+    html = pathlib.Path("index.html").read_text(encoding="utf-8")
+    block = html.split("function mfdDotRow")[1].split("\nfunction ")[0]
+    assert "i.history" in block
+    assert "h.publishable" in block                  # the count waits for the floor
+    assert "openStoryNode(" in block                 # every earlier story is tappable
+    assert "mfd-histpct" in block
+    # ...and the count is only ever inside the publishable branch.
+    assert "earlier" in block.split("h.publishable")[1].split(": ''")[0]
+    for sel in (".mfd-hist{", ".mfd-histline{", ".mfd-histrow{"):
+        assert sel in html
+    # Every desktop rule stays in the one @media block (CLAUDE.md), so the new
+    # CSS must sit OUTSIDE it: the phone renders identically to before.
+    start = html.index("@media (min-width: 1024px)")
+    i, depth = html.index("{", start), 0
+    while True:
+        if html[i] == "{":
+            depth += 1
+        elif html[i] == "}":
+            depth -= 1
+            if depth == 0:
+                break
+        i += 1
+    assert ".mfd-hist{" not in html[start:i]

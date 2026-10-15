@@ -5430,6 +5430,15 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 .mfd-evidence{margin-left:auto;font-size:.62rem;font-weight:800;text-transform:uppercase;
   letter-spacing:.07em;color:var(--t3);border:1px solid var(--line);border-radius:999px;
   padding:1px 7px;}
+.mfd-hist{margin-top:8px;border-top:1px solid var(--bd2,#e9e9ee);padding-top:7px}
+.mfd-histline{font-size:.78rem;color:var(--t2,#5a5a66);line-height:1.45;margin-bottom:5px}
+.mfd-histline b{color:var(--t1,#17171c)}
+.mfd-histrow{display:flex;align-items:baseline;gap:7px;width:100%;text-align:left;
+  background:none;border:0;padding:4px 0;font:inherit;font-size:.76rem;cursor:pointer;color:var(--t2,#5a5a66)}
+.mfd-histat{flex:0 0 auto;font-variant-numeric:tabular-nums;opacity:.7}
+.mfd-histhead{flex:1 1 auto;color:var(--t1,#17171c);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mfd-histpct{flex:0 0 auto;font-variant-numeric:tabular-nums;font-weight:600}
+.mfd-histpct.up{color:var(--up,#0a8f4e)}.mfd-histpct.down{color:var(--dn,#c62828)}
 /* Dots pane — labelled cross-asset rows */
 .mfd-dotrow{display:flex;flex-direction:column;gap:6px;padding:13px 0;border-bottom:1px solid var(--line);}
 .mfd-dotrow:first-child{padding-top:4px;}
@@ -11545,9 +11554,36 @@ function mfdDotRow(key, dot){
   // separation the analog cards already make between evidence and context.
   const tag = (!isCatch && dot.evidence === 'context')
     ? '<span class="mfd-evidence">context</span>' : '';
+  // DOT TO DOT: the earlier stories we published about this instrument, with
+  // what the instrument did in the next session each time. The COUNT only
+  // renders when research.py judged the sample publishable (its own floor) —
+  // below that the stories still show as links and no number is stated. It is
+  // a count of what happened, never a probability and never a forecast.
+  let hist = '';
+  if (!isCatch && dot.instruments && dot.instruments.length){
+    hist = dot.instruments.filter(i => i.history && (i.history.related || []).length)
+      .map(i => {
+        const h = i.history;
+        const name = bEsc(i.name || (i.ticker || '').toUpperCase());
+        const line = h.publishable
+          ? `<div class="mfd-histline">In ${h.n} earlier ${name} stories we published, `
+            + `it moved beyond its normal daily range the next session in `
+            + `<b>${h.n_beyond}</b> of them.</div>`
+          : '';
+        const rows = (h.related || []).slice().reverse().map(e => {
+          const pct = e.return_pct == null ? ''
+            : `<span class="mfd-histpct ${Number(e.return_pct) >= 0 ? 'up' : 'down'}">`
+              + `${Number(e.return_pct) >= 0 ? '+' : ''}${Number(e.return_pct).toFixed(2)}%</span>`;
+          return `<button type="button" class="mfd-histrow" onclick="openStoryNode(${Number(e.article_id) || 0})">`
+            + `<span class="mfd-histat">${bEsc(e.at || '')}</span>`
+            + `<span class="mfd-histhead">${bEsc(e.headline || '')}</span>${pct}</button>`;
+        }).join('');
+        return `<div class="mfd-hist">${line}${rows}</div>`;
+      }).join('');
+  }
   return `<div class="mfd-dotrow ${isCatch ? 'catch' : ''}">
     <div class="mfd-dothead"><span class="mfd-dotlabel">${bEsc(meta.label)}</span>${impact}${tag}</div>
-    <div class="mfd-dotbody">${bEsc(dot.summary || '')}</div>${ins}
+    <div class="mfd-dotbody">${bEsc(dot.summary || '')}</div>${ins}${hist}
   </div>`;
 }
 

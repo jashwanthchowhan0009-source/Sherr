@@ -60,6 +60,7 @@ from datetime import datetime, timedelta, timezone
 import markets
 import significance
 import synthesis
+from synthesis import parse_ts
 
 log = logging.getLogger("sherbyte.research")
 
@@ -353,6 +354,166 @@ def measure_moves(conn, instruments: list) -> dict:
     return out
 
 
+# ─── 3b. dot-to-dot: what followed the LAST times we covered this instrument ──
+# This is the cross-story leg, and it is the only thing on a card that answers
+# "has this happened before". CLAUDE.md names the compliant way to say what a
+# probability would have said: FREQUENCY OF PAST OCCURRENCE — "in 11 comparable
+# past events, crude moved beyond its normal daily range within 3 sessions in 8
+# of them". Nothing here is a forecast and nothing here is a probability: it is a
+# count over stories we actually published, each one openable.
+#
+# Two floors keep it honest, both borrowed from the analog cards rather than
+# invented here:
+#   * HISTORY_MIN_EVENTS mirrors AnalogCard's sample floor — below it there is no
+#     frequency SENTENCE at all, only the related stories as links. Four events
+#     is an anecdote; saying "3 of 4" would dress an anecdote as a base rate.
+#   * "beyond normal" is the same measured bar as everywhere else (Z_NOTABLE
+#     against the instrument's own MAD), so the count cannot be inflated by
+#     calling an ordinary day a move.
+HISTORY_DAYS = int(os.getenv("RESEARCH_HISTORY_DAYS", "400"))
+HISTORY_MAX_EVENTS = int(os.getenv("RESEARCH_HISTORY_MAX", "12"))
+HISTORY_MIN_EVENTS = int(os.getenv("RESEARCH_HISTORY_MIN", "5"))
+_HISTORY_SCAN = 40            # rows per pattern before date/dedupe filtering
+
+# LOWER() on both sides, because the tag is whatever case the model wrote. A
+# `micro_tags LIKE '%"brent"%'` matches nothing against the stored `"Brent"` on
+# Postgres, and that silent miss would read as "this instrument has no history".
+_HISTORY_BY_TAG = (
+    "SELECT id, headline, published_at FROM articles "
+    "WHERE status<>'merged' AND ai_processed=1 "
+    "AND LOWER(micro_tags) LIKE ? AND id<>? "
+    "ORDER BY id DESC LIMIT ?")
+
+
+def _history_patterns(ticker: str) -> list:
+    """The micro_tags spellings that mean this instrument, lowercased.
+
+    Built from the same `_ALIASES` table the resolver uses, so the two cannot
+    disagree about what "Brent" means. A regex-only alias is skipped — a tag is a
+    literal string, and `\bbp\b` would match none of them.
+    """
+    out, seen = [], set()
+    for word in [ticker, display_name(ticker)] + list(_ALIASES.get(ticker, ())):
+        w = str(word or "").strip().lower()
+        if not w or "\\" in w:
+            continue
+        if w.startswith("the "):          # "the rupee" is tagged "Rupee"
+            w = w[4:]
+        w = w.replace("_", " ")
+        if len(w) < 2 or w in seen:
+            continue
+        seen.add(w)
+        out.append(w)
+    return out[:3]
+
+
+def _close_series(conn, ticker: str) -> list:
+    """(date, close) oldest first, over the history window. [] on any failure."""
+    try:
+        rows = conn.execute(
+            f"SELECT price, ts FROM {TICKS_TABLE} WHERE symbol=? "
+            "ORDER BY ts DESC LIMIT ?", (ticker, HISTORY_DAYS)).fetchall()
+    except Exception as e:                                        # noqa: BLE001
+        log.info("[RESEARCH] history series failed for %s: %s", ticker, e)
+        return []
+    out = []
+    for r in rows:
+        ts = parse_ts(r["ts"])
+        try:
+            price = float(r["price"])
+        except Exception:                                         # noqa: BLE001
+            continue
+        if ts is not None:
+            out.append((ts.date(), price))
+    out.sort()
+    return out
+
+
+def _move_after(series: list, on_date, normal: float) -> dict | None:
+    """The next session's move after `on_date`, measured against normal.
+
+    The session AFTER the story, not the one containing it: a story published at
+    20:00 IST lands after the Indian close and before the US one, so "the day it
+    was published" is a different day depending on the exchange. The next bar is
+    unambiguous on every exchange, and it is also the honest question — what
+    followed the story.
+    """
+    if not series or normal <= 0:
+        return None
+    for i in range(1, len(series)):
+        if series[i][0] > on_date and series[i - 1][1]:
+            ret = (series[i][1] / series[i - 1][1] - 1.0) * 100.0
+            z = ret / normal
+            return {"at": series[i][0].isoformat(), "return_pct": round(ret, 2),
+                    "z": round(z, 2), "beyond_normal": abs(z) >= Z_NOTABLE,
+                    "direction": "higher" if ret > 0 else
+                                 ("lower" if ret < 0 else "flat")}
+    return None
+
+
+def instrument_history(conn, ticker: str, article_id: int = 0) -> dict | None:
+    """What followed the last times OUR corpus covered this instrument.
+
+    One price query and up to three bounded row scans per instrument. Returns
+    None when there is nothing to say — no series, no earlier stories, or a flat
+    baseline. `events` is always returned oldest first so the dot reads as a
+    history; `n_beyond` is the count the frequency sentence is built from.
+    """
+    series = _close_series(conn, ticker)
+    if len(series) < 20:
+        return None
+    daily = [(series[i][1] / series[i - 1][1] - 1.0) * 100.0
+             for i in range(1, len(series)) if series[i - 1][1]]
+    normal = _mad(daily)
+    if normal <= 0:
+        return None
+
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=HISTORY_DAYS)).date()
+    seen, cands = {article_id}, []
+    for pattern in _history_patterns(ticker):
+        try:
+            rows = conn.execute(_HISTORY_BY_TAG,
+                                (f'%"{pattern}"%', article_id or 0,
+                                 _HISTORY_SCAN)).fetchall()
+        except Exception as e:                                    # noqa: BLE001
+            log.info("[RESEARCH] history scan failed for %s: %s", ticker, e)
+            continue
+        for r in rows:
+            if r["id"] in seen:
+                continue
+            ts = parse_ts(r["published_at"])
+            if ts is None or ts.date() < cutoff:
+                continue
+            seen.add(r["id"])
+            cands.append((ts.date(), r["id"], r["headline"] or ""))
+
+    cands.sort(reverse=True)                       # newest first while trimming
+    events = []
+    for on_date, rid, headline in cands[:HISTORY_MAX_EVENTS]:
+        move = _move_after(series, on_date, normal)
+        if not move:
+            continue
+        events.append({"article_id": rid, "headline": headline,
+                       "at": on_date.isoformat(), "move": move})
+    if not events:
+        return None
+    events.sort(key=lambda e: e["at"])
+    beyond = [e for e in events if e["move"]["beyond_normal"]]
+    return {"ticker": ticker, "events": events, "n": len(events),
+            "n_beyond": len(beyond), "normal_day_pct": round(normal, 3),
+            # The SENTENCE needs the sample floor; the LINKS never do.
+            "frequency_publishable": len(events) >= HISTORY_MIN_EVENTS}
+
+
+def instrument_histories(conn, instruments: list, article_id: int = 0) -> dict:
+    out = {}
+    for inst in instruments or []:
+        h = instrument_history(conn, inst.get("ticker") or "", article_id)
+        if h:
+            out[h["ticker"]] = h
+    return out
+
+
 # ─── 4. prior coverage: the real Strings nodes ────────────────────────────────
 PRIOR_DAYS = int(os.getenv("RESEARCH_PRIOR_DAYS", "90"))
 PRIOR_MAX = int(os.getenv("RESEARCH_PRIOR_MAX", "4"))
@@ -430,16 +591,21 @@ def build_brief(conn, row, source_text: str = "") -> dict:
     blurb = synthesis._get(row, "summary_60", "") or ""
     text = f"{headline}\n{blurb}\n{(source_text or '')[:4000]}"
     brief = {"article_id": synthesis._get(row, "id", 0),
-             "instruments": [], "moves": {}, "prior": [], "legs": []}
+             "instruments": [], "moves": {}, "histories": {}, "prior": [],
+             "legs": []}
     try:
         brief["instruments"] = resolve_instruments(text)
     except Exception as e:                                        # noqa: BLE001
         log.info("[RESEARCH] instrument resolve failed: %s", e)
     if brief["instruments"]:
         brief["moves"] = measure_moves(conn, brief["instruments"])
+        brief["histories"] = instrument_histories(
+            conn, brief["instruments"], synthesis._get(row, "id", 0) or 0)
     brief["prior"] = prior_coverage(conn, row)
     if brief["moves"]:
         brief["legs"].append("market_move")
+    if brief.get("histories"):
+        brief["legs"].append("instrument_history")
     if brief["prior"]:
         brief["legs"].append("prior_coverage")
     if brief["instruments"]:
@@ -483,6 +649,28 @@ def render_brief(brief: dict) -> str:
             out.append(f"  - {display_name(ticker)} ({ticker}): " + "; ".join(bits)
                        + f" | normal day {m['normal_day_pct']:.2f}%"
                          f" over {m['baseline_days']} sessions")
+    hist = brief.get("histories") or {}
+    if hist:
+        out.append("")
+        out.append("WHAT FOLLOWED THE LAST TIMES WE COVERED THIS INSTRUMENT, "
+                   "counted over our own published stories. This is a COUNT OF "
+                   "PAST OCCURRENCES, never a probability and never a forecast: "
+                   "write it as a count in the past tense, exactly in the shape "
+                   "given, or leave it out:")
+        for ticker, h in hist.items():
+            name = display_name(ticker)
+            if h.get("frequency_publishable"):
+                out.append(f"  - in {h['n']} earlier stories we published that "
+                           f"named {name}, it moved beyond its normal daily "
+                           f"range in the next session in {h['n_beyond']} of them")
+            else:
+                out.append(f"  - {name}: only {h['n']} earlier stories — TOO FEW "
+                           f"to state a count. Do not give any number for this; "
+                           f"mention the earlier coverage only if it adds a fact.")
+            for e in h["events"][-3:]:
+                out.append(f"      {e['at']}: {e['headline']} "
+                           f"(next session {e['move']['return_pct']:+.2f}%)")
+
     insts = brief.get("instruments") or []
     unpriced = [i["ticker"] for i in insts if i["ticker"] not in moves]
     if unpriced:
@@ -588,6 +776,7 @@ def verify_dots(dots: dict, brief: dict) -> dict:
     if not isinstance(dots, dict) or not dots:
         return dots if isinstance(dots, dict) else {}
     moves = (brief or {}).get("moves") or {}
+    hists = (brief or {}).get("histories") or {}
     catalogue = _symbol_catalogue()
     out = {}
     for section, dot in dots.items():
@@ -610,6 +799,20 @@ def verify_dots(dots: dict, brief: dict) -> dict:
                     entry["move"] = m["horizons"].get("1") or \
                         next(iter(m["horizons"].values()))
                     entry["normal_day_pct"] = m["normal_day_pct"]
+                h = hists.get(ticker)
+                if h:
+                    # DOT TO DOT: the earlier stories themselves, so a reader can
+                    # open them. The links ride along whatever the sample size;
+                    # only the COUNT waits for the floor.
+                    entry["history"] = {
+                        "n": h["n"], "n_beyond": h["n_beyond"],
+                        "publishable": bool(h.get("frequency_publishable")),
+                        "related": [{"article_id": e["article_id"],
+                                     "headline": e["headline"], "at": e["at"],
+                                     "return_pct": e["move"]["return_pct"],
+                                     "beyond_normal": e["move"]["beyond_normal"]}
+                                    for e in h["events"][-4:]],
+                    }
                 kept.append(entry)
             else:
                 name = str(inst.get("name") or "").strip()
@@ -619,7 +822,13 @@ def verify_dots(dots: dict, brief: dict) -> dict:
             d["instruments"] = kept
         else:
             d.pop("instruments", None)
-        measured = any(i.get("move") for i in kept)
+        # A publishable frequency is as much a measurement as today's move —
+        # it is a count over past sessions, measured against the same bar. A
+        # history below the sample floor is NOT: its links still show, but the
+        # dot stays context, because four events is an anecdote.
+        measured = any(i.get("move")
+                       or (i.get("history") or {}).get("publishable")
+                       for i in kept)
         d["evidence"] = "measured" if measured else "context"
         out[section] = d
     return out
@@ -657,7 +866,9 @@ def stats() -> dict:
     out = dict(_stats)
     out.update({"enabled": enabled(), "scope_topics": sorted(SCOPE_TOPICS),
                 "min_significance": scope_min(), "max_per_tick": max_per_tick(),
-                "z_notable": Z_NOTABLE, "baseline_days": BASELINE_DAYS})
+                "z_notable": Z_NOTABLE, "baseline_days": BASELINE_DAYS,
+                "history_days": HISTORY_DAYS,
+                "history_min_events": HISTORY_MIN_EVENTS})
     considered, written = out["considered"], out["written"]
     out["write_rate"] = round(written / considered, 3) if considered else None
     if not out["in_scope"] and considered:
