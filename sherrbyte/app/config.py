@@ -49,11 +49,20 @@ class Settings(BaseSettings):
     # AI providers (router: Gemini → Groq cascade)
     gemini_api_key: str = Field("", alias="GEMINI_API_KEY")
     groq_api_key: str = Field("", alias="GROQ_API_KEY")
-    gemini_model: str = Field("gemini-2.5-flash", alias="GEMINI_MODEL")
-    groq_model: str = Field("llama-3.1-8b-instant", alias="GROQ_MODEL")
-    # Fast, low-cost Groq model used on the quota-failover path. (llama3-8b-8192
-    # is decommissioned on Groq; llama-3.1-8b-instant is its current equivalent.)
-    groq_fallback_model: str = Field("llama-3.1-8b-instant", alias="GROQ_FALLBACK_MODEL")
+    # Every default here names a model that is actually served TODAY, and each one
+    # has already gone stale once. Groq shut llama-3.1-8b-instant and
+    # llama-3.3-70b-versatile down for the free and developer tiers on 2026-08-16
+    # (console.groq.com/docs/deprecations) and named the openai/gpt-oss-* ids as
+    # their replacements; gemini-2.5-flash retires 2026-10-20. A retired id does
+    # not fail loudly — the call 404s and the router just falls through — so these
+    # are checked against the provider's deprecation page, not assumed.
+    gemini_model: str = Field("gemini-3.1-flash-lite", alias="GEMINI_MODEL")
+    groq_model: str = Field("openai/gpt-oss-20b", alias="GROQ_MODEL")
+    # The failover model on the quota path. Deliberately the SAME id as above, as
+    # it was before (both were llama-3.1-8b-instant): the failover exists to retry
+    # past a quota refusal, not to drop to a weaker writer. The separate setting is
+    # what lets one deployment split them without a code change.
+    groq_fallback_model: str = Field("openai/gpt-oss-20b", alias="GROQ_FALLBACK_MODEL")
 
     # Groq rate-limit guardrails. Free tier is ~12k tokens/min; we throttle below
     # it and back off (instead of hammering) when the API still returns 429.

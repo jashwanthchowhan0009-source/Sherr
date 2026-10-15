@@ -1,0 +1,60 @@
+name: tests
+
+# The test suite, on every pull request and every push to main.
+#
+# WHY THIS FILE EXISTS. Until it did, nothing in this repository ran `pytest` —
+# `.github/workflows` held only the ingest/detector crons, the db-cleanup
+# dry-run and the keep-alive ping, all of them schedules. The only check a PR
+# carried was a Vercel preview deploy, which builds the static tree against no
+# backend and so could not fail on anything in main.py, and was failing for an
+# account-side reason no diff could reach. The suite ran only where somebody
+# remembered to run it, and 6 failures had been sitting on main long enough to
+# be quoted in PR bodies as "pre-existing".
+#
+# Python 3.12, matching cron_ingest.yml and cron_detectors.yml, which are the
+# proof that this shape installs. It is NOT arbitrary: requirements.txt pins
+# psycopg[binary]==3.2.1, which has no wheel for 3.13, so a clean install on
+# 3.13 fails outright. If this repo ever moves to 3.13 that pin has to move with
+# it — and this job is where you will find out, instead of a Render deploy.
+#
+# The suite needs no database, no provider key and no network: everything hits
+# sqlite or a stub, so the job is ~40 seconds and there are no secrets to leak
+# into a fork's run.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # A second push to the same branch cancels the first run: the older result is
+  # about a commit nobody will merge.
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install the app and its test-only dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: pytest
+        # No -x: a run that stops at the first failure hides how much else is
+        # broken, and the whole suite costs 40 seconds.
+        run: python -m pytest tests -q

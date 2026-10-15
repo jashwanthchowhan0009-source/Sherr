@@ -121,6 +121,59 @@ not push to that branch again.** The next unit gets a new branch.
   ai_processor.process_batch` is False — so patching `ai_processor` never
   reaches what `run_ai_batch` invokes, and the test silently measures the
   fallback. It passed alone and failed only in the suite.
+- **Never bind to `asyncio.get_event_loop()`.** On 3.13 it RAISES in the main
+  thread once any earlier test has closed the loop, so a test using it passes
+  alone and fails in the suite. `asyncio.run` always.
+- **Do not locate a thing by its position.** Two tests found a workflow step as
+  `steps[-1]` and a function body as "the next 7200 characters"; appending a
+  step and growing the function broke both while what they assert stayed true.
+  Match on what the step runs and brace-match the function.
+
+## CI runs the suite, and it only ever ran where somebody remembered to
+
+`.github/workflows/tests.yml`, on every pull request and every push to `main`.
+Before it, `.github/workflows` held only schedules and the sole check on a PR
+was a Vercel preview deploy — which builds the static tree against no backend,
+so it could not fail on anything in `main.py`. That is how **six** failures sat
+on `main` long enough to be quoted in PR bodies as "pre-existing", and they are
+all fixed in the same pass that added this file.
+
+**Python 3.12, and that is load-bearing.** `requirements.txt` pins
+`psycopg[binary]==3.2.1`, which has no wheel for 3.13, so a clean install on
+3.13 fails outright — the version matches the ingest and detector crons, which
+are the proof the shape installs. `tests/test_ci_workflow.py` pins it, along
+with the trigger, that the suite runs whole (no `-x`, no `--deselect`) and that
+the job takes no secrets, so it can run on a fork.
+
+**Five of the failures were only visible on a clean install**, which is the
+argument for the workflow in one line: the system environment here carries
+newer packages than `requirements.txt` pins, and under the PINNED set
+`scheduler.start()` raised `Event loop is closed` on the second `TestClient`
+lifespan in a run. `AsyncIOScheduler` caches the loop it starts on and
+`scheduler` is module-level, so the second app instance found the first test's
+closed loop. `main.py` now calls `scheduler.configure(event_loop=...)` with the
+running loop first; in production, where lifespan runs once, it is a no-op.
+
+**`requirements-dev.txt` is the test-only set** — pytest, PyYAML,
+pydantic-settings. They are deliberately not in `requirements.txt`: Render
+installs that file to serve the app and has no reason to carry a test runner.
+
+## Provider model ids go stale, and a stale one fails silently
+
+`llama-3.3-70b-versatile` (the root app) and `llama-3.1-8b-instant` (the
+engine's `config.py`, both its model and its failover) were BOTH shut down for
+Groq's free and developer tiers on **2026-08-16**; `gemini-2.5-flash`, still the
+engine's default, retires 2026-10-20. A retired id does not fail loudly: the
+call 404s, the cascade drops to the next provider, and the only symptom is a
+backlog that stops clearing. The replacements Groq named are now the defaults
+(`openai/gpt-oss-120b` for the big model, `openai/gpt-oss-20b` for the small).
+
+`tests/test_feed_doctor.py` carries `GROQ_RETIRED` — a dated set of ids the
+provider has shut down — and asserts the configured model is not in it. **Add
+to that set, do not rewrite the pin.** The test it replaced asserted one
+hardcoded id and the id it asserted was itself retired on the same day as the
+one it was guarding against, so it failed for months while agreeing with
+nothing.
 
 ---
 

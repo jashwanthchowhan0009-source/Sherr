@@ -7,6 +7,10 @@ whole corpus. _openai_chat_once now retries, honouring Retry-After.
 """
 import asyncio
 
+# asyncio.run, never asyncio.get_event_loop().run_until_complete: on 3.13 the
+# latter RAISES in the main thread once any earlier test has closed the loop, so
+# these two passed alone and failed in the suite — the trap CLAUDE.md names.
+
 
 async def _noop_sleep(*_a, **_k):
     return None
@@ -48,7 +52,7 @@ def test_429_is_retried_then_succeeds(monkeypatch):
         _Resp(429, {"retry-after": "0"}),
         _Resp(200),
     ])
-    result, status = asyncio.get_event_loop().run_until_complete(
+    result, status = asyncio.run(
         ap._openai_chat_once("key", "T", "B", client,
                              url="http://x", model="m", label="Groq"))
     assert status == 200 and result is not None
@@ -59,7 +63,7 @@ def test_gives_up_after_the_retry_budget(monkeypatch):
     import ai_processor as ap
     monkeypatch.setattr(ap.asyncio, "sleep", _noop_sleep)
     client = _Client([_Resp(429, {"retry-after": "0"})] * 5)
-    result, status = asyncio.get_event_loop().run_until_complete(
+    result, status = asyncio.run(
         ap._openai_chat_once("key", "T", "B", client,
                              url="http://x", model="m", label="Groq"))
     assert status == 429 and result is None

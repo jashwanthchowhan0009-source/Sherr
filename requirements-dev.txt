@@ -1,0 +1,8 @@
+# Test-only dependencies. The app's own are in requirements.txt; these are what
+# `pytest tests` additionally needs, and the CI workflow installs both.
+pytest==8.3.3
+# tests/test_cron_detectors_workflow.py and its siblings parse the workflow YAML.
+PyYAML==6.0.2
+# sherrbyte/app/config.py's Settings is a pydantic-settings model, imported by
+# the tests that assert the engine's own defaults.
+pydantic-settings==2.4.0
