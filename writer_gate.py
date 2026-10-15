@@ -87,6 +87,12 @@ LENGTH_BANDS = {
     "news": (60, 80),
     "strings": (120, 180),
     "dots": (130, 200),
+    # Sherr Research writes three short paragraphs from an evidence brief
+    # (ai_processor.SYSTEM_INSTRUCTION_RESEARCH asks for 130-180), so it cannot
+    # be measured against the 60-80 News band — under enforcement every
+    # Research card would be withheld for being the length it was asked to be.
+    # The band is the prompt's band plus the usual tolerance either side.
+    "research": (120, 200),
 }
 
 
@@ -232,8 +238,14 @@ def entity_presence(entities) -> list:
 # ─── the composed gate ──────────────────────────────────────────────────────────
 
 def check_news(result: dict, *, source_text: str = None,
-               overlap_passed: bool = None, sebi_check=None) -> tuple:
-    """Run the News writer's gate over a synthesis result. Returns (passed, failures).
+               overlap_passed: bool = None, sebi_check=None,
+               writer: str = "news") -> tuple:
+    """Run a writer's gate over a synthesis result. Returns (passed, failures).
+
+    `writer` selects the LENGTH BAND and the open-loop rule only — every other
+    check is the same for every writer, because tone, unverified numbers and a
+    missing entity are defects whatever the length. It defaults to "news", so
+    this is the same call it has always been for the existing caller.
 
     `result` is the parsed synthesis dict: `content` is gated, `extracted_entities`
     supplies the entity-presence check and the name mask, and `numbers_used` (when the
@@ -262,8 +274,8 @@ def check_news(result: dict, *, source_text: str = None,
     add("numbers_verified",
         numbers_verified(content, result.get("numbers_used"), source_text or ""))
     add("first_six_words", first_six_words(content, names))
-    add("length", length_ok(content, "news"))
-    add("open_loop", open_loop(content, "news"))
+    add("length", length_ok(content, writer))
+    add("open_loop", open_loop(content, writer))
     add("entity_presence", entity_presence(entities))
 
     if overlap_passed is not None:

@@ -5420,6 +5420,25 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 .mfd-tl-stage{font-size:.66rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);}
 .mfd-tl-title{margin:2px 0 3px;font-size:.95rem;font-weight:700;line-height:1.3;color:var(--t1);font-family:var(--fd);}
 .mfd-tl-desc{margin:0;font-size:.9rem;line-height:1.5;color:var(--t2);}
+.mfd-tl-at{margin-left:6px;font-weight:700;letter-spacing:.02em;color:var(--t3);text-transform:none;}
+.mfd-tl-item.linked{cursor:pointer;}
+.mfd-tl-item.linked .mfd-tl-desc{text-decoration:underline;text-decoration-color:var(--line);
+  text-underline-offset:3px;}
+.mfd-tl-item.linked:active{opacity:.6;}
+.mfd-move{font-size:.72rem;font-weight:800;letter-spacing:.01em;}
+.mfd-move.up{color:#30D158;} .mfd-move.down{color:#FF453A;}
+.mfd-evidence{margin-left:auto;font-size:.62rem;font-weight:800;text-transform:uppercase;
+  letter-spacing:.07em;color:var(--t3);border:1px solid var(--line);border-radius:999px;
+  padding:1px 7px;}
+.mfd-hist{margin-top:8px;border-top:1px solid var(--bd2,#e9e9ee);padding-top:7px}
+.mfd-histline{font-size:.78rem;color:var(--t2,#5a5a66);line-height:1.45;margin-bottom:5px}
+.mfd-histline b{color:var(--t1,#17171c)}
+.mfd-histrow{display:flex;align-items:baseline;gap:7px;width:100%;text-align:left;
+  background:none;border:0;padding:4px 0;font:inherit;font-size:.76rem;cursor:pointer;color:var(--t2,#5a5a66)}
+.mfd-histat{flex:0 0 auto;font-variant-numeric:tabular-nums;opacity:.7}
+.mfd-histhead{flex:1 1 auto;color:var(--t1,#17171c);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mfd-histpct{flex:0 0 auto;font-variant-numeric:tabular-nums;font-weight:600}
+.mfd-histpct.up{color:var(--up,#0a8f4e)}.mfd-histpct.down{color:var(--dn,#c62828)}
 /* Dots pane — labelled cross-asset rows */
 .mfd-dotrow{display:flex;flex-direction:column;gap:6px;padding:13px 0;border-bottom:1px solid var(--line);}
 .mfd-dotrow:first-child{padding-top:4px;}
@@ -11459,11 +11478,22 @@ function renderStringsPane(strings, status, a){
       ? 'The causal thread builds here as synthesis links corroborating sources.'
       : 'No causal thread was found in the sources.');
   }
+  const curId = a && a.id ? String(a.id) : '';
   const rows = items.map((s, i) => {
-    const now = s.now || (i === 0 && /present|now/i.test(String(s.stage || '')));
-    return `<div class="mfd-tl-item${now ? ' now' : ''}">
+    const now = s.now || /present|now/i.test(String(s.stage || ''))
+      || (s.article_id && String(s.article_id) === curId);
+    // A Research thread's nodes are REAL ROWS in this corpus (research.py:
+    // build_thread), so they carry an id and a date and the reader can open
+    // the story the step refers to. A model-written step has neither and
+    // renders exactly as before — the two are never made to look alike.
+    const linked = s.article_id && String(s.article_id) !== curId;
+    const meta = s.at
+      ? `<span class="mfd-tl-at">${bEsc(s.at)}${linked ? ' · our coverage' : ''}</span>`
+      : '';
+    return `<div class="mfd-tl-item${now ? ' now' : ''}${linked ? ' linked' : ''}"
+      ${linked ? `role="button" tabindex="0" onclick="openStoryNode(${Number(s.article_id)})"` : ''}>
       <span class="mfd-tl-dot"></span>
-      ${s.stage ? `<div class="mfd-tl-stage">${bEsc(s.stage)}</div>` : ''}
+      ${s.stage ? `<div class="mfd-tl-stage">${bEsc(s.stage)}${meta}</div>` : meta}
       ${s.title ? `<div class="mfd-tl-title">${bEsc(s.title)}</div>` : ''}
       ${s.detail ? `<p class="mfd-tl-desc">${bEsc(s.detail)}</p>` : ''}
     </div>`;
@@ -11501,14 +11531,59 @@ function mfdDotRow(key, dot){
   if (!isCatch && dot.instruments && dot.instruments.length){
     ins = dot.instruments.map(i => {
       const tk = (i.ticker || '').toUpperCase();
+      // i.move is OUR OWN measurement from the daily price store (research.py:
+      // measure_move) — the move already realised, against this instrument's
+      // own normal day. It is a measured past fact, never a forecast, and it is
+      // the only number here that is not a live quote.
+      let mv = '';
+      if (i.move && i.move.return_pct != null){
+        const up = Number(i.move.return_pct) >= 0;
+        const band = i.move.beyond_normal ? 'beyond its normal range'
+                                          : 'inside its normal range';
+        mv = ` <span class="mfd-move ${up ? 'up' : 'down'}">`
+           + `${up ? '+' : ''}${Number(i.move.return_pct).toFixed(2)}% · ${band}</span>`;
+      }
       return `<span class="mfd-ins" ${tk ? `data-ticker="${bEsc(tk)}"` : ''}>${bEsc(i.name || tk)}`
         + (tk ? ` <b>${bEsc(tk)}</b>` : '')
+        + mv
         + (tk ? ` <span class="mfd-tick" data-tickfor="${bEsc(tk)}"></span>` : '') + `</span>`;
     }).join('');
   }
+  // "context" is a dot nothing measured backs. It still shows — the surface
+  // would otherwise be blank on most stories — but it says what it is, the same
+  // separation the analog cards already make between evidence and context.
+  const tag = (!isCatch && dot.evidence === 'context')
+    ? '<span class="mfd-evidence">context</span>' : '';
+  // DOT TO DOT: the earlier stories we published about this instrument, with
+  // what the instrument did in the next session each time. The COUNT only
+  // renders when research.py judged the sample publishable (its own floor) —
+  // below that the stories still show as links and no number is stated. It is
+  // a count of what happened, never a probability and never a forecast.
+  let hist = '';
+  if (!isCatch && dot.instruments && dot.instruments.length){
+    hist = dot.instruments.filter(i => i.history && (i.history.related || []).length)
+      .map(i => {
+        const h = i.history;
+        const name = bEsc(i.name || (i.ticker || '').toUpperCase());
+        const line = h.publishable
+          ? `<div class="mfd-histline">In ${h.n} earlier ${name} stories we published, `
+            + `it moved beyond its normal daily range the next session in `
+            + `<b>${h.n_beyond}</b> of them.</div>`
+          : '';
+        const rows = (h.related || []).slice().reverse().map(e => {
+          const pct = e.return_pct == null ? ''
+            : `<span class="mfd-histpct ${Number(e.return_pct) >= 0 ? 'up' : 'down'}">`
+              + `${Number(e.return_pct) >= 0 ? '+' : ''}${Number(e.return_pct).toFixed(2)}%</span>`;
+          return `<button type="button" class="mfd-histrow" onclick="openStoryNode(${Number(e.article_id) || 0})">`
+            + `<span class="mfd-histat">${bEsc(e.at || '')}</span>`
+            + `<span class="mfd-histhead">${bEsc(e.headline || '')}</span>${pct}</button>`;
+        }).join('');
+        return `<div class="mfd-hist">${line}${rows}</div>`;
+      }).join('');
+  }
   return `<div class="mfd-dotrow ${isCatch ? 'catch' : ''}">
-    <div class="mfd-dothead"><span class="mfd-dotlabel">${bEsc(meta.label)}</span>${impact}</div>
-    <div class="mfd-dotbody">${bEsc(dot.summary || '')}</div>${ins}
+    <div class="mfd-dothead"><span class="mfd-dotlabel">${bEsc(meta.label)}</span>${impact}${tag}</div>
+    <div class="mfd-dotbody">${bEsc(dot.summary || '')}</div>${ins}${hist}
   </div>`;
 }
 

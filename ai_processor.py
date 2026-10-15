@@ -346,12 +346,104 @@ def _build_full_instruction(base: str) -> str:
 SYSTEM_INSTRUCTION_FULL = _build_full_instruction(SYSTEM_INSTRUCTION)
 
 
+# ─── RESEARCH mode: write from the evidence brief, like an analyst ───────────
+# Adopted 2026-10-15. The cards read like a wire copy because the writer's whole
+# input was the publisher's own page: everything it could add was either a
+# paraphrase (rejected by the originality gate) or an invention (rejected by the
+# writer gate). `research.build_brief` supplies what the page does not carry —
+# our own earlier coverage of the same entities, and the instrument's MEASURED
+# move against its own normal day — and this instruction is how that brief
+# becomes prose.
+#
+# READER-FRIENDLY, NOT A DESK NOTE (the product owner's call): plain English,
+# three short paragraphs, every number already verified upstream. The model does
+# not reason about prices and never sees a raw series; it uses the numbers the
+# brief hands it, in the past tense, or it uses none.
+_RESEARCH_BODY_RULE = """3. full_body — 130-180 words, exactly 3 short paragraphs separated by a blank
+   line. You are writing as a market and geopolitics analyst explaining the
+   story to an ordinary reader, NOT as a wire service and NOT as a trading desk.
+
+   A RESEARCH BRIEF is appended after the article body, between
+   "=== SHERR RESEARCH BRIEF" and "=== END BRIEF ===". Everything in it is
+   already verified against our own corpus and our own price store. It is the
+   ONLY source of any figure you did not find in the article itself.
+
+   - Paragraph 1 — WHAT HAPPENED: the consequential fact in plain words, who
+     did what to whom, where and when. Lead with the most human or most
+     consequential true detail. Include the single number that matters most, if
+     there is one.
+   - Paragraph 2 — WHAT CAME BEFORE, AND WHY IT MATTERS: use OUR EARLIER
+     COVERAGE from the brief to say how this fits what already happened, then
+     the mechanism — who is affected and through what, named specifically. If
+     the brief lists no earlier coverage, give the article's own context and do
+     not invent a history.
+   - Paragraph 3 — WHAT WAS MEASURED, AND WHAT TO WATCH: if the brief gives a
+     MEASURED MARKET MOVE, state it in the past tense, with the instrument
+     named and the comparison the brief makes ("beyond"/"inside its normal
+     range"). If the brief gives none, say plainly what has not moved or is not
+     measured here, and never imply a move. Close with what WOULD show the
+     story developing — a condition, stated conditionally.
+
+   HARD RULES for this mode, on top of rule 0:
+   - NEVER state a figure that is not in the article or in the brief. Not one.
+   - NEVER say a market or price will do anything. No direction claim about the
+     future, no target, no probability, no "expected to". Past tense and
+     conditional only.
+   - NEVER present an instrument the brief lists as "NAMED but NOT PRICED" as
+     having moved.
+   - Do not restate our earlier coverage as if it happened now.
+   - Plain, warm, specific English for an Indian reader. Short sentences.
+     Explain any jargon in a few words. No hype, no teasing, no rhetorical
+     questions, no markdown, no bullet points inside the body.
+
+   COMPLIANCE — a market story is screened by the SAME blocklist the engine
+   applies to its own cards, and ONE hit withholds the whole card. These words
+   are ordinary in market journalism and are still forbidden here, anywhere in
+   the text, quotes included:
+   - advice words: buy, sell, hold, invest, recommend, advice, target,
+     allocate, allocation, portfolio, position, entry, exit, stop loss,
+     upside, downside, undervalued, overvalued, bullish, bearish, rally,
+     correction, opportunity
+   - forward-looking words: will, should, expect, expected to, likely to,
+     going to, set to, poised to, predict, prediction, forecast
+   - causal shortcuts: causes, caused, causing, due to, impact on
+   The check is on WHOLE WORDS, so "hold" is blocked while "held" is not — but
+   do not go looking for the loophole: write "stayed above" rather than "hold
+   above", and use rose / fell / was flat for a move. Use "after" or "following" where you would write "due to". State a
+   reason as something a named party said ("ministers pointed to weaker
+   demand"), not as a cause you assert.
+   NEVER write a figure with a currency symbol or code — "$90", "Rs 7,500",
+   "INR 90" each read as a price target and are blocked. Write the number with
+   its unit in words instead: "about 90 dollars a barrel", "roughly 7,500
+   rupees a gram"."""
+
+
+def _build_research_instruction(base: str) -> str:
+    """The FULL instruction with its body rule swapped for the Research one.
+
+    Built FROM the full instruction rather than written again, so the originality
+    rule, the category list, the entity rules and the strings/dots contract have
+    exactly one definition. A second copy is a second thing to forget to update.
+    """
+    start = base.index("3. full_body")
+    end = base.index("4. category")
+    return base[:start] + _RESEARCH_BODY_RULE + "\n\n" + base[end:]
+
+
+SYSTEM_INSTRUCTION_RESEARCH = _build_research_instruction(SYSTEM_INSTRUCTION_FULL)
+
+
 def is_full_text(body: str) -> bool:
     return len((body or "").split()) >= FULL_TEXT_MIN_WORDS
 
 
-def instruction_for(body: str) -> str:
+RESEARCH_MODE = "research"
+
+
+def instruction_for(body: str, mode: str = None) -> str:
     """The full-article (WWWH) prompt when we hold the article, else the blurb one."""
+    if mode == RESEARCH_MODE:
+        return SYSTEM_INSTRUCTION_RESEARCH
     return SYSTEM_INSTRUCTION_FULL if is_full_text(body) else SYSTEM_INSTRUCTION
 
 
@@ -366,20 +458,22 @@ def body_limit(body: str) -> int:
 #            limited" (rotate) from "the service is down" (do not rotate, the
 #            next key would fail identically and spend the pool for nothing).
 
-async def _gemini_once(key: str, title: str, body: str, client) -> tuple:
+async def _gemini_once(key: str, title: str, body: str, client, *,
+                       mode: str = None) -> tuple:
     # model_for, not the boot-time constant: the audit reports model_for's
     # answer, and the request must use the same one or the two disagree.
     url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
            f"{model_for('gemini')}:generateContent?key={key}")
     payload = {
-        "systemInstruction": {"parts": [{"text": instruction_for(body)}]},
+        "systemInstruction": {"parts": [{"text": instruction_for(body, mode)}]},
         "contents": [{
             "role": "user",
             "parts": [{"text": f"ARTICLE TITLE: {title}\n\nARTICLE BODY: {body[:body_limit(body)]}"}]
         }],
         "generationConfig": {
             "temperature": 0.35,
-            "maxOutputTokens": 2048 if is_full_text(body) else 1024,
+            "maxOutputTokens": (2048 if (is_full_text(body)
+                                        or mode == RESEARCH_MODE) else 1024),
             "responseMimeType": "application/json",
             "responseSchema": _GEMINI_SCHEMA,
         }
@@ -458,7 +552,8 @@ def _retry_after_seconds(resp) -> Optional[float]:
 
 
 async def _openai_chat_once(key: str, title: str, body: str, client, *,
-                            url: str, model: str, label: str) -> tuple:
+                            url: str, model: str, label: str,
+                            mode: str = None) -> tuple:
     """Groq, OpenAI and Grok all speak the OpenAI chat-completions shape, so they
     share one caller and differ only by endpoint, model and key.
 
@@ -466,17 +561,18 @@ async def _openai_chat_once(key: str, title: str, body: str, client, *,
     free tier — Groq especially — the tokens-per-minute cap bounces bursts, and
     without this each bounce fell straight back to the placeholder stub (the feed
     then never got an original body). Up to 4 attempts, capped waits."""
-    prompt = instruction_for(body) + f"""
+    prompt = instruction_for(body, mode) + f"""
 
 ARTICLE TITLE: {title}
 
-ARTICLE BODY: {body[:body_limit(body) if is_full_text(body) else 2000]}
+ARTICLE BODY: {body[:body_limit(body) if (is_full_text(body) or mode == RESEARCH_MODE) else 2000]}
 
 Return ONLY a single JSON object matching the schema. No markdown, no code fences."""
     payload = {"model": model,
                "messages": [{"role": "user", "content": prompt}],
                "temperature": 0.35,
-               "max_tokens": 1600 if is_full_text(body) else 900,
+               "max_tokens": (1600 if (is_full_text(body)
+                                      or mode == RESEARCH_MODE) else 900),
                "response_format": {"type": "json_object"}}
     headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
     for attempt in range(4):
@@ -508,22 +604,23 @@ Return ONLY a single JSON object matching the schema. No markdown, no code fence
 # provider -> a coroutine (key, title, body, client) -> (result, status)
 _PROVIDER_CALLS = {
     "gemini": _gemini_once,
-    "groq":   lambda k, t, b, c: _openai_chat_once(
+    "groq":   lambda k, t, b, c, **kw: _openai_chat_once(
         k, t, b, c, url="https://api.groq.com/openai/v1/chat/completions",
-        model=model_for("groq"), label="Groq"),
-    "openai": lambda k, t, b, c: _openai_chat_once(
+        model=model_for("groq"), label="Groq", **kw),
+    "openai": lambda k, t, b, c, **kw: _openai_chat_once(
         k, t, b, c, url="https://api.openai.com/v1/chat/completions",
-        model=model_for("openai"), label="OpenAI"),
+        model=model_for("openai"), label="OpenAI", **kw),
     # xAI, NOT Groq. The code used to read GROK_API_KEY and post it to
     # api.groq.com, so whichever of the two keys existed, one provider was
     # always being called with the other's credential.
-    "grok":   lambda k, t, b, c: _openai_chat_once(
+    "grok":   lambda k, t, b, c, **kw: _openai_chat_once(
         k, t, b, c, url="https://api.x.ai/v1/chat/completions",
-        model=model_for("grok"), label="Grok"),
+        model=model_for("grok"), label="Grok", **kw),
 }
 
 
-async def _call_provider(provider: str, title: str, body: str, client):
+async def _call_provider(provider: str, title: str, body: str, client,
+                         mode: str = None):
     """Try every key in one provider's pool, rotating on key-specific failures.
 
     Rotation happens ONLY on 401/403/429 — the statuses that mean this key is
@@ -539,7 +636,13 @@ async def _call_provider(provider: str, title: str, body: str, client):
         key = pool.current()
         if not key:
             return None
-        result, status = await fn(key, title, body, client)
+        # mode is passed ONLY when set. A test that monkeypatches
+        # _PROVIDER_CALLS[provider] with the documented 4-argument lambda keeps
+        # working; adding an unconditional kwarg would break every one of them.
+        if mode:
+            result, status = await fn(key, title, body, client, mode=mode)
+        else:
+            result, status = await fn(key, title, body, client)
         if result:
             return result
         if status in key_pool.ROTATE_STATUSES:
@@ -552,10 +655,10 @@ async def _call_provider(provider: str, title: str, body: str, client):
     return None
 
 
-async def _call_cascade(title: str, body: str, client):
+async def _call_cascade(title: str, body: str, client, mode: str = None):
     """Every configured provider in order, each with its own key rotation."""
     for provider in KEYS.configured():
-        result = await _call_provider(provider, title, body, client)
+        result = await _call_provider(provider, title, body, client, mode)
         if result:
             return result
     return None
@@ -738,8 +841,11 @@ async def process_batch(articles: list[dict], concurrency: int = 5) -> list[dict
                 title    = article.get("title", "")
                 body     = clean_html_fragments(article.get("body", ""))
                 fallback = article.get("fallback_category", "tech")
+                # Per-item, because one drain tick mixes Research rows with
+                # ordinary ones and they must not share an instruction.
+                mode     = article.get("mode") or None
                 try:
-                    r = await _call_cascade(title, body, client)
+                    r = await _call_cascade(title, body, client, mode)
                     if not r:
                         # publishable=True, exactly as process_article does.
                         # Without it _rule_based_fallback returns

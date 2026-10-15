@@ -50,6 +50,7 @@ import synthesis
 # can never disagree, rather than a filter each caller has to remember.
 import feeds_financial
 import significance
+import research
 # One canonical shape for articles.published_at. Four formats used to reach that
 # column; see timestamps.py for the two bugs that produced.
 import timestamps
@@ -1809,7 +1810,8 @@ def _apply_aggregator_posture(result: dict, row) -> None:
     result["full_body"] = f"{_SAFE_BODY_TEXT}\n\n{credit}\n{url}".strip()
 
 
-def _write_single_strings_dots(conn, article_id: int, result: dict) -> None:
+def _write_single_strings_dots(conn, article_id: int, result: dict, *,
+                               row=None, brief: dict = None) -> None:
     """Store the Strings/Dots the single-article rewrite produced for one row.
 
     Most rows are single-source and never reach synthesis, so their dossier panes
@@ -1833,6 +1835,28 @@ def _write_single_strings_dots(conn, article_id: int, result: dict) -> None:
         dots = synthesis._parse_dots(result.get("dots"), hook_check, [])
     except Exception:
         dots = {}
+
+    # EVERY dot is verified, Research row or not. `_parse_dots` accepts whatever
+    # ticker the model typed and nothing ever checked it, so the one field that
+    # could carry a hard number carried an adjective. verify_dots keeps only the
+    # tickers markets.SYMBOLS actually names, attaches the measured move when the
+    # brief has one, and labels the rest `context` — published, but never dressed
+    # up as a measurement.
+    try:
+        dots = research.verify_dots(dots, brief or {})
+    except Exception as e:                                        # noqa: BLE001
+        log.warning("[AI] dot verification failed for id %s: %s", article_id, e)
+
+    # A STRING NODE MUST BE A ROW. With a brief in hand the thread is built from
+    # our own earlier coverage — real ids, real dates, tappable — and the model's
+    # answer is demoted to the LABELS on those nodes. Without a brief this is the
+    # old behaviour: the model's own steps, unverified and marked so.
+    if brief is not None and row is not None:
+        try:
+            strings = research.build_thread(row, brief, result.get("strings"))
+        except Exception as e:                                    # noqa: BLE001
+            log.warning("[AI] thread build failed for id %s: %s", article_id, e)
+
     try:
         if strings:
             conn.execute("UPDATE articles SET strings=? WHERE id=?",
@@ -6169,6 +6193,96 @@ def _synthesise_clusters(conn, work: list, budget: int = None) -> list:
     return leftover
 
 
+# ─── Sherr Research: the evidence brief, chosen per tick ──────────────────────
+# Research is not a different writer so much as a different INPUT. The brief is
+# free (SQL only, see research.py), so what is bounded here is not quota but
+# blast radius: RESEARCH_MAX_PER_TICK rows a tick, geopolitics/markets only,
+# and only when the brief actually carries something the publisher's page did
+# not. Everything else keeps the existing single-call rewrite untouched.
+#
+# A row whose Research write FAILED its gate is remembered for the life of the
+# process and handed back to the plain path next tick. Without that, a story the
+# model cannot write to the Research band would be retried as Research forever
+# while the ordinary rewrite — which would have published it — never ran.
+_research_failed: set = set()
+_RESEARCH_META_SQL = ("SELECT id, significance, story_id, feed_class "
+                      "FROM articles WHERE id IN ({marks})")
+
+
+def _research_meta(conn, rows) -> dict:
+    """significance / story_id / feed_class for these rows, in one query.
+
+    Deliberately NOT added to body_state.SELECT_NEEDING_REWRITE: that selector is
+    also the synthesis clustering pool's query and is covered by its own tests,
+    and one extra SELECT a tick is cheaper than changing a shared contract.
+    """
+    ids = [r["id"] for r in rows]
+    if not ids:
+        return {}
+    try:
+        got = conn.execute(
+            _RESEARCH_META_SQL.format(marks=",".join("?" for _ in ids)),
+            tuple(ids)).fetchall()
+    except Exception as e:                                        # noqa: BLE001
+        _body_err("research_meta", e)
+        return {}
+    out = {}
+    for r in got:
+        keys = r.keys()
+        out[r["id"]] = {
+            "significance": (r["significance"] if "significance" in keys else None),
+            "story_id": (r["story_id"] if "story_id" in keys else 0) or 0,
+            "feed_class": (r["feed_class"] if "feed_class" in keys else "general")
+                          or "general",
+        }
+    return out
+
+
+def _research_briefs(conn, rows, source_of) -> dict:
+    """id -> (brief, row-view) for the rows this tick will write as Research."""
+    if not research.enabled() or not rows:
+        return {}
+    meta = _research_meta(conn, rows)
+    out: dict = {}
+    for r in rows:
+        if r["id"] in _research_failed:
+            continue
+        research.note("considered")
+        m = meta.get(r["id"], {})
+        try:
+            ok, _reasons = research.in_scope(
+                r["headline"], r["summary_60"], r["source_name"],
+                m.get("feed_class", "general"), m.get("significance"))
+        except Exception as e:                                    # noqa: BLE001
+            _body_err("research_scope", e, r["id"])
+            continue
+        if not ok:
+            continue
+        research.note("in_scope")
+        if len(out) >= research.max_per_tick():
+            research.note("skipped_budget")
+            continue
+        view = {"id": r["id"], "headline": r["headline"],
+                "summary_60": r["summary_60"], "micro_tags": r["micro_tags"],
+                "story_id": m.get("story_id", 0)}
+        try:
+            brief = research.build_brief(conn, view, source_of(r) or "")
+        except Exception as e:                                    # noqa: BLE001
+            _body_err("research_brief", e, r["id"])
+            continue
+        research.note("briefed")
+        research.note_legs(brief.get("legs"))
+        if not research.has_evidence(brief):
+            # Nothing our corpus or our price store could add. Sending the same
+            # input under a longer prompt would be strictly worse than the plain
+            # rewrite, so the row keeps it.
+            research.note("no_evidence")
+            continue
+        research.note_brief(brief)
+        out[r["id"]] = (brief, view)
+    return out
+
+
 _SELECT_REWRITE_BY_IDS = (
     "SELECT id, headline, source_headline, full_body, summary_60, "
     "source_summary, pillar_id, micro_tags, source_name, url, "
@@ -6324,12 +6438,30 @@ def _reprocess_bodies_sync(limit: int, batch: int,
                                        "attempted": len(attempted)})
                 continue
 
-            batch_input = [{
-                "title": r["headline"],
-                "body": full.get(r["id"]) or body_state.source_material(
-                    r["headline"], r["summary_60"], r["source_summary"], r["full_body"]),
-                "fallback_category": PILLARS.get(r["pillar_id"], PILLARS[3])["slug"],
-            } for r in work]
+            def _source_of(r):
+                return full.get(r["id"]) or body_state.source_material(
+                    r["headline"], r["summary_60"], r["source_summary"],
+                    r["full_body"])
+
+            # ── SHERR RESEARCH ───────────────────────────────────────────────
+            # The brief costs no provider request, so it is built BEFORE the
+            # batch is sent and simply changes what some of the items carry.
+            briefs = _research_briefs(conn, work, _source_of)
+
+            batch_input = []
+            for r in work:
+                body = _source_of(r)
+                item = {
+                    "title": r["headline"],
+                    "body": body,
+                    "fallback_category":
+                        PILLARS.get(r["pillar_id"], PILLARS[3])["slug"],
+                }
+                if r["id"] in briefs:
+                    brief, _view = briefs[r["id"]]
+                    item["body"] = f"{body}\n{research.render_brief(brief)}"
+                    item["mode"] = ai_processor.RESEARCH_MODE
+                batch_input.append(item)
 
             _body_last["sent_to_ai"] += len(batch_input)
             log.info("[BODY] sent %d article(s) to AI (providers: %s)",
@@ -6386,10 +6518,22 @@ def _reprocess_bodies_sync(limit: int, batch: int,
                     body_ok, body_m = originality_check(result["full_body"], source)
                     head_ok, head_m = headline_is_original(
                         result["refined_title"], src_head)
-                    audit = {"pass": "body_reprocess", "body": body_m,
+                    is_research = row["id"] in briefs
+                    audit = {"pass": ("sherr_research" if is_research
+                                      else "body_reprocess"),
+                             "body": body_m,
                              "read_full_article": row["id"] in full,
                              "headline": head_m, "headline_replaced": bool(head_ok),
                              "at": datetime.now(timezone.utc).isoformat()}
+                    if is_research:
+                        audit["research"] = {
+                            "legs": briefs[row["id"]][0].get("legs"),
+                            "instruments": [i["ticker"] for i in
+                                            briefs[row["id"]][0].get("instruments") or []],
+                            "priced": sorted((briefs[row["id"]][0].get("moves")
+                                              or {}).keys()),
+                            "prior_nodes": len(briefs[row["id"]][0].get("prior") or []),
+                        }
                     if not body_ok:
                         # The rewrite reproduced the source. Left unflagged so the
                         # next run tries again; never written.
@@ -6401,6 +6545,33 @@ def _reprocess_bodies_sync(limit: int, batch: int,
                                 if head_ok else "") \
                         or (row["headline"] or "").strip() \
                         or (row["source_headline"] or "").strip()
+
+                    # THE RESEARCH GATE IS ALWAYS MEASURED, AND IT IS THE SAME
+                    # CHECKLIST the News writer answers to — only the length band
+                    # differs, because this writer was asked for three paragraphs
+                    # (writer_gate.LENGTH_BANDS["research"]). A card that fails is
+                    # withheld under WRITER_GATE_ENABLED, keeps its placeholder, and
+                    # the id is remembered so the NEXT tick writes it the ordinary
+                    # way instead of failing the same way forever.
+                    if is_research:
+                        gate_ok, gate_failures = writer_gate.check_news(
+                            {"content": result.get("full_body", ""),
+                             "numbers_used": result.get("numbers_used"),
+                             "extracted_entities": result.get("topic_tags")
+                                                   or result.get("extracted_entities"),
+                             "who_subject": result.get("who_subject"),
+                             "who_affected": result.get("who_affected")},
+                            overlap_passed=True, writer="research",
+                            sebi_check=writer_gate.default_sebi_check())
+                        _record_writer_result("research", gate_ok, gate_failures)
+                        if not gate_ok and WRITER_GATE_ENABLED:
+                            audit["status"] = "rejected_research_gate"
+                            _body_reason("rejected_research_gate", row["id"])
+                            _research_failed.add(row["id"])
+                            research.note("failed")
+                            failed += 1
+                            continue
+                        research.note("written")
                     audit["status"] = "published"
                     conn.execute("""
                         UPDATE articles SET headline=?, summary_60=?, full_body=?,
@@ -6421,8 +6592,14 @@ def _reprocess_bodies_sync(limit: int, batch: int,
                         (result.get("when_info") or "").strip(),
                         (result.get("where_info") or "").strip(),
                         *_wwwh_params(result), row["id"]))
-                    # Fill the Strings/Dots panes from the same rewrite.
-                    _write_single_strings_dots(conn, row["id"], result)
+                    # Fill the Strings/Dots panes from the same rewrite. A
+                    # Research row also hands over its brief and its row view, so
+                    # the thread is built from real corpus rows and each dot is
+                    # checked against the price store.
+                    _brief = briefs[row["id"]][0] if is_research else None
+                    _view = briefs[row["id"]][1] if is_research else None
+                    _write_single_strings_dots(conn, row["id"], result,
+                                               row=_view, brief=_brief)
                     done += 1
                     _body_last["written"] += 1
                 except Exception as e:
@@ -6847,6 +7024,57 @@ async def admin_significance(x_admin_token: str = Header(""), token: str = Query
     return out
 
 
+@app.get("/admin/research")
+async def admin_research(x_admin_token: str = Header(""), token: str = Query(""),
+                         article_id: int = Query(0, ge=0)):
+    """What Sherr Research sees, and what it would write from.
+
+    Without ?article_id it reports the counters and the last brief: considered /
+    in_scope / briefed / no_evidence / written, the legs histogram, and a
+    one-line DIAGNOSIS — because "Research wrote nothing" has several causes
+    with different fixes (nothing in scope, no instrument resolved, no earlier
+    coverage, the gate withholding) and a counter per cause is what separates
+    them.
+
+    With ?article_id=N it builds that row's brief and returns it VERBATIM,
+    including the exact text appended to the prompt. Read-only and model-free,
+    so it is safe to run against production and is the fastest way to see why a
+    particular story got a thin write-up.
+    """
+    _check_admin(x_admin_token or token)
+    out = {"stats": research.stats(),
+           "gate_failed_ids": sorted(_research_failed)[:50],
+           "writer_doctor": _writer_doctor.get("research")}
+    if not article_id:
+        return out
+
+    def _one():
+        conn = get_db()
+        try:
+            row = conn.execute(
+                "SELECT id, headline, summary_60, source_summary, full_body, "
+                "source_name, feed_class, significance, story_id, micro_tags "
+                "FROM articles WHERE id=?", (article_id,)).fetchone()
+            if not row:
+                return {"found": False}
+            in_scope, reasons = research.in_scope(
+                row["headline"], row["summary_60"], row["source_name"],
+                row["feed_class"] or "general", row["significance"])
+            source = body_state.source_material(
+                row["headline"], row["summary_60"], row["source_summary"],
+                row["full_body"]) or ""
+            brief = research.build_brief(conn, row, source)
+            return {"found": True, "in_scope": in_scope, "scope_reasons": reasons,
+                    "brief": brief, "has_evidence": research.has_evidence(brief),
+                    "prompt_block": research.render_brief(brief),
+                    "thread_preview": research.build_thread(row, brief, None)}
+        finally:
+            conn.close()
+
+    out["article"] = await asyncio.get_event_loop().run_in_executor(None, _one)
+    return out
+
+
 @app.get("/admin/body-audit")
 async def admin_body_audit(x_admin_token: str = Header(""), token: str = Query("")):
     """What is actually in every article body, counted by state.
@@ -6954,6 +7182,13 @@ async def admin_body_audit(x_admin_token: str = Header(""), token: str = Query("
     synth["min_overlap_ratio"] = synthesis.EVENT_MIN_RATIO
     synth["DIAGNOSIS"] = _synthesis_diagnosis(synth)
     out["synthesis"] = synth
+
+    # Sherr Research, under the same audit as everything else the drain does:
+    # how many candidates were in scope, how many briefs actually carried
+    # evidence, and which legs supplied it.
+    rstats = research.stats()
+    rstats["gate_failed_ids"] = sorted(_research_failed)[:20]
+    out["research"] = rstats
 
     out["last_run"] = dict(_body_last)
     out["running"] = bool(_body_progress.get("running"))
