@@ -1129,3 +1129,96 @@ not a leaked secret. Nothing was rotated.
 matching the key string, so the next field to drift is caught too, and separately
 asserts `messagingSenderId` equals the project number inside `appId` — the invariant
 that catches a credential pasted in from another project.
+
+---
+
+## Sherr Research: the cards read like a wire copy because of the INPUT
+
+Adopted 2026-10-15. The writer's entire input was the publisher's own page
+(`article_reader`) or ~700 characters per source in a cluster
+(`synthesis.build_prompt`). Everything it could add beyond that page was either a
+paraphrase — rejected by `originality_check` — or an invention, rejected by
+`writer_gate`. **No prompt can fix a missing input**, which is why the previous
+rounds of prompt work moved nothing.
+
+`research.py` is the missing input, and it spends **zero provider requests**:
+every leg is a join over data this repo already produced and then discarded.
+
+- **Scope is the owner's line, not a new score.** Geopolitics and markets
+  (stocks, crypto, commodities) only — `SCOPE_TOPICS` intersected with
+  `significance.score_article`'s own `reasons["topics"]`, plus
+  `RESEARCH_MIN_SIGNIFICANCE` (55). There is deliberately **no second keyword
+  vocabulary**: two lists drift and the calibrated one is in `significance.py`.
+  `ai_tech` scores higher than everything in scope and is still excluded, which
+  is the test that proves the gate is the owner's line and not the score.
+- **An instrument exists only if `markets.SYMBOLS` names it.** So a ticker a card
+  prints is always a ticker `market_ticks` can price. `_ALIASES` is how a human
+  writes the same instrument ("the rupee", "bullion"); unqualified "crude"
+  resolves to **Brent**, the benchmark an Indian import bill is priced off.
+- **A move is measured against the instrument's own normal day** —
+  `z = r_h / (MAD * sqrt(h))`, the same formula as the analog engine, so two
+  surfaces cannot disagree about "beyond its normal range". The sqrt(h) term is
+  not optional here either. No series, no claim: `measure_move` returns **None**
+  rather than a zero on a thin or flat series.
+- **Prior coverage applies its window in Python, never in SQL.**
+  `articles.published_at` is TEXT on some deployments and timestamptz on others
+  (migration 018); comparing it to a bind parameter is the bug that took Phase 1
+  down on first contact with production. The scan is bounded by `id` and filtered
+  through `synthesis.parse_ts`.
+- **A brief with no legs is not sent.** It would be the same input the plain
+  rewrite sends, under a longer prompt — strictly worse. The row keeps the
+  ordinary path.
+
+### A string node is a ROW, and a dot carries an evidence leg
+
+`strings` was prose the model inferred from one source: steps a reader cannot
+open. `build_thread` makes every node an `articles` row — id, date, headline,
+tappable — and demotes the model's answer to the **labels** on those nodes. It
+can never add a node. `_labels_up_to_present` drops the model's "What's next"
+step first, or a speculative future label would land on the present node.
+
+`_parse_dots` accepted whatever ticker the model typed and nothing ever checked
+it, so the one field that could carry a hard number carried an adjective.
+`verify_dots` runs on **every** row, Research or not: a ticker survives only if
+`markets.SYMBOLS` names it, the measured move is attached when the brief has one,
+and the dot declares `evidence: "measured"` or `evidence: "context"`. Context
+dots still render — the surface would otherwise be blank on most stories — but
+labelled, the same separation `AnalogCard` already makes.
+
+### The compliance corset is real, and the prompt has to teach it
+
+The engine's blocklist is the ONE blocklist (`narrative.violates_language_rules`,
+injected as `sebi_check`) and it was written for generated market cards, so it
+forbids words ordinary market journalism reaches for: `hold`, `position`,
+`rally`, `correction`, `opportunity`, `target`, `upside`/`downside`, and — via
+`PRICE_TARGET_RE` — **any figure next to a currency symbol or code**. A natural
+first draft ("Brent held above $80", "anyone buying diesel") fails twice over.
+
+So `SYSTEM_INSTRUCTION_RESEARCH` enumerates those words with substitutes and
+requires prices in words ("about 90 dollars a barrel"). Two tests keep the prompt
+and the blocklist from drifting apart: every word the prompt forbids must really
+be in the engine's list, and the words a crude-or-rupee story actually trips must
+all be named in the prompt. The matching is on whole words, so `held` and
+`buying` are not hits while `hold` and `buy` are — the prompt is written to match
+that and explicitly told not to lean on it.
+
+### Budget, blast radius and the switch
+
+Research costs the **same one request** a plain rewrite costs — the brief is
+free — so `RESEARCH_MAX_PER_TICK` (4) is not a quota bound but a blast-radius
+bound. The gate is measured on every card under the writer `research`
+(`LENGTH_BANDS["research"]` is 120-200, because this writer was asked for three
+paragraphs; measuring it against the 60-80 News band would withhold every card
+for being the length it was asked to be). A card that fails is withheld, keeps
+its placeholder, and **its id is remembered for the life of the process so the
+next tick writes it the ordinary way** — otherwise a story the model cannot write
+to the band would retry as Research forever while the plain rewrite, which would
+have published it, never ran. `RESEARCH_ENABLED=0` switches the stage off.
+
+`/admin/research` is the diagnosis: the counters (considered / in_scope /
+briefed / no_evidence / written), the legs histogram, a one-line DIAGNOSIS, and
+`?article_id=N` builds that row's brief and returns the exact text appended to
+the prompt — read-only and model-free, so it is safe against production.
+
+Still open, deliberately: Telugu (one language at a time, and the writer gate's
+tone rules are English-only), and dot-to-dot linking between stories.
