@@ -333,8 +333,31 @@ async def _spie_patterns(type: str, limit: int, offset: int,
         log.warning("Sherr-I insights query failed: %s", e)
         return None
 
+# How many rows /admin/rescope holds at once. It walks the whole corpus either
+# way; this decides whether it does so in one list or a page at a time.
+RESCOPE_BATCH = int(os.getenv("RESCOPE_BATCH", "500"))
 # Story-thread ("string") linking window — how far back we cluster related news.
 STORY_WINDOW_DAYS = int(os.getenv("STORY_WINDOW_DAYS", "45"))
+# THE WINDOW IS THE SEMANTIC BOUND; THIS IS THE MEMORY ONE, AND IT WINS.
+#
+# link_stories clusters every published row inside STORY_WINDOW_DAYS, and the
+# cost of clustering is superlinear in the row count: the union-find holds a
+# term set per row, an inverted index over them, and a counter for every PAIR
+# that shares a term. Measured on a news-shaped corpus, cluster_articles alone
+# peaks at ~45MB over 6,000 rows, ~95MB over 12,000 and ~190MB over 25,000 —
+# before the fetched rows themselves, and on top of a resident app. Render's
+# free instance is 512MB total, so at 45 days of a feed ingesting ~1,700 a day
+# the pass stopped fitting and the instance was killed mid-cycle, repeatedly.
+#
+# Nothing about the clustering was wrong; the input simply grew. So the input
+# is bounded: the newest STORY_LINK_MAX_ROWS rows in the window are clustered
+# and anything older keeps the story_id it was already given. That is the same
+# kind of boundary the window has always been, just one that does not move with
+# how much the feed happened to ingest this month.
+STORY_LINK_MAX_ROWS = int(os.getenv("STORY_LINK_MAX_ROWS", "6000"))
+# The same bound for the on-demand thread, which scans a pillar's slice of the
+# window on a reader's request rather than once a cycle.
+LIVE_THREAD_MAX_ROWS = int(os.getenv("LIVE_THREAD_MAX_ROWS", "2000"))
 # Above this a "story thread" is an over-merged cluster, not a story. A real
 # running story is a few dozen updates at the very most; thousands means the
 # clustering collapsed and the thread is noise.
@@ -605,6 +628,13 @@ def extract_image(entry, pillar_id: int) -> str:
 RSS_CONCURRENCY = int(os.getenv("RSS_CONCURRENCY", "10"))
 # DNS/connect failures are retried this many times with 1s→2s→4s backoff.
 RSS_DNS_RETRIES = int(os.getenv("RSS_DNS_RETRIES", "2"))
+# Ceiling on a single feed response. A feed is a few hundred KB; nothing that
+# large is an RSS document, and RSS_CONCURRENCY of them are in flight at once
+# on a 512MB instance — where the body is buffered whole, then decoded to a
+# str, then handed to feedparser, which builds its own structure on top. A
+# misconfigured or hostile endpoint should cost a skipped feed, not the
+# process.
+RSS_MAX_BYTES = int(os.getenv("RSS_MAX_BYTES", str(8 * 1024 * 1024)))
 RSS_FEEDS = [
     ("https://feeds.feedburner.com/ndtvnews-top-stories", "NDTV"),
     ("https://timesofindia.indiatimes.com/rssfeedstopstories.cms", "Times of India"),
@@ -1512,9 +1542,47 @@ def verify_token(token: str) -> Optional[int]:
 
 
 # ─── NEWS COLLECTION ─────────────────────────────────────────────────────────
+async def _get_capped(client: httpx.AsyncClient, feed_url: str,
+                      source_name: str):
+    """GET a feed, abandoning it the moment the body passes RSS_MAX_BYTES.
+
+    Returns (status_code, text) — text is "" for a non-200 or an over-cap body.
+
+    STREAMED ON PURPOSE. A plain GET buffers the whole response before any size
+    check can run and httpx imposes no ceiling of its own, so one endpoint
+    serving something enormous (or a feed URL that has quietly become a video)
+    is read into memory in full, RSS_CONCURRENCY at a time, on a 512MB box.
+    Checking the length after the download is a check that cannot fire in the
+    case it exists for.
+    """
+    async with client.stream(
+            "GET", feed_url,
+            headers={"User-Agent": "SherByte/5.0 (+https://sherbyte.in)"},
+            timeout=12) as r:
+        if r.status_code != 200:
+            return r.status_code, ""
+        declared = r.headers.get("content-length")
+        if declared and declared.isdigit() and int(declared) > RSS_MAX_BYTES:
+            log.warning("[RSS] %s declares %s bytes, over the %d cap — skipped",
+                        source_name, declared, RSS_MAX_BYTES)
+            return r.status_code, ""
+        chunks, total = [], 0
+        async for chunk in r.aiter_bytes():
+            total += len(chunk)
+            if total > RSS_MAX_BYTES:
+                log.warning("[RSS] %s passed the %d byte cap — skipped",
+                            source_name, RSS_MAX_BYTES)
+                return r.status_code, ""
+            chunks.append(chunk)
+        encoding = r.encoding or "utf-8"
+    return r.status_code, b"".join(chunks).decode(encoding, errors="replace")
+
+
 async def _get_with_dns_backoff(client: httpx.AsyncClient, feed_url: str,
                                 source_name: str):
-    """GET a feed, retrying transient DNS/connect failures with backoff.
+    """GET a feed through _get_capped, retrying transient DNS/connect failures.
+
+    Returns whatever _get_capped returns — (status_code, text).
 
     Render's DNS resolver fails intermittently under a burst of concurrent feed
     fetches — 'No address associated with hostname', sometimes as a blank-message
@@ -1526,11 +1594,7 @@ async def _get_with_dns_backoff(client: httpx.AsyncClient, feed_url: str,
     last_exc = None
     for attempt in range(RSS_DNS_RETRIES + 1):
         try:
-            return await client.get(
-                feed_url,
-                headers={"User-Agent": "SherByte/5.0 (+https://sherbyte.in)"},
-                timeout=12,
-            )
+            return await _get_capped(client, feed_url, source_name)
         except (httpx.ConnectError, httpx.ConnectTimeout) as e:  # DNS / connect
             last_exc = e
             if attempt >= RSS_DNS_RETRIES:
@@ -1545,10 +1609,11 @@ async def _get_with_dns_backoff(client: httpx.AsyncClient, feed_url: str,
 async def fetch_feed_async(feed_url: str, source_name: str, client: httpx.AsyncClient) -> list[dict]:
     articles = []
     try:
-        r = await _get_with_dns_backoff(client, feed_url, source_name)
-        if r.status_code != 200:
+        status, text = await _get_with_dns_backoff(client, feed_url, source_name)
+        if status != 200 or not text:
             return articles
-        feed = await asyncio.get_event_loop().run_in_executor(None, feedparser.parse, r.text)
+        feed = await asyncio.get_event_loop().run_in_executor(
+            None, feedparser.parse, text)
         for entry in feed.entries[:36]:
             title = getattr(entry, "title", "").strip()
             summary = getattr(entry, "summary", "") or ""
@@ -2186,18 +2251,27 @@ def _story_terms(headline: str, tags: list) -> set:
     return synthesis.significant_terms(headline, tags)
 
 
-def link_stories(conn, window_days: int = STORY_WINDOW_DAYS) -> int:
+def link_stories(conn, window_days: int = STORY_WINDOW_DAYS,
+                 max_rows: int = None) -> int:
     """Cluster recent AI-processed articles into story threads via shared terms.
 
     Uses union-find over an inverted term index. Over-generic terms (appearing
     in many articles) are ignored so unrelated stories don't merge. Returns the
     number of multi-article threads formed.
+
+    Bounded by STORY_LINK_MAX_ROWS, read at CALL time rather than bound as a
+    default, so the ceiling can be lowered on a running instance without a
+    deploy. See the constant for why this pass has a memory bound at all.
     """
+    max_rows = STORY_LINK_MAX_ROWS if max_rows is None else max_rows
+    # Newest first for the LIMIT, so the cap drops the OLDEST rows in the
+    # window rather than an arbitrary slice; the clustering itself does not
+    # care about order.
     rows = conn.execute(
         "SELECT id, headline, micro_tags, pillar_id FROM articles "
         "WHERE ai_processed=1 AND status='published' AND published_at >= datetime('now', ?) "
-        "ORDER BY id ASC",
-        (f"-{int(window_days)} days",)
+        "ORDER BY published_at DESC, id DESC LIMIT ?",
+        (f"-{int(window_days)} days", int(max_rows))
     ).fetchall()
     if len(rows) < 2:
         return 0
@@ -2221,7 +2295,9 @@ def link_stories(conn, window_days: int = STORY_WINDOW_DAYS) -> int:
 
     sizes = {i: len(g) for i, g in enumerate(groups)}
     threads = sum(1 for s in sizes.values() if s >= 2)
-    log.info("[STORY] linked %d articles into %d threads", len(rows), threads)
+    log.info("[STORY] linked %d articles into %d threads%s", len(rows), threads,
+             " (AT THE ROW CAP — older rows in the window were not re-clustered)"
+             if len(rows) >= max_rows else "")
     return threads
 
 
@@ -7994,20 +8070,37 @@ async def admin_relink(x_admin_token: str = Header("")):
 async def admin_rescope(x_admin_token: str = Header("")):
     """Re-bucket every article into local / national / global with the current
     classifier, so the Explore region tabs work on existing rows immediately.
-    Cheap and AI-free — recomputes from the headline + body text."""
+    Cheap and AI-free — recomputes from the headline + body text.
+
+    PAGED BY ID, because `SELECT id, headline, summary_60, full_body FROM
+    articles` with no LIMIT is the whole corpus WITH ITS BODIES — tens of
+    thousands of rows at a few KB each, materialised in one list on a 512MB
+    instance. One admin tap could take the process down, which is the opposite
+    of what an admin endpoint is for. The work is identical; only how much of
+    it is resident at once has changed.
+    """
     _check_admin(x_admin_token)
     conn = get_db()
-    rows = conn.execute("SELECT id, headline, summary_60, full_body FROM articles").fetchall()
     counts = {"local": 0, "national": 0, "global": 0}
-    for r in rows:
-        body = r["full_body"] or r["summary_60"] or ""
-        sc = classify_scope(r["headline"] or "", body)
-        counts[sc] = counts.get(sc, 0) + 1
-        conn.execute("UPDATE articles SET scope=? WHERE id=?", (sc, r["id"]))
-    conn.commit()
+    total, after = 0, -1
+    while True:
+        rows = conn.execute(
+            "SELECT id, headline, summary_60, full_body FROM articles "
+            "WHERE id > ? ORDER BY id ASC LIMIT ?",
+            (after, RESCOPE_BATCH)).fetchall()
+        if not rows:
+            break
+        for r in rows:
+            body = r["full_body"] or r["summary_60"] or ""
+            sc = classify_scope(r["headline"] or "", body)
+            counts[sc] = counts.get(sc, 0) + 1
+            conn.execute("UPDATE articles SET scope=? WHERE id=?", (sc, r["id"]))
+        conn.commit()
+        after = rows[-1]["id"]
+        total += len(rows)
     conn.close()
-    log.info("[RESCOPE] %d rows → %s", len(rows), counts)
-    return {"rescoped": len(rows), "distribution": counts}
+    log.info("[RESCOPE] %d rows → %s", total, counts)
+    return {"rescoped": total, "distribution": counts}
 
 
 def _live_thread_ids(conn, article_id: int, window_days: int = STORY_WINDOW_DAYS,
@@ -8029,11 +8122,19 @@ def _live_thread_ids(conn, article_id: int, window_days: int = STORY_WINDOW_DAYS
     if len(base_terms) < 2:
         return []
 
+    # BOUNDED, because this one runs on a READER'S REQUEST. The window is 45
+    # days and a pillar's slice of it is thousands of rows on a feed ingesting
+    # ~1,700 a day, so an uncapped scan here is a few MB per card multiplied by
+    # however many readers are scrolling — on a 512MB instance. Newest first:
+    # a thread is built out of recent coverage, and the oldest rows in the
+    # window are the ones least likely to be the same running story.
     cands = conn.execute(
         "SELECT id, headline, micro_tags FROM articles "
         "WHERE ai_processed=1 AND status='published' AND pillar_id=? AND id!=? "
-        "AND published_at >= datetime('now', ?)",
-        (base["pillar_id"], article_id, f"-{int(window_days)} days")
+        "AND published_at >= datetime('now', ?) "
+        "ORDER BY published_at DESC, id DESC LIMIT ?",
+        (base["pillar_id"], article_id, f"-{int(window_days)} days",
+         LIVE_THREAD_MAX_ROWS)
     ).fetchall()
 
     scored = []
@@ -8133,6 +8234,69 @@ async def health():
     """
     return {"status": "ok", "version": "5.0.0",
             "pillars": 9, "micro_topics": len(MICRO_TOPICS)}
+
+
+# ─── what the instance is actually holding ───────────────────────────────────
+# Render's free plan is a hard 512MB and the only notice you get is "Ran out of
+# memory (used over 512MB) while running your code" in the dashboard, after the
+# instance has already been killed. The Metrics graph shows the climb but not
+# what is on the heap, so this reports the number and the three things that
+# have historically been big: the story-thread pass's row cap, the local read
+# cache, and the in-process ledgers.
+#
+# NO DATABASE AND NO I/O, deliberately — the moment you want this endpoint is
+# the moment the instance is thrashing, and a probe that queries Postgres is a
+# probe that times out exactly then.
+def _rss_bytes():
+    """Resident set size from /proc, or None where there is no procfs."""
+    try:
+        with open("/proc/self/status", encoding="utf-8") as fh:
+            for line in fh:
+                if line.startswith("VmRSS:"):
+                    return int(line.split()[1]) * 1024
+    except OSError:
+        pass
+    return None
+
+
+@app.get("/admin/memory")
+async def admin_memory(x_admin_token: str = Header(""), token: str = Query("")):
+    """How close this instance is to its memory limit, and what is holding it."""
+    _check_admin(x_admin_token or token)
+    rss = _rss_bytes()
+    limit = int(os.getenv("MEMORY_LIMIT_MB", "512"))
+    out = {
+        "rss_mb": round(rss / 1024 / 1024, 1) if rss else None,
+        "limit_mb": limit,
+        "used_pct": round(100 * rss / (limit * 1024 * 1024), 1) if rss else None,
+        "caps": {
+            # Each of these is a ceiling on how many rows one pass may hold.
+            # Lower them (they are all environment variables) before reaching
+            # for a bigger instance.
+            "STORY_LINK_MAX_ROWS": STORY_LINK_MAX_ROWS,
+            "LIVE_THREAD_MAX_ROWS": LIVE_THREAD_MAX_ROWS,
+            "SYNTHESIS_POOL": SYNTHESIS_POOL,
+            "SIG_BACKFILL_BATCH": SIG_BACKFILL_BATCH,
+            "RESCOPE_BATCH": RESCOPE_BATCH,
+            "RSS_MAX_BYTES": RSS_MAX_BYTES,
+            "RSS_CONCURRENCY": RSS_CONCURRENCY,
+            "CACHE_LOCAL_MAX": int(os.getenv("CACHE_LOCAL_MAX", "512")),
+        },
+        "holding": {
+            "cache_local_keys": cache.stats()["local_keys"],
+            "index_html_kb": round(len(_index_cache["html"]) / 1024, 1),
+            "token_versions": len(_TOKEN_VERSIONS),
+            "auth_rate_buckets": len(_AUTH_HITS),
+            "writer_doctor_writers": len(_writer_doctor),
+            "research_failed_ids": len(_research_failed),
+        },
+    }
+    if out["used_pct"] is not None and out["used_pct"] >= 80:
+        out["DIAGNOSIS"] = (
+            "Over 80%% of the limit. The passes that scale with the corpus are "
+            "the caps above; the story-thread pass is the largest of them and "
+            "runs at the end of every collection cycle.")
+    return out
 
 
 @app.get("/admin/stats")
