@@ -1,0 +1,157 @@
+{
+  "_doc": "Every knob of the Top-N video lives here. Change this file, not the code. See video_studio/README.md.",
+  "brand": "SHERRBYTE",
+  "brand_spoken": "Sherr Byte",
+  "brand_display": "SherrByte",
+  "tagline": "Stories that matter, in seconds.",
+  "footer": "SherrByte  ·  {date}",
+  "count": 10,
+  "order": "countdown",
+  "lookback_hours": 24,
+  "max_per_pillar": 3,
+  "min_significance": null,
+  "video": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "crf": 23
+  },
+  "voice": {
+    "name": "af_heart",
+    "speed": 1.05,
+    "lang": "en-us",
+    "gap_s": 0.3,
+    "_doc": "Kokoro voices: af_heart (most natural), af_bella, bf_emma, am_michael, am_fenrir, bm_george. Per-segment speed varies ±speed_jitter so it does not sound like one flat read.",
+    "speed_jitter": 0.04
+  },
+  "script": {
+    "_doc": "Templates only. {rank} is spoken as a word, {headline} and {line} come from the published story. Variants are picked deterministically per story id so a re-run says the same thing.",
+    "intro": {
+      "morning": "Good morning! I'm {mascot}, and these are the {count} stories you need today. Let's get into it.",
+      "afternoon": "Hey there! I'm {mascot}. Here are today's top {count} stories, quick and clear. Let's go.",
+      "evening": "Good evening! I'm {mascot}, and here's your day in {count} stories. Let's dive in."
+    },
+    "first": "Kicking things off at number {rank}. {headline}. {aside}{line}",
+    "middle": [
+      "Number {rank}. {headline}. {aside}{line}",
+      "Next up, number {rank}. {headline}. {aside}{line}",
+      "Coming in at number {rank}. {headline}. {aside}{line}",
+      "Moving on to number {rank}. {headline}. {aside}{line}"
+    ],
+    "second_last": "Almost there. Number {rank}. {headline}. {aside}{line}",
+    "last": "And the big one today, number {rank}. {headline}. {aside}{line}",
+    "asides": {
+      "1": [
+        "Big one on the policy front.",
+        "This matters well beyond the headlines."
+      ],
+      "2": [
+        "Here's the money angle.",
+        "Worth knowing if you follow the economy."
+      ],
+      "3": [
+        "Tech folks, this one's for you.",
+        "Here's the tech story everyone's talking about."
+      ],
+      "4": [
+        "A culture story worth your time."
+      ],
+      "5": [
+        "Nature lovers, listen up.",
+        "One for the planet."
+      ],
+      "6": [
+        "One for your well-being."
+      ],
+      "7": [
+        "A thoughtful one."
+      ],
+      "8": [
+        "A lifestyle story with a twist."
+      ],
+      "9": [
+        "Sports fans, this is yours."
+      ]
+    },
+    "aside_every": 2,
+    "outro": "And that's a wrap! You're all caught up. Follow {brand_spoken}, and I'll see you tomorrow.",
+    "max_line_words": 30
+  },
+  "titles": {
+    "intro_kicker": "TODAY'S BRIEFING  ·  WITH SHERR",
+    "intro_title": [
+      "Top {count}",
+      "stories",
+      "today."
+    ],
+    "outro_cta": "FOLLOW  +"
+  },
+  "music": {
+    "enabled": true,
+    "bpm": 100,
+    "volume": 0.05
+  },
+  "visual": {
+    "use_source_images": false,
+    "colors": {
+      "bg": "#07080C",
+      "text": "#F5F6FA",
+      "muted": "#969CAA",
+      "dim": "#5A606E",
+      "card": "#11131B",
+      "line": "#262A37",
+      "accent": "#FFC24B",
+      "alert": "#FF5A5F"
+    },
+    "glow_colors": [
+      "#4F8CFF",
+      "#FF5A5F",
+      "#FFC24B",
+      "#3DDC97"
+    ],
+    "pillars": {
+      "1": {
+        "name": "Society & Governance",
+        "color": "#4F8CFF"
+      },
+      "2": {
+        "name": "Business & Economy",
+        "color": "#FFC24B"
+      },
+      "3": {
+        "name": "Science & Tech",
+        "color": "#7C8CFF"
+      },
+      "4": {
+        "name": "Arts & Culture",
+        "color": "#FF5A5F"
+      },
+      "5": {
+        "name": "Natural World",
+        "color": "#3DDC97"
+      },
+      "6": {
+        "name": "Self & Well-being",
+        "color": "#FF9F43"
+      },
+      "7": {
+        "name": "Philosophy & Belief",
+        "color": "#B57BFF"
+      },
+      "8": {
+        "name": "Society & Lifestyle",
+        "color": "#2ED3E6"
+      },
+      "9": {
+        "name": "Sports & Gaming",
+        "color": "#9AA8B4"
+      }
+    }
+  },
+  "mascot": {
+    "enabled": true,
+    "name": "Sherr",
+    "image": "assets/tiger.png",
+    "claw_transitions": true
+  }
+}

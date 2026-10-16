@@ -1,0 +1,7 @@
+# Top-N video generator — installed only by .github/workflows/top10_video.yml,
+# never by Render (the API has no reason to carry a TTS model).
+numpy>=1.26
+pillow>=10.0
+soundfile>=0.12
+kokoro-onnx>=0.4
+psycopg[binary]==3.2.1
