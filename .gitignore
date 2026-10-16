@@ -13,3 +13,7 @@ node_modules/
 
 # Local backup bundles (pending-work archives) — not source
 *.bundle
+
+# video_studio build outputs and downloaded fonts
+/out/
+video_studio/fonts/
