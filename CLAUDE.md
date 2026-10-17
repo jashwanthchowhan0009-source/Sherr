@@ -614,6 +614,32 @@ monochrome (Twitter-minimal), leaning on space and curvature. `openDossier`
 survives as the deep-link entry (`/myfeed/<slug>`): it prepends that story as the
 first card rather than opening an overlay.
 
+### The minimized nav pill is the only way out of myFeed
+
+Adopted 2026-10-17. Scrolling the deck compacts the bottom nav, and
+`nav.compact .nb:not(.on)` gives every tab but the active one zero width and
+`pointer-events: none` — so on myFeed the minimized pill is the ONLY tappable
+control on the screen, and a tap on it is the reader's single route back to the
+full bar and from there to any other tab. **That tap was dead, which made a
+scrolled myFeed a navigation dead end.** Two causes, both fixed:
+
+- myFeed's scroll handler sets `compact` from `scrollTop` alone, where every
+  other section's handler compacts on a DOWNWARD scroll. So anything that
+  expanded the bar mid-deck was undone by the next scroll event — the settle
+  events the tap itself produces included — and the bar re-collapsed within a
+  frame. `_mfNavHold` records where the deck was when the reader asked for the
+  bar, survives that settle, and clears once they move `MF_NAV_HOLD_SLACK` (24px)
+  away. It is a DISTANCE, not a timer: a timer either outlives a slow reader or
+  expires during the settle it exists to absorb.
+- The re-tap branch called `loadMyfeed(true)` unconditionally, refetching and
+  re-rendering the deck out from under the reader. Home has carried the
+  `_reTap && _wasCompact` → inert rule for exactly this; myFeed now does too,
+  and the refresh stays on a tap of the FULL bar, which is what it was for.
+
+Not a regression from the laptop column — reproduced identically at 390x844 and
+1440x900. `tests/test_myfeed_nav_pill.py` pins all of it, including the
+`pointer-events: none` rule the rest of it rests on.
+
 `GET /article/<id>/dossier` returns node + strings + dots in one payload, cached
 through `cache.py` at `DOSSIER_CACHE_SECONDS` (raised to 600s) and it **serves
 stale on a DB error**, which is what stops `/myfeed` hanging on

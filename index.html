@@ -9343,8 +9343,13 @@ function navTo(name) {
   }
   if (name==='feed') { loadFeedPulse(); renderFeedFilterChips(); renderFeedTopics(); renderFeedArticles(); }
   if (name==='myfeed') {
-    // Tapping the myFeed icon again while already on myFeed pulls a fresh batch.
-    if (_reTap) { myfeedRetryCount = 0; loadMyfeed(true); }
+    // A re-tap of the MINIMIZED pill is inert, the same rule Home already has:
+    // the bar just comes back. It is the reader's only way to reach the other
+    // tabs from a scrolled deck, so it must never pull a fresh batch and throw
+    // away the story they were reading.
+    if (_reTap && _wasCompact) { mfHoldNav(); }
+    // Tapping the FULL myFeed bar again while already on myFeed pulls a fresh batch.
+    else if (_reTap) { myfeedRetryCount = 0; loadMyfeed(true); }
     else if (typeof initMyfeed === 'function') initMyfeed();
   }
 
@@ -10869,6 +10874,29 @@ let myfeedInit = false, myfeedPage = 1, myfeedLoading = false, _myfeedRetried = 
 const MYFEED_MAX_RETRIES = 5; let myfeedRetryCount = 0;
 function bEsc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function bCap(s){ s=String(s||''); return s.charAt(0).toUpperCase()+s.slice(1); }
+// While the nav is compact every tab but the active one is `pointer-events:none`
+// (see `nav.compact .nb:not(.on)`), so a tap on the minimized myFeed pill is the
+// ONLY way back to the full bar — and from there to any other tab.
+//
+// That tap was dead. Unlike the other sections, whose handlers compact on a
+// DOWNWARD scroll, the deck derives `compact` from scrollTop alone — so it
+// re-collapsed the bar on the very next scroll event, including the settle
+// events the tap itself produces, and the reader was left on myFeed with no
+// reachable navigation at all.
+//
+// `_mfNavHold` is the reader's explicit "give me the bar back". It records where
+// the deck was when they asked, survives the settle, and clears the moment they
+// genuinely move through the deck again — so the bar still gets out of the way
+// of the next card.
+let _mfNavHold = null;
+const MF_NAV_HOLD_SLACK = 24;   // px of settle a tap may produce, in deck scroll
+
+function mfHoldNav(){
+  const feed = document.getElementById('myfeed-feed');
+  _mfNavHold = feed ? feed.scrollTop : 0;
+  navEl.classList.remove('compact');
+}
+
 async function initMyfeed(){
   if (myfeedInit) return; myfeedInit = true;
   await loadMyfeed(true);
@@ -10877,6 +10905,10 @@ async function initMyfeed(){
     if (feed.scrollTop + feed.clientHeight >= feed.scrollHeight - feed.clientHeight * 1.5) loadMyfeed(false);
     // Collapse the nav to the active pill once past the first byte (like other
     // sections), so the card gets the full screen; expand again at the top.
+    if (_mfNavHold !== null) {
+      if (Math.abs(feed.scrollTop - _mfNavHold) < MF_NAV_HOLD_SLACK) return;
+      _mfNavHold = null;
+    }
     navEl.classList.toggle('compact', feed.scrollTop > 24);
   }, { passive: true });
   attachPullToRefresh(feed, () => { myfeedRetryCount = 0; loadMyfeed(true); });   // pull → fresh batch
