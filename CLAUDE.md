@@ -1387,3 +1387,68 @@ Strings, Dots and the TL;DR panel are still English. The choice is remembered in
 
 Still open, deliberately: Strings/Dots/TL;DR in Telugu (each would need its own
 field and its own output budget).
+
+---
+
+## The 512MB ceiling: the corpus grew, nothing was deployed
+
+Adopted 2026-10-17, after `sherrbyte-api` was killed repeatedly — "Ran out of
+memory (used over 512MB) while running your code", then "Service recovered",
+then the same thing two hours later. **No deploy caused it.** The reads that
+blew the limit had always been unbounded; the corpus finally got big enough for
+one of them to not fit.
+
+`link_stories` is the one that did it. It clusters every `ai_processed=1 AND
+status='published'` row inside `STORY_WINDOW_DAYS` (45) at the end of **every**
+collection cycle, and `synthesis.cluster_articles` is superlinear in the row
+count — a term set per row, an inverted index over them, and a counter for
+every pair sharing a term. Measured on a news-shaped corpus:
+
+| rows | clustering peak |
+|---|---|
+| 3,000 | 18 MB |
+| 6,000 | 45 MB |
+| 12,000 | 94 MB |
+| 25,000 | 189 MB |
+
+That is before the fetched rows themselves and on top of a resident app; at
+25,000 the benchmark process alone reached 513MB RSS. At ~1,700 published rows
+a day, 45 days is well past that.
+
+**The window is the semantic bound; `STORY_LINK_MAX_ROWS` (6,000) is the memory
+one, and it wins.** The newest rows in the window are clustered and anything
+older keeps the `story_id` it already had — the same kind of boundary the
+window has always been, except it no longer moves with how much the feed
+happened to ingest this month. The cap is read at CALL time, so it can be
+lowered on a thrashing instance without a deploy, and the `[STORY]` log line
+says when it binds. `MAX_TERM_DOC_FRACTION` was not the protection here: the
+generic-term cap is `min(MAX_TERM_DOCS=40, …)`, so it is 40 at any corpus size
+and bounds pairs per TERM, never the number of terms.
+
+Three more reads had the same shape and are bounded the same way:
+
+- **`_live_thread_ids` runs on a READER'S request**, scanning a pillar's slice
+  of the same 45-day window with no LIMIT, so its cost multiplied by however
+  many people were scrolling. `LIVE_THREAD_MAX_ROWS` (2,000).
+- **`/admin/rescope` selected the whole corpus WITH its bodies** into one list.
+  It now pages by id, `RESCOPE_BATCH` (500) at a time. One admin tap should not
+  be able to kill the process.
+- **Two fetches checked their size limit after buffering the whole response**,
+  which is a check that cannot fire in the case it exists for. `article_reader`
+  called `client.get` and then measured `r.content` against `MAX_BYTES`; httpx
+  imposes no ceiling of its own, so a 300MB page — or a URL that had quietly
+  become a video — was resident in full, six at a time under `fetch_many`'s
+  semaphore. Both it and the RSS fetch (`_get_capped`, `RSS_MAX_BYTES`, 8MB,
+  `RSS_CONCURRENCY` in flight) now stream and abandon the response the moment
+  it passes the cap, and refuse outright on an over-cap `Content-Length`.
+
+**`/admin/memory` is where you look.** RSS against the limit, the used
+percentage, every corpus-scaled cap and what the in-process ledgers are
+holding. It touches **no database**, deliberately: the moment you want it is
+the moment a query would time out. Render's own Metrics graph shows the climb
+but never what is on the heap.
+
+**The rule this leaves behind: a query whose row count is set by how much news
+there happens to be needs a LIMIT, and a fetch whose size is set by a remote
+server needs the cap applied while it streams.** On a 512MB instance neither is
+a tuning preference. `tests/test_memory_ceilings.py` asserts both halves.

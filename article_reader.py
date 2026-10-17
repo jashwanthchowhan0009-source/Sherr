@@ -189,19 +189,45 @@ async def fetch_article(url: str, client: Optional[httpx.AsyncClient] = None) ->
     own = client is None
     client = client or httpx.AsyncClient(follow_redirects=True)
     try:
-        r = await client.get(url, timeout=FETCH_TIMEOUT, follow_redirects=True,
-                             headers={"User-Agent": _UA,
-                                      "Accept": "text/html,application/xhtml+xml",
-                                      "Accept-Language": "en-IN,en;q=0.9"})
-        if r.status_code != 200:
-            log.info("[READER] %s -> HTTP %d", url[:90], r.status_code)
-            return ""
-        ctype = r.headers.get("content-type", "")
-        if "html" not in ctype and "xml" not in ctype:
-            return ""
-        if len(r.content) > MAX_BYTES:
-            return ""
-        return extract_text(r.text)
+        # STREAMED, AND THE CEILING IS ENFORCED WHILE IT STREAMS.
+        #
+        # This used to be a plain GET followed by `if len(r.content) >
+        # MAX_BYTES: return ""`. httpx buffers the whole body before that line
+        # can run and imposes no limit of its own, so MAX_BYTES described an
+        # intention the code never had: a publisher serving a 300MB page, or a
+        # URL that turns out to be a video, was read into memory in full — six
+        # of them at once under fetch_many's semaphore — on a 512MB instance.
+        # Reading it chunk by chunk and abandoning the response the moment it
+        # passes the cap makes the constant real.
+        async with client.stream(
+                "GET", url, timeout=FETCH_TIMEOUT, follow_redirects=True,
+                headers={"User-Agent": _UA,
+                         "Accept": "text/html,application/xhtml+xml",
+                         "Accept-Language": "en-IN,en;q=0.9"}) as r:
+            if r.status_code != 200:
+                log.info("[READER] %s -> HTTP %d", url[:90], r.status_code)
+                return ""
+            ctype = r.headers.get("content-type", "")
+            if "html" not in ctype and "xml" not in ctype:
+                return ""
+            # Trust a declared length when it is already over the cap: that
+            # saves downloading the body at all.
+            declared = r.headers.get("content-length")
+            if declared and declared.isdigit() and int(declared) > MAX_BYTES:
+                log.info("[READER] %s -> %s bytes declared, over cap",
+                         url[:90], declared)
+                return ""
+            chunks, total = [], 0
+            async for chunk in r.aiter_bytes():
+                total += len(chunk)
+                if total > MAX_BYTES:
+                    log.info("[READER] %s -> over %d bytes, abandoned",
+                             url[:90], MAX_BYTES)
+                    return ""
+                chunks.append(chunk)
+            raw = b"".join(chunks)
+            encoding = r.encoding or "utf-8"
+        return extract_text(raw.decode(encoding, errors="replace"))
     except Exception as e:                                        # noqa: BLE001
         log.info("[READER] %s failed: %s", url[:90], type(e).__name__)
         return ""
