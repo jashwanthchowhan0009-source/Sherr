@@ -1,9 +1,17 @@
-"""The desktop layout, and the promise that the phone is untouched.
+"""The laptop layout, and the promise that the phone is untouched.
 
-The mobile app is the product. Desktop is a second arrangement of the same DOM,
-and the only way to guarantee a desktop tweak can never reach a phone is for
-every desktop rule to live inside one media query. That is a structural property
-of the file, so it can be asserted rather than eyeballed in a browser.
+The Android app is the product, and on a laptop it is the SAME app: the phone
+layout in a centred column, not a second arrangement of the same DOM. An earlier
+pass built a desktop website here — a left sidebar, a 720px reading column, a
+two- and three-column Home — and that is explicitly not what this surface wants;
+sherrbyte.vercel.app is also the TWA's origin, so the browser and the app should
+show the same screen.
+
+Both halves of that are structural properties of the file rather than things to
+eyeball in a browser, so they are asserted: every laptop rule lives in one media
+query (which is what makes "a phone cannot be reached by a desktop fix" a
+guarantee), and what that one query does is frame the column rather than
+re-arrange it.
 
 These also pin the client half of real URLs: the server answering /explore is
 useless if the app never puts /explore in the address bar, and vice versa. The
@@ -52,68 +60,88 @@ def test_there_is_exactly_one_desktop_breakpoint(html):
     assert len(re.findall(r"@media\s*\(min-width:\s*1024px\)", html)) == 1
 
 
-def test_every_desktop_rule_lives_inside_it(html):
-    """The selectors the desktop layout changes must not appear as desktop
-    overrides anywhere else — a bare `nav { flex-direction: column }` outside
-    the block would turn the phone's bottom bar into a sidebar."""
+def test_the_laptop_block_frames_the_app_it_does_not_re_lay_it_out(html):
+    """The whole point of this surface: a laptop gets the phone, centred. Any of
+    these properties in the laptop block means a screen is being re-arranged for
+    desktop, which is the layout this replaced."""
     block = _block(html, "@media (min-width: 1024px)")
-    for selector in (".xp-matrix", ".myfeed-feed", ".mf-card", "nav {",
-                     "header {", ".nb-tabs", ".view {"):
-        assert selector in block, f"{selector} is not restyled for desktop"
+    for banned in ("grid-template-columns",   # the two/three-column Home and myFeed
+                   "flex-direction: column",  # the bottom nav rebuilt as a sidebar
+                   "--sbw", "--col)",         # the sidebar width / reading column
+                   "scroll-snap-type"):       # myFeed's snap taken off
+        assert banned not in block, f"the laptop block re-lays out the app: {banned}"
+    # And it stays small. Two hundred lines of laptop CSS is a second layout by
+    # another name.
+    assert block.count("{") < 12
+
+
+def test_the_phone_layout_is_what_a_laptop_shows(html):
+    block = _block(html, "@media (min-width: 1024px)")
+    assert ".phone" in block
+    assert "var(--deskbg)" in block, "the surround must not be the app's own --bg"
+
+
+def test_the_column_width_is_one_number(html):
+    """--appw is the app column. Hardcoding 440px in the two rules that need it
+    is how the column and the sheets centred on it drift apart."""
+    assert html.count("--appw: 440px") == 1
+    assert "width: var(--appw); max-width: var(--appw); right: auto;" in html
+
+
+def test_the_phone_bottom_nav_still_hides_on_scroll(html):
+    """The rule the old desktop block neutralised for its sidebar, proven not to
+    have been edited in place."""
+    block = _block(html, "@media (min-width: 1024px)")
     outside = html.replace(block, "")
-    # The one rule the desktop block overrides by name, proven not to have been
-    # edited in place: the phone still gets its bottom-nav hide-on-scroll.
     assert "nav.hidden { transform: translateX(-50%) translateY(110px);" in outside
+    assert "nav.hidden" not in block
 
 
-def test_the_phone_matrix_is_still_two_columns(html):
-    """Pixel-identical below the breakpoint means the base rule is unchanged."""
+def test_the_matrix_is_two_columns_at_every_width(html):
     block = _block(html, "@media (min-width: 1024px)")
     base = html.replace(block, "")
     assert ".xp-matrix{display:grid;grid-template-columns:1fr 1fr;" in base
+    assert ".xp-matrix" not in block
 
 
-def test_the_phone_bytes_feed_is_still_a_full_screen_snap(html):
+def test_myfeed_is_a_full_screen_snap_at_every_width(html):
+    """One card per screen is the surface's whole reading model, on a phone and
+    on a laptop alike."""
     block = _block(html, "@media (min-width: 1024px)")
     base = html.replace(block, "")
     assert "scroll-snap-type: y mandatory" in base
-    assert "grid-template-columns: repeat(2, minmax(0, 1fr))" in block
+    assert ".myfeed-feed" not in block and ".mf-card" not in block
 
 
-# ─── what desktop actually gets ─────────────────────────────────────────────
+# ─── what the laptop actually gets ──────────────────────────────────────────
 
-def test_the_bottom_nav_becomes_a_sidebar(html):
+def test_the_body_level_sheets_follow_the_column(html):
+    """A bottom sheet pinned to the full width of a 1440px screen is a banner.
+    These three are positioned against the viewport, so they are the only
+    things the laptop has to place by hand."""
     block = _block(html, "@media (min-width: 1024px)")
-    assert "flex-direction: column" in block
-    assert "width: var(--sbw)" in block
-    # A sidebar that slid away on scroll would take the app's only navigation
-    # with it — the phone's hide-on-scroll must be neutralised, not inherited.
-    assert "nav.hidden, nav.compact { transform: none;" in block
+    assert ".xp-sheet, .cmt-sheet, .xp-page {" in block
 
 
-def test_the_reading_column_is_centred_and_bounded(html):
+def test_the_sheets_are_centred_with_a_margin_not_a_transform(html):
+    """Both sheets animate their own transform (translateY(102%) closed), so a
+    horizontal transform here would be overwritten by the open state and the
+    sheet would slide back to the left edge the moment it opened."""
     block = _block(html, "@media (min-width: 1024px)")
-    assert "--col" in block and "max(24px, calc((100vw" in block
+    rule = block[block.index(".xp-sheet, .cmt-sheet, .xp-page {"):]
+    rule = rule[:rule.index("}")]
+    assert "margin-left: calc(var(--appw) / -2);" in rule
+    assert "transform" not in rule
 
 
-def test_the_matrix_of_markets_is_three_across(html):
-    """Six tiles: 3 x 2 is one glance where 2 x 3 was a scroll."""
-    block = _block(html, "@media (min-width: 1024px)")
-    assert ".xp-matrix { grid-template-columns: repeat(3, 1fr);" in block
-
-
-def test_the_column_variables_are_declared_once(html):
-    """Two numbers, one place. Eleven hardcoded 236px is how a sidebar and the
-    header it sits beside drift out of alignment."""
-    assert html.count("--sbw: 236px") == 1
-    assert html.count("--col: 720px") == 1
-
-
-def test_overlays_do_not_inherit_the_column_padding(html):
-    """The article overlay is full-bleed on top of everything and carries its
-    own padding; inheriting the view's gutter would double it."""
-    block = _block(html, "@media (min-width: 1024px)")
-    assert "#article-overlay" in block and "padding-left: 0" in block
+def test_the_surround_has_a_colour_in_every_theme(html):
+    """An unset --deskbg falls back to nothing and the backdrop paints white in
+    a dark app — so each theme that redefines --bg must redefine this too."""
+    for theme in ('', '[data-theme="navy"]', '[data-theme="light"]'):
+        root = ":root {" if not theme else theme + " {"
+        chunk = html[html.index(root):]
+        chunk = chunk[:chunk.index("\n}")]
+        assert "--deskbg:" in chunk, f"{theme or ':root'} has no backdrop colour"
 
 
 # ─── real URLs: the client half ─────────────────────────────────────────────
@@ -155,18 +183,3 @@ def test_a_deep_link_opens_the_story_on_boot(html):
 def test_navigation_pushes_the_path_not_just_the_state(html):
     assert "history.pushState({ view: name }, '', pathForView(name))" in html
     assert "'/myfeed/' + articleSlug(a)" in html
-
-
-def test_the_desktop_nav_is_a_full_height_rail_not_a_floating_card(html):
-    """#2/#3: the desktop sidebar showed as a floating frosted pill with a
-    stray circular button, overlapping content. The rail itself must carry the
-    surface and the pill/orb chrome must be flattened."""
-    block = _block(html, "@media (min-width: 1024px)")
-    # nav is a fixed full-height rail with its own background.
-    assert "position: fixed; top: 0; bottom: 0; left: 0" in block
-    assert "background: var(--glass)" in block
-    # the tab group is flattened (no pill background / radius / shadow).
-    assert "background: transparent; box-shadow: none; border: 0;" in block
-    assert "border-radius: 0;" in block
-    # the scan orb becomes a flush full-width row, not a floating circle.
-    assert "width: 100%; height: auto; margin: auto 0 0 0; border-radius: 12px;" in block

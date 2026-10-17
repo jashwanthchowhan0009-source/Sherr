@@ -69,20 +69,12 @@ def test_an_unwritten_article_opens_the_source_not_the_popup(html):
 
 
 # ── 4. Desktop: Home is a portal grid, phone is untouched ───────────────────
-def test_home_is_a_grid_on_desktop(html):
-    block = html[html.index("@media (min-width: 1024px)"):]
-    block = block[:block.index("/* Wider still")]
-    assert "#home-feed {" in block and "grid-template-columns: repeat(2, minmax(0, 1fr))" in block
-    # Full-bleed rows span the grid so they punctuate it.
-    assert "#home-feed > .hero-card" in block and "grid-column: 1 / -1" in block
-
-
-def test_the_phone_home_feed_is_not_a_grid(html):
-    """The grid lives ONLY inside the desktop breakpoint; below it, Home is the
-    untouched single column."""
-    block = html[html.index("@media (min-width: 1024px)"):html.index("/* Wider still")]
-    base = html.replace(block, "")
-    assert "grid-template-columns: repeat(2, minmax(0, 1fr))" not in base
+def test_home_is_one_column_at_every_width(html):
+    """Home was a two- and three-column desktop portal inside the 1024px block.
+    That is a news website; this surface is the Android app, shown on a laptop
+    in the phone's own column. One column is the layout, everywhere."""
+    assert "grid-template-columns: repeat(2, minmax(0, 1fr))" not in html
+    assert "#home-feed > .hero-card" not in html
 
 
 # ── 5. Sideways swipe steps categories even on an EMPTY pillar ───────────────

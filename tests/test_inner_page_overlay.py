@@ -32,6 +32,20 @@ def html():
         return fh.read()
 
 
+def _desktop_block(html: str) -> str:
+    """The text of the one brace-balanced laptop media query."""
+    start = html.index("@media (min-width: 1024px)")
+    depth, j = 0, html.index("{", start)
+    while True:
+        if html[j] == "{":
+            depth += 1
+        elif html[j] == "}":
+            depth -= 1
+            if depth == 0:
+                return html[start:j + 1]
+        j += 1
+
+
 # The last <div id="v-*"> view is the anchor for "body level": every named
 # view lives inside .phone, so an element that appears AFTER all of them and
 # after the real </nav> is a body-level sibling. (The literal "</nav>" also
@@ -60,13 +74,19 @@ def test_the_fragile_sibling_hide_rule_is_gone(html):
     assert "#v-explore > #xp-page ~ *{display:none" not in html
 
 
-def test_phone_is_transformed_in_the_tablet_band(html):
+def test_phone_is_transformed_at_every_width_above_500(html):
     """This is the trap the move exists to escape — documented so nobody
-    'simplifies' the move away without understanding why it was made."""
+    'simplifies' the move away without understanding why it was made.
+
+    The desktop block used to clear the transform (`left: 0; width: 100vw`),
+    which is what made this a 500–1023px "band". Now that a laptop shows the
+    same centred column, the transform is in force at EVERY width above 500px —
+    so the containing-block trap is permanent and this move is what keeps the
+    drill-downs out of it."""
     assert "transform: translateX(-50%)" in html  # the 500px .phone rule
-    # And desktop clears it.
-    block = html[html.index("@media (min-width: 1024px)"):html.index("/* Wider still")]
-    assert ".phone { max-width: none; left: 0; transform: none" in block
+    block = _desktop_block(html)
+    assert "transform: none" not in block
+    assert "width: 100vw" not in block
 
 
 def test_home_content_is_blanked_under_a_full_page(html):
@@ -85,8 +105,15 @@ def test_the_drilldown_page_itself_stays_visible_under_dp_open(html):
     assert "body.dp-open #xp-page { visibility: visible !important; }" in html
 
 
-def test_desktop_offsets_the_page_beside_the_sidebar(html):
-    block = html[html.index("@media (min-width: 1024px)"):html.index("/* Wider still")]
-    assert ".xp-page {" in block and "left: var(--sbw)" in block
-    # Header comes back on desktop — the page is offset, not covering it.
-    assert "body.dp-open > header, body.dp-open #hdr { display: flex" in block
+def test_desktop_centres_the_page_on_the_app_column(html):
+    """`#xp-page` is positioned against the viewport, so on a 1440px screen it
+    painted its 16px-gutter mobile column across the whole width unless placed
+    by hand. It is placed on the app column — the same place it covers on a
+    phone."""
+    block = _desktop_block(html)
+    assert ".xp-sheet, .cmt-sheet, .xp-page {" in block
+    assert "width: var(--appw); max-width: var(--appw);" in block
+    # The header stays hidden under a full page at every width now: the page is
+    # full-bleed over the column and carries its own back arrow, exactly as on a
+    # phone. A desktop-only "display: flex" override would uncover it.
+    assert "body.dp-open > header, body.dp-open #hdr { display: flex" not in block
