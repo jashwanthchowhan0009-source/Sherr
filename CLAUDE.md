@@ -1070,12 +1070,23 @@ be bumped and the target SDK cannot be raised. Rebuild with Bubblewrap against
 the live `manifest.json`, keeping the package name `app.vercel.sherrbyte.twa`,
 and back the keystore up off-machine: losing it means never updating the listing.
 
-### `claude/*` branches do not get a Vercel preview
+### No branch but `main` gets a Vercel deployment
 
 `vercel.json`'s `git.deploymentEnabled` turns automatic deployments off for
-`claude/*` and nothing else, so `main` still deploys to production — which is
-the origin the TWA and every browser load, and the one `assetlinks.json` has to
-be served from.
+every branch, so `main` still deploys to production — which is the origin the
+TWA and every browser load, and the one `assetlinks.json` has to be served
+from.
+
+It started as `claude/*` only (PR #266), which left `feat/*` and everything
+else gating PRs on the same useless red check — #269 is where that showed.
+The two patterns are `*/**` (any branch whose name contains a slash; a
+minimatch `*` does NOT cross a `/`, which is why a bare `*` would have missed
+`feat/top10-video-studio`) and `!(main)` (any single-segment branch that is not
+`main`). **Neither can match `main`, and that is the point**: a `"main": true`
+entry would depend on Vercel preferring an exact key over a glob, which its
+documentation does not promise, whereas "any unspecified branch defaults to
+true" is documented. A bare `"deploymentEnabled": false` is the trap — it stops
+production too. `tests/test_vercel_previews.py` pins all of it.
 
 The preview was gating PRs on a deploy that could not tell anyone anything. It
 builds the STATIC tree only: `vercel.json` carries headers and no backend, so
