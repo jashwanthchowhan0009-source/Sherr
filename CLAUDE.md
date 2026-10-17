@@ -868,19 +868,50 @@ condition, and a cached one outlives the outage.
 
 Pools are capped: `PG_POOL_MAX` 8 (pgcompat), `SPIE_POOL_MAX` 4 (asyncpg).
 
-## Desktop is one @media block, and that is the whole guarantee
+## A laptop shows the Android app, not a desktop website
 
-`@media (min-width: 1024px)` in index.html, and **every** desktop rule is inside
-it. That is what makes "mobile renders identically to before" a structural
-property rather than a hope, and `tests/test_desktop_layout.py` asserts it: one
-breakpoint, the restyled selectors inside, the phone's base rules untouched
-outside. If you are adding a desktop rule somewhere else in that stylesheet:
-don't.
+Adopted 2026-10-17. The 1024px block used to build a desktop site out of the
+same DOM: the bottom nav became a left sidebar, the reading column widened to
+720px, Home became a two- and three-column portal and myFeed lost its
+full-screen snap for a card grid. The owner's line is that **the Android app is
+the product and there is no desktop look to design** — and `sherrbyte.vercel.app`
+is also the TWA's origin, so a browser and the app should show the same screen.
 
-1024px, not 768px — a tablet in portrait is a big phone and the bottom nav is
-right for it. The sidebar is the SAME `<nav>` element re-laid out, not a second
-nav; two navs would mean two active-tab states that disagree the first time
-either changes.
+So the laptop layout is now: cap the app at the phone's own width, centre it,
+darken what is left. The whole `@media (min-width: 1024px)` block is about ten
+rules.
+
+**`--appw` (440px) is the app column and `--deskbg` is what surrounds it.**
+`--sbw`/`--col` are gone with the sidebar. Every theme that redefines `--bg`
+redefines `--deskbg` too, or the backdrop paints white behind a dark app.
+
+**Nothing inside `.phone` needs a desktop rule, and that is structural.** The
+500px rule gives `.phone` `transform: translateX(-50%)`, and a transform makes
+an element the containing block for its `position: fixed` descendants — so the
+header, the nav, every overlay and every sheet inside `.phone` already resolve
+against the column at every width above 500px. The three overlays that sit
+outside `.phone` (`#xp-page`, `#xp-sheet`, `#cmt-sheet`) are the only things the
+laptop places by hand, and they are centred with `margin-left`, **never a
+transform**: both sheets animate their own `translateY`, and the open state
+would overwrite a horizontal transform and send the sheet back to the screen
+edge.
+
+**The 500px rule was also miscentering the column.** It kept the base rule's
+`right: 0`, so the box could only be laid out in the half of the viewport right
+of `left: 50%` and `margin: 0 auto` centred it inside THAT half — 140px right of
+centre on a 1440px window. Nobody saw it because the desktop block overrode the
+rule entirely. It now carries `right: auto` and an explicit width.
+
+Still one breakpoint, and still the whole guarantee: every laptop rule lives in
+that one block, so a laptop fix cannot reach a phone.
+`tests/test_desktop_layout.py` asserts both halves — that the block frames the
+app (no `grid-template-columns`, no `flex-direction: column`, no
+`scroll-snap-type`, under a dozen rules) and that the phone's own rules are
+untouched. The phone render was verified byte-identical before and after at
+390x844.
+
+1024px, not 768px: below it the 500px rule already gives a tablet the same
+centred column with no border and no backdrop, which is right at that size.
 
 ## Auth identity is normalised, and every auth route the client calls exists
 

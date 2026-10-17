@@ -60,10 +60,11 @@
 
   /* Structural */
   --hh: 48px;
-  /* Desktop only (see the single desktop breakpoint further down). Declared here so
-     the sidebar width and the reading column are one number each, not eleven. */
-  --sbw: 236px;   /* sidebar */
-  --col: 720px;   /* centre reading column */
+  /* Laptop only (see the single desktop breakpoint further down). The app is
+     the SAME phone layout in a centred column, so there are exactly two
+     numbers: how wide the column is, and what surrounds it. */
+  --appw: 440px;   /* the app column — the phone's own width, unchanged */
+  --deskbg: #07070c;  /* the backdrop the column sits on */
   --nh: 70px;
   --r:        18px;   /* squircle cards — refined, a touch softer */
   --r-card:   18px;
@@ -117,6 +118,7 @@
 
 /* ── NAVY (System / half-circle) = deep-blue gradient tone, white text ── */
 [data-theme="navy"] {
+  --deskbg:    #01071c;
   --bg:        #02153F;
   --bg-grouped:#02153F;
   --surface:   rgba(255,255,255,0.10);
@@ -142,6 +144,7 @@
 
 /* ── LIGHT (Sun) = true white background, dark text ── */
 [data-theme="light"] {
+  --deskbg:    #DFE1E8;
   --bg:        #F2F2F7;
   --bg-grouped:#F2F2F7;
   --surface:   #FFFFFF;
@@ -2145,10 +2148,10 @@ nav.compact .nb.on { flex: 0 0 auto; padding-left: 16px; padding-right: 16px; }
   padding-bottom:var(--nav-clear)}
 /* #xp-page is a body-level overlay (below </nav>) at z-index 880, so it already
    sits above the app header (z 500) in the root stacking context. The header is
-   still hidden while a page is open on PHONES because the page is full-bleed
-   there and the page carries its own back arrow; on desktop the header is
-   restored (see the min-width:1024px block) since the page is offset beside the
-   sidebar and does not cover it. */
+   hidden while a page is open because the page is full-bleed over the app and
+   carries its own back arrow — and it is full-bleed at EVERY width now that the
+   laptop shows the same phone column (see the min-width:1024px block), so this
+   rule needs no desktop counterpart. */
 body.dp-open > header, body.dp-open #hdr { display:none !important }
 /* HOME CONTENT MUST NOT SHOW UNDER A FULL DRILL-DOWN PAGE. dp-open is set only
    for full pages (xpOpenPage/dpPage), never for the entity bottom sheet, so
@@ -2744,7 +2747,15 @@ body[data-view="myfeed"] #hdr { display: none; }
    RESPONSIVE / UTILITY
 ═══════════════════════════════════ */
 @media (min-width: 500px) {
-  .phone { max-width: 440px; margin: 0 auto; left: 50%; transform: translateX(-50%); }
+  /* The app column, once there is room beside it. `right: auto` + an explicit
+     width is what actually centres it: with the base rule's `right: 0` still in
+     force the box could only be laid out in the half of the viewport to the
+     right of `left: 50%`, so `margin: 0 auto` centred it inside THAT half and a
+     1440px window put the column 140px right of centre. */
+  .phone {
+    width: var(--appw); max-width: var(--appw); right: auto;
+    left: 50%; transform: translateX(-50%);
+  }
 }
 
 /* ═══════════════════════════════════
@@ -3657,224 +3668,79 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 .es-retry:active { transform: scale(0.93); }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   DESKTOP — ONE BLOCK, ONE BREAKPOINT
+   LAPTOP — THE SAME PHONE, IN A COLUMN
    ═══════════════════════════════════════════════════════════════════════════
-   EVERY DESKTOP RULE IN THIS FILE IS INSIDE THIS ONE @media, AND THAT IS THE
-   POINT. The mobile app is the product; this is a second arrangement of the
-   same DOM. Because nothing outside this block changed, anything narrower than
-   1024px renders byte-for-byte what it rendered before — there is no shared
-   "responsive" rule that could drift, and no way for a desktop tweak to reach a
-   phone. If you are about to add a desktop rule somewhere else in this
-   stylesheet: don't. Add it here.
+   THE ANDROID APP IS THE PRODUCT, AND ON A LAPTOP IT IS THE SAME APP, not a
+   second layout of the same DOM. The earlier pass turned the bottom nav into a
+   left sidebar, widened the reading column to 720px and broke Home and myFeed
+   into two- and three-column grids; that is a desktop website, and this project
+   does not want one. sherrbyte.vercel.app is also the TWA's origin, so what the
+   browser shows and what the app shows should be the same screen.
 
-   1024px, not 768px: a tablet in portrait is a big phone and the bottom nav is
-   right for it. The sidebar only earns its width once there is width to spare.
+   So the whole desktop layout is: cap the app at the phone's own width, centre
+   it, and darken what is left. Nothing is re-laid out, which is why this block
+   is now a dozen rules instead of two hundred.
 
-   Three changes, no new markup:
-     * the floating bottom nav becomes a left sidebar (same <nav>, same tabs);
-     * every view keeps a ~720px reading column centred in what is left;
-     * the two grids that were built for one narrow column — the Matrix of
-       Markets and the myFeed feed — get the columns they always wanted.
+   Why this is still the ONE breakpoint — and why the phone is still untouched:
+   `.phone` is already centred and capped at `--appw` from 500px up (see the
+   RESPONSIVE block), and that rule carries `transform: translateX(-50%)`. A
+   transform makes an element the containing block for its `position: fixed`
+   descendants, so the header, the nav, every overlay and every sheet INSIDE
+   `.phone` already resolve against the column rather than the viewport, at
+   every width above 500px. They need no desktop rules at all, and a phone
+   cannot be reached by one.
+
+   The only thing left to do here is the five overlays that are deliberately
+   direct children of <body> (so that their `inset: 0` is the viewport where
+   `.phone` would otherwise contain them). Those have to be brought back onto
+   the column by hand.
+
+   1024px, not 768px: a tablet in portrait is a big phone, and below the
+   breakpoint the 500px rule already gives it the same centred column with no
+   border and no backdrop — which is the right look at that size.
+
+   If you are about to add a desktop rule somewhere else in this stylesheet:
+   don't. Add it here. And if what you are adding re-arranges a screen rather
+   than framing it, it does not belong on this surface at all.
    ══════════════════════════════════════════════════════════════════════════ */
 @media (min-width: 1024px) {
 
-  /* The phone frame stops being a frame. */
-  .phone { max-width: none; left: 0; transform: none; width: 100vw; }
+  /* Everything outside the column is backdrop, not layout. --bg is the app's
+     own surface and the column paints it; using it out here too would make the
+     column invisible, which is the "website that failed to fill the window"
+     look this block exists to avoid. */
+  html, body { background: var(--deskbg); }
 
-  /* ── Sidebar ──────────────────────────────────────────────────────────────
-     The same <nav> element, re-laid out. Not a second nav: two navs would mean
-     two active-tab states, and they would disagree the first time either was
-     changed. */
-  /* nav is a FULL-HEIGHT OPAQUE RAIL, not a floating card. The base nav is a
-     transparent shell holding a frosted pill (.nb-tabs) and a circular orb
-     (.nb-scan) — right for a phone's floating bottom bar, wrong for a desktop
-     sidebar, where they read as a card and a stray button hovering over the
-     content. Here the rail itself carries the surface and the pill/orb chrome
-     is flattened into flush rows. position:fixed so it never scrolls away. */
-  nav {
-    position: fixed; top: 0; bottom: 0; left: 0; right: auto;
-    width: var(--sbw); max-width: var(--sbw);
-    transform: none;
-    flex-direction: column; align-items: stretch; justify-content: flex-start;
-    gap: 6px; padding: calc(var(--hh) + 16px) 12px 16px;
-    background: var(--glass); border-right: 1px solid var(--glassB);
-    backdrop-filter: blur(20px) saturate(180%);
-    -webkit-backdrop-filter: blur(20px) saturate(180%);
-  }
-  [data-theme="light"] nav { background: #fff; }
-  /* The scroll-away and the minimised pill are phone behaviours. A sidebar that
-     slid off-screen on scroll would take the app's only navigation with it. */
-  nav.hidden, nav.compact { transform: none; opacity: 1; pointer-events: auto; }
-  nav.compact .nb-tabs { flex: 1 1 auto; gap: 6px; }
-  nav.compact .nb:not(.on), nav.compact .nb.on {
-    flex: 0 0 auto; padding: 11px 14px; opacity: 1; width: auto;
+  /* The app column itself is sized and centred by the 500px rule above (change
+     --appw to make it wider or narrower). All a laptop adds is the edge that
+     tells a reader where the app stops. */
+  .phone {
+    border-left: 1px solid var(--glassB);
+    border-right: 1px solid var(--glassB);
+    box-shadow: 0 0 1px rgba(255,255,255,0.06), 0 18px 90px rgba(0,0,0,0.55);
   }
 
-  /* Flat column, no pill: no frost, no radius, no shadow — the rail is the
-     surface now, so the tab group must not paint a second one over it. */
-  .nb-tabs {
-    flex-direction: column; align-items: stretch; flex: 1 1 auto;
-    gap: 4px; padding: 0; border-radius: 0;
-    background: transparent; box-shadow: none; border: 0;
-    backdrop-filter: none; -webkit-backdrop-filter: none;
+  /* The body-level overlays — the entity sheet, the drill-down page and the
+     comments sheet. A bottom sheet pinned to the full width of a 1440px screen
+     is a banner; on the column it is a sheet again. The two SCRIMS are left
+     full-bleed on purpose: dimming the whole window, not just the column, is
+     what reads as a modal. */
+  .xp-sheet, .cmt-sheet, .xp-page {
+    left: 50%; right: auto;
+    width: var(--appw); max-width: var(--appw);
+    margin-left: calc(var(--appw) / -2);
   }
-  [data-theme="light"] .nb-tabs { background: transparent; box-shadow: none; border: 0; }
-  /* Icon beside the label, the way every desktop sidebar reads. Full-width rows. */
-  .nb {
-    flex-direction: row; justify-content: flex-start; align-items: center;
-    gap: 12px; flex: 0 0 auto; width: 100%; padding: 11px 14px; border-radius: 12px;
-  }
-  .nb-icon { font-size: 1rem; }
-  .nb-lbl { font-size: 0.9rem; font-weight: 700; opacity: 1; }
-  /* The "scan" orb becomes a flush full-width row pinned to the bottom of the
-     rail — reachable, labelled by its icon, but never a floating circle. */
-  .nb-scan {
-    width: 100%; height: auto; margin: auto 0 0 0; border-radius: 12px;
-    padding: 13px 14px; justify-content: flex-start; gap: 12px; box-shadow: none;
-  }
+  /* `margin-left`, NOT `translateX`. Both sheets animate their own transform
+     (`translateY(102%)` closed, `translateY(0)` open) and the open state would
+     overwrite a horizontal transform set here — the sheet would slide back to
+     the left edge of the screen the moment it opened. */
 
-  /* ── Header sits to the right of the sidebar ─────────────────────────────── */
-  header { left: var(--sbw); width: calc(100vw - var(--sbw)); padding: 0 24px; }
-
-  /* ── The reading column ──────────────────────────────────────────────────
-     max() rather than a fixed inset: below ~1240px the free space is smaller
-     than the gutter, and a fixed one would push the column off the right edge
-     rather than simply narrowing it. */
-  .view {
-    left: var(--sbw);
-    padding-left:  max(24px, calc((100vw - var(--sbw) - var(--col)) / 2));
-    padding-right: max(24px, calc((100vw - var(--sbw) - var(--col)) / 2));
-  }
-  /* The nav no longer floats over the content, so the phone's bottom gutter is
-     dead space on a desktop screen. */
-  #v-home, #v-profile, #v-bookmarks, #v-notifs {
-    padding-bottom: 40px !important;
-  }
-
-  /* Overlays are full-bleed on top of everything and must NOT inherit the
-     column padding — they carry their own. */
-  #article-overlay, #search-overlay, #market-overlay, #module-overlay,
-  #mktcat-overlay, #topic-overlay, #atlas-overlay, #media-viewer,
-  #splash, #ob-screen { left: 0; padding-left: 0; padding-right: 0; }
-  /* …but their content still reads at column width rather than 1600px wide. */
-  #ao-scroll { max-width: calc(var(--col) + 120px); margin: 0 auto; }
-
-  /* ── Matrix of Markets: 3 x 2 ────────────────────────────────────────────
-     Six tiles in two columns was a phone compromise. Three across turns the
-     same six into one glance instead of a scroll. */
-  .xp-matrix { grid-template-columns: repeat(3, 1fr); margin: 0; }
-
-  /* ── myFeed: a scroll of cards, not one card per screen ───────────────────
-     Full-screen vertical snap is a phone gesture. On a desktop it wastes a
-     1440px-wide screen on one card and makes the wheel fight the snap, so the
-     snap comes off and the cards become a two-column scroll. */
-  /* #v-myfeed carries its own `inset:0` (an ID rule, so it beats `.view`'s
-     `left:var(--sbw)`), which parked the grid at x:0 and slid the left column
-     under the sidebar. Re-apply the sidebar offset here so myFeed sits in the
-     content area like every other view. */
-  #v-myfeed { left: var(--sbw); }
-  .myfeed-feed {
-    scroll-snap-type: none;
-    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 20px; align-content: start;
-    padding: calc(var(--hh) + 20px) 0 40px;
-  }
-  .mf-item {
-    height: auto; padding: 0;
-    scroll-snap-align: none; scroll-snap-stop: normal;
-  }
-  .mf-card {
-    height: auto; border-radius: 20px;
-    border: 1px solid var(--glassB);
-    box-shadow: 0 10px 30px rgba(0,0,0,0.18);
-  }
-  .mf-media { height: 188px; min-height: 188px; border-radius: 20px 20px 0 0; }
-  /* card height is auto on desktop, so the swipe viewport needs an explicit
-     height for the horizontal slider to have room to work. */
-  .mfd-view { height: 300px; }
-  .mf-headline { font-size: 1.3rem; }
-  .myfeed-empty { grid-column: 1 / -1; height: 50vh; }
-
-  /* Home reads as a DESKTOP NEWS PORTAL here, not a phone column: the stories
-     flow into a two-column grid in a wider content area, while the hero, the
-     section tabs and the interleaved Top Headlines blocks span the full width
-     so they punctuate the grid rather than sit inside one column. Below the
-     breakpoint none of this applies and the phone's single column is untouched.
-     A portal is what a desktop reader expects; on a phone it would be wrong. */
-  #v-home .sec-tabs, #v-home > #home-feed {
-    max-width: 1040px; margin-left: auto; margin-right: auto;
-  }
-  #home-feed {
-    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 20px; align-items: start;
-  }
-  /* Full-bleed rows in the grid — everything that is not a single story card. */
-  #home-feed > .hero-card,
-  #home-feed > .continue-card,
-  #home-feed > .sec-tabs,
-  #home-feed > .insband,
-  #home-feed > .hl-inline,
-  #home-feed > .trending-section-hdr,
-  #home-feed > .trending-strip,
-  #home-feed > .empty-state,
-  #home-feed > .es-waking,
-  #home-feed > .skel-hero { grid-column: 1 / -1; }
-  #bm-feed, #notifs-feed { max-width: var(--col); }
-  /* Three columns once there is room for them. */
-  @media (min-width: 1500px) {
-    #v-home .sec-tabs, #v-home > #home-feed { max-width: 1360px; }
-    #home-feed { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  }
-
-  /* ── Inner pages: the drill-downs, which the first pass missed ───────────
-     .xp-page and .xp-sheet are `position: fixed` with `inset: 0` / `left: 0`,
-     so they are OUTSIDE the .view they visually belong to and inherited none
-     of its layout: on a 1440px screen every Explore drill-down — Mandi prices,
-     each Matrix tile, real estate, sports — painted its 16px-gutter mobile
-     column across the whole width, under the sidebar.
-     Fixed positioning is right for them (they must escape the view's scroll),
-     so the layout is applied here rather than by restructuring the DOM: the
-     sidebar keeps its strip, and the page content sits in the same reading
-     column every other screen uses. */
-  .xp-page {
-    left: var(--sbw);
-    padding-left:  max(24px, calc((100vw - var(--sbw) - var(--col)) / 2));
-    padding-right: max(24px, calc((100vw - var(--sbw) - var(--col)) / 2));
-    padding-bottom: 48px;
-  }
-  /* The slide-in came from off the right edge of a phone. Across a desktop
-     viewport that is a long horizontal sweep, so it becomes a short rise. */
-  .xp-page { transform: translateY(14px); opacity: 0; }
-  .xp-page.on { transform: none; opacity: 1; }
-
-  /* A bottom sheet pinned to the full width of a 1440px screen is a banner.
-     Centred on the reading column it stays a sheet. */
-  .xp-sheet {
-    left: calc(var(--sbw) + max(24px, (100vw - var(--sbw) - var(--col)) / 2));
-    right: max(24px, calc((100vw - var(--sbw) - var(--col)) / 2));
-    border-radius: 26px 26px 0 0; max-height: 82vh;
-  }
-
-  /* body.dp-open hides the app header so a full-screen page's own back arrow
-     is reachable (see the rule it overrides). That is a phone constraint — the
-     header does not overlap anything here, and hiding it on desktop removed
-     the only thing anchoring the page to the app. */
-  body.dp-open > header, body.dp-open #hdr { display: flex !important; }
-  .xp-page, .xp-sheet { top: var(--hh); }
-  .xp-sheet { top: auto; }
-
-  /* The drill-down's own internals were written against a 360px column: a
-     3-across stat strip and a 132px chart read as cramped at 720px. */
-  .dp-chart svg { height: 200px; }
-  .dp-hero-v { font-size: 2.9rem; }
-  .dp-chart, .dp-stat, .dp-range, .dp-chips { margin-left: 0; margin-right: 0; }
-  .dp-hero, .dp-row { padding-left: 2px; padding-right: 2px; }
+  /* A desktop pointer has no notch and no home bar, and the column's edges are
+     a border rather than the screen's edge, so the inset the phone reserves for
+     them is dead space here. */
+  .phone { padding-bottom: 0; }
 }
 
-/* Wider still: a third myFeed column, and nothing else changes. */
-@media (min-width: 1600px) {
-  .myfeed-feed { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-}
 
 
 </style>
