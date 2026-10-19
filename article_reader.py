@@ -23,6 +23,10 @@ WHAT IT GUARANTEES
   caught.
 * Never raises. A blocked, paywalled or unparseable page returns "" and the
   caller falls back to the old blurb path.
+* A page THIS module could not read is offered once to `you_contents`, which
+  fetches it from You.com's side. That is a second attempt on a failure, never
+  a first attempt on a batch: our own fetch is free and that one is not. It is
+  bounded by its own daily page budget and is a no-op without `YOU_KEYS`.
 
 Stdlib + httpx only (html.parser, json), so it adds no dependency.
 """
@@ -236,6 +240,51 @@ async def fetch_article(url: str, client: Optional[httpx.AsyncClient] = None) ->
             await client.aclose()
 
 
+def _url_key(url: str) -> str:
+    """A URL reduced to what two spellings of the same page share.
+
+    The fallback answers with the URL it actually fetched, which after a
+    redirect, a scheme upgrade or an added trailing slash is not character for
+    character the one we asked for. Matching on the raw string would drop a
+    page we paid for."""
+    u = (url or "").strip().lower()
+    u = re.sub(r"^https?://", "", u)
+    u = re.sub(r"^www\.", "", u)
+    return u.rstrip("/")
+
+
+async def _recover_unread(unread: dict) -> dict:
+    """{key: url} our own reader got nothing from -> {key: text}, via You.com.
+
+    SECOND ATTEMPT ONLY. A page this one recovers is a page that would
+    otherwise keep its placeholder body at every later tick, because the next
+    tick fetches the same URL and fails the same way. It costs money, so it
+    runs on failures and never on the whole batch — see you_contents.py for the
+    budget. Any failure here is the status quo, so nothing propagates."""
+    if not unread:
+        return {}
+    try:
+        import you_contents
+        if not you_contents.enabled():
+            return {}
+        got = await you_contents.fetch_contents(list(unread.values()))
+    except Exception as e:                                        # noqa: BLE001
+        log.info("[READER] fallback unavailable: %s", type(e).__name__)
+        return {}
+    if not got:
+        return {}
+    by_url = {_url_key(u): t for u, t in got.items()}
+    out = {}
+    for key, url in unread.items():
+        text = got.get(url) or by_url.get(_url_key(url)) or ""
+        # The fallback's text faces the SAME bar as our own extraction. A page
+        # of navigation furniture is not an article just because somebody else
+        # fetched it.
+        if is_full_article(text):
+            out[key] = text[:MAX_CHARS]
+    return out
+
+
 async def fetch_many(urls: dict) -> dict:
     """{key: url} -> {key: text}. Only keys whose page yielded an article appear."""
     out: dict = {}
@@ -249,7 +298,11 @@ async def fetch_many(urls: dict) -> dict:
                 if text:
                     out[key] = text
         await asyncio.gather(*[one(k, u) for k, u in urls.items()])
-    log.info("[READER] read %d of %d article page(s)", len(out), len(urls))
+    recovered = await _recover_unread({k: u for k, u in urls.items()
+                                       if k not in out and u})
+    out.update(recovered)
+    log.info("[READER] read %d of %d article page(s)%s", len(out), len(urls),
+             f" ({len(recovered)} via fallback)" if recovered else "")
     return out
 
 
