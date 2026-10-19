@@ -7161,6 +7161,27 @@ async def admin_significance(x_admin_token: str = Header(""), token: str = Query
     return out
 
 
+@app.get("/admin/you")
+async def admin_you(x_admin_token: str = Header(""), token: str = Query("")):
+    """What the You.com page fallback has spent, and what it bought.
+
+    `article_reader` returns "" for a paywalled or JavaScript-only page and the
+    row keeps its placeholder body forever, because the next tick fetches the
+    same URL and fails the same way. You.com's Contents API is the second
+    attempt at exactly those URLs.
+
+    It is billed per page, so the numbers that matter are the DAILY BUDGET and
+    `articles_recovered` — pages bought against articles that are now writable.
+    `keys` is a count; no key is ever returned here or written to a log.
+
+    Read-only, touches no database and makes no call of its own, so it is safe
+    against production while the drain is running."""
+    _check_admin(x_admin_token or token)
+    import you_contents
+    return {"stats": you_contents.stats(),
+            "DIAGNOSIS": you_contents.diagnosis()}
+
+
 @app.get("/admin/research")
 async def admin_research(x_admin_token: str = Header(""), token: str = Query(""),
                          article_id: int = Query(0, ge=0)):

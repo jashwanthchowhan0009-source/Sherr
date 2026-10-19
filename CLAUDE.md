@@ -1520,3 +1520,71 @@ but never what is on the heap.
 there happens to be needs a LIMIT, and a fetch whose size is set by a remote
 server needs the cap applied while it streams.** On a 512MB instance neither is
 a tuning preference. `tests/test_memory_ceilings.py` asserts both halves.
+
+---
+
+## You.com is a SECOND attempt at a page, never a first — and it is metered
+
+Adopted 2026-10-19. `article_reader` returns `""` for a paywalled page, a bot
+wall or a body that only exists after JavaScript runs. The caller then falls
+back to the 40-word blurb, which this file already records as impossible to
+rewrite — so that row keeps its placeholder, and it keeps it **forever**: the
+next drain tick fetches the same URL and fails the same way. The failure is not
+transient, which is what makes a second route worth buying.
+
+`you_contents.py` is that route. It is wired **inside `article_reader.fetch_many`**,
+so every caller (the drain, the on-demand rewrite, Research) is covered without
+a call-site change, and it is offered **only the URLs our own fetch returned
+nothing for**. Our fetch is free and this one is not; a fallback that ran on the
+whole batch would pay for pages we already had.
+
+**The $100 of credit is a finite free tier, not a utility.** Contents is billed
+per PAGE FETCHED at $1.00/1,000 ($0.001 a page). The drain reads ~17,000
+articles a day, so "retry every failure" is tens of dollars a week and the
+credit is gone before anyone opens a card. `YOU_PAGE_BUDGET_PER_DAY` (200) is a
+**hard ceiling**, not a rate hint: $0.20 a day, so the credit outlives a year of
+unattended running. Nothing queues — a page skipped today is offered again
+tomorrow by the same selector that offered it today — and a failed call refunds
+the pages it never fetched, or a run of timeouts would spend the day's ceiling
+having read nothing.
+
+**The ledger is per-process, and that is a stated bound.** It is in memory for
+the reason `/admin/memory` touches no database: the moment the budget matters is
+the moment a DB write is one more thing that can fail, and a failed write that
+silently resets a spend counter is worse than a counter honest about its scope.
+With N instances the real ceiling is N × the budget. Move it into `cache.py`'s
+Redis layer **before** scaling out, not after — the same note `_token_version`'s
+TTL cache carries.
+
+**The host is an environment variable because the documentation disagrees with
+itself.** You.com's reference gives `https://ydc-index.io/v1/contents`; their
+API catalogue lists a base of `https://api.you.com/v1`. Both hosts are
+unreachable from CI and from the container this was written in, so **no call in
+this module has ever been made against a live response** — every test drives an
+`httpx.MockTransport`. `YOU_API_BASE` makes picking the right host a dashboard
+edit rather than a deploy, and `_pages()` accepts a bare array or a
+`results`/`data`/`contents` envelope so a wrong guess about the wrapper degrades
+to "no text" instead of raising inside the rewrite pass.
+
+`YOU_KEYS` is **plural in the dashboard, so it is read as a list** (comma,
+whitespace or newline separated) and rotated through `key_pool.KeyPool` on
+401/403/429 — the statuses that mean the KEY is the problem, the same rule the
+model providers follow. `YOU_API_KEY` and `YDC_API_KEY` (the name You.com's own
+tooling uses) are accepted as singles so a key set under either is not dead
+weight. The count is reported; a key never is.
+
+Recovered text faces **the same floor our own extraction does**
+(`is_full_article`): a page of navigation furniture is not an article because
+somebody else fetched it. It is INPUT ONLY, never stored and never served — the
+copyright line and the Supabase-quota line that `article_reader` already holds.
+
+`/admin/you` reports the budget, the counters and a one-line `DIAGNOSIS`;
+`YOU_CONTENTS_ENABLED=0`, or simply no key, makes the whole path a no-op and the
+reader behaves exactly as it did before.
+
+**What was deliberately NOT built:** the Search API ($5/1,000 calls, five times
+the price) as an evidence leg for Sherr Research. Research is built as
+deterministic joins over data we already hold, and that is a recorded decision,
+not an accident — a web-search leg is a different claim about where a card's
+evidence comes from, and it should be a decision taken on its own, not smuggled
+in behind a page-reading fix.

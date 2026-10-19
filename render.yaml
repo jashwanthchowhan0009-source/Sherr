@@ -97,6 +97,22 @@ services:
         sync: false
       - key: NEWSAPI_KEY
         sync: false
+      # You.com Contents — the SECOND attempt at a publisher page our own
+      # reader could not read (paywall, bot wall, JavaScript-only body).
+      # Plural: comma-separate several keys and they are rotated on 401/403/429.
+      # Billed per page ($1 per 1,000), so YOU_PAGE_BUDGET_PER_DAY is a hard
+      # ceiling — 200 pages is $0.20 a day. Unset, the fallback is a no-op and
+      # the reader behaves exactly as it did before.
+      - key: YOU_KEYS
+        sync: false
+      - key: YOU_PAGE_BUDGET_PER_DAY
+        value: "200"
+      # The documented Contents host is https://ydc-index.io; You.com's API
+      # catalogue lists https://api.you.com. Neither is reachable from CI, so
+      # this is an environment variable: picking the right one is a dashboard
+      # edit, not a deploy.
+      - key: YOU_API_BASE
+        value: https://ydc-index.io
 
   # ─── Redis / Key-Value (cache + dedup + ARQ queue) ─────────────────────────
   # Supabase has no Redis, so Render provides a free Key-Value store. The app
