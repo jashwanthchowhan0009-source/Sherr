@@ -13,7 +13,9 @@ from typing import Optional
 from datetime import datetime, timezone
 import httpx
 
+import circuit
 import key_pool
+import telemetry
 import telugu
 
 from text_utils import (
@@ -696,40 +698,92 @@ _PROVIDER_CALLS = {
 }
 
 
-async def _call_provider(provider: str, title: str, body: str, client,
-                         mode: str = None):
-    """Try every key in one provider's pool, rotating on key-specific failures.
+async def _try_pool(provider: str, op: str, call):
+    """Run ONE provider's key pool behind its breaker and one telemetry span.
 
-    Rotation happens ONLY on 401/403/429 — the statuses that mean this key is
-    the problem. On anything else the next key would fail identically, and
-    burning the pool to learn that costs the fallback its keys too.
+    `call(key)` is an awaitable returning `(payload, status)`; `payload` is
+    falsy when that key produced nothing. Returns `(payload, status)`.
+
+    This exists because the three writers — the card rewrite, synthesis and the
+    news writer — each had their own copy of the same rotation loop, so a
+    breaker added to one covered none of the drain's actual spend. One copy also
+    means one place where the rotation policy lives:
+
+    ROTATION IS ONLY FOR 401/403/429 — the statuses that mean this KEY is the
+    problem. On anything else the next key fails identically, and burning the
+    pool to learn that costs the fallback provider its keys too.
+
+    THE BREAKER SITS IN FRONT OF THE POOL, NOT EACH KEY. What it protects
+    against is a provider that is not answering, and then every key times out
+    identically — so the unit it has to be able to skip is the provider. Per key
+    it would also fight `key_pool`, which owns the per-key decision.
     """
     pool = KEYS.get(provider)
     if not pool.size:
-        return None
-    fn = _PROVIDER_CALLS[provider]
+        return None, 0
+
+    breaker = circuit.get(provider)
+    if not breaker.allow():
+        # The caller's next provider is tried immediately rather than paying a
+        # connect timeout per key to re-learn what the last N articles proved.
+        telemetry.event("llm.skip", op=op, provider=provider,
+                        reason="circuit_open",
+                        retry_in_s=round(breaker.retry_in(), 1))
+        return None, 0
+
     pool.reset()
-    for _ in range(pool.size):
-        key = pool.current()
-        if not key:
-            return None
+    payload, status, attempted = None, 0, False
+    with telemetry.span("llm.call", op, provider=provider, keys=pool.size) as sp:
+        try:
+            for _ in range(pool.size):
+                key = pool.current()
+                if not key:
+                    break
+                attempted = True
+                payload, status = await call(key)
+                if payload:
+                    break
+                if status in key_pool.ROTATE_STATUSES:
+                    if not pool.rotate(f"HTTP {status}"):
+                        log.warning("%s: all %d key(s) exhausted (last HTTP %s)",
+                                    provider, pool.size, status)
+                        break
+                    continue
+                break
+        finally:
+            # In `finally` so an exception out of a provider call still records
+            # an outcome: `allow()` has marked a probe in flight, and a probe
+            # with no outcome is what would wedge the breaker shut.
+            sp["ok"] = bool(payload)
+            sp["status"] = status
+            if payload:
+                breaker.record_success()
+            elif attempted:
+                breaker.record_failure(status)
+            else:
+                # No call was made, so there is no evidence either way — and a
+                # status of 0 would read as "no response" and open the breaker
+                # over a key-configuration problem. Release the probe rather
+                # than judging the provider on it.
+                breaker.record_success()
+    return payload, status
+
+
+async def _call_provider(provider: str, title: str, body: str, client,
+                         mode: str = None):
+    """The card rewrite, for one provider."""
+    fn = _PROVIDER_CALLS[provider]
+
+    async def _call(key):
         # mode is passed ONLY when set. A test that monkeypatches
         # _PROVIDER_CALLS[provider] with the documented 4-argument lambda keeps
         # working; adding an unconditional kwarg would break every one of them.
         if mode:
-            result, status = await fn(key, title, body, client, mode=mode)
-        else:
-            result, status = await fn(key, title, body, client)
-        if result:
-            return result
-        if status in key_pool.ROTATE_STATUSES:
-            if not pool.rotate(f"HTTP {status}"):
-                log.warning("%s: all %d key(s) exhausted (last HTTP %d)",
-                            provider, pool.size, status)
-                return None
-            continue
-        return None
-    return None
+            return await fn(key, title, body, client, mode=mode)
+        return await fn(key, title, body, client)
+
+    result, _ = await _try_pool(provider, mode or "process", _call)
+    return result
 
 
 async def _call_cascade(title: str, body: str, client, mode: str = None):
@@ -1110,30 +1164,20 @@ async def synthesize(prompt: str, *, n_sources: int = 0) -> Optional[dict]:
             fn = _SYNTH_CALLS.get(provider)
             if fn is None:
                 continue
-            pool = KEYS.get(provider)
-            if not pool.size:
-                continue
-            pool.reset()
-            for _ in range(pool.size):
-                key = pool.current()
-                if not key:
-                    break
-                text, status = await fn(key, prompt, client)
-                if text:
-                    try:
-                        return synthesis.parse_synthesis(
-                            text, n_sources=n_sources, hook_check=hook_check)
-                    except synthesis.SynthesisRejected as e:
-                        # A rejected answer is a provider failure, recorded like
-                        # one so /admin/body-audit can show why nothing was
-                        # written instead of reporting a silent zero.
-                        _record_error(provider, 200, f"synthesis rejected: {e}")
-                        return None
-                if status in key_pool.ROTATE_STATUSES:
-                    if not pool.rotate(f"HTTP {status}"):
-                        break
-                    continue
-                break
+            text, _ = await _try_pool(
+                provider, "synthesize", lambda k: fn(k, prompt, client))
+            if text:
+                try:
+                    return synthesis.parse_synthesis(
+                        text, n_sources=n_sources, hook_check=hook_check)
+                except synthesis.SynthesisRejected as e:
+                    # A rejected answer is a provider failure, recorded like one
+                    # so /admin/body-audit can show why nothing was written
+                    # instead of reporting a silent zero. It is NOT a breaker
+                    # failure: the provider answered, and the next provider
+                    # would be asked the same question with the same prompt.
+                    _record_error(provider, 200, f"synthesis rejected: {e}")
+                    return None
     return None
 
 
@@ -1394,22 +1438,10 @@ async def news_writer(source_text: str, *, corrective: Optional[list] = None,
             fn = _NEWS_CALLS.get(provider)
             if fn is None:
                 continue
-            pool = KEYS.get(provider)
-            if not pool.size:
-                continue
-            pool.reset()
-            for _ in range(pool.size):
-                key = pool.current()
-                if not key:
-                    break
-                result, status = await fn(key, prompt, cl)
-                if result is not None:
-                    return result, news_writer_id(provider)
-                if status in key_pool.ROTATE_STATUSES:
-                    if not pool.rotate(f"HTTP {status}"):
-                        break
-                    continue
-                break
+            result, _ = await _try_pool(
+                provider, "news_writer", lambda k: fn(k, prompt, cl))
+            if result is not None:
+                return result, news_writer_id(provider)
         return None, news_writer_id(primary)
 
     if client is not None:

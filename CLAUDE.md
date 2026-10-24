@@ -1588,3 +1588,131 @@ deterministic joins over data we already hold, and that is a recorded decision,
 not an accident — a web-search leg is a different claim about where a card's
 evidence comes from, and it should be a decision taken on its own, not smuggled
 in behind a page-reading fix.
+
+---
+
+## Provider circuit breakers, and the status that must never trip one
+
+Adopted 2026-10-24. `_call_provider` tried every key in a pool and the cascade
+tried every provider, on **every article**. Correct when a call fails for a
+reason the next key might not share; pure waste when the provider is simply not
+answering — each article then pays the full connect timeout once per key, the
+drain's 60-second tick is spent waiting rather than writing, and the only record
+is a `PROVIDER_ERRORS` line saying the same thing for the hundredth time.
+
+`circuit.py` remembers. After `CIRCUIT_THRESHOLD` (4) consecutive failures of
+the kind that mean "not answering", the provider is skipped for
+`CIRCUIT_COOLDOWN_S` (60) and the cascade moves on immediately. One probe is let
+through when the cooldown expires: success closes it, failure re-opens it with a
+**doubled** cooldown up to `CIRCUIT_MAX_COOLDOWN_S` (900).
+
+### Which failures trip it is the entire design
+
+| | |
+|---|---|
+| **trips** | status `0` (no response at all — DNS, connect, read timeout) and any 5xx |
+| **never** | 401/403 — the KEY is the problem and `key_pool` already rotates on it; opening here would take a provider out over one bad key in a pool of good ones |
+| | **429** — "slow down", not "down" |
+| | 400/404 — a configuration error, not a transient one |
+
+**429 is the one that matters.** The free tier bounces bursts routinely,
+`body_drain_job` already backs off on exactly that signal (read from
+`ai_processor.PROVIDER_ERRORS`), and a breaker opening on it would take a
+**healthy** provider out of service for a cooldown — the opposite of the correct
+response, and it would stall the one pass writing the corpus. The drain's rule
+that a rate limit and a failure are different answers is the same rule one layer
+down. A test drives 50 consecutive 429s and asserts the breaker never opens.
+
+**404 is excluded because that is how a RETIRED MODEL ID presents** (see the
+provider-model-ids entry: the call 404s, the cascade drops through, and the only
+symptom is a backlog that stops clearing). Cooling down and retrying is the
+wrong shape for something only a config change fixes, and `GROQ_RETIRED` in
+`tests/test_feed_doctor.py` is its guard. It still lands in `PROVIDER_ERRORS`.
+
+**Any HTTP answer closes the breaker**, 429 and 401 included: receiving a status
+at all is proof the host is reachable and serving. Leaving it open on evidence
+that contradicts it would keep skipping a provider that is up.
+
+### Two ways a breaker fails worse than no breaker, both guarded
+
+- **It never closes.** `allow()` marks a probe in flight so the rest of the
+  batch is not sent at a provider that is down. If the caller then raises before
+  recording an outcome, that flag would never clear and the provider would be
+  skipped **forever**. So the outcome is recorded in a `finally`, *and* a probe
+  is abandoned after one cooldown, *and* the doubling has a ceiling — a breaker
+  that cannot close is a worse outage than the one it was protecting against.
+- **It opens on the wrong thing.** Covered above. `CIRCUIT_ENABLED=0` measures
+  without short-circuiting, the same posture `WRITER_GATE_ENABLED` has, so the
+  trip rate is readable on a live instance before anything is skipped on it.
+
+### `_try_pool` is one copy of a loop that was three
+
+The card rewrite, `synthesize` and `news_writer` each carried their own
+key-rotation loop, so a breaker added to one would have covered almost none of
+the drain's actual spend. All three now go through `_try_pool`, which owns the
+rotation policy, the breaker and the telemetry span. A **rejected synthesis** is
+deliberately not a breaker failure: the provider answered, and the next provider
+would be asked the same question with the same prompt.
+
+**The breaker sits in front of the pool, not each key.** What it protects
+against is a provider that is not answering, and then every key times out
+identically — so the unit it must be able to skip is the provider.
+
+Per process, the same stated bound `you_contents`' budget ledger and
+`_token_version`'s TTL cache carry: with N instances each has its own view. That
+is the right scope — a breaker is about what *this* process observed, and a
+shared one would let an instance that has made no call refuse to make one.
+
+## Telemetry is a structured line, and OpenTelemetry is refused for two reasons
+
+`telemetry.py`. Every admin endpoint here answers one subsystem's question well;
+none answers the one that spans them — *where did the last hour go*. A model
+call, the page fetch before it and the query after it were three log lines in
+three formats with no field in common, so "the drain is slow" could not be read
+off anything.
+
+One shape, one logger (`sherbyte.telemetry`), `grep | jq`-able on Render's log
+tail, which is the only log tool this deployment has:
+
+```json
+{"ev":"llm.call","op":"synthesize","provider":"gemini","ms":812,"ok":true,"status":200}
+```
+
+**OpenTelemetry was asked for and is the wrong tool here**, for reasons about
+this deployment rather than about OTel: there is nowhere to send a trace (an
+exporter with no collector is a dependency, a thread and a queue in exchange for
+nothing, and standing up a collector is a hosting decision), and the SDK plus an
+exporter and its protobuf runtime is tens of megabytes resident on a 512MB
+instance that has already been OOM-killed. The span shape is deliberately
+OTel-shaped — a name, a duration, an ok flag, flat attributes — so that if a
+collector ever exists this becomes an exporter and not a rewrite.
+
+Three properties worth not re-deriving:
+
+- **A span never swallows an exception.** It records `ok:false` with the
+  exception type and re-raises; swallowing would turn an instrumented call site
+  into a silently different one. An explicit `ok=False` in the attributes wins
+  over "did not raise", because a call that returned a 500 without raising did
+  not succeed and the caller is what knows that.
+- **The series dict is bounded** (`MAX_SERIES`, 200) and every attribute is
+  truncated to 200 chars. An op name is a string a caller supplies, and one
+  built from reader input would grow the dict with traffic — the exact shape the
+  512MB entry warns about. A span attribute is a label, not a payload.
+- **The redaction list does not contain a bare `key`.** It did, and it redacted
+  `keys` — the *number* of keys in the pool, a count the diagnosis wants that
+  reveals nothing. Credential-shaped names match as substrings (`GEMINI_API_KEY`,
+  `authorization`); the bare word matches exactly.
+
+`TELEMETRY_LOG=0` silences the lines while keeping the counters, because the
+counters are what `/admin` reads and cost nothing while the lines are what fills
+a log quota.
+
+`/admin/pipeline` is both ledgers plus a `DIAGNOSIS` each. `top_by_time` is
+ordered by **total** time, not average: a 3-second call made once is not the
+problem and a 90ms one made ten thousand times is. It touches no database,
+deliberately — the moment you want it is the moment a query would time out.
+
+**`tests/conftest.py` resets all three pieces of per-process state** (the cache's
+local layer, the breakers, the telemetry counters) before *and* after every test.
+Before as well as after, so a test is not affected by one that failed partway
+through and never reached its teardown.
