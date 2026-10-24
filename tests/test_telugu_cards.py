@@ -353,8 +353,8 @@ def test_myfeed_shows_the_pill_only_when_there_is_a_translation():
     pref = html.split("function mfLangPref")[1].split("\nfunction ")[0]
     assert "catch" in pref and "'en'" in pref
     assert "mfBindLang(el, d.telugu)" in html
-    # Every desktop rule lives in the one @media block (CLAUDE.md).
-    start = html.index("@media (min-width: 1024px)")
+    # Every website rule lives inside the website breakpoint (CLAUDE.md).
+    start = html.index("@media (min-width: 768px)")
     i, depth = html.index("{", start), 0
     while True:
         if html[i] == "{":

@@ -876,9 +876,9 @@ def test_myfeed_renders_the_frequency_and_opens_the_earlier_stories():
     assert "earlier" in block.split("h.publishable")[1].split(": ''")[0]
     for sel in (".mfd-hist{", ".mfd-histline{", ".mfd-histrow{"):
         assert sel in html
-    # Every desktop rule stays in the one @media block (CLAUDE.md), so the new
-    # CSS must sit OUTSIDE it: the phone renders identically to before.
-    start = html.index("@media (min-width: 1024px)")
+    # Every website rule stays inside the website breakpoint (CLAUDE.md), so
+    # this CSS must sit OUTSIDE it: a phone renders it identically to before.
+    start = html.index("@media (min-width: 768px)")
     i, depth = html.index("{", start), 0
     while True:
         if html[i] == "{":

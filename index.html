@@ -24,7 +24,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Poppins:wght@400;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Poppins:wght@400;600;700&family=Space+Grotesk:wght@400;500;600;700&family=Archivo:wght@400;500;600;700;800&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
 <style>
 /* ══════════════════════════════════════════════════
    SHERBYTE v20 — MASTERPIECE UI
@@ -85,6 +85,69 @@
   --c-red:#FF453A; --c-orange:#FF9F0A; --c-yellow:#FFD60A; --c-green:#30D158;
   --c-blue:#0A84FF; --c-indigo:#5E5CE6; --c-violet:#BF5AF2;
   --positive:#30D158; --negative:#FF453A;
+
+  /* ══════════════════════════════════════════════════════════════════════
+     WEBSITE DESIGN TOKENS  (--ds-*)
+     ══════════════════════════════════════════════════════════════════════
+     sherrbyte.vercel.app is BOTH the Android TWA's origin and the website.
+     So every token below is declared here but CONSUMED ONLY inside the two
+     website breakpoints (>=768px). A phone therefore renders byte-identical
+     to before — the tokens are inert at phone widths, by construction, which
+     is what keeps "a website fix cannot reach the app" true.
+
+     Typography: no default stack. Space Grotesk is the geometric display
+     face (already loaded for the brand), Archivo the UI/body sans — a
+     grotesque with real character at small sizes — and Newsreader the serif
+     the long-form reading column uses, because a news body set in the same
+     sans as the chrome reads like an admin panel. Inter/Poppins stay the
+     PHONE's faces and are untouched. */
+  --ds-f-display: "Space Grotesk", "Archivo", system-ui, sans-serif;
+  --ds-f-ui:      "Archivo", "Space Grotesk", system-ui, sans-serif;
+  --ds-f-read:    "Newsreader", Georgia, "Times New Roman", serif;
+
+  /* Layout: one page width and one reading measure, everywhere. */
+  --ds-page:  1280px;   /* the outer content frame */
+  --ds-read:  720px;    /* the long-form measure — ~75 characters */
+  --ds-gut:   clamp(20px, 4vw, 56px);
+  --ds-topbar: 72px;
+
+  /* Motion architecture. Durations and curves are tokens so a reveal, a hover
+     lift and a sheet all share one physical vocabulary; staggers are a token
+     too, so a grid's cascade is tuned in one place rather than per selector. */
+  --ds-dur-1: 120ms;   /* state change: hover, press */
+  --ds-dur-2: 260ms;   /* element enter */
+  --ds-dur-3: 520ms;   /* page-load reveal */
+  --ds-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ds-out:    cubic-bezier(0.16, 1, 0.3, 1);
+  --ds-stagger: 55ms;
+  --ds-lift: -3px;
+
+  /* Tonal depth. Four steps of ONE tone rather than four unrelated greys, so
+     a surface reads as a height above the page, not a different colour. The
+     per-theme blocks below re-tune these; nothing here is a flat #000/#fff. */
+  --ds-t0: #0A0B10;    /* the page floor */
+  --ds-t1: #10121A;    /* raised: rails, footer */
+  --ds-t2: #161923;    /* card */
+  --ds-t3: #1E2230;    /* card, hovered */
+  --ds-hair:  rgba(255,255,255,0.07);   /* 1px micro-border */
+  --ds-hair2: rgba(255,255,255,0.14);   /* the same border, lit */
+  --ds-ink:   #F4F5F8;
+  --ds-ink2:  rgba(244,245,248,0.62);
+  --ds-ink3:  rgba(244,245,248,0.38);
+
+  /* The accent pops are SHARP and rationed: the app's blue carries interaction,
+     and one warm signal carries "live / measured". Nothing is lavender. */
+  --ds-pop:    #2E7BFF;
+  --ds-signal: #FF6A3D;
+  --ds-popA:   rgba(46,123,255,0.14);
+
+  /* Atmosphere, not a flat fill: two offset radial washes plus a dot mesh that
+     is masked away from the content band. Applied to the page floor only. */
+  --ds-mesh:
+    radial-gradient(900px 520px at 12% -6%,  rgba(46,123,255,0.16) 0%, rgba(46,123,255,0) 62%),
+    radial-gradient(760px 480px at 92% 4%,   rgba(255,106,61,0.10) 0%, rgba(255,106,61,0) 60%),
+    radial-gradient(1200px 700px at 50% 108%, rgba(46,123,255,0.07) 0%, rgba(46,123,255,0) 70%);
+  --ds-grain: rgba(255,255,255,0.045);
 }
 
 /* ── Apple DARK (active) ───────────────────────────────────────── */
@@ -119,6 +182,14 @@
 /* ── NAVY (System / half-circle) = deep-blue gradient tone, white text ── */
 [data-theme="navy"] {
   --deskbg:    #01071c;
+  --ds-t0: #02112F; --ds-t1: #042049; --ds-t2: #06295B; --ds-t3: #0A3372;
+  --ds-hair: rgba(255,255,255,0.14); --ds-hair2: rgba(255,255,255,0.28);
+  --ds-ink: #FFFFFF; --ds-ink2: rgba(255,255,255,0.74); --ds-ink3: rgba(255,255,255,0.48);
+  --ds-mesh:
+    radial-gradient(980px 560px at 16% -8%, rgba(14,183,214,0.20) 0%, rgba(14,183,214,0) 60%),
+    radial-gradient(820px 520px at 90% 2%,  rgba(2,35,158,0.46)  0%, rgba(2,35,158,0) 62%),
+    radial-gradient(1200px 760px at 50% 110%, rgba(1,26,125,0.55) 0%, rgba(1,26,125,0) 72%);
+  --ds-grain: rgba(255,255,255,0.05);
   --bg:        #02153F;
   --bg-grouped:#02153F;
   --surface:   rgba(255,255,255,0.10);
@@ -145,6 +216,17 @@
 /* ── LIGHT (Sun) = true white background, dark text ── */
 [data-theme="light"] {
   --deskbg:    #DFE1E8;
+  /* Light is a warm paper tone, never #FFF: a flat white page under a white
+     card gives the card no height at all. */
+  --ds-t0: #ECEBE6; --ds-t1: #F6F5F1; --ds-t2: #FFFDFA; --ds-t3: #FFFFFF;
+  --ds-hair: rgba(26,24,20,0.10); --ds-hair2: rgba(26,24,20,0.22);
+  --ds-ink: #16161A; --ds-ink2: rgba(22,22,26,0.64); --ds-ink3: rgba(22,22,26,0.42);
+  --ds-pop: #1559D6; --ds-popA: rgba(21,89,214,0.10);
+  --ds-mesh:
+    radial-gradient(900px 520px at 10% -6%, rgba(21,89,214,0.10) 0%, rgba(21,89,214,0) 60%),
+    radial-gradient(760px 460px at 94% 2%,  rgba(255,106,61,0.12) 0%, rgba(255,106,61,0) 58%),
+    radial-gradient(1200px 700px at 50% 108%, rgba(21,89,214,0.06) 0%, rgba(21,89,214,0) 70%);
+  --ds-grain: rgba(26,24,20,0.035);
   --bg:        #F2F2F7;
   --bg-grouped:#F2F2F7;
   --surface:   #FFFFFF;
@@ -2746,8 +2828,10 @@ body[data-view="myfeed"] #hdr { display: none; }
 /* ═══════════════════════════════════
    RESPONSIVE / UTILITY
 ═══════════════════════════════════ */
-@media (min-width: 500px) {
-  /* The app column, once there is room beside it. `right: auto` + an explicit
+@media (min-width: 500px) and (max-width: 767px) {
+  /* The app column on a big phone / small tablet, where the website shell
+     below would be cramped. Above 767px the website layer takes over and the
+     column cap is deliberately gone. `right: auto` + an explicit
      width is what actually centres it: with the base rule's `right: 0` still in
      force the box could only be laid out in the half of the viewport to the
      right of `left: 50%`, so `margin: 0 auto` centred it inside THAT half and a
@@ -2755,7 +2839,14 @@ body[data-view="myfeed"] #hdr { display: none; }
   .phone {
     width: var(--appw); max-width: var(--appw); right: auto;
     left: 50%; transform: translateX(-50%);
+    border-left: 1px solid var(--glassB);
+    border-right: 1px solid var(--glassB);
   }
+  /* The surround, so the column reads as a column. --deskbg, never --bg: the
+     app's own surface out here would make the column invisible, which is the
+     "website that failed to fill the window" look. Every theme that redefines
+     --bg redefines this too. */
+  html, body { background: var(--deskbg); }
 }
 
 /* ═══════════════════════════════════
@@ -3668,77 +3759,561 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 .es-retry:active { transform: scale(0.93); }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   LAPTOP — THE SAME PHONE, IN A COLUMN
+   SHERRBYTE AS A WEBSITE  —  the only place desktop/tablet rules live
    ═══════════════════════════════════════════════════════════════════════════
-   THE ANDROID APP IS THE PRODUCT, AND ON A LAPTOP IT IS THE SAME APP, not a
-   second layout of the same DOM. The earlier pass turned the bottom nav into a
-   left sidebar, widened the reading column to 720px and broke Home and myFeed
-   into two- and three-column grids; that is a desktop website, and this project
-   does not want one. sherrbyte.vercel.app is also the TWA's origin, so what the
-   browser shows and what the app shows should be the same screen.
+   sherrbyte.vercel.app is BOTH the Android TWA's origin and the public
+   website. Those are two different readers and, from 2026-10-24, two different
+   layouts: a phone gets the app, a laptop gets a news site. What makes that
+   safe is the SAME property the old centred-column pass relied on — every rule
+   that re-arranges anything lives inside the website breakpoints below, so a
+   website fix cannot reach the app, and the phone render is byte-identical to
+   the version before this block existed.
 
-   So the whole desktop layout is: cap the app at the phone's own width, centre
-   it, and darken what is left. Nothing is re-laid out, which is why this block
-   is now a dozen rules instead of two hundred.
+   Two breakpoints, and each has a job:
 
-   Why this is still the ONE breakpoint — and why the phone is still untouched:
-   `.phone` is already centred and capped at `--appw` from 500px up (see the
-   RESPONSIVE block), and that rule carries `transform: translateX(-50%)`. A
-   transform makes an element the containing block for its `position: fixed`
-   descendants, so the header, the nav, every overlay and every sheet INSIDE
-   `.phone` already resolve against the column rather than the viewport, at
-   every width above 500px. They need no desktop rules at all, and a phone
-   cannot be reached by one.
+   • 768px  — the website shell. The bottom nav becomes a top bar, the app
+     column cap is gone (see the 500px rule, now scoped BELOW this), the feed
+     becomes a two-column grid, and the page gains a masthead and a footer.
+   • 1200px — the wide grid only: three columns with the lead story spanning a
+     2x2 block. Nothing structural is introduced here, so a 1024px laptop and a
+     1440px monitor are the same site at different densities.
 
-   The only thing left to do here is the five overlays that are deliberately
-   direct children of <body> (so that their `inset: 0` is the viewport where
-   `.phone` would otherwise contain them). Those have to be brought back onto
-   the column by hand.
+   Everything is expressed in the --ds-* tokens declared at the top of this
+   sheet: one page width, one reading measure, one tonal ramp, one motion
+   vocabulary. Hardcoding a pixel here is how the grid and the sheets centred
+   on it drift apart, which is the bug the --appw note already records.
 
-   1024px, not 768px: a tablet in portrait is a big phone, and below the
-   breakpoint the 500px rule already gives it the same centred column with no
-   border and no backdrop — which is the right look at that size.
-
-   If you are about to add a desktop rule somewhere else in this stylesheet:
-   don't. Add it here. And if what you are adding re-arranges a screen rather
-   than framing it, it does not belong on this surface at all.
+   The three overlays that are direct children of <body> (#xp-page, #xp-sheet,
+   #cmt-sheet) need no desktop rules now: .phone no longer carries a transform
+   at these widths, so the viewport IS the column and their own inset:0 is
+   already right. That is why they are gone from this block.
    ══════════════════════════════════════════════════════════════════════════ */
-@media (min-width: 1024px) {
 
-  /* Everything outside the column is backdrop, not layout. --bg is the app's
-     own surface and the column paints it; using it out here too would make the
-     column invisible, which is the "website that failed to fill the window"
-     look this block exists to avoid. */
-  html, body { background: var(--deskbg); }
+/* Reveal: used by the masthead and the feed grid. Declared outside the queries
+   (a keyframe is inert until something references it) and referenced only
+   inside them, so no phone element can pick it up. */
+@keyframes dsRise {
+  from { opacity: 0; transform: translateY(20px) scale(0.988); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes dsFade { from { opacity: 0; } to { opacity: 1; } }
 
-  /* The app column itself is sized and centred by the 500px rule above (change
-     --appw to make it wider or narrower). All a laptop adds is the edge that
-     tells a reader where the app stops. */
+/* The masthead and the footer are website furniture: they exist in the markup
+   at every width and are DISPLAYED only by the queries below. A phone never
+   renders them, and nothing has to be injected at runtime. */
+#ds-hero, #ds-foot { display: none; }
+
+@media (min-width: 768px) {
+
+  /* ── the page floor ──────────────────────────────────────────────────── */
+  /* One shoulder value centres every band on the page: the content is capped
+     at --ds-page and the gutter never falls below --ds-gut. Because it is a
+     custom property, the top bar, the chip rail, the grid and the footer all
+     line up on the same left edge by construction. */
+  :root {
+    --ds-shoulder: max(var(--ds-gut), calc((100vw - var(--ds-page)) / 2));
+    --hh: var(--ds-topbar);   /* the views already pad by --hh */
+    --nh: 10px;              /* …and by --nh, which is no longer a nav */
+  }
+
+  html, body { background: var(--ds-t0); }
+
   .phone {
-    border-left: 1px solid var(--glassB);
-    border-right: 1px solid var(--glassB);
-    box-shadow: 0 0 1px rgba(255,255,255,0.06), 0 18px 90px rgba(0,0,0,0.55);
+    background: var(--ds-t0);
+    font-family: var(--ds-f-ui);
+    /* A stacking context, so the two atmosphere layers below can sit at -1:
+       above the page's own fill, beneath every view. */
+    isolation: isolate;
+  }
+  /* Navy's app-wide gradient is a phone treatment; on the website the same
+     depth comes from the mesh, so the fixed-attachment gradient is dropped
+     rather than layered under it. */
+  [data-theme="navy"] .phone { background: var(--ds-t0); }
+
+  /* Depth, not a flat fill: two offset colour washes and one orange, plus a
+     dot mesh masked out before it reaches the reading column. */
+  .phone::before,
+  .phone::after {
+    content: ''; position: absolute; inset: 0;
+    z-index: -1; pointer-events: none;
+  }
+  .phone::before { background: var(--ds-mesh); }
+  .phone::after {
+    background-image: radial-gradient(var(--ds-grain) 1px, transparent 1.2px);
+    background-size: 22px 22px;
+    -webkit-mask-image: radial-gradient(120% 88% at 50% 0%, #000 0%, rgba(0,0,0,0) 72%);
+            mask-image: radial-gradient(120% 88% at 50% 0%, #000 0%, rgba(0,0,0,0) 72%);
   }
 
-  /* The body-level overlays — the entity sheet, the drill-down page and the
-     comments sheet. A bottom sheet pinned to the full width of a 1440px screen
-     is a banner; on the column it is a sheet again. The two SCRIMS are left
-     full-bleed on purpose: dimming the whole window, not just the column, is
-     what reads as a modal. */
-  .xp-sheet, .cmt-sheet, .xp-page {
+  /* ── the top bar ─────────────────────────────────────────────────────── */
+  header {
+    height: var(--ds-topbar);
+    padding: 0 var(--ds-shoulder);
+    background: transparent;
+    border-bottom: 1px solid var(--ds-hair);
+    backdrop-filter: blur(20px) saturate(150%);
+    -webkit-backdrop-filter: blur(20px) saturate(150%);
+  }
+  header::before {
+    content: ''; position: absolute; inset: 0; z-index: -1;
+    background: var(--ds-t1); opacity: 0.74;
+  }
+  /* myFeed hides the bar on a phone to reclaim the top of the deck. On the
+     website the bar carries the whole navigation, so hiding it would strand
+     the reader on the deck with nothing to click. */
+  /* #hdr, not `header`: the rule being undone is `body[data-view="myfeed"]
+     #hdr`, and an id beats a type selector however specific the rest is. */
+  body[data-view="myfeed"] #hdr { display: flex; }
+
+  .h-brand {
+    font-family: var(--ds-f-display);
+    font-size: 1.16rem; font-weight: 700; letter-spacing: -0.02em;
+  }
+  .h-logo { width: 32px; height: 32px; border-radius: 10px; }
+  .hbtn, .hico { width: 34px; height: 34px; border-radius: 11px; }
+  .hbtn:hover, .hico:hover { background: var(--ds-popA); color: var(--ds-pop); }
+  .h-avatar { width: 34px; height: 34px; }
+  /* The search affordance is a phone-only icon in a 390px bar; on the website
+     it belongs in the bar at every view, not only where the app shows it. */
+  #h-search { display: flex !important; }
+
+  /* ── the nav, moved into the bar ──────────────────────────────────────── */
+  /* The same element, the same JS, the same active class — relaid as a
+     horizontal segmented control pinned to the top centre. Nothing about
+     navTo() changes. */
+  nav {
+    top: calc((var(--ds-topbar) - 46px) / 2); bottom: auto;
+    width: auto; max-width: none; z-index: 650;
+  }
+  /* The phone's scroll behaviours have no meaning on a top bar: hide-on-scroll
+     would take the navigation away mid-page, and `compact` collapses every
+     inactive tab to zero width (which on myFeed leaves the pill as the only
+     tappable control — see the nav-pill note). Both are neutralised here
+     rather than edited out of the base sheet, so the phone keeps them. */
+  nav.hidden { transform: translateX(-50%); opacity: 1; pointer-events: auto; }
+  nav.compact .nb-tabs { flex: 0 0 auto; gap: 2px; }
+  nav.compact .nb:not(.on) {
+    width: auto; padding: 9px 17px; opacity: 1; pointer-events: auto;
+    margin: 0; border: 0;
+  }
+  nav.compact .nb.on { flex: 0 0 auto; padding-left: 17px; padding-right: 17px; }
+
+  .nb-tabs {
+    padding: 4px; border-radius: 999px;
+    background: var(--ds-t2);
+    border: 1px solid var(--ds-hair);
+    box-shadow: 0 10px 28px rgba(0,0,0,0.26), inset 0 1px 0 var(--ds-hair2);
+  }
+  .nb {
+    flex-direction: row; gap: 9px; padding: 9px 17px; border-radius: 999px;
+  }
+  /* flex: 0 0 auto — the phone's tabs share the bar's width equally (flex:1),
+     which on a content-width pill clips "myFeed" and "Explore" to their
+     1/4 share. Here each tab is as wide as its own label. */
+  .nb { flex: 0 0 auto; }
+  .nb-lbl { font: 600 0.82rem/1 var(--ds-f-ui); letter-spacing: -0.01em; white-space: nowrap; }
+  .nb-icon { font-size: 0.8rem; }
+  .nb:hover:not(.on) { background: var(--ds-popA); }
+
+  /* ── the masthead ─────────────────────────────────────────────────────── */
+  /* Asymmetric on purpose: a 7/5 split with the editorial claim on the left
+     and a panel explaining the three dossier panes on the right. Both columns
+     are fluid — there is no fixed width and no absolute positioning here, so
+     it scales from 768px to a 4K monitor without a second rule. */
+  #ds-hero {
+    display: grid;
+    grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+    gap: clamp(28px, 4vw, 64px);
+    align-items: center;
+    max-width: var(--ds-page);
+    margin: 0 auto;
+    padding: clamp(40px, 6vw, 84px) var(--ds-gut) clamp(28px, 3vw, 44px);
+    container-type: inline-size;
+  }
+  .dsh-eyebrow {
+    font: 700 0.68rem/1 var(--ds-f-ui); letter-spacing: 0.22em;
+    text-transform: uppercase; color: var(--ds-signal);
+    display: inline-flex; align-items: center; gap: 9px;
+    animation: dsRise var(--ds-dur-3) var(--ds-out) both;
+  }
+  .dsh-eyebrow::before {
+    content: ''; width: 7px; height: 7px; border-radius: 50%;
+    background: var(--ds-signal); box-shadow: 0 0 0 4px rgba(255,106,61,0.18);
+  }
+  .dsh-title {
+    margin: 18px 0 0;
+    font-family: var(--ds-f-display);
+    font-size: clamp(2.4rem, 5.2vw, 4.2rem);
+    font-weight: 700; line-height: 0.98; letter-spacing: -0.035em;
+    color: var(--ds-ink);
+    animation: dsRise var(--ds-dur-3) var(--ds-out) both;
+    animation-delay: var(--ds-stagger);
+  }
+  .dsh-title em {
+    font-style: normal; color: var(--ds-pop);
+    /* The one gradient on type, and it is on three words. */
+    background: linear-gradient(94deg, var(--ds-pop) 0%, #6FB0FF 100%);
+    -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .dsh-sub {
+    margin: 20px 0 0; max-width: 46ch;
+    font: 400 1.06rem/1.62 var(--ds-f-read); color: var(--ds-ink2);
+    animation: dsRise var(--ds-dur-3) var(--ds-out) both;
+    animation-delay: calc(var(--ds-stagger) * 2);
+  }
+  .dsh-cta {
+    display: flex; flex-wrap: wrap; gap: 12px; margin-top: 28px;
+    animation: dsRise var(--ds-dur-3) var(--ds-out) both;
+    animation-delay: calc(var(--ds-stagger) * 3);
+  }
+  /* Magnetic press: the button lifts under the pointer and sinks past it, and
+     the sheen sweeps on hover rather than on a loop. */
+  .dsh-btn {
+    position: relative; overflow: hidden; text-decoration: none;
+    display: inline-flex; align-items: center; gap: 10px;
+    padding: 13px 24px; border-radius: 999px; border: 1px solid transparent;
+    font: 600 0.92rem/1 var(--ds-f-ui); cursor: pointer;
+    background: var(--ds-pop); color: #fff;
+    box-shadow: 0 10px 26px rgba(46,123,255,0.30);
+    transition: transform var(--ds-dur-1) var(--ds-spring),
+                box-shadow var(--ds-dur-2) var(--ds-out),
+                background var(--ds-dur-2) var(--ds-out);
+  }
+  .dsh-btn::after {
+    content: ''; position: absolute; inset: 0;
+    background: linear-gradient(100deg, transparent 30%, rgba(255,255,255,0.28) 50%, transparent 70%);
+    transform: translateX(-120%);
+    transition: transform var(--ds-dur-3) var(--ds-out);
+  }
+  .dsh-btn:hover { transform: translateY(-2px); box-shadow: 0 16px 34px rgba(46,123,255,0.38); }
+  .dsh-btn:hover::after { transform: translateX(120%); }
+  .dsh-btn:active { transform: translateY(1px) scale(0.985); }
+  .dsh-btn.ghost {
+    background: transparent; color: var(--ds-ink);
+    border-color: var(--ds-hair2); box-shadow: none;
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  }
+  .dsh-btn.ghost:hover { background: var(--ds-popA); border-color: var(--ds-pop); color: var(--ds-pop); }
+
+  .dsh-stats {
+    display: flex; flex-wrap: wrap; gap: 26px 40px; margin: 34px 0 0;
+    animation: dsRise var(--ds-dur-3) var(--ds-out) both;
+    animation-delay: calc(var(--ds-stagger) * 4);
+  }
+  .dsh-stats > div { min-width: 0; }
+  .dsh-stats dt {
+    font: 700 0.64rem/1 var(--ds-f-ui); letter-spacing: 0.16em;
+    text-transform: uppercase; color: var(--ds-ink3);
+  }
+  .dsh-stats dd {
+    margin: 8px 0 0; font-family: var(--ds-f-display);
+    font-size: 1.44rem; font-weight: 600; letter-spacing: -0.02em; color: var(--ds-ink);
+  }
+
+  /* The panel: a 1px translucent border over a blurred tonal surface — the
+     "premium engineering" read comes from the hairline and the stacked rows,
+     not from a shadow. */
+  .dsh-panel {
+    position: relative; border-radius: 22px; overflow: hidden;
+    padding: 24px;
+    background: linear-gradient(168deg, var(--ds-t2), var(--ds-t1));
+    border: 1px solid var(--ds-hair);
+    backdrop-filter: blur(18px) saturate(160%);
+    -webkit-backdrop-filter: blur(18px) saturate(160%);
+    box-shadow: 0 30px 70px rgba(0,0,0,0.30), inset 0 1px 0 var(--ds-hair2);
+    animation: dsRise var(--ds-dur-3) var(--ds-out) both;
+    animation-delay: calc(var(--ds-stagger) * 2);
+  }
+  .dsh-panel-h {
+    display: flex; align-items: center; justify-content: space-between;
+    font: 700 0.62rem/1 var(--ds-f-ui); letter-spacing: 0.2em;
+    text-transform: uppercase; color: var(--ds-ink3);
+    padding-bottom: 14px; border-bottom: 1px solid var(--ds-hair);
+  }
+  .dsh-live { display: inline-flex; align-items: center; gap: 7px; color: var(--ds-signal); }
+  .dsh-live::before {
+    content: ''; width: 6px; height: 6px; border-radius: 50%;
+    background: var(--ds-signal); animation: livePulse 1.6s infinite;
+  }
+  .dsh-row {
+    display: grid; grid-template-columns: 34px minmax(0, 1fr);
+    gap: 14px; align-items: start;
+    padding: 16px 0; border-bottom: 1px solid var(--ds-hair);
+    transition: transform var(--ds-dur-2) var(--ds-out);
+  }
+  .dsh-row:last-child { border-bottom: 0; padding-bottom: 2px; }
+  .dsh-row:hover { transform: translateX(4px); }
+  .dsh-row i {
+    width: 34px; height: 34px; border-radius: 11px;
+    display: grid; place-items: center;
+    background: var(--ds-popA); color: var(--ds-pop); font-size: 0.82rem;
+  }
+  .dsh-row b {
+    display: block; font: 600 0.92rem/1.2 var(--ds-f-ui); color: var(--ds-ink);
+    letter-spacing: -0.01em;
+  }
+  .dsh-row span {
+    display: block; margin-top: 5px;
+    font: 400 0.84rem/1.5 var(--ds-f-ui); color: var(--ds-ink2);
+  }
+
+  /* ── the chip rail ───────────────────────────────────────────────────── */
+  .chips {
+    padding: 13px var(--ds-shoulder);
+    gap: 6px;
+    border-bottom: 1px solid var(--ds-hair);
+    background: var(--ds-t1);
+  }
+  .chip {
+    padding: 9px 16px; font: 600 0.84rem/1 var(--ds-f-ui);
+    border: 1px solid transparent;
+    transition: background var(--ds-dur-1) var(--ds-out),
+                color var(--ds-dur-1) var(--ds-out),
+                border-color var(--ds-dur-1) var(--ds-out);
+  }
+  .chip:hover:not(.on) { background: var(--ds-popA); color: var(--ds-pop); border-color: var(--ds-hair2); }
+  .chip.on { background: var(--ds-pop); }
+
+  /* ── the feed grid ───────────────────────────────────────────────────── */
+  #home-headlines, #home-feed {
+    max-width: var(--ds-page); margin: 0 auto;
+    padding-left: var(--ds-gut); padding-right: var(--ds-gut);
+  }
+  #home-feed {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: clamp(18px, 2vw, 26px);
+    padding-top: clamp(22px, 3vw, 34px);
+    align-items: start;
+  }
+  /* The card: a tonal surface a step above the page, a hairline, and a hover
+     that lifts it rather than tinting it. The phone's divider-only treatment
+     is left alone below 768px. */
+  #home-feed > .nc {
+    padding: 20px;
+    border: 1px solid var(--ds-hair);
+    border-radius: 20px;
+    background: var(--ds-t2);
+    overflow: hidden;
+    animation: dsRise var(--ds-dur-3) var(--ds-out) both;
+    transition: transform var(--ds-dur-2) var(--ds-out),
+                border-color var(--ds-dur-2) var(--ds-out),
+                background var(--ds-dur-2) var(--ds-out),
+                box-shadow var(--ds-dur-2) var(--ds-out);
+  }
+  #home-feed > .nc:hover {
+    transform: translateY(var(--ds-lift));
+    background: var(--ds-t3);
+    border-color: var(--ds-hair2);
+    box-shadow: 0 22px 48px rgba(0,0,0,0.28);
+  }
+  /* The stagger is a token, applied by position. Past the twelfth card the
+     reader has scrolled anyway, so the cascade stops instead of delaying a
+     card by two seconds. */
+  #home-feed > .nc:nth-child(1)  { animation-delay: 0ms; }
+  #home-feed > .nc:nth-child(2)  { animation-delay: calc(var(--ds-stagger) * 1); }
+  #home-feed > .nc:nth-child(3)  { animation-delay: calc(var(--ds-stagger) * 2); }
+  #home-feed > .nc:nth-child(4)  { animation-delay: calc(var(--ds-stagger) * 3); }
+  #home-feed > .nc:nth-child(5)  { animation-delay: calc(var(--ds-stagger) * 4); }
+  #home-feed > .nc:nth-child(6)  { animation-delay: calc(var(--ds-stagger) * 5); }
+  #home-feed > .nc:nth-child(n+7) { animation-delay: calc(var(--ds-stagger) * 6); }
+
+  /* The lead story is the one asymmetry in the grid: it spans the full row and
+     sets its headline at display size, which is what makes a news page read as
+     edited rather than paginated. */
+  /* Anything in the feed that is not a card — the section tab row, a bulletin
+     strip, the loading skeletons — is a band, not a cell, so it takes the whole
+     row. Without this the tab row would sit in column one and the first card
+     beside it. */
+  #home-feed > *:not(.nc) { grid-column: 1 / -1; }
+
+  /* The lead story, when the feed has no hero card of its own. `.hero-card`
+     is already a full-bleed banner and is caught by the band rule above, so
+     this only fires on the tabs where the first row IS a plain card — which is
+     why it is `:first-child` and not "the first .nc after a non-card": that
+     sibling form also matched the card AFTER the hero banner, and promoted a
+     second lead story into the middle of the grid. */
+  #home-feed > .nc:first-child { grid-column: 1 / -1; }
+  #home-feed > .nc:first-child .nc-title {
+    font-family: var(--ds-f-display);
+    font-size: clamp(1.5rem, 2.6vw, 2.1rem);
+    line-height: 1.12; letter-spacing: -0.03em;
+  }
+  #home-feed > .nc:first-child .nc-hero-image,
+  #home-feed > .nc:first-child .nc-img { max-height: 420px; }
+
+  /* Media sized by aspect-ratio is a PHONE measurement. 16/10 of a 390px
+     column is 244px; of a 1240px grid row it is 775px, which is one card
+     taller than the window — the lead story filled the screen and the grid
+     below it was never seen. The boxes are capped here and object-fit does
+     the rest, so the crop changes and the markup does not. */
+  #home-feed .hero-card { aspect-ratio: auto; height: clamp(320px, 32vw, 440px); }
+  #home-feed .nc .img-wrap { max-height: 250px; }
+  #home-feed > .nc:first-child .img-wrap { max-height: 400px; }
+
+  .nc-title { font-family: var(--ds-f-display); letter-spacing: -0.02em; }
+  .nc-desc, .nc-preview { font-family: var(--ds-f-read); font-size: 0.99rem; line-height: 1.6; }
+
+  /* ── the reading column ──────────────────────────────────────────────── */
+  /* A 1440px window must not set a 1400px line of body text. One measure,
+     centred, serif — the article is the only place this sheet uses a serif. */
+  .ao-body { max-width: var(--ds-read); margin: 0 auto; padding: 30px var(--ds-gut) 60px; }
+  .ao-hero { max-height: 54vh; }
+  .ao-main-title {
+    font-family: var(--ds-f-display);
+    font-size: clamp(1.9rem, 3.2vw, 2.7rem); line-height: 1.1; letter-spacing: -0.032em;
+  }
+  .ao-text {
+    font-family: var(--ds-f-read); font-size: 1.14rem; line-height: 1.78;
+    color: var(--ds-ink);
+  }
+  .ao-text p { margin-bottom: 1.1em; }
+
+  /* ── the other views ─────────────────────────────────────────────────── */
+  /* Explore is a browse surface, so it gets the page's shoulders and lets its
+     own sections grid themselves. Profile, bookmarks and notifications are
+     lists of one thing each, so they take the reading measure instead of
+     stretching a settings row across a monitor. */
+  #v-explore { padding-left: var(--ds-shoulder); padding-right: var(--ds-shoulder); }
+  #v-profile, #v-bookmarks, #v-notifs {
+    padding-left: max(var(--ds-gut), calc((100vw - 860px) / 2));
+    padding-right: max(var(--ds-gut), calc((100vw - 860px) / 2));
+  }
+  .exp-cat-feed {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+    gap: 20px; align-items: start;
+  }
+
+  /* myFeed stays the snap deck — one story per screen is the surface's whole
+     reading model and that is as true on a laptop as on a phone. What changes
+     is its proportions: the card is centred at a readable width under the top
+     bar instead of filling a 1440px window. */
+  .mf-item {
+    padding: calc(var(--ds-topbar) + 20px) var(--ds-gut) 26px;
+    align-items: center;
+  }
+  .mf-card {
+    max-width: 920px; margin: 0 auto;
+    border-radius: 24px; border-color: var(--ds-hair);
+    box-shadow: 0 34px 80px rgba(0,0,0,0.38);
+  }
+  .mf-media { height: 40vh; max-height: 380px; }
+  .mf-headline { font-family: var(--ds-f-display); font-size: 1.44rem; letter-spacing: -0.028em; }
+
+  /* ── the body-level overlays ─────────────────────────────────────────── */
+  /* #xp-page, #xp-sheet and #cmt-sheet are positioned against the viewport —
+     .phone carries no transform at these widths, so there is no containing
+     block to catch them. A bottom sheet stretched across a 1440px window is a
+     banner, so the two sheets are centred on a sheet-sized column; the page is
+     meant to be full-bleed and only takes the site's shoulders.
+
+     margin-left, NOT translateX: both sheets animate their own
+     translateY(102%) -> translateY(0), and the open state would overwrite a
+     horizontal transform set here — the sheet would slide back to the screen
+     edge the moment it opened. */
+  .xp-sheet, .cmt-sheet {
     left: 50%; right: auto;
-    width: var(--appw); max-width: var(--appw);
-    margin-left: calc(var(--appw) / -2);
+    width: min(540px, 92vw);
+    margin-left: calc(min(540px, 92vw) / -2);
   }
-  /* `margin-left`, NOT `translateX`. Both sheets animate their own transform
-     (`translateY(102%)` closed, `translateY(0)` open) and the open state would
-     overwrite a horizontal transform set here — the sheet would slide back to
-     the left edge of the screen the moment it opened. */
+  .xp-page { padding-left: var(--ds-shoulder); padding-right: var(--ds-shoulder); }
 
-  /* A desktop pointer has no notch and no home bar, and the column's edges are
-     a border rather than the screen's edge, so the inset the phone reserves for
-     them is dead space here. */
-  .phone { padding-bottom: 0; }
+  /* ── the footer ──────────────────────────────────────────────────────── */
+  /* Play's reviewer loads the privacy and deletion URLs from a browser, signed
+     out, with no app installed, so the website needs them in reach without a
+     sidebar tap. They are built from API_URL (see legalUrl) because these
+     pages are FastAPI on the Render host, not files on the static deploy. */
+  /* The base sheet styles the element `nav` — the app's bottom bar — as an
+     absolutely-positioned, centred pill. The footer's link groups are <nav>
+     too (they are navigation, and a div with role="navigation" is the same
+     thing with the semantics bolted on), so they inherit that rule and fly to
+     the middle of the screen. Resetting it here keeps the markup honest and
+     leaves the app's own nav untouched. */
+  #ds-foot nav {
+    position: static; transform: none;
+    left: auto; right: auto; bottom: auto;
+    width: auto; max-width: none; display: block; z-index: auto;
+  }
+
+  #ds-foot {
+    display: block;
+    margin-top: clamp(48px, 6vw, 90px);
+    border-top: 1px solid var(--ds-hair);
+    background: var(--ds-t1);
+  }
+  .dsf-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.6fr) repeat(3, minmax(0, 1fr));
+    gap: clamp(24px, 3vw, 52px);
+    max-width: var(--ds-page); margin: 0 auto;
+    padding: clamp(36px, 4vw, 58px) var(--ds-gut);
+  }
+  .dsf-brand {
+    display: flex; align-items: center; gap: 11px;
+    font-family: var(--ds-f-display); font-size: 1.1rem; font-weight: 700;
+    letter-spacing: -0.02em; color: var(--ds-ink);
+  }
+  .dsf-brand img { width: 30px; height: 30px; border-radius: 9px; }
+  .dsf-wordmark span { color: var(--ds-pop); }
+  .dsf-note {
+    margin: 14px 0 0; max-width: 34ch;
+    font: 400 0.88rem/1.6 var(--ds-f-ui); color: var(--ds-ink2);
+  }
+  .dsf-col h2 {
+    margin: 0 0 14px;
+    font: 700 0.62rem/1 var(--ds-f-ui); letter-spacing: 0.2em;
+    text-transform: uppercase; color: var(--ds-ink3);
+  }
+  .dsf-col ul { list-style: none; margin: 0; padding: 0; }
+  .dsf-col li + li { margin-top: 10px; }
+  .dsf-col a {
+    display: inline-block;
+    font: 500 0.9rem/1.4 var(--ds-f-ui); color: var(--ds-ink2);
+    text-decoration: none; cursor: pointer;
+    transition: color var(--ds-dur-1) var(--ds-out), transform var(--ds-dur-1) var(--ds-out);
+  }
+  .dsf-col a:hover { color: var(--ds-pop); transform: translateX(3px); }
+  .dsf-bar {
+    border-top: 1px solid var(--ds-hair);
+  }
+  .dsf-bar-in {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+    gap: 12px;
+    max-width: var(--ds-page); margin: 0 auto;
+    padding: 18px var(--ds-gut);
+    font: 400 0.8rem/1.5 var(--ds-f-ui); color: var(--ds-ink3);
+  }
+
+  /* ── one tablet concession ───────────────────────────────────────────── */
+  /* Between 768 and 1023 the bar holds the brand, the segmented nav and four
+     icons. The wordmark is the only one of those that is decoration, so it is
+     the one that goes; the logo stays, so the bar still says whose site it is. */
+  @media (max-width: 1023px) {
+    #ds-hero { grid-template-columns: minmax(0, 1fr); }
+    .dsh-panel { order: 2; }
+    .dsf-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .h-brand { display: none; }
+    .nb { padding: 9px 13px; }
+  }
+
+  /* A reader who asks for less motion gets the layout and none of the
+     choreography. The reveals are decorative by construction — every element
+     they animate is already in place and readable at its end state. */
+  @media (prefers-reduced-motion: reduce) {
+    #ds-hero *, #home-feed > .nc { animation: dsFade 1ms both !important; }
+    #home-feed > .nc:hover, .dsh-row:hover, .dsh-btn:hover { transform: none; }
+  }
+}
+
+/* ── the wide grid ─────────────────────────────────────────────────────── */
+@media (min-width: 1200px) {
+  /* Three columns, and the lead story takes a 2x2 block out of the top-left
+     corner. That is the whole difference between a laptop and a monitor here:
+     density, not a different page. */
+  #home-feed { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  #home-feed > .nc:first-child { grid-column: span 2; grid-row: span 2; }
+  #home-feed > .nc:first-child .nc-title { font-size: clamp(1.8rem, 2.4vw, 2.4rem); }
 }
 
 
@@ -3902,7 +4477,53 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
 
 <!-- ════════ HOME ════════ -->
 <div id="v-home" class="view active">
+  <!-- ════════ WEBSITE MASTHEAD (>=768px only; display:none on a phone) ════════
+       This is the one piece of markup the website adds to Home. It is inert on
+       the app: #ds-hero is display:none in the base sheet and only the website
+       breakpoint turns it on, so the TWA's Home is the card feed it has always
+       been, with no runtime branch deciding which surface is rendering. -->
+  <section id="ds-hero" aria-labelledby="ds-hero-h">
+    <div class="dsh-copy">
+      <p class="dsh-eyebrow">Detection, not prediction</p>
+      <h1 id="ds-hero-h" class="dsh-title">The story, and <em>what moved</em> because of it.</h1>
+      <p class="dsh-sub">SherrByte reads 50+ sources, writes each event once, and files it with the
+        thread it belongs to and the instruments it touched — so you read what happened, measured
+        against what normally does.</p>
+      <div class="dsh-cta">
+        <a class="dsh-btn" href="/myfeed" onclick="navTo('myfeed');return false;">
+          <i class="fa-solid fa-layer-group" aria-hidden="true"></i> Open myFeed
+        </a>
+        <a class="dsh-btn ghost" href="/explore" onclick="navTo('explore');return false;">
+          <i class="fa-solid fa-compass" aria-hidden="true"></i> Explore the map
+        </a>
+      </div>
+      <dl class="dsh-stats">
+        <div><dt>Sources</dt><dd>50+</dd></div>
+        <div><dt>Refreshed</dt><dd>~15 min</dd></div>
+        <div><dt>Per story</dt><dd>3 panes</dd></div>
+      </dl>
+    </div>
+    <aside class="dsh-panel" aria-label="What a dossier contains">
+      <div class="dsh-panel-h"><span>Inside a dossier</span><span class="dsh-live">Live</span></div>
+      <div class="dsh-row">
+        <i class="fa-solid fa-newspaper" aria-hidden="true"></i>
+        <div><b>News</b><span>What happened, who it involves and where — written once from every
+          source covering it, never a publisher's blurb repeated.</span></div>
+      </div>
+      <div class="dsh-row">
+        <i class="fa-solid fa-timeline" aria-hidden="true"></i>
+        <div><b>Strings</b><span>The thread this story belongs to, as a timeline of earlier stories
+          you can open — not a summary of them.</span></div>
+      </div>
+      <div class="dsh-row">
+        <i class="fa-solid fa-chart-line" aria-hidden="true"></i>
+        <div><b>Dots</b><span>The instruments it touched, with the move measured against that
+          instrument's own normal day. No targets, no forecasts.</span></div>
+      </div>
+    </aside>
+  </section>
   <div class="chips" id="chip-row">
+
     <div class="chip on tap" onclick="selectChip(this,'all')">All</div>
     <div class="chip tap" onclick="selectChip(this,'arts')"><i class="fa-solid fa-masks-theater"></i> Arts &amp; Culture</div>
     <div class="chip tap" onclick="selectChip(this,'selfwell')"><i class="fa-solid fa-spa"></i> Well-being</div>
@@ -3917,7 +4538,58 @@ nav.hidden { transform: translateX(-50%) translateY(110px); opacity: 0; pointer-
   <div id="home-headlines"></div>
   <div id="home-feed"></div>
   <div style="height:16px"></div>
+
+  <!-- ════════ WEBSITE FOOTER (>=768px only) ════════
+       The legal hrefs are NOT written here. Those pages are FastAPI on the
+       Render host while this file is served from the static Vercel deploy, so a
+       literal href="/privacy" 404s for every reader — the exact trap the
+       PLAY_STORE note records. dsFootLinks() fills them from API_URL at boot,
+       which also keeps them real links: focusable, middle-clickable and legible
+       to a crawler, which an onclick handler is not. -->
+  <footer id="ds-foot">
+    <div class="dsf-grid">
+      <div>
+        <div class="dsf-brand">
+          <img referrerpolicy="no-referrer" src="tiger-logo.png" alt="" onerror="this.style.display='none'">
+          <span class="dsf-wordmark">Sherr<span>Byte</span></span>
+        </div>
+        <p class="dsf-note">News intelligence for readers who want the measurement, not the mood.
+          Past tense and conditional only — the math decides what is significant.</p>
+      </div>
+      <nav class="dsf-col" aria-label="Read">
+        <h2>Read</h2>
+        <ul>
+          <li><a href="/" onclick="navTo('home');return false;">Home</a></li>
+          <li><a href="/myfeed" onclick="navTo('myfeed');return false;">myFeed</a></li>
+          <li><a href="/explore" onclick="navTo('explore');return false;">Explore</a></li>
+          <li><a href="/profile" onclick="navTo('profile');return false;">Profile</a></li>
+        </ul>
+      </nav>
+      <nav class="dsf-col" aria-label="Legal">
+        <h2>Legal</h2>
+        <ul>
+          <li><a data-legal="/privacy">Privacy policy</a></li>
+          <li><a data-legal="/terms">Terms of use</a></li>
+          <li><a data-legal="/delete-account">Delete your account</a></li>
+        </ul>
+      </nav>
+      <div class="dsf-col">
+        <h2>App</h2>
+        <ul>
+          <li><a href="/manifest.json">Install as an app</a></li>
+          <li><a data-legal="/status/freshness">Feed freshness</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="dsf-bar">
+      <div class="dsf-bar-in">
+        <span>&copy; <span id="dsf-year">2026</span> SherrByte. Detection, not prediction.</span>
+        <span>Also on Android</span>
+      </div>
+    </div>
+  </footer>
 </div>
+
 
 <!-- ════════ ATLAS IMMERSIVE OVERLAY — full-screen global intelligence ════════ -->
 <style>
@@ -6137,6 +6809,22 @@ function contactSupport(){ try{ location.href='mailto:support@thewhitetiger.in?s
 // such file exists, and every reader who tapped it would get a 404.
 // A new tab, because the TWA would otherwise keep it inside the app shell.
 function legalUrl(path){ return API_URL + path; }
+// The website footer's legal links. They are left href-less in the markup and
+// filled here for one reason: `legalUrl` is the only thing that knows these
+// pages live on the API origin, and a hardcoded "/privacy" would resolve
+// against the static deploy and 404. Filling an href (rather than wiring an
+// onclick) keeps them real links — focusable, middle-clickable, and followable
+// by Play's reviewer and by a crawler.
+function dsFootLinks(){
+  try{
+    document.querySelectorAll('[data-legal]').forEach(function(a){
+      a.href = legalUrl(a.getAttribute('data-legal'));
+      a.target = '_blank'; a.rel = 'noopener';
+    });
+    var y = document.getElementById('dsf-year');
+    if (y) y.textContent = String(new Date().getFullYear());
+  }catch(e){}
+}
 function openLegal(path){
   const u = legalUrl(path);
   try{ window.open(u,'_blank','noopener'); }catch(e){ location.href=u; }
@@ -13513,6 +14201,7 @@ document.addEventListener('DOMContentLoaded', () => {
   updateSidebarAuth();
   rehydrateScope();                                            // restore Local/National/Global choice
   restoreSettings();                                           // restore toggles / privacy / text size
+  dsFootLinks();                                               // website footer: real legal hrefs
   document.getElementById('saved-ct').textContent = ST.saves.length;
   gateAppDownloadCTA();
   loadFeed(true);

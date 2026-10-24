@@ -894,50 +894,79 @@ condition, and a cached one outlives the outage.
 
 Pools are capped: `PG_POOL_MAX` 8 (pgcompat), `SPIE_POOL_MAX` 4 (asyncpg).
 
-## A laptop shows the Android app, not a desktop website
+## A laptop shows a WEBSITE now, and a phone still shows the app
 
-Adopted 2026-10-17. The 1024px block used to build a desktop site out of the
-same DOM: the bottom nav became a left sidebar, the reading column widened to
-720px, Home became a two- and three-column portal and myFeed lost its
-full-screen snap for a card grid. The owner's line is that **the Android app is
-the product and there is no desktop look to design** — and `sherrbyte.vercel.app`
-is also the TWA's origin, so a browser and the app should show the same screen.
+Adopted 2026-10-24, reversing the 2026-10-17 entry that said there was no
+desktop look to design. The owner's line changed: `sherrbyte.vercel.app` has to
+work as a modern news site on a laptop. It is also still the TWA's origin, so
+the old constraint did not go away — it moved. **Below 768px a reader gets the
+app, byte-identical to what the TWA ships. Above it they get a website.**
 
-So the laptop layout is now: cap the app at the phone's own width, centre it,
-darken what is left. The whole `@media (min-width: 1024px)` block is about ten
-rules.
+What makes that safe is the same structural property the centred-column pass
+relied on, pointed the other way: **every rule that re-arranges anything lives
+inside the website breakpoints**, so a website fix cannot reach the app. There
+are two of them and each has one job:
 
-**`--appw` (440px) is the app column and `--deskbg` is what surrounds it.**
-`--sbw`/`--col` are gone with the sidebar. Every theme that redefines `--bg`
-redefines `--deskbg` too, or the backdrop paints white behind a dark app.
+- **768px** — the shell. The bottom nav becomes a top bar (the same `<nav>`, the
+  same `navTo`, relaid as a horizontal segmented control), the app-column cap is
+  gone, Home gains a masthead and a two-column feed grid, the article gets a
+  720px serif reading column, and the page gains a footer.
+- **1200px** — density only. Three columns instead of two, lead story spanning a
+  2x2 block. Nothing structural, so a 1024px laptop and a 1440px monitor are the
+  same site.
 
-**Nothing inside `.phone` needs a desktop rule, and that is structural.** The
-500px rule gives `.phone` `transform: translateX(-50%)`, and a transform makes
-an element the containing block for its `position: fixed` descendants — so the
-header, the nav, every overlay and every sheet inside `.phone` already resolve
-against the column at every width above 500px. The three overlays that sit
-outside `.phone` (`#xp-page`, `#xp-sheet`, `#cmt-sheet`) are the only things the
-laptop places by hand, and they are centred with `margin-left`, **never a
-transform**: both sheets animate their own `translateY`, and the open state
-would overwrite a horizontal transform and send the sheet back to the screen
-edge.
+The old `@media (min-width: 500px)` column rule is now `(min-width: 500px) and
+(max-width: 767px)`: a big phone or small tablet still gets the centred `--appw`
+column on `--deskbg`, which is right at that size. `--appw` and `--deskbg` are
+still live and still mean what they meant; they just stop at 767px.
 
-**The 500px rule was also miscentering the column.** It kept the base rule's
-`right: 0`, so the box could only be laid out in the half of the viewport right
-of `left: 50%` and `margin: 0 auto` centred it inside THAT half — 140px right of
-centre on a 1440px window. Nobody saw it because the desktop block overrode the
-rule entirely. It now carries `right: auto` and an explicit width.
+**The design system is the `--ds-*` tokens at the top of the sheet**, and they
+are declared globally but CONSUMED ONLY inside those two queries — which is what
+makes "the phone is untouched" a property of the file rather than a claim.
+Typography is Space Grotesk (display) / Archivo (UI) / Newsreader (the reading
+column only); Inter and Poppins stay the PHONE's faces and are still loaded for
+it. Colour is a four-step tonal ramp per theme (`--ds-t0..t3`) rather than four
+unrelated greys, with one blue accent and one warm signal, and no flat `#000` or
+`#fff` anywhere — depth is `--ds-mesh` (three offset radial washes) plus a dot
+grain masked away from the reading band. Motion is tokenised
+(`--ds-dur-1/2/3`, `--ds-spring`, `--ds-out`, `--ds-stagger`) so a reveal, a
+hover lift and a sheet share one physics, and the whole choreography is dropped
+under `prefers-reduced-motion`.
 
-Still one breakpoint, and still the whole guarantee: every laptop rule lives in
-that one block, so a laptop fix cannot reach a phone.
-`tests/test_desktop_layout.py` asserts both halves — that the block frames the
-app (no `grid-template-columns`, no `flex-direction: column`, no
-`scroll-snap-type`, under a dozen rules) and that the phone's own rules are
-untouched. The phone render was verified byte-identical before and after at
-390x844.
+Four things this cost, each one found by rendering rather than reading:
 
-1024px, not 768px: below it the 500px rule already gives a tablet the same
-centred column with no border and no backdrop, which is right at that size.
+- **`<nav>` is a styled element here.** The base sheet makes every `nav` the
+  app's absolutely-positioned centred pill, so the footer's `<nav>` link groups
+  flew to the middle of the screen. `#ds-foot nav { position: static }` is the
+  reset; using `<div role="navigation">` instead would have hidden the problem
+  rather than fixed it.
+- **`body[data-view="myfeed"] #hdr { display: none }` needs an ID to undo.** An
+  override written as `body[...] header` loses on specificity, and myFeed on the
+  website lost its entire navigation while looking like it had been styled.
+- **Media sized by `aspect-ratio` is a phone measurement.** `16/10` of a 390px
+  column is 244px; of a 1240px grid row it is 775px, so the lead card filled the
+  window and the grid under it was never seen. The boxes are capped and
+  `object-fit` does the rest.
+- **The lead-story rule must be `:first-child`, not "the first `.nc` after a
+  non-card".** The sibling form also matched the card following the hero banner
+  and promoted a second lead into the middle of the grid.
+
+The masthead (`#ds-hero`) and footer (`#ds-foot`) are in the markup at every
+width and `display: none` in the base sheet — **there is no runtime branch
+deciding which surface is rendering**, so the TWA's Home cannot accidentally
+grow a hero. The footer's Privacy / Terms / Delete-account links carry
+`data-legal` and no href; `dsFootLinks()` fills them from `API_URL` at boot,
+because those pages are FastAPI on the Render host while this file is served
+from the static Vercel deploy — a literal `href="/privacy"` 404s for every
+reader, which is the trap `PLAY_STORE.md` already records. Filling an href
+rather than wiring an onclick keeps them real links, which is what Play's
+reviewer and a crawler both need.
+
+`tests/test_desktop_layout.py` pins both halves: that no breakpoint below 768px
+re-arranges anything, that the snap deck and the Explore matrix are still base
+rules, that the furniture is `display: none` off the website, and that the wide
+block stays density-only. Verified by rendering at 1440x900, 1280x800, 834x1112
+and 390x844 against a mocked backend.
 
 ## Auth identity is normalised, and every auth route the client calls exists
 
