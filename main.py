@@ -49,7 +49,9 @@ import synthesis
 # analog engine and market_reaction filter on a stored column AND a whitelist that
 # can never disagree, rather than a filter each caller has to remember.
 import feeds_financial
+import circuit
 import significance
+import telemetry
 import research
 import telugu
 # One canonical shape for articles.published_at. Four formats used to reach that
@@ -7180,6 +7182,50 @@ async def admin_you(x_admin_token: str = Header(""), token: str = Query("")):
     import you_contents
     return {"stats": you_contents.stats(),
             "DIAGNOSIS": you_contents.diagnosis()}
+
+
+@app.get("/admin/pipeline")
+async def admin_pipeline(x_admin_token: str = Header(""), token: str = Query("")):
+    """Where the last hour went, and which providers are being skipped.
+
+    Every other admin endpoint here answers one subsystem's question well. This
+    one answers the question that spans them — a model call, the page fetch
+    before it and the query after it were three log lines in three formats with
+    no field in common, so "the drain is slow" could not be read off anything.
+
+    `telemetry` is one structured line per instrumented call, aggregated per
+    series; `top_by_time` is ordered by TOTAL time, not average, because a
+    3-second call made once is not the problem and a 90ms one made ten thousand
+    times is.
+
+    `circuits` is the breaker per provider. The one thing worth knowing while
+    reading it: a 429 NEVER trips a breaker. A rate limit means "slow down", the
+    drain already backs off on exactly that signal, and taking a healthy
+    provider out of service for a cooldown would stall the one pass writing the
+    corpus. A breaker opens only on no-response or a 5xx.
+
+    Both ledgers are PER PROCESS — the same stated bound /admin/memory and
+    /admin/you carry. Touches no database, deliberately: the moment you want
+    this is the moment a query would time out.
+    """
+    _check_admin(x_admin_token or token)
+    return {
+        "telemetry": {
+            "health": telemetry.health(),
+            "top_by_time": telemetry.top_by_time(),
+            "series": telemetry.stats(),
+            "DIAGNOSIS": telemetry.diagnose(),
+        },
+        "circuits": {
+            "enabled": circuit.enabled(),
+            "threshold": circuit.threshold(),
+            "cooldown_s": circuit.cooldown_s(),
+            "max_cooldown_s": circuit.max_cooldown_s(),
+            "open": circuit.open_breakers(),
+            "breakers": circuit.snapshot(),
+            "DIAGNOSIS": circuit.diagnose(),
+        },
+    }
 
 
 @app.get("/admin/research")
