@@ -1588,3 +1588,116 @@ deterministic joins over data we already hold, and that is a recorded decision,
 not an accident — a web-search leg is a different claim about where a card's
 evidence comes from, and it should be a decision taken on its own, not smuggled
 in behind a page-reading fix.
+
+---
+
+## /search is a fusion now, and the capability IS the index
+
+Adopted 2026-10-24. The endpoint was one statement:
+
+```sql
+WHERE headline LIKE '%q%' OR summary_60 LIKE '%q%' ORDER BY published_at DESC
+```
+
+A substring match with no index, no relevance ordering, and no bound on the
+corpus it scanned **on a reader's request** — the exact shape the 512MB entry
+above says needs a LIMIT. Three consequences, all reader-visible: `oil price`
+matched **nothing**, because those two words are never adjacent in a real
+headline; a row that mentioned the query once in passing outranked the story
+about it as long as it was newer; and the cost grew with the corpus.
+
+`search_rank.py` replaces it with two kinds of ranking, fused by **Reciprocal
+Rank Fusion**:
+
+- **relevance** — did this row match, and how well. Postgres: full-text
+  (`websearch_to_tsquery` + `ts_rank_cd`) and trigram word-similarity, two legs.
+  Otherwise: the LIKE match, one leg.
+- **priority** — among the rows that matched, what is worth reading first:
+  recency, and `significance` (the score this repo already computes).
+
+**RRF, not a weighted sum, and the reason is that the scores are not
+comparable.** `ts_rank_cd` is unbounded and corpus-dependent, trigram
+similarity is 0–1, `significance` is 0–100 and recency is a date. Normalising
+them against each other needs a calibration nobody has measured, and a min-max
+over the page — the usual shortcut — makes a row's score depend on which other
+rows happened to land on the page. A rank is the one thing every leg produces
+on the same scale.
+
+**Relevance is weighted above priority (1.0 / 0.7 vs 0.5 each), and that is the
+whole point.** A priority leg at 1.0 lets a merely-recent weak match outrank the
+story the reader asked for, which is `ORDER BY published_at DESC` with extra
+steps.
+
+**Three bounded statements, and the third is free.** Each relevance leg takes
+`SEARCH_LEG_LIMIT` (200); the union of their ids is fetched in one
+`WHERE id IN (...)`, bounded by construction at legs × leg_limit; the priority
+rankings are then derived **in Python from the rows already fetched**, so
+recency and significance cost no database work at all.
+
+### The capability is the INDEX, not the server version
+
+A leg is only offered if its index was created at boot (`ensure_indexes`, called
+from `init_db`). Without the index the same SQL is a sequential scan with a
+`to_tsvector` call per row — **strictly worse than the LIKE it replaced** — so a
+missing index removes the leg rather than quietly slowing every reader down.
+`pg_trgm` in particular is an extension a managed Postgres may refuse to create.
+
+Each DDL statement runs on its **own connection**: a failed statement aborts the
+transaction on Postgres, so probing them on one shared connection would make the
+first failure look like every capability was missing. Nothing there can fail the
+boot.
+
+**The ranking expression and the index expression are the same string**
+(`_FTS_VECTOR`, shared by the index, the match and the ORDER BY). A different
+`COALESCE`, column order or configuration name and the planner cannot use the
+index — which is the silent version of this whole problem, so a test compares
+them.
+
+**The LIKE leg is NOT added alongside the indexed ones.** It is a coarser view
+of the same question; a second vote for a substring match pulls the fusion back
+towards the behaviour being replaced. It also **ANDs the query's words** rather
+than matching the literal phrase — that is what fixes `oil price` — and ORing
+them would make a two-word query broader than a one-word one.
+
+**On the fallback leg the match is binary**, so a one-word query is ordered by
+the priority legs alone. The leg that discriminates *between* matches is
+`ts_rank_cd`, and it only exists on Postgres with the index. That is a stated
+limit of the sqlite path, pinned in a test so nobody reads the fusion as doing
+more than it does there.
+
+**Pre-filtering, at the database layer.** `Filters` (pillar, scope, feed_class,
+min_significance, a `days` window) goes into every leg's own WHERE clause, so
+narrowing to one pillar returns that pillar's best 200 matches rather than
+whatever survives filtering a corpus-wide 200 — post-filtering is how a narrowed
+search comes back empty while matching rows exist. Two details that are bugs
+elsewhere in this file: `significance >= ? OR significance < 0` keeps **unscored**
+rows visible (`-1` is "the backfill has not reached this row", not "below the
+bar"), and the date bound is a plain `published_at >= ?` — **never a regex**,
+because the column is TEXT on some deployments and timestamptz on others.
+
+**One leg failing is a degraded search, not a failed request** (the likely cause
+is an index dropped underneath us), and `?explain=1` returns each result's
+per-leg ranks and fused score — the only way to answer "why is this above that".
+It is public because it reveals nothing a reader cannot see on the page.
+
+`/admin/search` is the diagnosis: backend, capabilities, the tuning, a one-line
+`DIAGNOSIS`, and with `?q=` the SQL each leg **would** run, verbatim. It
+executes no query. "Search feels wrong" has four causes with four different
+fixes (fusion switched off, no FTS index, `pg_trgm` refused, neither), and each
+one gets its own line. `SEARCH_HYBRID_ENABLED=0` falls back to the single
+bounded LIKE leg.
+
+The trigram floor is the server's `pg_trgm.word_similarity_threshold` (0.6), and
+it is deliberately **not** `SET` per connection: pgcompat talks through
+Supabase's pooler, which hands the same client connection to different server
+backends, so a session-level `SET` may not be in force on the backend running
+the next query — the same trap the prepared-statement note in `pgcompat.py`
+describes.
+
+**No dense/vector leg, and that is the recorded decision above, not an
+oversight.** `info_objects.embedding` is the md5 hash fallback
+(`sentence-transformers` lives in `requirements-ml.txt`, which no deployed
+process installs), so cosine similarity over it is lexical collision. A
+cross-encoder reranker is refused for a different reason: torch plus
+sentence-transformers does not fit a 512MB instance that has already been killed
+for memory.

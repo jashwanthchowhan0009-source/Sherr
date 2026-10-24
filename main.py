@@ -50,6 +50,7 @@ import synthesis
 # can never disagree, rather than a filter each caller has to remember.
 import feeds_financial
 import significance
+import search_rank
 import research
 import telugu
 # One canonical shape for articles.published_at. Four formats used to reach that
@@ -1287,6 +1288,16 @@ def init_db():
                 log.info("[FEED_CLASS] backfilled %d historical financial row(s)", n)
     except Exception as e:
         log.warning("[FEED_CLASS] backfill skipped: %s", e)
+
+    # Search indexes, and the capability detection that depends on them. Each
+    # statement runs on its own connection inside search_rank, because a failed
+    # DDL aborts the transaction on Postgres and would make the first failure
+    # look like every capability was missing. Nothing here can fail the boot: a
+    # database that refuses CREATE EXTENSION leaves /search on its LIKE leg.
+    try:
+        search_rank.ensure_indexes(get_db, is_postgres=USE_POSTGRES)
+    except Exception as e:
+        log.warning("[SEARCH] index setup skipped: %s", e)
 
     # A card with no headline is the worst thing the feed can show. Repair
     # before anything is served.
@@ -4611,26 +4622,153 @@ async def interact(req: InteractReq, authorization: str = Header("")):
     return {"status": "ok"}
 
 
+def _search_filters(scope: str, pillar_slug: str, feed_class: str,
+                    min_significance: int, days: int) -> search_rank.Filters:
+    """Translate the query string into database-layer pre-filters.
+
+    The pillar arrives as a slug because that is what Explore already puts in
+    its URLs; an unknown slug is dropped rather than made to match nothing, so a
+    stale link degrades to an unfiltered search instead of an empty one.
+    """
+    pid = None
+    if pillar_slug:
+        for _pid, _meta in PILLARS.items():
+            if _meta["slug"] == pillar_slug.lower():
+                pid = _pid
+                break
+
+    since = ""
+    if days > 0:
+        # Canonical form, because the comparison in prefilter() is a plain >=
+        # and on a TEXT column that is a byte compare — only the one shape
+        # normalise_published_at guarantees sorts correctly.
+        since = timestamps.to_canonical(
+            datetime.now(timezone.utc) - timedelta(days=days))
+
+    return search_rank.Filters(
+        pillar=pid,
+        scope=scope,
+        feed_class=feed_class if feed_class in ("general", "financial") else "",
+        min_significance=min_significance if min_significance >= 0 else None,
+        since=since,
+    )
+
+
+def _run_search(conn, q: str, f: search_rank.Filters, *, limit: int,
+                offset: int) -> tuple[list, dict]:
+    """Hybrid retrieval: relevance legs in the database, fusion in Python.
+
+    Three bounded statements at most, and the third is free — see search_rank's
+    header for why the priority legs cost no database work. Returns the page's
+    rows plus a report the /admin/search diagnosis and ?explain=1 read.
+    """
+    report: dict = {"query": q, "legs": {}, "caps": sorted(search_rank.capabilities())}
+
+    legs = search_rank.relevance_legs(q, f, limit=search_rank.leg_limit())
+    rankings: dict[str, list] = {}
+    for name, sql, params in legs:
+        try:
+            ids = [r["id"] for r in conn.execute(sql, tuple(params)).fetchall()]
+        except Exception as e:
+            # One leg failing is a degraded search, not a failed request. The
+            # most likely cause is an index that was dropped underneath us, in
+            # which case the remaining leg still answers.
+            log.warning("[SEARCH] leg %s failed: %s", name, e)
+            report["legs"][name] = {"error": str(e)[:200]}
+            continue
+        rankings[name] = ids
+        report["legs"][name] = {"hits": len(ids)}
+
+    matched = sorted({i for ids in rankings.values() for i in ids})
+    report["matched"] = len(matched)
+    if not matched:
+        return [], report
+
+    # One statement for the union. Bounded by construction: at most one
+    # leg_limit per leg, so the IN list cannot grow with the corpus.
+    marks = ",".join("?" * len(matched))
+    rows = conn.execute(
+        f"SELECT * FROM articles WHERE id IN ({marks})", tuple(matched)
+    ).fetchall()
+    by_id = {r["id"]: r for r in rows}
+
+    rankings.update(search_rank.priority_rankings(rows))
+    fused = search_rank.rrf_fuse(rankings)
+    report["fused"] = len(fused)
+
+    page = [by_id[h.id] for h in fused[offset:offset + limit] if h.id in by_id]
+    report["explain"] = [
+        {"id": h.id, "score": round(h.score, 6), "ranks": h.ranks,
+         "headline": (by_id[h.id]["headline"] if h.id in by_id else "")}
+        for h in fused[offset:offset + limit]
+    ]
+    return page, report
+
+
 @app.get("/search")
 async def search(request: Request, q: str = Query(""),
+                 scope: str = Query(""), pillar: str = Query(""),
+                 feed_class: str = Query(""),
+                 min_significance: int = Query(-1, ge=-1, le=100),
+                 days: int = Query(0, ge=0, le=400),
+                 page: int = Query(1, ge=1, le=40),
+                 explain: int = Query(0, ge=0, le=1),
                  authorization: str = Header("")):
+    """Hybrid search: full-text + trigram relevance, fused with recency and
+    significance by Reciprocal Rank Fusion.
+
+    Both a linkable screen and an API endpoint, so the content negotiation
+    above the body has to stay first — see CLAUDE.md on the routes that answer
+    by Accept.
+
+    `?explain=1` returns each result's per-leg ranks and fused score. It is the
+    only way to answer "why is this result above that one", and it is public
+    because it reveals nothing a reader cannot already see on the page.
+    """
     page_html = _spa_or_none(request)
     if page_html is not None:
         return page_html
     get_current_user(authorization)
-    if not q:
-        return {"articles": []}
+
+    q = search_rank.clean_query(q)
+    if not search_rank.is_usable(q):
+        # A one-character query matches a third of the corpus on every leg, so
+        # it is answered as "no query" rather than as a scan.
+        return {"articles": [], "query": q, "total": 0}
+
+    f = _search_filters(scope, pillar, feed_class, min_significance, days)
+    limit = search_rank.page_size()
+    offset = (page - 1) * limit
+
     conn = get_db()
-    q_like = f"%{q}%"
-    rows = conn.execute(
-        "SELECT * FROM articles WHERE (headline LIKE ? OR summary_60 LIKE ?) AND ai_processed=1 AND status='published' "
-        "ORDER BY published_at DESC LIMIT 25",
-        (q_like, q_like)
-    ).fetchall()
-    conn.close()
+    try:
+        if search_rank.enabled():
+            rows, report = _run_search(conn, q, f, limit=limit, offset=offset)
+        else:
+            # The switch exists so the fusion can be turned off on a live
+            # instance without a deploy. It serves the single bounded LIKE leg,
+            # which is the behaviour this endpoint had before the fusion.
+            sql, params = search_rank.leg_like_sql(q, f, limit=search_rank.leg_limit())
+            ids = [r["id"] for r in conn.execute(sql, tuple(params)).fetchall()]
+            ids = ids[offset:offset + limit]
+            rows = []
+            if ids:
+                marks = ",".join("?" * len(ids))
+                found = {r["id"]: r for r in conn.execute(
+                    f"SELECT * FROM articles WHERE id IN ({marks})", tuple(ids)
+                ).fetchall()}
+                rows = [found[i] for i in ids if i in found]
+            report = {"query": q, "legs": {"like": {"hits": len(ids)}},
+                      "matched": len(ids), "hybrid": False}
+    finally:
+        conn.close()
+
     arts = [article_row_to_dict(r) for r in rows]
     await _apply_stock_images(arts)
-    return {"articles": arts}
+    out = {"articles": arts, "query": q, "page": page, "total": report.get("matched", 0)}
+    if explain:
+        out["report"] = report
+    return out
 
 
 @app.get("/stats/categories")
@@ -7180,6 +7318,47 @@ async def admin_you(x_admin_token: str = Header(""), token: str = Query("")):
     import you_contents
     return {"stats": you_contents.stats(),
             "DIAGNOSIS": you_contents.diagnosis()}
+
+
+@app.get("/admin/search")
+async def admin_search(x_admin_token: str = Header(""), token: str = Query(""),
+                       q: str = Query("")):
+    """Which search legs this instance can actually serve, and why.
+
+    "Search feels wrong" has four causes with four different fixes — the fusion
+    switched off, the full-text index missing, the pg_trgm extension refused, or
+    neither index built — and the capability set plus the one-line DIAGNOSIS is
+    what separates them. The capability is the INDEX, not the server version:
+    without the index the same SQL is a sequential scan with a to_tsvector call
+    per row, which is worse than the LIKE it replaced, so a missing index
+    removes the leg instead of quietly slowing every reader down.
+
+    With ?q= it returns the SQL each leg would run, verbatim, with its
+    parameters. No query is executed, so it is safe against production.
+    """
+    _check_admin(x_admin_token or token)
+    caps = search_rank.capabilities()
+    out = {
+        "backend": "postgres" if USE_POSTGRES else "sqlite",
+        "hybrid_enabled": search_rank.enabled(),
+        "capabilities": sorted(caps),
+        "leg_limit": search_rank.leg_limit(),
+        "page_size": search_rank.page_size(),
+        "rrf_k": search_rank.rrf_k(),
+        "weights": search_rank.WEIGHTS,
+        "DIAGNOSIS": search_rank.diagnose(is_postgres=USE_POSTGRES),
+    }
+    if q:
+        cq = search_rank.clean_query(q)
+        f = search_rank.Filters()
+        out["would_run"] = [
+            {"leg": name, "sql": sql, "params": [str(x) for x in params]}
+            for name, sql, params in search_rank.relevance_legs(
+                cq, f, limit=search_rank.leg_limit())
+        ]
+        out["cleaned_query"] = cq
+        out["words"] = search_rank.query_words(cq)
+    return out
 
 
 @app.get("/admin/research")
