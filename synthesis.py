@@ -41,6 +41,8 @@ import json
 import re
 from datetime import datetime, timezone
 
+import llm_bounds
+
 # ─── term extraction ─────────────────────────────────────────────────────────
 # Lifted from main.link_stories, which is where this clustering has always
 # lived. It is here so both callers share one definition.
@@ -671,7 +673,13 @@ def parse_synthesis(raw, *, n_sources: int = 0, hook_check=None) -> dict:
     strings = _parse_strings(raw.get("strings"), hook_check, names)
     dots = _parse_dots(raw.get("dots"), hook_check, names)
 
-    return {
+    # The size ceiling. `numbers_used` already cuts its items at 60/120 chars
+    # and every list here is length-bounded, but `content` had a MINIMUM and no
+    # maximum and the items of the three flat lists had no per-item cap — this
+    # module was inconsistent with itself. `strings`, `dots` and `numbers_used`
+    # are left alone on purpose: their own parsers bound them, and a flat text
+    # clamp over a list of dicts would drop them.
+    return llm_bounds.clamp_synthesis({
         "headline": headline,
         "content": content,
         "numbers_used": numbers_used,
@@ -687,7 +695,7 @@ def parse_synthesis(raw, *, n_sources: int = 0, hook_check=None) -> dict:
         "dots": dots,
         "n_sources": n_sources,
         "words": words,
-    }
+    })
 
 
 # The stages the timeline is drawn from, and their order. A model answer that

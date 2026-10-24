@@ -49,6 +49,7 @@ import synthesis
 # analog engine and market_reaction filter on a stored column AND a whitelist that
 # can never disagree, rather than a filter each caller has to remember.
 import feeds_financial
+import llm_bounds
 import significance
 import research
 import telugu
@@ -7382,6 +7383,32 @@ async def admin_body_audit(x_admin_token: str = Header(""), token: str = Query("
         out["next"] = ("GET /admin/reprocess-bodies?token=...&limit=%d"
                        % min(out["needs_rewrite"], 3000))
     return out
+
+
+@app.get("/admin/llm-bounds")
+async def admin_llm_bounds(x_admin_token: str = Header(""), token: str = Query("")):
+    """Whether any model output has had to be clamped before storage, and how big.
+
+    This sits beside /admin/writer-doctor deliberately: both answer "is the
+    prompt asking for the right thing". A clamp is NOT a safety event to be
+    satisfied by seeing it work — the caps are roughly six times the longest
+    band any writer is asked for, so one firing means the prompt or the band is
+    wrong, and the fix belongs there rather than in a larger cap.
+
+    `worst_seen_chars` is the number that says which: a body at 8,100 is a
+    prompt drifting past its band, and one at 300,000 is a provider that
+    ignored the output-token ceiling or a response that repeated itself.
+
+    Per process and touches no database, the same posture /admin/memory has.
+    """
+    _check_admin(x_admin_token or token)
+    return {"caps": {"title": llm_bounds.MAX_TITLE_CHARS,
+                     "summary": llm_bounds.MAX_SUMMARY_CHARS,
+                     "body": llm_bounds.MAX_BODY_CHARS,
+                     "field": llm_bounds.MAX_FIELD_CHARS,
+                     "item": llm_bounds.MAX_ITEM_CHARS},
+            "stats": llm_bounds.stats(),
+            "DIAGNOSIS": llm_bounds.diagnose()}
 
 
 @app.get("/admin/writer-doctor")
