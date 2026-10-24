@@ -1588,3 +1588,78 @@ deterministic joins over data we already hold, and that is a recorded decision,
 not an accident — a web-search leg is a different claim about where a card's
 evidence comes from, and it should be a decision taken on its own, not smuggled
 in behind a page-reading fix.
+
+---
+
+## Model output had a floor and no ceiling, and 2.1MB went into one row
+
+Adopted 2026-10-24, found by counting rather than reading. Both validators
+bounded *some* of what the model returns and not the rest, and the split was not
+a decision — it was wherever somebody happened to add a cap:
+
+| | bounded | not bounded |
+|---|---|---|
+| `ai_processor._validate_and_fix` | `refined_title` 12 words, `summary` 55 words | `full_body` (a MINIMUM and no maximum), `what_info`, `why_info`, `how_info`, `who_subject`, `when_info`, `where_info`, and every list ITEM |
+| `synthesis.parse_synthesis` | `headline` 12 words, `numbers_used` items at 60/120 chars, every list length | `content` (a MINIMUM and no maximum), and the items of `extracted_entities`, `fact_conflicts`, `who_affected` — **the module was inconsistent with itself** |
+
+Driving `_validate_and_fix` with a long response **wrote 2.1MB into one row**,
+300KB in each of seven columns. `llm_bounds.clamp_card` brings the same input to
+under 11KB — a 195x bound, and `tests/test_llm_bounds.py` asserts the ratio
+rather than the cap, so the number stays honest.
+
+**`_out_tokens` does not close this.** It asks each provider for a bounded
+response, which is a request *parameter*, not a property of the column: a
+provider that ignores it, a cascade fallback with a different limit, or a
+response that repeats itself all land in the database at whatever size the model
+chose. That is the rule this file already states for fetches, one layer over —
+**a payload whose size is set by a remote server needs the cap applied on our
+side.** It matters here because the database has already been over its size
+quota (egress ~487%, size ~248%), the instance has already been OOM-killed, and
+a 300KB body is SERVED: one such row makes every `/feed` page containing it
+300KB heavier for every reader.
+
+**Characters, not words.** A word count does not bound a column — one "word" can
+be 9,000 characters, which is exactly how the unbounded list items got through.
+
+**CLAMP, NEVER REJECT.** An overrunning response is still a usable answer, and
+rejecting it would send the row back to its placeholder for the next tick to
+fetch and fail on identically — the forever-placeholder failure mode recorded
+above for `no_source_material`. Prose is cut on a word boundary, unless honouring
+it would throw away most of the budget (a string whose only space is at
+character 3 must not be cut to 3 characters).
+
+**The caps are ~6x the longest band any writer is asked for** (`LENGTH_BANDS`
+tops out at 200 words), so a clamp firing is evidence the PROMPT is wrong, not
+that the cap is tight. Every one is therefore counted and reported rather than
+applied silently — the same argument `/admin/writer-doctor` makes, and
+`/admin/llm-bounds` sits beside it for that reason. `worst_seen_chars` is the
+number that says which problem it is: a body at 8,100 is a prompt drifting past
+its band; one at 300,000 is a provider ignoring the output ceiling. **Fix it in
+the prompt or the band, never by raising the cap.**
+
+Three things the clamp deliberately does NOT do:
+
+- **It never touches a field with no chosen cap.** Only keys present in the dict
+  AND named in `CARD_CAPS`/`SYNTH_CAPS` are clamped, so a field somebody adds
+  later cannot start being truncated without them choosing a cap for it.
+- **`strings`, `dots` and `numbers_used` are absent from the tables on purpose.**
+  They are lists of dicts whose own parsers already bound both the list length
+  and each field, and a flat text clamp over them would DROP them — worse than
+  not clamping.
+- **A nested value in a flat list is dropped, not stringified.** It is not a
+  value that was shortened, it is the wrong shape, and storing its `repr` would
+  put Python syntax on a card.
+
+The `SYNTH_*` tables name **`parse_synthesis`'s own return keys**
+(`extracted_entities`, not `entities`): the clamp runs on the parsed contract
+after the parser has renamed, so a cap under the model's JSON key would silently
+apply to nothing. A test asserts every capped key exists in that dict.
+
+### The client was already correct, and that was checked, not assumed
+
+The same audit looked for model-written text reaching `innerHTML` unescaped —
+`index.html` has 202 `innerHTML` sites. `bEsc` is applied at 219 call sites and
+every path that renders a model-written field goes through it, including the
+ones that escape at the assignment (`const tldr = bEsc(mfSummaryOf(a))`) rather
+than at the template, which is what makes a naive grep report a false positive.
+**No client change was needed.** Recorded so the next audit does not re-run it.

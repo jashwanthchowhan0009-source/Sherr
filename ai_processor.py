@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 import httpx
 
 import key_pool
+import llm_bounds
 import telugu
 
 from text_utils import (
@@ -879,6 +880,17 @@ def _validate_and_fix(result: dict, title: str, body: str, fallback_category: st
 
     # Bool coercion
     result["is_trending"] = bool(result["is_trending"])
+
+    # The size ceiling, applied LAST — after every field has been filled,
+    # normalised and word-trimmed, so a clamp recorded here is a genuine
+    # overrun and not an artefact of a default this function supplied.
+    #
+    # `_out_tokens` already asks each provider for a bounded response, but that
+    # is a request parameter, not a property of the column: a provider that
+    # ignores it, a cascade fallback with a different limit, or a response that
+    # repeats itself all land in the database at whatever size the model chose.
+    # Measured before this line: 2.1MB written to one row.
+    llm_bounds.clamp_card(result)
 
     return result
 
