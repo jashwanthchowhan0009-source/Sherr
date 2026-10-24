@@ -33,8 +33,8 @@ def html():
 
 
 def _desktop_block(html: str) -> str:
-    """The text of the one brace-balanced laptop media query."""
-    start = html.index("@media (min-width: 1024px)")
+    """The text of the brace-balanced website media query."""
+    start = html.index("@media (min-width: 768px)")
     depth, j = 0, html.index("{", start)
     while True:
         if html[j] == "{":
@@ -74,19 +74,22 @@ def test_the_fragile_sibling_hide_rule_is_gone(html):
     assert "#v-explore > #xp-page ~ *{display:none" not in html
 
 
-def test_phone_is_transformed_at_every_width_above_500(html):
+def test_phone_is_transformed_in_the_app_column_band(html):
     """This is the trap the move exists to escape — documented so nobody
     'simplifies' the move away without understanding why it was made.
 
-    The desktop block used to clear the transform (`left: 0; width: 100vw`),
-    which is what made this a 500–1023px "band". Now that a laptop shows the
-    same centred column, the transform is in force at EVERY width above 500px —
-    so the containing-block trap is permanent and this move is what keeps the
-    drill-downs out of it."""
-    assert "transform: translateX(-50%)" in html  # the 500px .phone rule
-    block = _desktop_block(html)
-    assert "transform: none" not in block
-    assert "width: 100vw" not in block
+    Between 500 and 767px `.phone` is the centred app column and carries
+    `transform: translateX(-50%)`. A transform makes an element the containing
+    block for its `position: fixed` descendants, so an overlay left inside
+    .phone would be trapped in a 440px box there. Moving these three out is
+    what keeps the drill-downs free of it.
+
+    Above 767px the website shell takes over, .phone carries no transform, and
+    the overlays resolve against the viewport — which is why the website block
+    places the two sheets by hand (see the test below) rather than inheriting a
+    column that no longer exists."""
+    assert "@media (min-width: 500px) and (max-width: 767px) {" in html
+    assert "transform: translateX(-50%)" in html  # the app-column .phone rule
 
 
 def test_home_content_is_blanked_under_a_full_page(html):
@@ -105,14 +108,19 @@ def test_the_drilldown_page_itself_stays_visible_under_dp_open(html):
     assert "body.dp-open #xp-page { visibility: visible !important; }" in html
 
 
-def test_desktop_centres_the_page_on_the_app_column(html):
-    """`#xp-page` is positioned against the viewport, so on a 1440px screen it
-    painted its 16px-gutter mobile column across the whole width unless placed
-    by hand. It is placed on the app column — the same place it covers on a
-    phone."""
+def test_the_website_places_the_body_level_sheets_by_hand(html):
+    """These three are positioned against the viewport, so on a 1440px screen a
+    bottom sheet is a full-width banner unless it is placed. The sheets get a
+    sheet-sized centred column; #xp-page is full-bleed and only takes the
+    site's shoulders, which is what it is for."""
     block = _desktop_block(html)
-    assert ".xp-sheet, .cmt-sheet, .xp-page {" in block
-    assert "width: var(--appw); max-width: var(--appw);" in block
+    assert ".xp-sheet, .cmt-sheet {" in block
+    rule = block[block.index(".xp-sheet, .cmt-sheet {"):]
+    rule = rule[:rule.index("}")]
+    # margin-left, never a transform: the open state animates translateY and
+    # would overwrite a horizontal transform, sending the sheet to the edge.
+    assert "margin-left: calc(min(540px, 92vw) / -2);" in rule
+    assert "transform" not in rule
     # The header stays hidden under a full page at every width now: the page is
     # full-bleed over the column and carries its own back arrow, exactly as on a
     # phone. A desktop-only "display: flex" override would uncover it.

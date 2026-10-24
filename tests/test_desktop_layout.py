@@ -1,17 +1,14 @@
-"""The laptop layout, and the promise that the phone is untouched.
+"""The website layer, and the promise that the phone is untouched.
 
-The Android app is the product, and on a laptop it is the SAME app: the phone
-layout in a centred column, not a second arrangement of the same DOM. An earlier
-pass built a desktop website here — a left sidebar, a 720px reading column, a
-two- and three-column Home — and that is explicitly not what this surface wants;
-sherrbyte.vercel.app is also the TWA's origin, so the browser and the app should
-show the same screen.
+sherrbyte.vercel.app is BOTH the Android TWA's origin and the public website,
+and from 2026-10-24 those are two different layouts: below 768px a reader gets
+the app, exactly as the TWA ships it; above it they get a news site — a top
+bar, a masthead, a multi-column feed grid, a reading column and a footer.
 
-Both halves of that are structural properties of the file rather than things to
-eyeball in a browser, so they are asserted: every laptop rule lives in one media
-query (which is what makes "a phone cannot be reached by a desktop fix" a
-guarantee), and what that one query does is frame the column rather than
-re-arrange it.
+What makes that safe is a structural property rather than something to eyeball
+in a browser: EVERY rule that re-arranges anything lives inside the website
+breakpoints, so a website fix cannot reach the app. That is asserted here,
+along with the pieces of the phone those rules used to own.
 
 These also pin the client half of real URLs: the server answering /explore is
 useless if the app never puts /explore in the address bar, and vice versa. The
@@ -54,94 +51,177 @@ def _block(html: str, opener: str) -> str:
 
 # ─── the phone is untouched ─────────────────────────────────────────────────
 
-def test_there_is_exactly_one_desktop_breakpoint(html):
-    """One block, one breakpoint. Desktop rules scattered through the sheet are
-    how a phone regression arrives disguised as a desktop fix."""
-    assert len(re.findall(r"@media\s*\(min-width:\s*1024px\)", html)) == 1
+WEB = "@media (min-width: 768px)"
+WIDE = "@media (min-width: 1200px)"
 
 
-def test_the_laptop_block_frames_the_app_it_does_not_re_lay_it_out(html):
-    """The whole point of this surface: a laptop gets the phone, centred. Any of
-    these properties in the laptop block means a screen is being re-arranged for
-    desktop, which is the layout this replaced."""
-    block = _block(html, "@media (min-width: 1024px)")
-    for banned in ("grid-template-columns",   # the two/three-column Home and myFeed
-                   "flex-direction: column",  # the bottom nav rebuilt as a sidebar
-                   "--sbw", "--col)",         # the sidebar width / reading column
-                   "scroll-snap-type"):       # myFeed's snap taken off
-        assert banned not in block, f"the laptop block re-lays out the app: {banned}"
-    # And it stays small. Two hundred lines of laptop CSS is a second layout by
-    # another name.
-    assert block.count("{") < 12
+# ─── the phone is untouched ─────────────────────────────────────────────────
+
+def test_the_website_lives_in_exactly_two_breakpoints(html):
+    """One shell query and one density query. Website rules scattered through
+    the sheet are how a phone regression arrives disguised as a website fix."""
+    assert len(re.findall(r"@media\s*\(min-width:\s*768px\)", html)) == 1
+    assert len(re.findall(r"@media\s*\(min-width:\s*1200px\)", html)) == 1
 
 
-def test_the_phone_layout_is_what_a_laptop_shows(html):
-    block = _block(html, "@media (min-width: 1024px)")
-    assert ".phone" in block
-    assert "var(--deskbg)" in block, "the surround must not be the app's own --bg"
+def test_no_breakpoint_below_768_rearranges_anything(html):
+    """The TWA renders below 768px. The only query under it is the app-column
+    rule, which centres .phone and changes nothing inside it."""
+    for m in re.finditer(r"@media\s*\(min-width:\s*(\d+)px\)", html):
+        width = int(m.group(1))
+        if width >= 768:
+            continue
+        block = _block(html, html[m.start():m.start() + 40])
+        for banned in ("grid-template-columns", "flex-direction: row",
+                       "scroll-snap-type", "#home-feed", "#ds-hero", "#ds-foot"):
+            assert banned not in block, (
+                f"the {width}px block re-lays out the app: {banned}")
 
 
-def test_the_column_width_is_one_number(html):
-    """--appw is the app column. Hardcoding 440px in the two rules that need it
-    is how the column and the sheets centred on it drift apart."""
-    assert html.count("--appw: 440px") == 1
+def test_the_app_column_rule_stops_where_the_website_starts(html):
+    """500-767px is a big phone or a small tablet: the same app, centred. The
+    moment the website shell takes over, the column cap has to be gone or the
+    site renders as a 440px strip in the middle of a monitor."""
+    assert "@media (min-width: 500px) and (max-width: 767px) {" in html
     assert "width: var(--appw); max-width: var(--appw); right: auto;" in html
 
 
 def test_the_phone_bottom_nav_still_hides_on_scroll(html):
-    """The rule the old desktop block neutralised for its sidebar, proven not to
-    have been edited in place."""
-    block = _block(html, "@media (min-width: 1024px)")
-    outside = html.replace(block, "")
+    """The rule the website neutralises for its top bar, proven not to have
+    been edited in place — the phone keeps it."""
+    web = _block(html, WEB)
+    outside = html.replace(web, "")
     assert "nav.hidden { transform: translateX(-50%) translateY(110px);" in outside
-    assert "nav.hidden" not in block
-
-
-def test_the_matrix_is_two_columns_at_every_width(html):
-    block = _block(html, "@media (min-width: 1024px)")
-    base = html.replace(block, "")
-    assert ".xp-matrix{display:grid;grid-template-columns:1fr 1fr;" in base
-    assert ".xp-matrix" not in block
 
 
 def test_myfeed_is_a_full_screen_snap_at_every_width(html):
-    """One card per screen is the surface's whole reading model, on a phone and
-    on a laptop alike."""
-    block = _block(html, "@media (min-width: 1024px)")
-    base = html.replace(block, "")
+    """One card per screen is the surface's whole reading model, and that is as
+    true on a laptop as on a phone. The website changes the card's proportions,
+    never the deck's behaviour."""
+    web = _block(html, WEB)
+    base = html.replace(web, "")
     assert "scroll-snap-type: y mandatory" in base
-    assert ".myfeed-feed" not in block and ".mf-card" not in block
+    assert "scroll-snap-type" not in web
 
 
-# ─── what the laptop actually gets ──────────────────────────────────────────
-
-def test_the_body_level_sheets_follow_the_column(html):
-    """A bottom sheet pinned to the full width of a 1440px screen is a banner.
-    These three are positioned against the viewport, so they are the only
-    things the laptop has to place by hand."""
-    block = _block(html, "@media (min-width: 1024px)")
-    assert ".xp-sheet, .cmt-sheet, .xp-page {" in block
+def test_the_matrix_is_two_columns_at_every_width(html):
+    web = _block(html, WEB)
+    base = html.replace(web, "")
+    assert ".xp-matrix{display:grid;grid-template-columns:1fr 1fr;" in base
+    assert ".xp-matrix" not in web
 
 
-def test_the_sheets_are_centred_with_a_margin_not_a_transform(html):
-    """Both sheets animate their own transform (translateY(102%) closed), so a
-    horizontal transform here would be overwritten by the open state and the
-    sheet would slide back to the left edge the moment it opened."""
-    block = _block(html, "@media (min-width: 1024px)")
-    rule = block[block.index(".xp-sheet, .cmt-sheet, .xp-page {"):]
-    rule = rule[:rule.index("}")]
-    assert "margin-left: calc(var(--appw) / -2);" in rule
-    assert "transform" not in rule
+def test_the_website_furniture_does_not_exist_on_a_phone(html):
+    """The masthead and the footer are in the markup at every width and are
+    DISPLAYED only by the website query — so there is no runtime branch
+    deciding which surface is rendering, and the TWA's Home is the card feed it
+    has always been."""
+    assert "#ds-hero, #ds-foot { display: none; }" in html
+    web = _block(html, WEB)
+    assert "#ds-hero {" in web and "display: grid;" in web
+    assert "#ds-foot {" in web
+
+
+# ─── what the website actually is ───────────────────────────────────────────
+
+def test_the_shell_block_builds_a_site_not_a_column(html):
+    """The inverse of the rule this file used to assert. A laptop gets a top
+    bar, a grid and a footer; if these stop being here, the website has
+    silently collapsed back into a centred phone."""
+    web = _block(html, WEB)
+    for needed in ("#home-feed {", "grid-template-columns",
+                   "header {", "nav {", "#ds-foot {", "--ds-shoulder"):
+        assert needed in web, f"the website block lost: {needed}"
+
+
+def test_the_wide_block_only_changes_density(html):
+    """1200px is three columns instead of two and nothing else. A laptop and a
+    monitor must be the same site, or there are two websites to maintain."""
+    wide = _block(html, WIDE)
+    assert "#home-feed {" in wide
+    assert wide.count("{") < 6, "the wide block is growing a second layout"
+    for banned in ("header", "nav ", "#ds-foot", "position:"):
+        assert banned not in wide
+
+
+def test_every_measurement_is_a_token(html):
+    """One page width, one reading measure, one tonal ramp. A hardcoded pixel
+    here is how the grid and the things centred on it drift apart."""
+    for token in ("--ds-page:", "--ds-read:", "--ds-topbar:",
+                  "--ds-f-display:", "--ds-f-ui:", "--ds-f-read:",
+                  "--ds-spring:", "--ds-stagger:", "--ds-mesh:"):
+        assert token in html, f"missing design token {token}"
+
+
+def test_the_type_is_not_a_default_stack(html):
+    """Space Grotesk / Archivo / Newsreader are loaded and used. Inter and
+    Poppins stay the PHONE's faces, which is why they are still in the link."""
+    link = re.search(r'fonts\.googleapis\.com/css2\?[^"]+', html).group(0)
+    for fam in ("Space+Grotesk", "Archivo", "Newsreader"):
+        assert fam in link, f"{fam} is used by the website but never loaded"
+    web = _block(html, WEB)
+    assert "var(--ds-f-display)" in web and "var(--ds-f-read)" in web
+
+
+def test_the_background_is_never_a_flat_fill(html):
+    """Depth comes from layered washes plus a masked dot mesh, per theme."""
+    assert "--ds-mesh:" in html
+    web = _block(html, WEB)
+    assert "background: var(--ds-mesh);" in web
+    assert "mask-image" in web, "the grain must be masked off the reading band"
+
+
+def test_motion_is_tokenised_and_can_be_switched_off(html):
+    web = _block(html, WEB)
+    assert "animation: dsRise" in web
+    assert "var(--ds-stagger)" in web
+    assert "@media (prefers-reduced-motion: reduce)" in web
+
+
+def test_the_footer_does_not_hardcode_the_legal_paths(html):
+    """These pages are FastAPI on the Render host while this file is served
+    from the static Vercel deploy, so a literal href="/privacy" 404s for every
+    reader — the trap PLAY_STORE.md already records. dsFootLinks() fills them
+    from API_URL, which also keeps them real, focusable links."""
+    foot = html[html.index('<footer id="ds-foot">'):]
+    foot = foot[:foot.index("</footer>")]
+    for path in ("/privacy", "/terms", "/delete-account"):
+        assert f'data-legal="{path}"' in foot
+        assert f'href="{path}"' not in foot
+    assert "function dsFootLinks()" in html
+    assert "a.href = legalUrl(" in html
+    assert "dsFootLinks();" in html.split("function dsFootLinks()")[0] or \
+           "dsFootLinks();" in html.split("function dsFootLinks()")[1]
+
+
+def test_the_footer_nav_groups_are_pulled_out_of_the_app_nav_rule(html):
+    """The base sheet styles the element `nav` as the app's centred bottom
+    pill. The footer's link groups are <nav> too, so without this reset they
+    fly to the middle of the screen — which is exactly what they did."""
+    web = _block(html, WEB)
+    assert "#ds-foot nav {" in web
+    rule = web[web.index("#ds-foot nav {"):]
+    assert "position: static;" in rule[:rule.index("}")]
 
 
 def test_the_surround_has_a_colour_in_every_theme(html):
-    """An unset --deskbg falls back to nothing and the backdrop paints white in
-    a dark app — so each theme that redefines --bg must redefine this too."""
+    """--deskbg is what sits beside the app column between 500 and 767px. An
+    unset one falls back to nothing and paints white behind a dark app."""
     for theme in ('', '[data-theme="navy"]', '[data-theme="light"]'):
         root = ":root {" if not theme else theme + " {"
         chunk = html[html.index(root):]
         chunk = chunk[:chunk.index("\n}")]
         assert "--deskbg:" in chunk, f"{theme or ':root'} has no backdrop colour"
+
+
+def test_every_theme_retunes_the_tonal_ramp(html):
+    """The ramp is four steps of ONE tone. A theme that redefines --bg and not
+    these gets a dark card on a light page."""
+    for theme in ('[data-theme="navy"]', '[data-theme="light"]'):
+        chunk = html[html.index(theme + " {"):]
+        chunk = chunk[:chunk.index("\n}")]
+        for token in ("--ds-t0:", "--ds-t2:", "--ds-ink:", "--ds-mesh:"):
+            assert token in chunk, f"{theme} never retunes {token}"
 
 
 # ─── real URLs: the client half ─────────────────────────────────────────────

@@ -68,13 +68,29 @@ def test_an_unwritten_article_opens_the_source_not_the_popup(html):
     assert "!_ours(a.body_ai) && !_ours(a.preview) && !_ours(a.summary)" in op
 
 
-# ── 4. Desktop: Home is a portal grid, phone is untouched ───────────────────
-def test_home_is_one_column_at_every_width(html):
-    """Home was a two- and three-column desktop portal inside the 1024px block.
-    That is a news website; this surface is the Android app, shown on a laptop
-    in the phone's own column. One column is the layout, everywhere."""
-    assert "grid-template-columns: repeat(2, minmax(0, 1fr))" not in html
-    assert "#home-feed > .hero-card" not in html
+# ── 4. Home is one column on the APP, a grid only on the website ───────────
+def test_home_is_one_column_on_the_app(html):
+    """sherrbyte.vercel.app is the TWA's origin as well as the website, so the
+    feed grid has to be unreachable from a phone. It is: every rule that makes
+    #home-feed a grid lives inside the website breakpoint, and the base sheet
+    still stacks the cards."""
+    web_start = html.index("@media (min-width: 768px)")
+    depth, j = 0, html.index("{", web_start)
+    while True:
+        if html[j] == "{":
+            depth += 1
+        elif html[j] == "}":
+            depth -= 1
+            if depth == 0:
+                break
+        j += 1
+    website = html[web_start:j + 1]
+    wide_start = html.index("@media (min-width: 1200px)")
+    wide = html[wide_start:html.index("}", html.index("}", wide_start) + 1)]
+    outside = html.replace(website, "").replace(wide, "")
+    assert "grid-template-columns: repeat(2, minmax(0, 1fr))" in website
+    assert "#home-feed {" not in outside, \
+        "#home-feed is being laid out outside the website breakpoint"
 
 
 # ── 5. Sideways swipe steps categories even on an EMPTY pillar ───────────────
